@@ -1,3 +1,5 @@
+import { contentImageUrl } from './readerInteractions'
+
 export type TtsSentence = {
   sentenceIndex: number
   text: string
@@ -102,6 +104,8 @@ export function processChapterForTts(
 
   for (let pIdx = 0; pIdx < rawParagraphs.length; pIdx++) {
     const raw = rawParagraphs[pIdx]
+    // 正文配图占位行（`![图片](url)`）不是朗读内容。跳过但保留 pIdx —— 段落高亮是按下标对齐 DOM 的。
+    if (contentImageUrl(raw)) continue
     const cleaned = cleanTextForSpeech(raw, filterSymbols)
     const sentencesText = splitSentences(raw, filterSymbols)
 

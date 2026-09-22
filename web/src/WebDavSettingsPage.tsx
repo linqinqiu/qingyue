@@ -3,21 +3,22 @@ import { api, joinWebDavPath, webDavFileUrl, WebDavInfo } from './api'
 import { toast } from './Toast'
 import { Icon } from './icons'
 
-/** 客户端接入指引：按当前访问来源拼出可复制的连接信息。 */
-export function webDavClientGuides(origin: string, urlPath: string) {
+/** 客户端接入指引：按当前访问来源拼出可复制的连接信息。`localFree` 表示本机回环免登录已生效。 */
+export function webDavClientGuides(origin: string, urlPath: string, localFree = false) {
   const url = `${origin}${urlPath}`
+  const credentialHint = localFree ? '本机地址直接回车，无需填凭据' : '使用其他凭据连接（用户名任意填，密码为登录密码）'
   return [
     {
       id: 'windows',
       title: 'Windows 资源管理器',
-      steps: '「此电脑」→ 右键 → 映射网络驱动器 → 粘贴下面的地址 → 使用其他凭据连接（用户名任意填，密码为登录密码）',
+      steps: `「此电脑」→ 右键 → 映射网络驱动器 → 粘贴下面的地址 → ${credentialHint}`,
       command: url,
       copyLabel: '复制地址',
     },
     {
       id: 'macos',
       title: 'macOS Finder',
-      steps: 'Finder → 前往 → 连接服务器（⌘K）→ 粘贴下面的地址 → 注册用户（用户名任意填，密码为登录密码）',
+      steps: `Finder → 前往 → 连接服务器（⌘K）→ 粘贴下面的地址 → ${localFree ? '直接连接（本机无需凭据）' : '注册用户（用户名任意填，密码为登录密码）'}`,
       command: url,
       copyLabel: '复制地址',
     },
@@ -116,7 +117,7 @@ export function WebDavSettingsPage() {
 
   const origin = currentOrigin()
   const guides = useMemo(
-    () => webDavClientGuides(origin, info?.url ?? '/webdav'),
+    () => webDavClientGuides(origin, info?.url ?? '/webdav', Boolean(info?.anonymousLocalAccess)),
     [origin, info?.url],
   )
   const breadcrumbs = useMemo(() => davBreadcrumbs(path), [path])
@@ -212,9 +213,14 @@ export function WebDavSettingsPage() {
         <article className="webdav-card">
           <span className="webdav-card-label">服务状态</span>
           <strong className="webdav-card-value">
-            <span className="webdav-status-dot" />运行中
+            <span className={`webdav-status-dot ${info ? 'ok' : loading ? 'pending' : 'down'}`} />
+            {info ? '运行中' : loading ? '检测中' : '读取失败'}
           </strong>
-          <span className="webdav-card-hint">已内置在服务端，无需额外端口或容器</span>
+          <span className="webdav-card-hint">
+            {info
+              ? '已内置在服务端，无需额外端口或容器'
+              : loading ? '正在向 /api/webdav 探活' : '未取到目录信息：服务端未启动或登录会话已过期，点右上角刷新重试'}
+          </span>
         </article>
         <article className="webdav-card">
           <span className="webdav-card-label">访问地址</span>
@@ -230,8 +236,12 @@ export function WebDavSettingsPage() {
         </article>
         <article className="webdav-card">
           <span className="webdav-card-label">认证方式</span>
-          <strong className="webdav-card-value">HTTP Basic</strong>
-          <span className="webdav-card-hint">用户名任意填写，密码即当前登录密码</span>
+          <strong className="webdav-card-value">{info?.anonymousLocalAccess ? '本机免密 · HTTP Basic' : 'HTTP Basic'}</strong>
+          <span className="webdav-card-hint">
+            {info?.anonymousLocalAccess
+              ? '在这台电脑上读写不需要密码；换设备或走反代时用户名任意填、密码为管理员密码'
+              : '用户名任意填写，密码即当前登录密码'}
+          </span>
         </article>
         <article className="webdav-card">
           <span className="webdav-card-label">已存数据</span>

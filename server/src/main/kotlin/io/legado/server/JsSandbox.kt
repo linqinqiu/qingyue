@@ -2,6 +2,8 @@ package io.legado.server
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.mozilla.javascript.BaseFunction
 import org.mozilla.javascript.ClassShutter
 import org.mozilla.javascript.Context
@@ -48,6 +50,9 @@ data class JsExecutionContext(
 class JsSandbox(private val runner: RuleRunner? = null) {
     private val sessionStore = ConcurrentHashMap<String, Any>()
 
+    /** `java.put` / `java.get` 的临时 KV 必须按书源隔离：整个沙箱只有一份，之前所有书源共用一个键空间。 */
+    private fun sessionKey(sourceId: String?, key: String): String = (sourceId ?: "-") + "\u0000" + key
+
     /**
      * 当前线程正在求值的书源上下文。
      *
@@ -93,6 +98,21 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             cx.optimizationLevel = -1
             cx.setClassShutter(ClassShutter { false }) // Sandbox: block all Java reflection
             val scope = cx.initSafeStandardObjects()
+
+            // 书源规则里 `JSON.parse(result)` 和 `result.属性` 两种写法都有：沙箱把 JSON 条目作为**对象**注入
+            // result（否则属性访问取不到值），于是前者会把对象转成 "[object Object]" 再解析失败，
+            // 规则里的 try/catch 把它吞掉后整条记录消失，表现为「搜索完成：0 项」。让 JSON.parse 接受已解析对象即可两全。
+            runCatching {
+                cx.evaluateString(
+                    scope,
+                    "if (typeof JSON !== 'undefined' && typeof JSON.parse === 'function') {" +
+                        "var __legadoOrigParse = JSON.parse;" +
+                        "JSON.parse = function(value) {" +
+                        "if (value !== null && typeof value === 'object') return value;" +
+                        "return __legadoOrigParse.call(JSON, value);};}",
+                    "sandbox-compat", 1, null,
+                )
+            }
 
             // Inject bindings (e.g. result, src, baseUrl, key, page, book, chapter, isLongClick)
             bindings.forEach { (key, value) ->
@@ -442,20 +462,23 @@ class JsSandbox(private val runner: RuleRunner? = null) {
                 val url = args.getOrNull(0)?.toString() ?: return ""
                 val body = args.getOrNull(1)?.toString() ?: ""
                 val headers = args.getOrNull(2)?.let { parseJsMapOrJson(it) } ?: emptyMap()
-                val opt = mapOf("method" to "POST", "body" to body, "headers" to headers)
-                val fullUrl = "$url,${Json.encodeToString(opt)}"
+                val fullUrl = "$url,${urlOptionsJson("POST", headers, body)}"
                 return runner?.fetch(fullUrl, execContext?.sourceId, execContext?.database) ?: ""
             }
         })
 
-        // java.get(url, headers)
+        // java.get(...) 在 Legado 里有两种用法：`java.get(key)` 读 KV，`java.get(url[, headers])` 发 HTTP GET。
+        // 这里必须一个函数同时兼顾：曾经两个注册都写在同一个 bridge 上，后注册的 KV 版把 HTTP 版静默覆盖，
+        // 于是所有用 java.get 抓页面的书源都拿到 undefined（表现为“执行成功但内容为空”）。
         ScriptableObject.putProperty(api, "get", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
-                val url = args.getOrNull(0)?.toString() ?: return ""
-                val headers = args.getOrNull(1)?.let { parseJsMapOrJson(it) } ?: emptyMap()
-                val opt = mapOf("method" to "GET", "headers" to headers)
-                val fullUrl = "$url,${Json.encodeToString(opt)}"
-                return runner?.fetch(fullUrl, execContext?.sourceId, execContext?.database) ?: ""
+                val first = args.firstOrNull()?.toString() ?: return Context.getUndefinedValue()
+                val looksLikeUrl = first.startsWith("http://", ignoreCase = true) || first.startsWith("https://", ignoreCase = true)
+                if (args.size >= 2 || looksLikeUrl) {
+                    val headers = args.getOrNull(1)?.let { parseJsMapOrJson(it) } ?: emptyMap()
+                    return runner?.fetch("$first,${urlOptionsJson("GET", headers, null)}", execContext?.sourceId, execContext?.database) ?: ""
+                }
+                return sessionStore[sessionKey(execContext?.sourceId, first)] ?: Context.getUndefinedValue()
             }
         })
 
@@ -627,7 +650,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
         ScriptableObject.putProperty(api, "deviceID", deviceIdFn)
         ScriptableObject.putProperty(api, "androidId", deviceIdFn)
 
-        // java.timeFormat(timestamp)
+        // java.timeFormat(timestamp[, format])：默认格式与 Legado 一致（到分钟，不带秒）
         ScriptableObject.putProperty(api, "timeFormat", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val arg = args.firstOrNull() ?: return ""
@@ -636,7 +659,10 @@ class JsSandbox(private val runner: RuleRunner? = null) {
                     is Date -> arg.time
                     else -> arg.toString().toLongOrNull() ?: System.currentTimeMillis()
                 }
-                return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(millis))
+                val pattern = (args.getOrNull(1) as? CharSequence)?.toString()?.takeIf { it.isNotBlank() }
+                    ?: "yyyy-MM-dd HH:mm"
+                return runCatching { SimpleDateFormat(pattern, Locale.getDefault()).format(Date(millis)) }
+                    .getOrDefault("")
             }
         })
 
@@ -649,21 +675,28 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             }
         })
 
-        // java.put(key, val) / java.get(key)
+        // java.put(key, val)：读取由上面那个 java.get 分发器负责（KV 分支）。
         ScriptableObject.putProperty(api, "put", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val key = args.getOrNull(0)?.toString() ?: return Context.getUndefinedValue()
                 val value = args.getOrNull(1) ?: return Context.getUndefinedValue()
-                sessionStore[key] = value
+                sessionStore[sessionKey(execContext?.sourceId, key)] = value
                 return value
             }
         })
-        ScriptableObject.putProperty(api, "get", object : BaseFunction() {
-            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
-                val key = args.firstOrNull()?.toString() ?: return Context.getUndefinedValue()
-                return sessionStore[key] ?: Context.getUndefinedValue()
-            }
-        })
+    }
+
+    /**
+     * 拼 `url,{options}` 形态的请求描述。
+     * 不能写成 `Json.encodeToString(mapOf("method" to ..., "headers" to ...))`：kotlinx 在运行期
+     * 找不到 `Any` 的序列化器会直接抛异常，`java.get(url)` / `java.post(url, body)` 于是静默失败。
+     */
+    private fun urlOptionsJson(method: String, headers: Map<String, String>, body: String?): String {
+        val fields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>()
+        fields["method"] = JsonPrimitive(method)
+        if (headers.isNotEmpty()) fields["headers"] = JsonObject(headers.mapValues { JsonPrimitive(it.value) })
+        if (body != null) fields["body"] = JsonPrimitive(body)
+        return JsonObject(fields).toString()
     }
 
     private fun parseJsMapOrJson(value: Any?): Map<String, String> {

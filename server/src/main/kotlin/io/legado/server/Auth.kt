@@ -7,16 +7,39 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sessions.*
+import java.net.URI
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 
-class AuthService(val database: Database, private val secureCookies: Boolean) {
+class AuthService(val database: Database, private val secureCookies: Boolean, val loopbackNoAuth: Boolean = false) {
     private val attempts = ConcurrentHashMap<String, Attempt>()
     private val basicAuthorizations = ConcurrentHashMap<String, Long>()
+    private val loopbackLock = Any()
+
+    @Volatile
+    private var loopbackSession: UserSession? = null
+
+    /**
+     * 回环免登录：给来自 127.0.0.1 的匿名请求就地铸造一个会话。
+     * 条件不满足（未开开关、或请求不是本机）时返回 null，行为与原版一致。
+     * 整个进程复用同一条 session 记录：过期表没有清理任务，逐请求铸造会让 session 表无上限增长。
+     */
+    suspend fun attachLoopbackSession(call: ApplicationCall): UserSession? {
+        if (!loopbackNoAuth || !ServerConfig.isLoopbackRemote(call.request.origin.remoteHost)) return null
+        val cached = loopbackSession
+        val session = if (cached != null && database.csrfFor(cached) != null) cached
+        else synchronized(loopbackLock) { loopbackSession?.takeIf { database.csrfFor(it) != null } ?: database.createSession().also { loopbackSession = it } }
+        call.sessions.set(session)
+        return session
+    }
 
     suspend fun requireSession(call: ApplicationCall, csrfRequired: Boolean = false): UserSession? {
-        val session = call.sessions.get<UserSession>()
-        val csrf = session?.let(database::csrfFor)
+        var session = call.sessions.get<UserSession>()
+        var csrf = session?.let(database::csrfFor)
+        if (session == null || csrf == null) {
+            session = attachLoopbackSession(call)
+            csrf = session?.let(database::csrfFor)
+        }
         if (session == null || csrf == null) {
             call.sessions.clear<UserSession>(); call.respond(HttpStatusCode.Unauthorized, ApiError("unauthenticated", "请先登录")); return null
         }
@@ -53,6 +76,25 @@ class AuthService(val database: Database, private val secureCookies: Boolean) {
         return true
     }
 
+    /**
+     * 回环免登录部署下 WebDAV 是否放行。三道门槛缺一不可：
+     * 开关开着、请求真的来自 127.x、`Host` 本身就是回环地址（DNS 重绑会把 attacker.example 指到本机，
+     * 但 Host 头会留原域名，直接拒）；带 `Origin` 的浏览器请求还必须与 `Host` 同源，
+     * 否则网页就能借本机浏览器往用户目录写文件。资源管理器/curl 不发 Origin，照常放行。
+     */
+    fun allowsLoopbackWebDav(call: ApplicationCall): Boolean {
+        if (!loopbackNoAuth) return false
+        if (!ServerConfig.isLoopbackRemote(call.request.origin.remoteHost)) return false
+        val hostHeader = call.request.headers[HttpHeaders.Host].orEmpty().substringBefore(':')
+        if (hostHeader.isEmpty() || !ServerConfig.isLoopbackRemote(hostHeader)) return false
+        val origin = call.request.headers[HttpHeaders.Origin] ?: return true
+        val originHost = runCatching { URI(origin).host }.getOrNull() ?: return false
+        return originHost.equals(hostHeader, ignoreCase = true)
+    }
+
+    /** 只有客户端自己带上会话 Cookie 时 CSRF 校验才有意义（服务端铸造的匿名会话无从携带伪造请求做不到的 Cookie）。 */
+    fun csrfForPresentedSession(call: ApplicationCall): String? = call.sessions.get<UserSession>()?.let { csrf(it) }
+
     fun canAttempt(remoteHost: String): Boolean = attempts[remoteHost]?.let { it.until > System.currentTimeMillis() } != true
     fun failure(remoteHost: String) {
         attempts.compute(remoteHost) { _, old ->
@@ -75,7 +117,7 @@ class AuthService(val database: Database, private val secureCookies: Boolean) {
 fun Route.authRoutes(auth: AuthService) {
     route("/api/auth") {
         get("/session") {
-            val session = call.sessions.get<UserSession>()
+            val session = call.sessions.get<UserSession>() ?: auth.attachLoopbackSession(call)
             val csrf = session?.let(auth::csrf)
             call.respond(SessionResponse(csrf != null, csrf))
         }

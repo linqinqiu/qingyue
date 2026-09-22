@@ -89,6 +89,10 @@ data class SourceLoginActionResult(
 data class SourceLoginCheckResult(
     val loggedIn: Boolean,
     val message: String? = null,
+    /** 是否已捕获到任意凭据（Cookie / 登录头 / 登录信息）。有凭据 ≠ 已登录。 */
+    val hasCredential: Boolean = false,
+    /** 是否经书源 loginCheckJs 主动验证通过。无 loginCheckJs 时恒为 false（无法验证）。 */
+    val verified: Boolean = false,
 )
 
 @Serializable
@@ -159,6 +163,7 @@ data class SourceLoginStateRecord(
 )
 
 @Serializable data class SourceWriteRequest(val json: String, val version: Long? = null)
+@Serializable data class SourceValidateRequest(val json: String? = null)
 @Serializable data class ImportRequest(val sources: List<String>, val overwrite: Boolean = true)
 @Serializable data class ImportResponse(val imported: Int, val updated: Int = 0, val skipped: Int, val errors: List<String>)
 @Serializable data class SubscriptionWriteRequest(val url: String, val enabled: Boolean = true)
@@ -177,6 +182,8 @@ data class SourceLoginStateRecord(
 @Serializable data class ValidateResponse(val valid: Boolean, val errors: List<String>, val warnings: List<String>)
 @Serializable data class DebugRequest(val keyword: String = "测试")
 @Serializable data class SearchRequest(val keyword: String, val sourceIds: List<String>? = null)
+@Serializable data class ExploreTab(val title: String, val url: String)
+@Serializable data class ExploreRequest(val sourceId: String, val url: String)
 @Serializable data class SearchStreamEvent(
     val type: String,
     val totalSources: Int = 0,
@@ -422,6 +429,8 @@ data class BatchSourceResponse(
 data class SourceHealthCheckRequest(
     val ids: List<String>? = null,
     val timeoutMs: Long = 5000L,
+    /** 体检用的搜索关键词；书源自带 checkKeyWord 时优先用源自己的。 */
+    val keyword: String? = null,
 )
 
 @Serializable
@@ -431,7 +440,8 @@ data class SourceHealthCheckItem(
     val ok: Boolean,
     val latencyMs: Long,
     val statusCode: Int = 0,
-    val statusCategory: String, // "valid", "slow", "failed", "blocked"
+    /** valid · slow · empty · blocked · needs_login · needs_webview · unreachable · tls · broken · invalid */
+    val statusCategory: String,
     val error: String? = null,
 )
 
@@ -470,6 +480,8 @@ data class BackupImportSummary(
     val books: Int,
     val booksUpdated: Int,
     val progress: Int,
+    /** 备份包里有、但服务端当前承接不了的条目名（RSS/TTS/字典/主题…），如实回报而不是静默丢弃。 */
+    val skippedSections: List<String> = emptyList(),
 )
 
 /** 备份包 `bookshelf.json` 中的一条书架记录（含阅读进度），仅用于导入。 */
@@ -499,6 +511,8 @@ data class WebDavInfoResponse(
     val directoryCount: Int,
     val totalBytes: Long,
     val entries: List<WebDavEntry> = emptyList(),
+    /** 本机回环免登录是否生效：决定「文件」页要不要教用户填密码。 */
+    val anonymousLocalAccess: Boolean = false,
 )
 
 /** 本地图书导入返回条目 */

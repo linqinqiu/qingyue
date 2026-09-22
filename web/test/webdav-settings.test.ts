@@ -20,7 +20,7 @@ test('WebDavSettingsPage - static rendering exposes status, guides and file mana
   assert.ok(html.includes('WebDAV'), 'page should contain the WebDAV title')
   assert.ok(html.includes('文件服务'), 'page should contain the section kicker')
   assert.ok(html.includes('服务状态'), 'page should contain the status card')
-  assert.ok(html.includes('运行中'), 'page should report the service as running')
+  assert.ok(html.includes('检测中'), 'static render has no probe result yet, so the card must not claim 运行中')
   assert.ok(html.includes('/webdav'), 'page should show the webdav endpoint')
   assert.ok(html.includes('HTTP Basic'), 'page should describe the auth scheme')
   assert.ok(html.includes('用户名任意填写，密码即当前登录密码'), 'page should explain credentials')

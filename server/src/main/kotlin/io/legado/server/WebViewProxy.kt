@@ -43,6 +43,8 @@ class WebViewProxy(private val database: Database) {
         val expiresAt: Long,
         /** 书源 JS 用数据地址生成的自包含页面（如「使用教程」「书源更新」「设置中心」） */
         val inline: MutableMap<String, String> = ConcurrentHashMap(),
+        /** 整个会话锁定一种身份：书源 loginUrl 多是 m. 移动站，用桌面 UA 会撑出 980px 布局，登录按钮落到可视区外 */
+        val userAgent: String,
     )
 
     private val tickets = ConcurrentHashMap<String, Ticket>()
@@ -63,10 +65,12 @@ class WebViewProxy(private val database: Database) {
         // 这样即便 bookSourceUrl 是「大灰狼融合VIP5.0」这类自定义标识也能正常代理。
         val domains = allowedDomains(sourceJson).toMutableSet()
         startUrl?.let { url -> hostOf(url)?.let { domains.add(registrableDomain(it)) } }
+        val probeHost = startUrl?.let { hostOf(it) } ?: domains.firstOrNull()
         tickets[token] = Ticket(
             sourceId = sourceId,
             domains = domains,
             expiresAt = System.currentTimeMillis() + TICKET_TTL_MS,
+            userAgent = if (probeHost != null && MOBILE_HOST.matches(probeHost)) MOBILE_USER_AGENT else DESKTOP_USER_AGENT,
         )
         return token
     }
@@ -96,7 +100,7 @@ class WebViewProxy(private val database: Database) {
     fun openPage(sourceId: String, token: String, target: String): ProxiedPayload {
         val ticket = resolveTicket(token, sourceId)
         val uri = validateTarget(ticket, target, enforceDomain = true)
-        val response = requestFollowing(uri, "GET", null, null, sourceId, referer = null)
+        val response = requestFollowing(uri, "GET", null, null, sourceId, ticket, referer = null)
         val contentType = response.headers().firstValue("content-type").orElse("")
         val raw = response.body()
         val mime = contentType.substringBefore(';').trim().lowercase()
@@ -114,7 +118,7 @@ class WebViewProxy(private val database: Database) {
     fun openResource(sourceId: String, token: String, target: String): ProxiedPayload {
         val ticket = resolveTicket(token, sourceId)
         val uri = validateTarget(ticket, target, enforceDomain = false)
-        val response = requestFollowing(uri, "GET", null, null, sourceId, referer = refererFor(uri))
+        val response = requestFollowing(uri, "GET", null, null, sourceId, ticket, referer = refererFor(uri))
         val contentType = response.headers().firstValue("content-type").orElse("application/octet-stream")
         val raw = response.body()
         val mime = contentType.substringBefore(';').trim().lowercase()
@@ -145,9 +149,9 @@ class WebViewProxy(private val database: Database) {
         val ticket = resolveTicket(token, sourceId)
         val uri = validateTarget(ticket, action, enforceDomain = true)
         val response = if (method.equals("POST", ignoreCase = true)) {
-            requestFollowing(uri, "POST", body, contentType, sourceId, referer = refererFor(uri))
+            requestFollowing(uri, "POST", body, contentType, sourceId, ticket, referer = refererFor(uri))
         } else {
-            requestFollowing(uri, "GET", null, null, sourceId, referer = refererFor(uri))
+            requestFollowing(uri, "GET", null, null, sourceId, ticket, referer = refererFor(uri))
         }
         val responseContentType = response.headers().firstValue("content-type").orElse("")
         val raw = response.body()
@@ -222,6 +226,7 @@ class WebViewProxy(private val database: Database) {
         body: ByteArray?,
         contentType: String?,
         sourceId: String,
+        ticket: Ticket,
         referer: String?,
     ): HttpResponse<ByteArray> {
         var current = uri
@@ -230,14 +235,16 @@ class WebViewProxy(private val database: Database) {
         var currentContentType = contentType
         var currentReferer = referer
         repeat(MAX_REDIRECTS) {
-            val response = send(current, currentMethod, currentBody, currentContentType, sourceId, currentReferer)
+            val response = send(current, currentMethod, currentBody, currentContentType, sourceId, currentReferer, ticket.userAgent)
             harvestCookies(sourceId, current, response)
             val status = response.statusCode()
             if (status in 300..399) {
                 val location = response.headers().firstValue("location").orElse(null) ?: return response
                 val next = runCatching { current.resolve(location) }.getOrNull() ?: return response
+                // 每一跳都要重新过 SSRF 校验：否则站点回一个 `Location: http://127.0.0.1:…` 就绕过了
+                // 只在入口做的内网拦截（本机服务还带免登录会话，等于把内网口递给了外部站点）。
+                current = validateTarget(ticket, next.toString(), enforceDomain = false)
                 currentReferer = current.toString()
-                current = next
                 // 302/303 之后按浏览器语义退化为 GET
                 if (status == 303 || (status in setOf(301, 302) && currentMethod == "POST")) {
                     currentMethod = "GET"
@@ -258,10 +265,11 @@ class WebViewProxy(private val database: Database) {
         contentType: String?,
         sourceId: String,
         referer: String?,
+        userAgent: String,
     ): HttpResponse<ByteArray> {
         val builder = HttpRequest.newBuilder(uri)
             .timeout(Duration.ofSeconds(25))
-            .header("User-Agent", DESKTOP_USER_AGENT)
+            .header("User-Agent", userAgent)
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
             .header("Accept-Encoding", "gzip, deflate")
@@ -328,6 +336,12 @@ class WebViewProxy(private val database: Database) {
         private const val MAX_INLINE_PAGES = 16
         const val DESKTOP_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+        /** 安卓端 Legado 用的是 WebView UA，服务端对齐它，移动站才会给出移动版登录页 */
+        const val MOBILE_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+
+        private val MOBILE_HOST = Regex("""^(m|wap|3g|mobile|i)\.[\w.-]+$|\.m\.[\w.-]+$""")
 
         private val MULTI_PART_TLDS = setOf(
             "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
@@ -575,6 +589,13 @@ class WebViewProxy(private val database: Database) {
                 script,
                 """
                 (function(){
+                  /* 宿主窗口必须在改写 top/parent 之前抓下来。改写之后 window.parent 就是 iframe 自己，
+                     届时所有 postMessage 都打进自己的收件箱 —— 地址栏跟随和登录自检会全部静默失效。 */
+                  var HOST=null;
+                  try{ HOST=window.parent }catch(e){}
+                  var HAS_HOST=false;
+                  try{ HAS_HOST=!!HOST&&HOST!==window }catch(e){}
+                  function tell(payload){ if(!HAS_HOST)return; try{ HOST.postMessage(payload,'*') }catch(e){} }
                   try{Object.defineProperty(window,'top',{get:function(){return window},configurable:true})}catch(e){}
                   try{Object.defineProperty(window,'parent',{get:function(){return window},configurable:true})}catch(e){}
                   try{Object.defineProperty(window,'frameElement',{get:function(){return null},configurable:true})}catch(e){}
@@ -585,11 +606,7 @@ class WebViewProxy(private val database: Database) {
                   function build(kind,u){var a=abs(u);if(!a||!/^https?:/i.test(a))return u;return PREFIX+'/'+kind+'?t='+encodeURIComponent(TOKEN)+'&u='+encodeURIComponent(a)}
                   var toRes=function(u){return build('res',u)}, toPage=function(u){return build('page',u)};
                   window.__legadoProxy={toRes:toRes,toPage:toPage};
-                  try{
-                    if(window.parent&&window.parent!==window){
-                      window.parent.postMessage({source:'legado-webview',type:'navigated',url:BASE},'*')
-                    }
-                  }catch(e){}
+                  tell({source:'legado-webview',type:'navigated',url:BASE});
                   var nativeFetch=window.fetch;
                   if(nativeFetch){
                     window.fetch=function(input,init){
@@ -605,7 +622,97 @@ class WebViewProxy(private val database: Database) {
                     try{ arguments[1]=toRes(url) }catch(e){}
                     return nativeOpen.apply(this,arguments)
                   };
+                  /* 站点运行时才插入的脚本/样式/图片不走 HTML 改写，只走这里：
+                     番茄的头部（含登录入口）正是被一段动态注入的 SDK 挂上去的，
+                     那条 src 留在原域就是跨源脚本，报 "Script error." 且整段不执行。 */
+                  function patchUrlProp(proto,name){
+                    try{
+                      if(!proto) return;
+                      var d=Object.getOwnPropertyDescriptor(proto,name);
+                      if(!d||!d.set) return;
+                      Object.defineProperty(proto,name,{configurable:true,get:d.get,set:function(v){ d.set.call(this,toRes(v)) }});
+                    }catch(e){}
+                  }
+                  patchUrlProp(window.HTMLScriptElement&&HTMLScriptElement.prototype,'src');
+                  patchUrlProp(window.HTMLImageElement&&HTMLImageElement.prototype,'src');
+                  patchUrlProp(window.HTMLIFrameElement&&HTMLIFrameElement.prototype,'src');
+                  patchUrlProp(window.HTMLMediaElement&&HTMLMediaElement.prototype,'src');
+                  patchUrlProp(window.HTMLSourceElement&&HTMLSourceElement.prototype,'src');
+                  patchUrlProp(window.HTMLLinkElement&&HTMLLinkElement.prototype,'href');
+                  var nativeSetAttr=Element.prototype.setAttribute;
+                  Element.prototype.setAttribute=function(name,value){
+                    try{
+                      var n=String(name||'').toLowerCase();
+                      var tag=String(this.tagName||'').toLowerCase();
+                      if(n==='src'&&/^(script|img|iframe|source|embed|video|audio|track)$/.test(tag)){ arguments[1]=toRes(value) }
+                      else if(n==='href'&&tag==='link'){ arguments[1]=toRes(value) }
+                    }catch(e){}
+                    return nativeSetAttr.apply(this,arguments)
+                  };
                   window.open=function(url){ if(url){ window.location.href=toPage(url) } return window };
+                  // 自检并回报：iframe 是不透明源（不给 allow-same-origin，否则被代理页面与我们同源，
+                  // 第三方脚本就能读会话 Cookie、直接调我们的接口），所以站方 JS 一旦碰
+                  // localStorage/sessionStorage/indexedDB/document.cookie 就是 SecurityError，
+                  // 表现是"页面打开了但什么都点不动"。与其让用户猜，不如把现场报回宿主。
+                  var errs=[];
+                  window.addEventListener('error',function(e){ if(errs.length<6) errs.push(String((e&&e.message)||'脚本错误').slice(0,120)) },true);
+                  // 「登录按钮点不到」要能自己说清是谁挡的：找出带「登录」字样的可见控件，
+                  // 反查它几何中心上真正接住点击的元素，顺便看它是否落在视口外。
+                  function targets(){
+                    var list=[];
+                    try{
+                      var nodes=document.querySelectorAll('button,a,input[type=submit],[role=button],div,span,li');
+                      for(var i=0;i<nodes.length&&list.length<8;i++){
+                        var el=nodes[i];
+                        var txt=String(el.innerText||el.value||el.getAttribute('aria-label')||'').replace(/\s+/g,'');
+                        if(!txt||txt.length>8) continue;
+                        if(txt.indexOf('登录')<0&&txt.toLowerCase().indexOf('login')<0) continue;
+                        var r=el.getBoundingClientRect();
+                        if(!r.width||!r.height) continue;
+                        var top=document.elementFromPoint(Math.round(r.left+r.width/2),Math.round(r.top+r.height/2));
+                        var blocked=!!top&&top!==el&&!el.contains(top)&&!top.contains(el);
+                        list.push({
+                          text:txt,
+                          box:[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)],
+                          inView:r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth,
+                          blocked:blocked,
+                          blocker:top?(top.tagName+'.'+String(top.className||'').slice(0,60)+(top.id?'#'+top.id:'')):''
+                        });
+                      }
+                    }catch(err){}
+                    return list;
+                  }
+                  function report(){
+                    try{
+                      // 注：iframe 是 opaque origin（宿主刻意不给 same-origin），localStorage 必然抛错，
+                      // 这是我们自己的沙箱限制、不是站点故障，宿主不得据此判「页面坏了」。
+                      var storage='ok';
+                      try{ window.localStorage.getItem('__legado_probe') }catch(err){ storage=String((err&&err.name)||'blocked') }
+                      tell({
+                        source:'legado-webview',
+                        type:'diagnostics',
+                        forms:document.querySelectorAll('form').length,
+                        fields:document.querySelectorAll('input,select,textarea').length,
+                        scripts:document.querySelectorAll('script').length,
+                        storage:storage,
+                        viewport:[innerWidth,innerHeight,document.documentElement.scrollWidth,document.documentElement.scrollHeight],
+                        targets:targets(),
+                        errors:errs
+                      },'*');
+                    }catch(err){}
+                  }
+                  // SPA 的登录按钮/表单常在首屏之后才挂载：定点快照会误报「无表单/点不到」。
+                  // 改为持续轮询（约每 1.2s 一次，最多 ~18 次）+ DOM 变化节流重报，宿主始终取最新一份。
+                  report();
+                  var polls=0;
+                  var timer=setInterval(function(){ polls++; report(); if(polls>=18) clearInterval(timer) },1200);
+                  var mQueued=false;
+                  try{
+                    new MutationObserver(function(){
+                      if(mQueued) return; mQueued=true;
+                      setTimeout(function(){ mQueued=false; report() },900);
+                    }).observe(document.documentElement,{subtree:true,childList:true,attributes:true});
+                  }catch(e){}
                 })();
                 """.trimIndent(),
             )

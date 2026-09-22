@@ -273,6 +273,24 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         it.setString(1, id); it.executeQuery().use { rs -> if (rs.next()) SourceRecord(rs.getString(1), rs.getString(2), rs.getLong(3), rs.getLong(4)) else null }
     } }
 
+    /** 配了「发现」页（exploreUrl 非空）的启用书源，供发现页做书源筛选。 */
+    fun listExploreSources(): List<SourceSummary> = connect { db ->
+        db.prepareStatement(
+            "select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login, payload from source where enabled = 1 order by name collate nocase"
+        ).use { statement ->
+            statement.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        val exploreUrl = runCatching {
+                            Json.parseToJsonElement(rs.getString(10)).jsonObject["exploreUrl"]?.jsonPrimitive?.contentOrNull
+                        }.getOrNull()
+                        if (!exploreUrl.isNullOrBlank()) add(rs.toSummary())
+                    }
+                }
+            }
+        }
+    }
+
     fun listSearchSourceRecords(sourceIds: List<String>?): List<SourceRecord> = connect { db ->
         val ids = sourceIds?.distinct()?.takeIf { it.isNotEmpty() }
         val sql = if (ids == null) {
@@ -474,7 +492,8 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             db.prepareStatement("delete from reading_progress where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_content_cache where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_cache_status where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
-            db.prepareStatement("delete from book_toc_cache where source_id=? and (toc_url=? or toc_url like ?)").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.setString(3, "%$bookUrl%"); it.executeUpdate() }
+            // 用 instr 而不是 like '%x%'：bookUrl 里的 `%`/`_` 会被 LIKE 当通配符，删一本书会连带删掉别的书的目录缓存。
+            db.prepareStatement("delete from book_toc_cache where source_id=? and (toc_url=? or instr(toc_url, ?) > 0)").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.setString(3, bookUrl); it.executeUpdate() }
             val orphan = key?.takeIf { value -> db.prepareStatement("select 1 from book_shelf where cover_key=?").use { it.setString(1, value); !it.executeQuery().next() } }
             orphan?.let { value -> db.prepareStatement("delete from cover_cache where cache_key=?").use { it.setString(1, value); it.executeUpdate() } }
             db.commit(); orphan
@@ -502,7 +521,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             db.prepareStatement("delete from reading_progress where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_content_cache where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_cache_status where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
-            db.prepareStatement("delete from book_toc_cache where source_id=? and (toc_url=? or toc_url like ?)").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.setString(3, "%$oldBookUrl%"); it.executeUpdate() }
+            db.prepareStatement("delete from book_toc_cache where source_id=? and (toc_url=? or instr(toc_url, ?) > 0)").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.setString(3, oldBookUrl); it.executeUpdate() }
             cover?.let { value -> db.prepareStatement("insert into cover_cache(cache_key,content_type) values(?,?) on conflict(cache_key) do update set content_type=excluded.content_type").use { it.setString(1, value.key); it.setString(2, value.contentType); it.executeUpdate() } }
             val newCoverKey = cover?.key ?: oldCover
             db.prepareStatement("""insert into book_shelf(source_id,book_url,name,author,toc_url,cover_url,cover_key,last_read_at,alternate_sources) values(?,?,?,?,?,?,?,?,?)

@@ -28,7 +28,8 @@ version = '0.1.0'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        // 本机只有 JDK 17（JDK 21 镜像拉不下来）。target 本来就是 17，降级只影响编译器版本。
+        languageVersion = JavaLanguageVersion.of(17)
     }
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17

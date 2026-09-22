@@ -23,8 +23,17 @@ node_modules/
 server/src/main/resources/static/
 .env
 .data/
+# 本机部署的数据目录（SQLite + 封面 + WebDAV 落盘），含用户书架，严禁入库
+data/
+*.log
+tools/verify/out/
 .agents/
 .worktrees/
 coverage/
 web/coverage/
 
+
+.pptr-profile/
+
+# 本机改动差异，含本机绝对路径，只作本地留档用，不入库
+local-patches.diff

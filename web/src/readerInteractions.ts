@@ -143,3 +143,11 @@ export function findFirstFullyVisibleParagraphIndex(
 
 
 
+
+/**
+ * 服务端把正文里的 `<img>` 换成的占位行：`![图片](绝对地址)`。
+ * 图片因此能穿过净化管道、离线缓存与 TTS 的同一条字符串链路，不用另开一套数据结构。
+ */
+const CONTENT_IMAGE_LINE = /^!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)$/
+
+export const contentImageUrl = (line: string): string | null => CONTENT_IMAGE_LINE.exec(line.trim())?.[1] ?? null

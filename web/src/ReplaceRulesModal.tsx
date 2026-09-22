@@ -235,7 +235,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
               type="button"
               onClick={() => openAddModal(false)}
               className="primary-button"
-              style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
+              style={{ padding: '0 10px', fontSize: '12px' }}
             >
               <Icon name="plus" />
               <span>新建规则</span>
@@ -245,7 +245,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                 type="button"
                 onClick={() => openAddModal(true)}
                 className="subtle-button"
-                style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
+                style={{ padding: '0 10px', fontSize: '12px' }}
               >
                 <span>当前书专用</span>
               </button>
@@ -254,7 +254,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
               type="button"
               onClick={() => setIsImportModalOpen(true)}
               className="subtle-button"
-              style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
+              style={{ padding: '0 10px', fontSize: '12px' }}
             >
               <Icon name="upload" />
               <span>导入</span>
@@ -263,7 +263,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
               type="button"
               onClick={handleExport}
               className="ghost-button"
-              style={{ height: '30px', padding: '0 8px', fontSize: '12px' }}
+              style={{ padding: '0 8px', fontSize: '12px' }}
               title="导出全部"
             >
               <Icon name="download" />
@@ -374,7 +374,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                         setIsEditModalOpen(true)
                       }}
                       className="subtle-button"
-                      style={{ padding: '3px 6px', height: '26px' }}
+                      style={{ padding: '3px 6px' }}
                       title="编辑"
                     >
                       <Icon name="edit" />
@@ -383,7 +383,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                       type="button"
                       onClick={() => handleDelete(rule)}
                       className="danger-button"
-                      style={{ padding: '3px 6px', height: '26px' }}
+                      style={{ padding: '3px 6px' }}
                       title="删除"
                     >
                       <Icon name="close" />
@@ -415,7 +415,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
             type="button"
             onClick={onClose}
             className="primary-button"
-            style={{ height: '32px', padding: '0 16px', fontSize: '12px' }}
+            style={{ padding: '0 16px', fontSize: '12px' }}
           >
             完成
           </button>
@@ -547,7 +547,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                     onClick={handleRunTest}
                     disabled={testing}
                     className="subtle-button"
-                    style={{ height: '24px', padding: '0 8px', fontSize: '11px' }}
+                    style={{ padding: '0 8px', fontSize: '11px' }}
                   >
                     {testing ? '测试中...' : '运行测试'}
                   </button>

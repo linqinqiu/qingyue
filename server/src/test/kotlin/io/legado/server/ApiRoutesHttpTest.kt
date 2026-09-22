@@ -117,6 +117,15 @@ class ApiRoutesHttpTest {
             val validateResult = validateResp.body<ValidateResponse>()
             assertTrue(validateResult.valid)
 
+            // 6b. 带草稿时校验未保存内容：编辑器里写坏的结构必须当场暴露，不能去看库里的旧副本
+            val draftResp = client.post("/api/sources/https%3A%2F%2Fsource1.com/validate") {
+                header(AuthService.CSRF_HEADER, csrf)
+                contentType(ContentType.Application.Json)
+                setBody(SourceValidateRequest("""{"bookSourceName":"缺少地址的草稿"}"""))
+            }
+            assertEquals(HttpStatusCode.OK, draftResp.status)
+            assertEquals(false, draftResp.body<ValidateResponse>().valid)
+
             // 7. Update source (PUT)
             val updatedJson = """{"bookSourceUrl":"https://source1.com","bookSourceName":"更新后的源1","searchUrl":"/s?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b/{{$.id}}"}}"""
             val putResp = client.put("/api/sources/https%3A%2F%2Fsource1.com") {

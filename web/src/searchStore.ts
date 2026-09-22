@@ -15,6 +15,8 @@ export type SourceChoice = {
 export interface SearchStoreState {
   keyword: string
   selectedSourceId: string
+  /** 按分组搜索时的显式书源集合；null = 沿用单源或全部 */
+  selectedSourceIds: string[] | null
   results: SearchResult[]
   choices: SourceChoice[]
   openBook: OpenBook | null
@@ -157,6 +159,7 @@ export const loadSourceBook = async (result: SearchResult, alternateSources?: Se
 const initialSearchState: SearchStoreState = {
   keyword: '',
   selectedSourceId: '',
+  selectedSourceIds: null,
   results: [],
   choices: [],
   openBook: null,
@@ -199,7 +202,11 @@ export class SearchStore {
   }
 
   setSelectedSourceId = (selectedSourceId: string) => {
-    this.setState({ selectedSourceId })
+    this.setState({ selectedSourceId, selectedSourceIds: null })
+  }
+
+  setSelectedSourceIds = (selectedSourceIds: string[] | null) => {
+    this.setState({ selectedSourceIds, selectedSourceId: selectedSourceIds?.length === 1 ? selectedSourceIds[0] : '' })
   }
 
   setFilters = (filters: SearchFilters | ((current: SearchFilters) => SearchFilters)) => {
@@ -221,6 +228,8 @@ export class SearchStore {
     if (!query) return
 
     const source = sourceId !== undefined ? sourceId : this.state.selectedSourceId
+    // 服务端把「sourceIds 为空」当作不限制=搜全部启用源，所以 null（不限制）与 []（零个源）必须分清
+    const scopeIds = sourceId !== undefined ? (source ? [source] : undefined) : (this.state.selectedSourceIds ?? (source ? [source] : undefined))
 
     if (this.socket) {
       try {
@@ -253,7 +262,7 @@ export class SearchStore {
 
     const socket = streamSearch(
       query,
-      source ? [source] : undefined,
+      scopeIds,
       packet => {
         if (this.socket !== socket) return
         if (packet.type === 'start' || packet.type === 'progress' || packet.type === 'done') {
@@ -450,6 +459,7 @@ export const searchStore = new SearchStore()
 export function useSearchStore(): SearchStoreState & {
   setKeyword: (keyword: string) => void
   setSelectedSourceId: (sourceId: string) => void
+  setSelectedSourceIds: (ids: string[] | null) => void
   setFilters: (filters: SearchFilters | ((current: SearchFilters) => SearchFilters)) => void
   setOpenBook: (book: OpenBook | null) => void
   startSearch: (keyword?: string, sourceId?: string) => void
@@ -461,7 +471,8 @@ export function useSearchStore(): SearchStoreState & {
   const state = useSyncExternalStore(searchStore.subscribe, searchStore.getSnapshot)
   return {
     ...state,
-    setKeyword: searchStore.setKeyword,
+    setKeyword: searchStore.setKeyword,
+    setSelectedSourceIds: searchStore.setSelectedSourceIds,
     setSelectedSourceId: searchStore.setSelectedSourceId,
     setFilters: searchStore.setFilters,
     setOpenBook: searchStore.setOpenBook,

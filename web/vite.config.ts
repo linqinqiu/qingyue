@@ -12,13 +12,33 @@ export default defineConfig({
         name: '阅读',
         short_name: '阅读',
         description: 'Legado 现代化 Web 阅读器与服务端',
-        theme_color: '#121820',
-        background_color: '#121820',
+        theme_color: '#247a58',
+        background_color: '#f8f9f7',
         display: 'standalone',
         orientation: 'any',
         scope: '/',
         start_url: '/',
+        // Windows 安装出来的 .ico 是从 PNG 图标生成的；只给 SVG 会被光栅化成糊成一团的小图，
+        // 所以 PNG 必须排在前面并同时给出 192/512 与 maskable。
         icons: [
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
           {
             src: '/pwa-192x192.svg',
             sizes: '192x192',
@@ -37,31 +57,19 @@ export default defineConfig({
             type: 'image/svg+xml',
             purpose: 'maskable',
           },
-          {
-            src: '/logo.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
-          {
-            src: '/favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
         ],
         shortcuts: [
           {
             name: '我的书架',
             short_name: '书架',
             url: '/',
-            icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+            icons: [{ src: '/favicon-48.png', sizes: '48x48', type: 'image/png' }],
           },
           {
             name: '书源管理',
             short_name: '书源',
             url: '/#sources',
-            icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+            icons: [{ src: '/favicon-48.png', sizes: '48x48', type: 'image/png' }],
           },
           {
             name: '替换净化',

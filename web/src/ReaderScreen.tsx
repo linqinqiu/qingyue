@@ -1,7 +1,7 @@
 import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, BookDetails, Chapter, ReadingProgress, SearchResult } from './api'
 import { Icon } from './icons'
-import { calculatePaginationLayout, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
+import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, TtsEngineType } from './readerSettings'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
@@ -51,7 +51,7 @@ function ReaderSettingsControls({
 }) {
   const update = (value: Partial<ReaderSettings>) => onChange({ ...settings, ...value })
   return <div className="drawer-scroll-content">
-    <section className="setting-section"><span className="setting-label">主题</span><div className="theme-grid">{themes.map(([theme, label]) => <button key={theme} className={`theme-choice theme-${theme} ${settings.theme === theme ? 'selected' : ''}`} onClick={() => update({ theme })}><i>{settings.theme === theme && <Icon name="check" />}</i><small>{label}</small></button>)}</div></section>
+    <section className="setting-section"><span className="setting-label">主题</span><div className="theme-grid">{themes.map(([theme, label]) => <button key={theme} className={`theme-choice swatch-${theme} ${settings.theme === theme ? 'selected' : ''}`} onClick={() => update({ theme })}><i>{settings.theme === theme && <Icon name="check" />}</i><small>{label}</small></button>)}</div></section>
     <section className="setting-section"><span className="setting-label">字体</span><label className="font-select"><select value={settings.font} onChange={event => update({ font: event.target.value as ReaderSettings['font'] })}><option value="song">思源宋体</option><option value="hei">黑体 / 苹方</option><option value="kai">华文楷体</option><option value="fangsong">华文仿宋</option><option value="system">系统字体</option></select><Icon name="chevronDown" /></label></section>
     <section className="setting-section compact-settings"><div className="font-stepper"><span>字号</span><button aria-label="减小字号" onClick={() => update({ fontSize: Math.max(15, settings.fontSize - 1) })}>−</button><output>{settings.fontSize}</output><button aria-label="增大字号" onClick={() => update({ fontSize: Math.min(28, settings.fontSize + 1) })}>+</button></div><SettingRange label="字间距" value={settings.letterSpacing} min={-.25} max={1.5} step={.05} display={settings.letterSpacing.toFixed(2)} onChange={letterSpacing => update({ letterSpacing })} /><SettingRange label="行间距" value={settings.lineHeight} min={1.45} max={2.4} step={.05} display={settings.lineHeight.toFixed(2)} onChange={lineHeight => update({ lineHeight })} /><SettingRange label="段间距" value={settings.paragraphSpacing} min={.7} max={2} step={.05} display={settings.paragraphSpacing.toFixed(2)} onChange={paragraphSpacing => update({ paragraphSpacing })} /><SettingRange label="左右边距" value={settings.contentPadding} min={20} max={120} step={2} display={`${settings.contentPadding}`} onChange={contentPadding => update({ contentPadding })} /><SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} /></section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
@@ -71,8 +71,8 @@ function ReaderSettingsControls({
             padding: '10px 14px',
             border: '1px solid var(--line)',
             borderRadius: '8px',
-            background: 'var(--panel)',
-            color: 'var(--text-color, #e6e8eb)',
+            background: 'var(--surface-muted)',
+            color: 'var(--ink)',
             cursor: 'pointer',
             fontSize: '14px',
           }}
@@ -249,6 +249,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [showTtsSettings, setShowTtsSettings] = useState(false)
   const [showSourceSwitch, setShowSourceSwitch] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  useEffect(() => {
+    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+    else void document.documentElement.requestFullscreen().catch(() => undefined)
+  }
   const [showReplaceRules, setShowReplaceRules] = useState(false)
   const [cachedChapterUrls, setCachedChapterUrls] = useState<Set<string>>(new Set())
   const [offlineStatsModal, setOfflineStatsModal] = useState(false)
@@ -297,6 +307,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const chapter = currentBook.chapters[chapterIndex]
+  // 异步回调里判断「这一章还是不是当前章」必须用 ref：闭包捕获的 chapter 是发起请求那一刻的。
+  const currentChapterUrlRef = useRef('')
+  currentChapterUrlRef.current = chapter?.url ?? ''
   const bookName = currentBook.details.name || '书籍正文'
 
   // Sync cache status with bookshelf and local IndexedDB
@@ -370,7 +383,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     })
   }, [deferredQuery, currentBook.chapters])
 
-  const chapterProgress = currentBook.chapters.length > 1 ? (chapterIndex / (currentBook.chapters.length - 1)) * 100 : 0
+  // 拖动进度条时的临时读数：松手/键盘抬起才真正切章，避免拖一格发一次正文请求。
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null)
+  const shownChapterIndex = scrubIndex ?? chapterIndex
+  const chapterProgress = currentBook.chapters.length > 1 ? (shownChapterIndex / (currentBook.chapters.length - 1)) * 100 : 0
 
   const isCurrentChapterLoaded = loadedChapterUrl === chapter?.url && !loading
 
@@ -660,6 +676,34 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       </>
     }
     return rawLine
+  }
+
+  /** 正文块渲染：`![图片](url)` 占位行还原成走代理的 `<img>`，其余仍是段落。 */
+  const renderContentBlock = (line: string, index: number) => {
+    const image = contentImageUrl(line)
+    if (image) {
+      return (
+        <figure key={index} className="reader-paragraph-image">
+          <img
+            src={api.bookImage(image, chapter?.url)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={event => { event.currentTarget.closest('figure')?.setAttribute('hidden', '') }}
+          />
+        </figure>
+      )
+    }
+    return (
+      <p
+        key={index}
+        data-paragraph-index={index}
+        className={`reader-paragraph ${ttsActive && activeParagraphIndex === index ? 'tts-active-paragraph' : ''}`}
+        onClick={() => handleParagraphClick(index)}
+      >
+        {renderParagraphContent(line, index)}
+      </p>
+    )
   }
 
   const showBoundaryNotice = useCallback((msg: string) => {
@@ -1208,6 +1252,18 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [activeDrawer, chapterIndex, changeChapter, goNextPage, goPrevPage, settings.pageMode])
 
+  // Ctrl/⌘ + 滚轮直接调字号：不用先开设置抽屉再拖滑杆。必须 passive:false，否则拦不住浏览器的页面缩放。
+  useEffect(() => {
+    const onWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return
+      event.preventDefault()
+      const next = Math.min(28, Math.max(15, settings.fontSize + (event.deltaY > 0 ? -1 : 1)))
+      if (next !== settings.fontSize) onSettingsChange({ ...settings, fontSize: next })
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [settings, onSettingsChange])
+
   const readerStyle = {
     '--reader-font-size': `${settings.fontSize}px`,
     '--reader-line-height': settings.lineHeight,
@@ -1305,6 +1361,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       <div className="reader-header-actions">
         <IconButton label="切换书源" icon="sliders" onClick={() => setShowSourceSwitch(true)} />
         <IconButton label="阅读设置" icon="settings" onClick={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')} />
+        <IconButton label={isFullscreen ? '退出全屏' : '全屏阅读'} icon="expand" onClick={toggleFullscreen} />
         <IconButton
           label={!ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
           icon={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'}
@@ -1516,16 +1573,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 <h1>{chapter?.title}</h1>
                 {loading && <ReaderContentSkeleton />}
                 {message && <p className="reader-error">{message}</p>}
-                {paragraphs.map((line, index) => (
-                  <p
-                    key={index}
-                    data-paragraph-index={index}
-                    className={`reader-paragraph ${ttsActive && activeParagraphIndex === index ? 'tts-active-paragraph' : ''}`}
-                    onClick={() => handleParagraphClick(index)}
-                  >
-                    {renderParagraphContent(line, index)}
-                  </p>
-                ))}
+                {paragraphs.map(renderContentBlock)}
               </article>
             </div>
           </div>
@@ -1539,17 +1587,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           <h1>{chapter?.title}</h1>
           {loading && <ReaderContentSkeleton />}
           {message && <p className="reader-error">{message}</p>}
-          {paragraphs.map((line, index) => (
-            <p
-              key={index}
-              data-paragraph-index={index}
-              className={`reader-paragraph ${ttsActive && activeParagraphIndex === index ? 'tts-active-paragraph' : ''}`}
-              onClick={() => handleParagraphClick(index)}
-            >
-              {renderParagraphContent(line, index)}
-            </p>
-          ))}
-          {content && <footer className="reader-navigation"><button disabled={chapterIndex === 0 || loading} onClick={() => changeChapter(chapterIndex - 1)}><Icon name="arrowLeft" />上一章</button><div className="chapter-progress"><i style={{ width: `${chapterProgress}%` }} /><span>{chapterIndex + 1} / {currentBook.chapters.length}</span></div><button disabled={chapterIndex === currentBook.chapters.length - 1 || loading} onClick={() => changeChapter(chapterIndex + 1)}>下一章<Icon name="arrowRight" /></button></footer>}
+          {paragraphs.map(renderContentBlock)}
+          {content && <footer className="reader-navigation"><button disabled={chapterIndex === 0 || loading} onClick={() => changeChapter(chapterIndex - 1)}><Icon name="arrowLeft" />上一章</button><div className="chapter-progress"><i style={{ width: `${chapterProgress}%` }} /><input className="chapter-scrub" type="range" min={0} max={Math.max(0, currentBook.chapters.length - 1)} step={1} value={shownChapterIndex} disabled={loading || currentBook.chapters.length < 2} aria-label={`章节进度：第 ${shownChapterIndex + 1} 章，共 ${currentBook.chapters.length} 章`} onChange={event => setScrubIndex(Number(event.target.value))} onPointerUp={() => { if (scrubIndex !== null && scrubIndex !== chapterIndex) changeChapter(scrubIndex); setScrubIndex(null) }} onKeyUp={() => { if (scrubIndex !== null && scrubIndex !== chapterIndex) changeChapter(scrubIndex); setScrubIndex(null) }} /><span>{shownChapterIndex + 1} / {currentBook.chapters.length}</span></div><button disabled={chapterIndex === currentBook.chapters.length - 1 || loading} onClick={() => changeChapter(chapterIndex + 1)}>下一章<Icon name="arrowRight" /></button></footer>}
         </article>
       )}
       {boundaryMessage && <p className="reader-boundary-message" role="status">{boundaryMessage}</p>}
@@ -1621,19 +1660,24 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         currentSourceUrl={currentBook.details.sourceId}
         onRulesChanged={() => {
           if (chapter) {
+            const requestedUrl = chapter.url
             setLoadedChapterUrl('')
             setContent('')
             setLoading(true)
             api.content(currentBook.details.sourceId, chapter.url, currentBook.bookUrl)
               .then(res => {
+                // 用户可能已经翻到别的章节；这里无条件写入会用旧章正文覆盖新章，
+                // 结果 loadedChapterUrl 与当前章不符 → 章节标题下永远空白。
+                if (currentChapterUrlRef.current !== requestedUrl) return
                 setContent(res.content)
-                setLoadedChapterUrl(chapter.url)
+                setLoadedChapterUrl(requestedUrl)
               })
               .catch(err => {
+                if (currentChapterUrlRef.current !== requestedUrl) return
                 setMessage(err.message || '加载章节内容失败')
               })
               .finally(() => {
-                setLoading(false)
+                if (currentChapterUrlRef.current === requestedUrl) setLoading(false)
               })
           }
         }}
@@ -1674,7 +1718,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             </button>
           </header>
           <div className="source-login-body">
-            <p style={{ margin: '8px 0', fontSize: '14px', lineHeight: '1.6', color: 'var(--text-color, #e6e8eb)' }}>
+            <p style={{ margin: '8px 0', fontSize: '14px', lineHeight: '1.6', color: 'var(--ink)' }}>
               当前未连接到互联网，云端 Edge-TTS 朗读不可用。是否切换使用设备本地自带的<strong>系统语音 (Web Speech)</strong> 进行脱机朗读？
             </p>
           </div>

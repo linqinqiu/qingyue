@@ -30,6 +30,10 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
   const [webViewStartUrl, setWebViewStartUrl] = useState<string | undefined>(undefined)
   /** 触发内置浏览器的登录动作，登录完成后需要带 Cookie 重跑一次 */
   const pendingBrowserActionRef = useRef<string | null>(null)
+  /** 当前选择的登录方式；null 表示还没按书源能力自动选过。 */
+  const [method, setMethod] = useState<'form' | 'browser' | 'cookie' | 'bookmark' | null>(null)
+  const [status, setStatus] = useState<{ loggedIn: boolean; hasCredential?: boolean; verified?: boolean; message?: string } | null>(null)
+  const userPickedRef = useRef(false)
 
   const loadLoginUi = useCallback(async () => {
     try {
@@ -45,6 +49,17 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
         }
       })
       setFormData(initialData)
+      // 拉一次登录判定，让头部状态与实际一致（区分已验证 / 仅抓到凭据）
+      try {
+        setStatus(await api.checkSourceLogin(sourceId))
+      } catch {
+        /* 判定失败不阻塞界面 */
+      }
+      // 用户没手动切过分段时，按书源能力自动选推荐方式
+      if (!userPickedRef.current) {
+        const hasForm = res.loginUi.length > 0
+        setMethod(hasForm ? 'form' : res.loginUrl ? 'browser' : 'cookie')
+      }
     } catch (err: any) {
       onToast(err.message || '获取登录界面失败', 'error')
     } finally {
@@ -356,7 +371,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
             <button
               type="button"
               className="source-login-action-btn"
-              title="用内置浏览器登录（推荐）"
+              title="用内置浏览器登录"
               onClick={openBuiltInBrowser}
             >
               🖥
@@ -437,102 +452,114 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
         <div className="source-login-body">
           {loading ? (
             <div className="login-ui-loading">正在加载登录界面...</div>
-          ) : !uiResponse?.loginUi || uiResponse.loginUi.length === 0 ? (
-            <div className="login-ui-empty-direct-cookie" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '13px', color: 'var(--muted)' }}>
-                  此书源未定义可视化登录表单，请直接填入 Cookie / 凭据：
-                </span>
-                {uiResponse?.loginUrl && (
-                  <button
-                    type="button"
-                    className="subtle-button"
-                    style={{ fontSize: '12px', padding: '4px 10px' }}
-                    onClick={openBuiltInBrowser}
-                  >
-                    🖥 用内置浏览器登录
-                  </button>
-                )}
-              </div>
-
-              <div className="direct-cookie-card" style={{ background: 'var(--card-bg, rgba(255,255,255,0.03))', border: '1px solid var(--line)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)' }}>
-                    🍪 粘贴 Cookie / Token (支持 JSON / 键值对)
-                  </label>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                    支持 Cookie-Editor 导出的 JSON
-                  </span>
+          ) : (() => {
+            const hasForm = (uiResponse?.loginUi?.length ?? 0) > 0
+            const hasLoginUrl = !!uiResponse?.loginUrl
+            const recommended = hasForm ? 'form' : hasLoginUrl ? 'browser' : 'cookie'
+            const active = method ?? recommended
+            const tab = (key: 'form' | 'browser' | 'cookie' | 'bookmark', label: string, enabled = true) => (
+              <button
+                key={key}
+                type="button"
+                className={`source-login-method-tab${active === key ? ' is-active' : ''}`}
+                disabled={!enabled}
+                onClick={() => { userPickedRef.current = true; setMethod(key) }}
+              >
+                {label}
+                {recommended === key && <span className="source-login-method-recommend">推荐</span>}
+              </button>
+            )
+            return (
+              <>
+                <div className="source-login-method-tabs" role="tablist">
+                  {tab('form', '✍️ 填写表单', hasForm)}
+                  {tab('browser', '🖥 内置浏览器')}
+                  {tab('cookie', '🍪 粘贴 Cookie')}
+                  {tab('bookmark', '⚡ 书签同步')}
                 </div>
-                <textarea
-                  className="source-login-textarea"
-                  rows={5}
-                  value={cookieInputText}
-                  placeholder={`直接粘贴 Cookie 字符串（k1=v1; k2=v2）或 Cookie-Editor 导出的 JSON 数组：\n[{"name":"session_id","value":"..."},{"name":"token","value":"..."}]`}
-                  onChange={e => setCookieInputText(e.target.value)}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      className="subtle-button"
-                      style={{ fontSize: '12px', padding: '5px 10px' }}
-                      onClick={() => setBookmarkletModalOpen(true)}
-                    >
-                      ⚡ 一键同步书签
-                    </button>
-                    {uiResponse?.loginHeader && (
-                      <button
-                        type="button"
-                        className="subtle-button danger-text"
-                        style={{ fontSize: '12px', padding: '5px 10px' }}
-                        onClick={handleDeleteLoginHeader}
-                      >
-                        🗑️ 清除已存凭据
+
+                {status?.verified && <div className="source-login-status is-verified">● 登录已验证</div>}
+                {!status?.verified && (status?.hasCredential || status?.loggedIn) && <div className="source-login-status is-credential">◐ 已捕获登录凭据（未自动验证）</div>}
+
+                {active === 'form' && (hasForm ? (
+                  <form
+                    className="source-login-flex-form"
+                    onSubmit={e => { e.preventDefault(); handleSaveAndLogin() }}
+                  >
+                    {uiResponse!.loginUi.map((item, idx) => renderControl(item, idx))}
+                    <div style={{ flex: '1 1 100%', width: '100%', marginTop: 6 }}>
+                      <button type="submit" className="primary-button" style={{ width: '100%' }} disabled={executing}>
+                        {executing ? '登录中...' : '保存并登录'}
                       </button>
+                    </div>
+                  </form>
+                ) : (
+                  <p className="source-login-hint">此书源未提供可视化登录表单，请改用「内置浏览器」或「粘贴 Cookie」方式。</p>
+                ))}
+
+                {active === 'browser' && (
+                  <div className="source-login-panel">
+                    <p className="source-login-hint">
+                      在内置浏览器中打开该书源登录页完成登录，站点的 Set-Cookie 会被服务端自动收进书源 Cookie 罐。
+                      对纯前端渲染 / 风控站点（番茄、起点等）常无效，此时请改用其它方式。
+                    </p>
+                    {uiResponse?.loginUrl && <div className="source-login-url-line">{uiResponse.loginUrl}</div>}
+                    <button type="button" className="primary-button" disabled={!hasLoginUrl} onClick={openBuiltInBrowser} style={{ alignSelf: 'flex-start' }}>
+                      🖥 打开内置浏览器登录
+                    </button>
+                    {!hasLoginUrl && <p className="source-login-hint small">此书源未配置 loginUrl，无法用内置浏览器登录。</p>}
+                  </div>
+                )}
+
+                {active === 'cookie' && (
+                  <div className="source-login-panel">
+                    <div className="direct-cookie-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>🍪 粘贴 Cookie / Token（支持 JSON / 键值对）</label>
+                        <span style={{ fontSize: '11px', color: 'var(--muted)' }}>支持 Cookie-Editor 导出的 JSON</span>
+                      </div>
+                      <textarea
+                        className="source-login-textarea"
+                        rows={5}
+                        value={cookieInputText}
+                        placeholder={'直接粘贴 Cookie 字符串（k1=v1; k2=v2）或 Cookie-Editor 导出的 JSON 数组：\n[{"name":"session_id","value":"..."},{"name":"token","value":"..."}]'}
+                        onChange={e => setCookieInputText(e.target.value)}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        {uiResponse?.loginHeader && (
+                          <button type="button" className="subtle-button danger-text" onClick={handleDeleteLoginHeader}>🗑️ 清除已存凭据</button>
+                        )}
+                        <button type="button" className="primary-button" disabled={executing || !cookieInputText.trim()} onClick={handleSaveCookie}>
+                          {executing ? '保存中...' : '保存 Cookie'}
+                        </button>
+                      </div>
+                    </div>
+                    {uiResponse?.loginHeader && (
+                      <div className="source-login-header-preview">
+                        <div className="source-login-header-preview-title">当前书源已持久化登录头</div>
+                        <div className="source-login-header-preview-body">{uiResponse.loginHeader}</div>
+                      </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={executing || !cookieInputText.trim()}
-                    onClick={handleSaveCookie}
-                  >
-                    {executing ? '保存中...' : '保存 Cookie'}
-                  </button>
-                </div>
-              </div>
+                )}
 
-              {uiResponse?.loginHeader && (
-                <div style={{ padding: '10px 14px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '6px', fontSize: '12px' }}>
-                  <div style={{ fontWeight: 600, color: '#38bdf8', marginBottom: '4px' }}>✅ 当前书源已持久化登录头 (Login Header)</div>
-                  <div style={{ color: 'var(--muted)', wordBreak: 'break-all', fontFamily: 'monospace', maxHeight: '60px', overflowY: 'auto' }}>
-                    {uiResponse.loginHeader}
+                {active === 'bookmark' && (
+                  <div className="source-login-panel">
+                    <p className="source-login-hint">
+                      在新标签页打开目标网站并登录后，在书签栏点一下此书签，即可把当前站点 Cookie 秒级回传到阅读服务器。
+                    </p>
+                    <ol className="source-login-bookmark-steps">
+                      <li>复制下方代码（或点「复制书签代码」）；</li>
+                      <li>浏览器书签栏新建书签，网址处粘贴该代码；</li>
+                      <li>在网站登录完成后，点击该书签即可回传。</li>
+                    </ol>
+                    <textarea className="source-login-textarea" rows={4} readOnly value={bookmarkletCode} style={{ fontSize: '11px', fontFamily: 'monospace' }} onFocus={e => e.currentTarget.select()} />
+                    <button type="button" className="primary-button" onClick={copyBookmarklet} style={{ alignSelf: 'flex-start' }}>📋 复制书签代码</button>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <form
-              className="source-login-flex-form"
-              onSubmit={e => {
-                e.preventDefault()
-                handleSaveAndLogin()
-              }}
-            >
-              <div style={{ flex: '1 1 100%', width: '100%' }}>
-                <button
-                  type="button"
-                  className="primary-button"
-                  style={{ width: '100%' }}
-                  onClick={openBuiltInBrowser}
-                >
-                  🖥 用内置浏览器登录（推荐）
-                </button>
-              </div>
-              {uiResponse.loginUi.map((item, idx) => renderControl(item, idx))}
-            </form>
-          )}
+                )}
+              </>
+            )
+          })()}
         </div>
 
         {headerEditOpen && (
@@ -632,6 +659,11 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
             startUrl={webViewStartUrl}
             onClose={() => setWebViewOpen(false)}
             onToast={onToast}
+            onNeedOtherMethod={() => {
+              setWebViewOpen(false)
+              userPickedRef.current = true
+              setMethod('cookie')
+            }}
             onLoggedIn={async () => {
               await loadLoginUi()
               // 内置浏览器登录成功后，带着已落库的 Cookie 重跑当初触发浏览器的动作，

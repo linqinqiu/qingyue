@@ -2,20 +2,27 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { createRoot } from 'react-dom/client'
 import { api, BookDetails, BookshelfItem, Chapter, SearchResult, SearchStreamEvent, setCsrfToken, SourceRecord, SourceSubscription, SourceSummary } from './api'
 import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
+import { ContextMenuLayer, showContextMenu } from './ContextMenu'
+import { GRID_RANGE, readShelfLayout, ShelfLayout, writeShelfLayout } from './shelfLayout'
 import { Logo } from './Logo'
 import { Login } from './Login'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
 import { loadReaderSettings, ReaderSettings, saveReaderSettings } from './readerSettings'
 import { AppHeader } from './AppHeader'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, isPopularMatch, SearchFilters, SearchGroup, SortMode } from './searchFilters'
-import { groupSearchResults, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
+import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { SourceLoginModal } from './SourceLoginModal'
+import { SourceDebugModal } from './SourceDebugModal'
+import { SourceShareModal } from './SourceShareModal'
 import { ReplaceRulesModal } from './ReplaceRulesModal'
 import { ReplaceRulesPage } from './ReplaceRulesPage'
+import { ExplorePage } from './ExplorePage'
 import { WebDavSettingsPage } from './WebDavSettingsPage'
 import { OfflineCacheModal } from './OfflineCacheModal'
 import { SourceHealthModal } from './SourceHealthModal'
+import { SourceEditor } from './SourceEditorPanel'
 import { SourceGroupModal } from './SourceGroupModal'
 import { PwaManager } from './PwaManager'
 import { flushOfflineProgress } from './offlineStorage'
@@ -25,12 +32,22 @@ import './styles.css'
 import { clearStoredInspections, getInitialOrStoredInspections, inspectAllSourcesConcurrently, SourceHealthInspection } from './sourceInspector'
 import { parseSourceJsonText, extractSourcesFromRaw, sanitizeImageUrl } from './sourceImport'
 
+/** 书源侧栏一次渲染的条数上限：整库导入常有数千个源，全量挂载会让首屏和滚动一起变卡。 */
+const SOURCE_PAGE_SIZE = 120
+
+/**
+ * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效,音乐` 表示同时属于两个分组。
+ * 整串当一个分组的话，4876 个源只数得出 20 个"分组"，选任何分组都只剩几条，且 91% 的源永远归不进去。
+ */
+const splitSourceGroups = (raw?: string) =>
+  (raw ?? '').split(/[,，、\s]+/).map(tag => tag.trim()).filter(Boolean)
+
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 
-type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'reader' | 'rules' | 'webdav'
+type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'webdav'
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#webdav' ? 'webdav' : location.hash === '#shelf' ? 'shelf' : location.hash === '#reader' ? 'reader' : 'library'
+const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#webdav' ? 'webdav' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : 'library'
 
 function SourceChoiceList({
   choices,
@@ -433,49 +450,15 @@ function BookDetailModal({
 
 
 
-function SourceEditor({
-  selected,
-  onSaved,
-  onOpenLogin,
-}: {
-  selected: SourceSummary | null
-  onSaved: () => void
-  onOpenLogin?: (source: SourceSummary) => void
-}) {
-  const [record, setRecord] = useState<SourceRecord | null>(null); const [text, setText] = useState(''); const [status, setStatus] = useState('')
-  useEffect(() => { if (!selected) { setRecord(null); setText(''); return }; void api.source(selected.id).then(value => { setRecord(value); setText(value.json); setStatus('') }).catch(error => setStatus(error.message)) }, [selected])
-  const save = async () => { if (!record || !selected) return; try { const next = await api.save(selected.id, text, record.version); setRecord(next); setStatus('已保存'); onSaved() } catch (error) { setStatus(error instanceof Error ? error.message : '保存失败') } }
-  const validate = async () => { if (!selected) return; try { const result = await api.validate(selected.id); setStatus(result.valid ? result.warnings.join('；') || '结构校验通过' : result.errors.join('；')) } catch (error) { setStatus(error instanceof Error ? error.message : '校验失败') } }
-  if (!selected) return <section className="source-editor empty-editor"><Icon name="book" /><h2>选择一个书源</h2><p>从列表选择书源，或导入一个 JSON 文件。</p></section>
-  return (
-    <section className="source-editor">
-      <header>
-        <div>
-          <span className="section-kicker">书源编辑</span>
-          <div className="source-editor-name-row">
-            <h2>{selected.name}</h2>
-            {selected.hasLogin && <span className="source-login-badge" title="支持登录鉴权">登录</span>}
-          </div>
-          <small>{selected.url}</small>
-        </div>
-        <div className="editor-actions">
-          {selected.hasLogin && (
-            <button
-              type="button"
-              className="subtle-button source-login-entry-btn"
-              onClick={() => onOpenLogin?.(selected)}
-            >
-              登录
-            </button>
-          )}
-          <button type="button" className="subtle-button" onClick={() => void validate()}>校验</button>
-          <button type="button" className="primary-button" onClick={() => void save()}>保存</button>
-        </div>
-      </header>
-      <textarea aria-label="书源 JSON 编辑器" value={text} onChange={event => setText(event.target.value)} spellCheck={false} />
-      {status && <footer className={status.includes('失败') || status.includes('错误') ? 'form-error' : ''}>{status}</footer>}
-    </section>
-  )
+
+/**
+ * 书籍封面。封面文件可能已经不在（换源、缓存清理、抓取失败），
+ * 原来这种情况会留一个浏览器破图角标在封面上，这里回落到书名首字块。
+ */
+function BookCover({ coverKey, name, fallbackClassName = 'cover-fallback' }: { coverKey?: string; name: string; fallbackClassName?: string }) {
+  const [broken, setBroken] = useState(false)
+  if (!coverKey || broken) return <span className={fallbackClassName}><span>{name.replace(/[《【\[]/g, '').slice(0, 2)}</span></span>
+  return <img src={api.cover(coverKey)} alt="" loading="lazy" onError={() => setBroken(true)} />
 }
 
 function SubscriptionPanel({ onSourcesChange }: { onSourcesChange: () => void }) {
@@ -505,7 +488,10 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   const [showHealthModal, setShowHealthModal] = useState(false)
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [busyBatch, setBusyBatch] = useState(false)
+  const [debugModalSource, setDebugModalSource] = useState<SourceSummary | null>(null)
   const [loginModalSource, setLoginModalSource] = useState<SourceSummary | null>(null)
+  const [shareIds, setShareIds] = useState<string[] | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -522,19 +508,44 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
     return () => window.clearTimeout(timer)
   }, [load])
 
-  const allGroups = useMemo(() => {
-    const set = new Set<string>()
-    for (const s of sources) {
-      if (s.group && s.group.trim()) set.add(s.group.trim())
+  // 右键菜单走的是「单源」动作：复用批量接口，但只传一个 id，因此不需要批量确认框。
+  const flipOne = async (source: SourceSummary) => {
+    try {
+      await api.batchSources(source.enabled ? 'disable' : 'enable', [source.id])
+      await load()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '操作失败')
     }
-    return Array.from(set).sort()
+  }
+  const removeOne = async (source: SourceSummary) => {
+    if (!confirm(`删除「${source.name}」？这本书源的规则、登录态会被移除，已缓存的书籍不受影响。`)) return
+    try {
+      await api.batchSources('delete', [source.id])
+      await load()
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '删除失败')
+    }
+  }
+
+  const groupStats = useMemo(() => {
+    const counts = new Map<string, number>()
+    let ungrouped = 0
+    for (const source of sources) {
+      const tags = splitSourceGroups(source.group)
+      if (!tags.length) { ungrouped++; continue }
+      for (const tag of new Set(tags)) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    }
+    return { groups: [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh-CN')), ungrouped }
   }, [sources])
+
+  const allGroups = useMemo(() => groupStats.groups.map(([name]) => name), [groupStats])
 
   const filteredSources = useMemo(() => {
     return sources.filter(source => {
       if (groupFilter) {
-        if (groupFilter === '__none__' && source.group) return false
-        if (groupFilter !== '__none__' && (source.group ?? '') !== groupFilter) return false
+        const tags = splitSourceGroups(source.group)
+        if (groupFilter === '__none__') { if (tags.length) return false }
+        else if (!tags.includes(groupFilter)) return false
       }
       if (query) {
         const q = query.toLowerCase()
@@ -543,6 +554,21 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
       return true
     })
   }, [sources, groupFilter, query])
+
+  // 4876 个书源全量铺进 DOM 时，侧栏首屏和滚动都会卡：先渲染一屏，按需再续。
+  const [visibleSourceCount, setVisibleSourceCount] = useState(SOURCE_PAGE_SIZE)
+  useEffect(() => { setVisibleSourceCount(SOURCE_PAGE_SIZE) }, [query, groupFilter])
+  const visibleSources = useMemo(
+    () => filteredSources.slice(0, visibleSourceCount),
+    [filteredSources, visibleSourceCount],
+  )
+  const sourceStats = useMemo(() => ({
+    total: sources.length,
+    enabled: sources.filter(s => s.enabled).length,
+    js: sources.filter(s => s.isJsSource).length,
+    login: sources.filter(s => s.hasLogin).length,
+    groups: allGroups.length,
+  }), [sources, allGroups])
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -571,8 +597,16 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
     })
   }
 
+  /**
+   * 批量启停会一次改写整库状态，而「停用」不报错 —— 表现只是搜索慢慢没结果。
+   * 「全选」又是跨分页选中全部筛选结果（几千个），所以必须让数量先露面再动手。
+   */
+  const confirmBatch = (verb: string) =>
+    confirm(`将对 ${selectedIds.size} 个书源执行「${verb}」，确定继续吗？`)
+
   const handleBatchEnable = async () => {
     if (selectedIds.size === 0) return
+    if (!confirmBatch('批量启用')) return
     setBusyBatch(true)
     try {
       const resp = await api.batchSources('enable', Array.from(selectedIds))
@@ -587,6 +621,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
 
   const handleBatchDisable = async () => {
     if (selectedIds.size === 0) return
+    if (!confirmBatch('批量停用')) return
     setBusyBatch(true)
     try {
       const resp = await api.batchSources('disable', Array.from(selectedIds))
@@ -728,7 +763,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
             <button
               type="button"
               className="subtle-button icon-button health-probe-btn"
-              title="书源连通性体检"
+              title="批量联网体检：每个源拿关键词试搜一次，只看能不能出条目。想先确认 JSON 写没写坏用编辑器里的「校验」（不联网），要看搜索→详情→目录→正文每一步用「调试」。"
               onClick={() => setShowHealthModal(true)}
             >
               <Icon name="activity" />
@@ -756,13 +791,13 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
               aria-label="按分组筛选书源"
             >
               <option value="">全部分组 ({sources.length})</option>
-              {allGroups.map(g => (
-                <option key={g} value={g}>
-                  {g} ({sources.filter(s => s.group === g).length})
+              {groupStats.groups.map(([name, count]) => (
+                <option key={name} value={name}>
+                  {name} ({count})
                 </option>
               ))}
               <option value="__none__">
-                未分组 ({sources.filter(s => !s.group).length})
+                未分组 ({groupStats.ungrouped})
               </option>
             </select>
           </div>
@@ -772,6 +807,15 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
           <Icon name="search" />
           <input placeholder="筛选书源" value={query} onChange={event => setQuery(event.target.value)} />
         </div>
+
+        <button
+          type="button"
+          className="primary-button source-create-btn"
+          onClick={() => { setCreating(true); onSelect(null) }}
+        >
+          <Icon name="plus" />
+          新建书源
+        </button>
 
         <label className={`import-button ${importing ? 'disabled' : ''}`}>
           <Icon name="upload" />
@@ -790,8 +834,8 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
 
         {notice && <p className="sidebar-notice">{notice}</p>}
 
-        <nav className="source-list">
-          {filteredSources.map(source => {
+        <nav className="source-list" aria-label="书源列表">
+          {visibleSources.map(source => {
             const isChecked = selectedIds.has(source.id)
             const isCurrent = selected?.id === source.id
 
@@ -815,7 +859,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                       {!source.enabled && <span className="source-disabled-badge">已停用</span>}
                       {source.hasLogin && <span className="source-login-badge" title="支持登录鉴权">登录</span>}
                     </div>
-                    <small>{source.group || (source.isJsSource ? 'JS 书源' : '书源')}</small>
+                    <small>{splitSourceGroups(source.group).join(' · ') || (source.isJsSource ? 'JS 书源' : '未分组')}</small>
                   </div>
                 </div>
               )
@@ -826,17 +870,34 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                 className={isCurrent ? 'selected' : ''}
                 key={source.id}
                 type="button"
-                onClick={() => onSelect(source)}
+                onClick={() => { setCreating(false); onSelect(source) }}
+                onContextMenu={event => showContextMenu(event, [
+                  { label: '编辑此书源', icon: 'edit', onSelect: () => { setCreating(false); onSelect(source) } },
+                  { label: '分阶段调试', icon: 'activity', onSelect: () => setDebugModalSource(source) },
+                  ...(source.hasLogin ? [{ label: '登录 / Cookie', icon: 'logOut' as const, onSelect: () => setLoginModalSource(source) }] : []),
+                  {
+                    label: source.enabled ? '停用此书源' : '启用此书源',
+                    icon: source.enabled ? 'close' : 'check',
+                    onSelect: () => void flipOne(source),
+                  },
+                  { label: '分享书源', icon: 'copy', onSelect: () => setShareIds([source.id]) },
+                  { label: '删除此书源', icon: 'trash', danger: true, onSelect: () => void removeOne(source) },
+                ])}
               >
                 <div className="source-list-item-title">
                   <span>{source.name}</span>
                   {!source.enabled && <span className="source-disabled-badge">已停用</span>}
                   {source.hasLogin && <span className="source-login-badge" title="支持登录鉴权">登录</span>}
                 </div>
-                <small>{source.group || (source.isJsSource ? 'JS 书源' : '书源')}</small>
+                <small>{splitSourceGroups(source.group).join(' · ') || (source.isJsSource ? 'JS 书源' : '未分组')}</small>
               </button>
             )
           })}
+          {visibleSources.length < filteredSources.length && (
+            <button type="button" className="source-list-more" onClick={() => setVisibleSourceCount(count => count + SOURCE_PAGE_SIZE)}>
+              已显示 {visibleSources.length} / {filteredSources.length}，点击加载更多
+            </button>
+          )}
         </nav>
       </aside>
 
@@ -857,8 +918,16 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
         </header>
         <SourceEditor
           selected={selected}
+          creating={creating}
+          summary={sourceStats}
           onSaved={() => void load()}
+          onCreateCancel={() => setCreating(false)}
+          onCreated={source => {
+            setCreating(false)
+            onSelect(source)
+          }}
           onOpenLogin={source => setLoginModalSource(source)}
+          onOpenDebug={source => setDebugModalSource(source)}
         />
       </section>
 
@@ -916,6 +985,14 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
             </button>
             <button
               type="button"
+              className="subtle-button"
+              disabled={selectedIds.size === 0 || busyBatch}
+              onClick={() => setShareIds(Array.from(selectedIds))}
+            >
+              分享选中
+            </button>
+            <button
+              type="button"
               className="danger-button"
               disabled={selectedIds.size === 0 || busyBatch}
               onClick={() => void handleBatchDelete()}
@@ -958,6 +1035,14 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
         />
       )}
 
+      {debugModalSource && (
+        <SourceDebugModal
+          sourceId={debugModalSource.id}
+          sourceName={debugModalSource.name}
+          onClose={() => setDebugModalSource(null)}
+        />
+      )}
+
       {loginModalSource && (
         <SourceLoginModal
           sourceId={loginModalSource.id}
@@ -968,6 +1053,14 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
             else if (type === 'success') toast.success(msg)
             else toast.info(msg)
           }}
+        />
+      )}
+      {shareIds && (
+        <SourceShareModal
+          sourceIds={shareIds}
+          sources={sources}
+          onClose={() => setShareIds(null)}
+          onToast={(msg, type) => { if (type === 'error') toast.error(msg); else if (type === 'success') toast.success(msg); else toast.info(msg) }}
         />
       )}
     </main>
@@ -996,10 +1089,43 @@ function HighlightText({ text, keyword }: { text: string; keyword: string }) {
 
 function LibraryPage({ sources, onOpen }: { sources: SourceSummary[]; onOpen: (book: OpenBook, index: number) => void }) {
   const search = useSearchStore()
+  const [scopeMode, setScopeMode] = useState<'all' | 'group' | 'single'>('all')
+  const [scopeGroup, setScopeGroup] = useState('')
   const handleSearch = (event: FormEvent) => {
     event.preventDefault()
+    if (scopeMode !== 'all' && !scopeIds.length) {
+      search.setKeyword(search.keyword)
+      toast.warning(scopeMode === 'group' ? '这个分组里没有处于启用状态的书源，换一组或先去「书源」页启用' : '先选一个书源，或改用「全部书源」')
+      return
+    }
+    search.setSelectedSourceIds(scopeMode === 'all' ? null : scopeIds)
     search.startSearch()
   }
+  const groupOptions = useMemo(() => {
+    const tally = new Map<string, { total: number; ready: number }>()
+    for (const source of sources) {
+      for (const tag of splitSourceGroups(source.group)) {
+        const row = tally.get(tag) ?? { total: 0, ready: 0 }
+        row.total += 1
+        if (source.enabled) row.ready += 1
+        tally.set(tag, row)
+      }
+    }
+    return [...tally.entries()]
+      .map(([name, row]) => ({ name, ...row }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'zh-CN'))
+  }, [sources])
+  const scopeIds = useMemo(() => {
+    if (scopeMode === 'single') return search.selectedSourceId ? [search.selectedSourceId] : []
+    if (scopeMode === 'group') return scopeGroup ? sources.filter(source => source.enabled && splitSourceGroups(source.group).includes(scopeGroup)).map(source => source.id) : []
+    return []
+  }, [scopeMode, scopeGroup, sources, search.selectedSourceId])
+  const enabledCount = sources.filter(source => source.enabled).length
+  const scopeHint = scopeMode === 'all'
+    ? `库里 ${sources.length} 个书源，其中 ${enabledCount} 个处于启用状态；「全部书源」只搜启用的这些`
+    : scopeMode === 'group'
+      ? (scopeIds.length ? `将搜索该分组下 ${scopeIds.length} 个启用书源` : '该分组当前没有可搜的启用书源')
+      : (search.selectedSourceId ? '只搜这一个书源，结果最干净但也最容易空' : '尚未选择书源')
   const resumeIndex = search.openBook?.progress ? Math.min(Math.max(search.openBook.progress.chapterIndex, 0), Math.max(0, search.openBook.chapters.length - 1)) : 0
   const groups = useMemo(() => groupSearchResults(search.results), [search.results])
   const visibleGroups = useMemo(() => filterSearchGroups(groups, search.filters, search.keyword), [groups, search.filters, search.keyword])
@@ -1045,18 +1171,27 @@ function LibraryPage({ sources, onOpen }: { sources: SourceSummary[]; onOpen: (b
             </button>
           )}
         </form>
-        <label className="library-source-select">
-          搜索范围
-          <select
-            value={search.selectedSourceId}
-            onChange={event => search.setSelectedSourceId(event.target.value)}
-          >
-            <option value="">全部书源</option>
-            {sources.map(source => (
-              <option key={source.id} value={source.id}>{source.name}</option>
+        <div className="library-scope">
+          <span className="library-scope-label">搜索范围</span>
+          <div className="library-scope-modes" role="group" aria-label="搜索范围">
+            {([['all', '全部书源'], ['group', '按分组'], ['single', '指定书源']] as const).map(([key, label]) => (
+              <button key={key} type="button" className={scopeMode === key ? 'active' : ''} onClick={() => setScopeMode(key)}>{label}</button>
             ))}
-          </select>
-        </label>
+          </div>
+          {scopeMode === 'group' && (
+            <select value={scopeGroup} onChange={event => setScopeGroup(event.target.value)} aria-label="按分组搜索">
+              <option value="">选择分组</option>
+              {groupOptions.map(item => <option key={item.name} value={item.name}>{item.name}（可搜 {item.ready} / 共 {item.total}）</option>)}
+            </select>
+          )}
+          {scopeMode === 'single' && (
+            <select value={search.selectedSourceId} onChange={event => search.setSelectedSourceId(event.target.value)} aria-label="指定书源搜索">
+              <option value="">选择书源</option>
+              {sources.map(source => <option key={source.id} value={source.id}>{source.name}{source.enabled ? '' : '（已停用，搜不到）'}</option>)}
+            </select>
+          )}
+          <small className="library-scope-hint">{scopeHint}</small>
+        </div>
         {(search.loading || search.stopped) && (
           <p className="library-search-status">
             {search.stopped
@@ -1065,6 +1200,22 @@ function LibraryPage({ sources, onOpen }: { sources: SourceSummary[]; onOpen: (b
           </p>
         )}
       </section>
+      {groups.length === 0 && !search.loading && (
+        <section className="library-idle" aria-label="快速入口">
+          <a href="#shelf">
+            <strong><Icon name="bookmark" /> 书架</strong>
+            <small>接着上次没读完的地方读，也可以拖入本地 TXT / EPUB。</small>
+          </a>
+          <a href="#explore">
+            <strong><Icon name="activity" /> 发现</strong>
+            <small>读读书源自带的榜单与分类分栏，挑一本新的。</small>
+          </a>
+          <a href="#sources">
+            <strong><Icon name="list" /> 书源</strong>
+            <small>当前接入 {sources.length} 个书源，可导入、体检和逐阶段调试。</small>
+          </a>
+        </section>
+      )}
       {search.message && <p className="form-error library-message">{search.message}</p>}
       {groups.length > 0 && (
         <>
@@ -1181,6 +1332,7 @@ function BookInfoEditModal({
   const [coverUrl, setCoverUrl] = useState<string | null>(null) // null = keep existing, '' = clear, string = new URL
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  useEscapeClose(onClose)
 
   const candidateCovers = useMemo(() => {
     const map = new Map<string, { sourceId: string; coverUrl: string }>()
@@ -1382,6 +1534,7 @@ function BookManageModal({
   onRemove: () => void
 }) {
   const [editingInfo, setEditingInfo] = useState(false)
+  useEscapeClose(onClose, editingInfo ? '.book-info-edit-modal' : undefined)
   const isCaching = item.cacheState === 'caching'
   const isReady = item.cacheState === 'ready'
   const isFailed = item.cacheState === 'failed'
@@ -1392,7 +1545,7 @@ function BookManageModal({
       <div className="book-manage-sheet" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`书籍管理: ${item.name}`}>
         <header className="manage-sheet-header">
           <div className="manage-sheet-cover">
-            {item.coverKey ? <img src={api.cover(item.coverKey)} alt="" /> : <span>{item.name.slice(0, 1)}</span>}
+            <BookCover coverKey={item.coverKey} name={item.name} fallbackClassName="" />
           </div>
           <div className="manage-sheet-info">
             <h3>{item.name}</h3>
@@ -1487,6 +1640,7 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
   const [switchingItem, setSwitchingItem] = useState<BookshelfItem | null>(null)
   const [managingItem, setManagingItem] = useState<BookshelfItem | null>(null)
   const [view, setView] = useState<'reading' | 'completed' | 'all'>('reading')
+  const [layout, setLayout] = useState<ShelfLayout>(() => readShelfLayout())
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1626,6 +1780,10 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
 
   const visibleItems = useMemo(() => view === 'all' ? items : items.filter(item => view === 'completed' ? item.completed : !item.completed), [items, view])
   const counts = { reading: items.filter(item => !item.completed).length, completed: items.filter(item => item.completed).length, all: items.length }
+  const chooseLayout = (next: ShelfLayout) => { setLayout(next); writeShelfLayout(next) }
+  // 上游书架头就是「继续阅读 + 统计」：最想看的是上次读到哪儿，而不是再挑一次封面。
+  const resume = useMemo(() => items.filter(item => !item.completed).sort((a, b) => b.lastReadAt - a.lastReadAt)[0] ?? null, [items])
+  const resumePercent = resume ? Math.min(100, Math.round((((resume.chapterIndex ?? 0) + 1) / Math.max(1, resume.totalChapters || 1)) * 100)) : 0
 
   return (
     <main
@@ -1644,12 +1802,8 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
         }
       }}
     >
-      <header className="page-title">
-        <div>
-          <span className="section-kicker">我的阅读</span>
-          <h1>书架</h1>
-          <p>继续上次未读完的故事，或导入本地 TXT / EPUB 电子书。</p>
-        </div>
+      <header className="shelf-bar">
+        <h1>书架<small>{counts.all} 本</small></h1>
         <div className="shelf-header-actions">
           <input
             ref={fileInputRef}
@@ -1674,7 +1828,43 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
             <Icon name="upload" />
             <span>{uploading ? '导入中...' : '导入本地'}</span>
           </button>
-          <small>{visibleItems.length} 本书</small>
+          <div className="shelf-layout-picker" role="group" aria-label="书架布局">
+            <button
+              type="button"
+              className={layout.mode === 'auto' ? 'active' : ''}
+              title="封面网格：按屏宽自动排布（同发现页）"
+              onClick={() => chooseLayout({ mode: 'auto', columns: 0 })}
+            >
+              <Icon name="columns" />
+            </button>
+            <button
+              type="button"
+              className={layout.mode === 'list' ? 'active' : ''}
+              title="列表：封面在左，含作者/进度/最后阅读"
+              onClick={() => chooseLayout({ mode: 'list', columns: 0 })}
+            >
+              <Icon name="list" />
+            </button>
+            <button
+              type="button"
+              className={layout.mode === 'compact' ? 'active' : ''}
+              title="紧凑列表：只看书名与进度"
+              onClick={() => chooseLayout({ mode: 'compact', columns: 0 })}
+            >
+              <Icon name="menu" />
+            </button>
+            {GRID_RANGE.map(columns => (
+              <button
+                key={columns}
+                type="button"
+                className={layout.mode === 'grid' && layout.columns === columns ? 'active' : ''}
+                title={`网格 ${columns} 列`}
+                onClick={() => chooseLayout({ mode: 'grid', columns })}
+              >
+                {columns}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -1685,6 +1875,24 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
           </button>
         ))}
       </nav>
+
+      {resume && (
+        <section className="shelf-resume" aria-label="继续阅读">
+          <span className="shelf-resume-cover" onClick={() => onOpen(resume)} role="button" tabIndex={0} aria-label={`继续阅读 ${resume.name}`}>
+            <BookCover coverKey={resume.coverKey} name={resume.name} />
+          </span>
+          <div className="shelf-resume-info">
+            <strong title={resume.name}>{resume.name}</strong>
+            <small>
+              {resume.completed ? '已读完' : `上次读到第 ${(resume.chapterIndex ?? 0) + 1} 章${resume.totalChapters ? ` / 共 ${resume.totalChapters} 章` : ''}`}
+              {' · '}
+              {new Date(resume.lastReadAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </small>
+            <span className="shelf-resume-track" aria-hidden="true"><i style={{ width: `${resumePercent}%` }} /></span>
+          </div>
+          <button type="button" className="primary-button" onClick={() => onOpen(resume)}>继续阅读</button>
+        </section>
+      )}
 
       {message && <p className="form-error">{message}</p>}
 
@@ -1710,7 +1918,10 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
           <h2>这个分组还是空的</h2>
         </section>
       ) : (
-        <section className="shelf-grid">
+        <section
+          className={`shelf-grid shelf-${layout.mode}`}
+          style={layout.mode === 'grid' ? { gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))` } : undefined}
+        >
           {visibleItems.map(item => {
             const badge = cacheBadge(item)
             const isCaching = item.cacheState === 'caching'
@@ -1718,7 +1929,19 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
             const percent = Math.min(100, Math.round((item.cachedChapters / Math.max(1, item.totalChapters || 1)) * 100))
 
             return (
-              <article key={`${item.sourceId}-${item.bookUrl}`} className="shelf-card">
+              <article
+                key={`${item.sourceId}-${item.bookUrl}`}
+                className="shelf-card"
+                onContextMenu={event => showContextMenu(event, [
+                  { label: item.completed ? '重新阅读' : '继续阅读', icon: 'book', onSelect: () => onOpen(item) },
+                  { label: '书籍管理', icon: 'settings', onSelect: () => setManagingItem(item) },
+                  { label: '换源', icon: 'refresh', disabled: isLocal, onSelect: () => setSwitchingItem(item) },
+                  { label: isCaching ? '取消缓存' : '缓存全本', icon: isCaching ? 'close' : 'download', onSelect: () => void (isCaching ? cancelCache(item) : cache(item)) },
+                  { label: item.completed ? '标记未读完' : '标记已读完', icon: 'check', onSelect: () => void setCompleted(item, !item.completed) },
+                  { label: '复制书名', icon: 'copy', onSelect: () => void navigator.clipboard?.writeText(`${item.name}${item.author ? ` — ${item.author}` : ''}`) },
+                  { label: '移出书架', icon: 'trash', danger: true, onSelect: () => void remove(item) },
+                ])}
+              >
                 {/* Upper Half: Large Cover directly opens reader */}
                 <div
                   className="shelf-card-cover"
@@ -1727,12 +1950,18 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
                   tabIndex={0}
                   aria-label={`继续阅读 ${item.name}`}
                 >
-                  {item.coverKey ? <img src={api.cover(item.coverKey)} alt="" /> : <span className="cover-fallback">{item.name.slice(0, 1)}</span>}
+                  <BookCover coverKey={item.coverKey} name={item.name} />
                   {isLocal && <span className="shelf-card-tag-local">本地</span>}
                   {badge && <span className={`shelf-card-badge ${item.cacheState}`}>{badge}</span>}
                   {isCaching && (
                     <div className="shelf-card-progress-track">
                       <div className="shelf-card-progress-fill" style={{ width: `${percent}%` }} />
+                    </div>
+                  )}
+                  {/* 上游网格卡封面底部有阅读进度条；原来只标了缓存章数，读到哪儿完全看不出来 */}
+                  {!item.completed && item.totalChapters > 0 && (
+                    <div className="shelf-card-read-track" aria-hidden="true">
+                      <div className="shelf-card-read-fill" style={{ width: `${Math.min(100, Math.round((((item.chapterIndex ?? 0) + 1) / item.totalChapters) * 100))}%` }} />
                     </div>
                   )}
                 </div>
@@ -1745,11 +1974,15 @@ function ShelfPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
                     <span className={`shelf-meta-chapter ${item.completed ? 'completed' : ''}`}>
                       {item.completed ? '已读完' : item.chapterIndex === undefined ? '刚加入书架' : `第 ${item.chapterIndex + 1} 章`}
                     </span>
+                    {item.totalChapters > 0 && <span className="shelf-meta-percent">{Math.min(100, Math.round(((item.chapterIndex ?? 0) / item.totalChapters) * 100))}%</span>}
+                    <time className="shelf-meta-when" dateTime={new Date(item.lastReadAt).toISOString()}>
+                      {new Date(item.lastReadAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+                    </time>
                   </div>
                 </div>
 
                 {/* Bottom Action Section: Clear Read Button & Manage Button */}
-                <div className="shelf-card-footer">
+                <div className="shelf-card-footer" data-hover-reveal>
                   <button className="shelf-btn-read" onClick={() => onOpen(item)}>
                     {item.completed ? '重新阅读' : '继续阅读'}
                   </button>
@@ -1816,6 +2049,11 @@ function App() {
   const [ready, setReady] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings)
+  // 系统标题栏/状态栏颜色跟随主题：装成 PWA 或手机全屏时，原来固定成深色的那条边在浅色界面下很突兀。
+  useEffect(() => {
+    const canvas = settings.theme === 'dark' ? '#202522' : settings.theme === 'paper' ? '#eef3e7' : '#f8f9f7'
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
+  }, [settings.theme])
   const [page, setPage] = useState<Page>(pageFromHash)
   const [readerReturnPage, setReaderReturnPage] = useState<Page>('shelf')
   const [sources, setSources] = useState<SourceSummary[]>([])
@@ -1864,6 +2102,30 @@ function App() {
     location.hash = `#${next}`
     setPage(next)
   }
+
+  // 桌面手感（借鉴悦读）：Alt+←/→ 沿一级导航切页；Ctrl/⌘+F 聚焦当前页的搜索/筛选框。
+  // 阅读器里不抢 Ctrl+F —— 在长正文里找字，浏览器原生查找更好用。
+  useEffect(() => {
+    const NAV: Page[] = ['library', 'shelf', 'explore', 'sources', 'subscriptions', 'rules', 'webdav']
+    const handler = (event: KeyboardEvent) => {
+      if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        const current = NAV.indexOf(page)
+        if (current < 0) return
+        event.preventDefault()
+        navigate(NAV[(current + (event.key === 'ArrowRight' ? 1 : NAV.length - 1)) % NAV.length])
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f' && page !== 'reader') {
+        const input = document.querySelector<HTMLInputElement>('main input[type="search"], .source-filter input, main input[placeholder*="搜索"]')
+        if (!input) return
+        event.preventDefault()
+        input.focus()
+        input.select()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [page])
 
   const openReader = (book: OpenBook, index: number, origin: Page = 'library') => {
     const fallbackCover = book.details.coverUrl || book.details.alternateSources?.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
@@ -1915,26 +2177,11 @@ function App() {
           updatedAt: item.lastReadAt,
         } : undefined),
       }, resumeIdx, 'shelf')
-    } catch {
-      // Offline / network fallback: allow entering reader so user can read local cached chapters
-      const resumeIdx = item.chapterIndex ?? 0
-      const fallbackChapters: Chapter[] = [
-        { index: resumeIdx, title: `第 ${resumeIdx + 1} 章`, url: item.tocUrl }
-      ]
-      openReader({
-        details: safeDetails,
-        bookUrl: item.bookUrl,
-        chapters: fallbackChapters,
-        progress: {
-          sourceId: item.sourceId,
-          bookUrl: item.bookUrl,
-          chapterUrl: item.tocUrl,
-          chapterIndex: resumeIdx,
-          scrollPosition: item.scrollPosition ?? 0,
-          updatedAt: item.lastReadAt,
-        },
-      }, resumeIdx, 'shelf')
-      toast.warning('书源网络较慢，已为您进入离线阅读模式')
+    } catch (error) {
+      // 这里原来会伪造一章（url = tocUrl）直接进阅读器：读者看到的是一个假章节，
+      // 抓回来的其实是目录页内容，还会把 `chapterUrl=tocUrl` 当成真实进度写回服务端与 IndexedDB，
+      // 下次联网打开就从这一章的假位置继续。目录取不到时宁可明确报错，不要进入坏状态。
+      toast.error(error instanceof Error ? `无法打开《${item.name}》：${error.message}` : `无法打开《${item.name}》：目录加载失败`)
     }
   }
 
@@ -1972,6 +2219,7 @@ function App() {
   return (
     <div className={`app-shell theme-${settings.theme}`}>
       <ToastContainer />
+      <ContextMenuLayer />
       <PwaManager />
       <AppHeader
         page={page}
@@ -1993,6 +2241,8 @@ function App() {
         <WebDavSettingsPage />
       ) : page === 'shelf' ? (
         <ShelfPage onOpen={item => void openShelfItem(item)} />
+      ) : page === 'explore' ? (
+        <ExplorePage onOpen={async result => openReader(await loadSourceBook(result), 0, 'explore')} />
       ) : (
         <LibraryPage sources={sources} onOpen={(book, index) => openReader(book, index, 'library')} />
       )}

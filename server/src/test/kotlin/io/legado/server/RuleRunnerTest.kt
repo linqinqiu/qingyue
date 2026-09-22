@@ -345,4 +345,217 @@ class RuleRunnerTest {
         val chapters = runner.chapters(source, "https://source.example/toc")
         assertEquals(0, chapters.size)
     }
+
+    @Test
+    fun `java get handles both HTTP fetch and key-value lookup`() {
+        // Legado 书源同时存在 `java.get(url)` 与 `java.get(key)` 两种用法；
+        // 沙箱里曾有两个同名注册互相覆盖，HTTP 版被 KV 版吃掉，书源静默拿到 undefined。
+        val source = """{
+            "bookSourceUrl":"https://agg.example",
+            "searchUrl":"/search?q={{key}}",
+            "ruleSearch":{
+                "bookList":"<js>var log=[];var p;try{p=JSON.parse(result);}catch(e){log.push('parse:'+e.message);p={id:'7'};}try{log.push('put:'+java.put('token','T-1'));}catch(e){log.push('putERR:'+e.message);}try{log.push('http:'+java.get('https://agg.example/extra'));}catch(e){log.push('httpERR:'+e.message);}try{log.push('kv:'+java.get('token'));}catch(e){log.push('kvERR:'+e.message);}JSON.stringify([{id:p.id, extra:log.join(' | ')}]);</js>",
+                "name":"$.id",
+                "author":"$.extra",
+                "bookUrl":"/b/{{$.id}}"
+            }
+        }"""
+        val runner = RuleRunner { url ->
+            if (url == "https://agg.example/extra") "PAGE" else """{"id":"7"}"""
+        }
+
+        val results = runner.search(source, "诛仙")
+        assertEquals("results=$results", 1, results.size)
+        assertEquals("put:T-1 | http:PAGE | kv:T-1", results.single().author)
+    }
+
+    @Test
+    fun `supports && branches and at-put at-get variables without breaking jsonpath filters`() {
+        // 依据上游 RuleAnalyzer.splitRule("&&","||","%%")：无优先级、最左分隔符说了算，
+        // `&&` 是「并且」（每个分支都取值再拼接），`||` 才是「取第一个」。
+        // 实测语料里 `&&` 4375 行、`@put:`/`@get:{}` 合计 2344 行，都是缺了就整源取不到值。
+        val andSource = """{
+            "bookSourceUrl":"https://and.example",
+            "searchUrl":"/s?q={{key}}",
+            "ruleSearch":{
+                "bookList":"$.books[*]",
+                "name":"$.title && $.sub",
+                "author":"$.nope && $.writer",
+                "bookUrl":"/b/{{$.id}}"
+            }
+        }"""
+        val andRunner = RuleRunner {
+            """{"books":[{"id":"1","title":"上层","sub":"下层","writer":"某作者"}]}"""
+        }
+        val andHit = andRunner.search(andSource, "测试").single()
+        assertEquals("上层\n下层", andHit.name)
+        // `&&` 里某支为空：只留拿到的那支，不能像 `||` 那样整条放弃
+        assertEquals("某作者", andHit.author)
+
+        // JSONPath 过滤谓词里天然带 &&，切分会把规则劈成两半 —— 必须跳过 [...] 内部
+        val filterSource = """{
+            "bookSourceUrl":"https://and.example",
+            "searchUrl":"/s?q={{key}}",
+            "ruleSearch":{
+                "bookList":"$.books[?(@.price<10 && @.cat==\"x\")]",
+                "name":"title",
+                "bookUrl":"/b/{{$.id}}"
+            }
+        }"""
+        val filterRunner = RuleRunner {
+            """{"books":[{"id":"1","title":"便宜的","price":5,"cat":"x"},{"id":"2","title":"贵的","price":99,"cat":"x"}]}"""
+        }
+        assertEquals("便宜的", filterRunner.search(filterSource, "测试").single().name)
+
+        // @put:{k:rule} 存变量、@get:{k} 取回；同一本书的字段之间共享（笔趣阁30 就是 name 里存 id、tocUrl 里用）
+        val putSource = """{
+            "bookSourceUrl":"https://put.example",
+            "ruleBookInfo":{
+                "name":"book_name@put:{cid:$.cid}",
+                "tocUrl":"https://put.example/{{$.cid}}/@get:{cid}/index.html"
+            }
+        }"""
+        val putRunner = RuleRunner { """{"book_name":"存过变量的书","cid":"8842"}""" }
+        val details = putRunner.details(putSource, "https://put.example/b/1")
+        assertEquals("存过变量的书", details.name)
+        assertEquals("https://put.example/8842/8842/index.html", details.tocUrl)
+    }
+
+    @Test
+    fun `follows nextTocUrl and nextContentUrl and stops on loops`() {
+        // 实测语料里 `nextTocUrl` 非空的有 1,165 个源、`nextContentUrl` 非空 1,693 个，
+        // 以前被整个忽略：目录只剩第一页、长章只拿到第一屏，且不报错，只是"看起来书短了"。
+        val source = """{
+            "bookSourceUrl":"https://pg.example",
+            "ruleToc":{
+                "chapterList":".toc a",
+                "chapterName":"text",
+                "chapterUrl":"href",
+                "nextTocUrl":"a.next@href"
+            },
+            "ruleContent":{
+                "content":"#text@text",
+                "nextContentUrl":"#next@href"
+            }
+        }"""
+        val runner = RuleRunner { url ->
+            when {
+                url.endsWith("/toc1") -> """<div class="toc"><a href="/c/1">一章</a><a href="/c/2">二章</a></div><a class="next" href="/toc2">下页</a>"""
+                // 第二页的"下一页"指回 toc1，必须靠 visited 守卫停下来，否则无限爬
+                url.endsWith("/toc2") -> """<div class="toc"><a href="/c/3">三章</a></div><a class="next" href="/toc1">下页</a>"""
+                url.endsWith("/c/1") -> """<div id="text">第一页正文。</div><a id="next" href="/c/1p2">下一页</a>"""
+                url.endsWith("/c/1p2") -> """<div id="text">第二页正文。</div>"""
+                else -> throw AssertionError("不该请求 $url")
+            }
+        }
+
+        val chapters = runner.chapters(source, "https://pg.example/toc1")
+        assertEquals(listOf("一章", "二章", "三章"), chapters.map { it.title })
+        assertEquals(listOf(0, 1, 2), chapters.map { it.index })
+
+        val content = runner.content(source, "https://pg.example/c/1")
+        assertTrue("正文缺第二页: ${content.content}", content.content.contains("第一页正文。"))
+        assertTrue("正文缺第二页: ${content.content}", content.content.contains("第二页正文。"))
+    }
+
+    @Test
+    fun `keeps content images as proxyable placeholders instead of stripping them`() {
+        // `cleanContent()` 原来把所有标签一刀切，正文配图整张消失（上游是用 ImageGetter 渲染的）。
+        // 现在 `<img>` 换成 `![图片](绝对地址)` 占位行：绝对化、认懒加载属性、丢掉 data: 内联图。
+        val source = """{
+            "bookSourceUrl":"https://img.example",
+            "ruleContent":{"content":"#content@html"}
+        }"""
+        val runner = RuleRunner {
+            """<div id="content"><p>第一段。</p>""" +
+                """<img src="/p/1.png"><p>第二段。</p>""" +
+                """<img data-src="https://cdn.example/b.jpg" class="lazy">""" +
+                """<img src="data:image/png;base64,AAAA"></div>"""
+        }
+
+        val content = runner.content(source, "https://img.example/c/1").content
+        assertTrue("正文里没保住图片占位: $content", content.contains("![图片](https://img.example/p/1.png)"))
+        assertTrue("懒加载 data-src 没认: $content", content.contains("![图片](https://cdn.example/b.jpg)"))
+        assertFalse("data: 内联图应该丢掉", content.contains("data:image"))
+        assertTrue("正文文本被吃掉: $content", content.contains("第一段。") && content.contains("第二段。"))
+    }
+
+    @Test
+    fun `supports Legado rule dialects used by aggregate JSON sources`() {        // 番茄这类官方接口源同时用到：`{{表达式}}` 占位、`<js>…</js>` 后再接取值路径、
+        // `$..a||$..b` 备选规则、以及裸键（`author` 等价 `$.author`）。缺一个就整本源搜不到书。
+        val source = """{
+            "bookSourceUrl":"https://agg.example",
+            "searchUrl":"/search?q={{key}}&offset={{(page-1)*20}}",
+            "ruleSearch":{
+                "bookList":"<js>var r = JSON.parse(result); JSON.stringify({ data: r.data.list });</js>\n$.data.*",
+                "name":"$..missing||$..title",
+                "author":"author",
+                "bookUrl":"{{source.bookSourceUrl}}/b/{{$.book_id||$.id}}"
+            }
+        }"""
+        val runner = RuleRunner { url ->
+            assertEquals("https://agg.example/search?q=%E9%83%BD%E5%B8%82&offset=0", url)
+            """{"data":{"list":[{"id":"9001","title":"发现的书","author":"某作者"}]}}"""
+        }
+
+        val result = runner.search(source, "都市").single()
+        assertEquals("发现的书", result.name)
+        assertEquals("某作者", result.author)
+        assertEquals("https://agg.example/b/9001", result.bookUrl)
+    }
+
+    @Test
+    fun `evaluates inline JavaScript and expressions embedded in rule templates`() {
+        // 番茄聚合源的详情规则同时用到三种写法：`{{java.xxx()}}` 里嵌 JS、`路径##正则##替换` 出现在占位符内、
+        // 以及「文字模板 + 换行 @js: 收尾」。实测语料里分别有 1804 / 1452 行规则这么写，
+        // 不认的话简介会漏出源码、时间留空、`__status__` 占位词原样显示。
+        val source = """{
+            "bookSourceUrl":"https://fq.example",
+            "ruleBookInfo":{
+                "init":"$.data",
+                "name":"book_name",
+                "intro":"更新：{{java.timeFormat(Number(java.getString('$..last_publish_time'))*1000)}}
+开坑：{{$.create_time##T|\\+.*## }}
+状态：__status__
+@js:var cs=java.getString('$..creation_status')||'';var m={'0':'完结','1':'连载'};result.replace('__status__',m[cs]||'未知')"
+            }
+        }"""
+        val runner = RuleRunner {
+            """{"data":{"book_name":"番茄书","last_publish_time":"1700000000",""" +
+                """"create_time":"2023-11-01T00:00:00+08:00","creation_status":"0","category":"都市"}}"""
+        }
+
+        val details = runner.details(source, "https://fq.example/b/1")
+        val intro = details.intro ?: ""
+        assertTrue("开坑时间未剥离 ISO 尾巴: $intro", intro.contains("开坑：2023-11-01 00:00:00"))
+        assertTrue("状态占位词未被替换: $intro", intro.contains("完结"))
+        assertTrue("java.timeFormat 未生效: $intro", intro.contains("2023-11-1"))
+        assertFalse("@js: 源码漏进了简介", intro.contains("@js:"))
+    }
+
+    @Test
+    fun `parses explore tabs from plain and JavaScript exploreUrl`() {
+        val plain = """{"bookSourceUrl":"https://agg.example","exploreUrl":"榜单::/rank\n其他::/other"}"""
+        val js = """{
+            "bookSourceUrl":"https://agg.example",
+            "exploreUrl":"@js:\nvar t=[];t.push({title:'书架',url:'/shelf'});JSON.stringify(t);",
+            "ruleExplore":{"bookList":"$.books","name":"name","bookUrl":"url"}
+        }"""
+        val runner = RuleRunner { url ->
+            when {
+                url.endsWith("/shelf") -> """{"books":[{"name":"书架书","url":"s1"}]}"""
+                else -> """{"books":[{"name":"榜单书","url":"r1"}]}"""
+            }
+        }
+
+        assertEquals(
+            listOf(ExploreTab("榜单", "/rank"), ExploreTab("其他", "/other")),
+            runner.exploreTabs(plain),
+        )
+        assertEquals(listOf(ExploreTab("书架", "/shelf")), runner.exploreTabs(js))
+
+        val books = runner.explore(js, "/shelf")
+        assertEquals("书架书", books.single().name)
+        assertEquals("https://agg.example/s1", books.single().bookUrl)
+    }
 }

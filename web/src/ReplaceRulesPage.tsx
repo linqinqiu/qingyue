@@ -220,15 +220,6 @@ export function ReplaceRulesPage() {
             <span>替换净化规则</span>
             <span className="rules-count-badge">{rules.length}</span>
           </div>
-          <button
-            type="button"
-            className="primary-button"
-            style={{ padding: '4px 10px', height: '28px', fontSize: '12px' }}
-            onClick={openCreateModal}
-          >
-            <Icon name="plus" />
-            <span>新建规则</span>
-          </button>
         </header>
 
         {/* 工具条：搜索与快捷按钮 */}

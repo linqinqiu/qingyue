@@ -30,6 +30,7 @@ class EdgeTtsService(
     private val maxCacheSize = 250
 
     companion object {
+        private const val MAX_CUSTOM_TTS_BYTES = 8 * 1024 * 1024
         private const val TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
         private const val WSS_BASE_URL = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
         private const val CHROMIUM_FULL_VERSION = "143.0.3650.75"
@@ -311,6 +312,24 @@ class EdgeTtsService(
         }
     }
 
+    /**
+     * 自定义 TTS 的地址由用户在朗读设置里填，最常见的用法就是指向本机的自建合成服务，
+     * 所以这里**不能**套用封面/书源抓取那套内网拦截。跨站风险由接口的 CSRF 校验挡住
+     * （`POST /api/tts/speak` 现在要求 `X-CSRF-Token`），这里只保证协议合法、体积可控、
+     * 并且重定向后仍然停留在 HTTP(S)。
+     */
+    private fun assertSafeTtsTarget(uri: URI) {
+        require(uri.scheme.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()) {
+            "自定义 TTS 只支持 HTTP(S) 地址"
+        }
+    }
+
+    private fun customTtsUri(raw: String): URI {
+        val uri = runCatching { URI.create(raw) }.getOrNull() ?: throw IllegalArgumentException("自定义 TTS 地址无效")
+        assertSafeTtsTarget(uri)
+        return uri
+    }
+
     fun synthesizeCustom(request: TtsSpeakRequest, timeoutSeconds: Long = 15): Pair<String, ByteArray> {
         val targetUrl = request.customUrl ?: throw IllegalArgumentException("customUrl is required for custom TTS")
         val cleanText = request.text.trim()
@@ -340,16 +359,19 @@ class EdgeTtsService(
                 .replace("{{speakText}}", cleanText)
                 .replace("{{speakVoice}}", voice)
                 .replace("{{speakSpeed}}", speedMultiplier.toString())
-            reqBuilder.uri(URI.create(resolvedUrl))
+            reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.POST(HttpRequest.BodyPublishers.ofString(resolvedBody, StandardCharsets.UTF_8))
         } else {
-            reqBuilder.uri(URI.create(resolvedUrl))
+            reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.GET()
         }
 
         val response = client.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofByteArray())
+        assertSafeTtsTarget(response.uri())
+        val bytes = response.body()
+        require(bytes.size <= MAX_CUSTOM_TTS_BYTES) { "自定义 TTS 响应超过 ${MAX_CUSTOM_TTS_BYTES / 1024 / 1024}MB 上限" }
         val contentType = response.headers().firstValue("Content-Type").orElse("audio/mpeg")
-        return Pair(contentType, response.body())
+        return Pair(contentType, bytes)
     }
 
     fun synthesizeCustomStream(
@@ -377,14 +399,15 @@ class EdgeTtsService(
                 .replace("{{speakText}}", cleanText)
                 .replace("{{speakVoice}}", request.voice)
                 .replace("{{speakSpeed}}", speedMultiplier.toString())
-            reqBuilder.uri(URI.create(resolvedUrl))
+            reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
         } else {
-            reqBuilder.uri(URI.create(resolvedUrl))
+            reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.GET()
         }
 
         val response = client.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofInputStream())
+        assertSafeTtsTarget(response.uri())
         response.body().use { input ->
             if (response.statusCode() !in 200..299) {
                 throw IllegalStateException("自定义 TTS 返回 HTTP ${response.statusCode()}")

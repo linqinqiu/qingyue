@@ -11,6 +11,7 @@ import {
   isInteractiveReaderTarget,
   calculatePaginationLayout,
   isDoubleColumnActive,
+  contentImageUrl,
 } from '../src/readerInteractions.ts'
 import {
   clampScrollPosition,
@@ -101,4 +102,13 @@ test('reader settings - parsing, math clamping and localStorage persistence', ()
   } finally {
     globalThis.window = originalWindow
   }
+})
+
+test('正文配图占位行只认服务端产出的那一种形状', () => {
+  assert.equal(contentImageUrl('![图片](https://cdn.example/a.jpg)'), 'https://cdn.example/a.jpg')
+  assert.equal(contentImageUrl('  ![图片](http://example.test/b.png)  '), 'http://example.test/b.png')
+  // 普通段落、被净化规则改坏的半截占位、以及 javascript: 之类协议都不能被当成图片渲染
+  assert.equal(contentImageUrl('他低声说：「走吧。」'), null)
+  assert.equal(contentImageUrl('![图片](javascript:alert(1))'), null)
+  assert.equal(contentImageUrl('![图片](https://example.test/a.jpg'), null)
 })

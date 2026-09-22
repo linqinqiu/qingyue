@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, Chapter, SearchResult, SearchStreamEvent, streamSearch } from './api'
+import { cleanTitle } from './searchFilters'
 import { Icon } from './icons'
 import { toast } from './Toast'
 
@@ -191,9 +192,10 @@ export function SourceSwitchModal({
             for (const r of event.results) {
               const key = `${r.sourceId}\u0000${r.bookUrl}`
               // Filter by book name similarity
+              // 书名按清洗后比较：源站常带《》或尾随空白，全等会把同名结果整批滤掉，换源列表就成了空的。
               if (
                 !existingKeys.has(key) &&
-                r.name.trim().toLowerCase() === bookName.trim().toLowerCase()
+                cleanTitle(r.name).trim().toLowerCase() === cleanTitle(bookName).trim().toLowerCase()
               ) {
                 existingKeys.add(key)
                 const candidate: SourceCandidate = {

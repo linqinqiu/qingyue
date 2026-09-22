@@ -41,6 +41,12 @@ class BookCacheService(private val database: Database, private val runner: RuleR
 
     private suspend fun cache(book: CachedBookRequest) {
         try {
+            if (book.sourceId == LocalBookParser.LOC_BOOK_SOURCE_ID) {
+                // 本地书导入时目录与正文已直接入库，没有可回源的书源记录，按已就绪收尾即可
+                database.finishBookCache(book.sourceId, book.bookUrl)
+                log("book cache completed: ${book.bookUrl}, local book already cached")
+                return
+            }
             val source = database.getSource(book.sourceId) ?: throw IllegalArgumentException("书源不存在")
             val chapters = withContext(Dispatchers.IO) { runner.chapters(source.json, book.tocUrl) }
             if (chapters.isEmpty()) throw RuleExecutionException("目录规则未提取到章节")

@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import type { ReaderSettings } from './readerSettings'
 
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'reader' | 'rules' | 'webdav'
+export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'webdav'
 
 export interface AppHeaderProps {
   page: AppPage
@@ -35,6 +35,19 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [canInstall, setCanInstall] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
+  const toggleFullscreen = () => {
+    setMenuOpen(false)
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+    else void document.documentElement.requestFullscreen().catch(() => undefined)
+  }
 
   useEffect(() => {
     return subscribePwaInstall(setCanInstall)
@@ -114,6 +127,13 @@ export function AppHeader({
           onClick={() => onNavigate('shelf')}
         >
           书架
+        </button>
+        <button
+          type="button"
+          className={page === 'explore' ? 'active' : ''}
+          onClick={() => onNavigate('explore')}
+        >
+          发现
         </button>
         <button
           type="button"
@@ -215,7 +235,7 @@ export function AppHeader({
                   <button
                     type="button"
                     className="menu-logout-btn"
-                    style={{ color: 'var(--text-color, #e6e8eb)' }}
+                    style={{ color: 'var(--ink)' }}
                     role="menuitem"
                     onClick={() => {
                       setMenuOpen(false)
@@ -229,7 +249,7 @@ export function AppHeader({
                 <button
                   type="button"
                   className="menu-logout-btn"
-                  style={{ color: 'var(--text-color, #e6e8eb)' }}
+                  style={{ color: 'var(--ink)' }}
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false)
@@ -242,7 +262,7 @@ export function AppHeader({
                 <button
                   type="button"
                   className="menu-logout-btn"
-                  style={{ color: 'var(--text-color, #e6e8eb)' }}
+                  style={{ color: 'var(--ink)' }}
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false)
@@ -251,6 +271,17 @@ export function AppHeader({
                 >
                   <Icon name="folder" />
                   <span>WebDAV 文件服务</span>
+                </button>
+                <button
+                  type="button"
+                  className="menu-logout-btn"
+                  style={{ color: 'var(--ink)' }}
+                  role="menuitem"
+                  aria-pressed={isFullscreen}
+                  onClick={toggleFullscreen}
+                >
+                  <Icon name="expand" />
+                  <span>{isFullscreen ? '退出全屏' : '全屏显示'}</span>
                 </button>
               </div>
 

@@ -1,6 +1,6 @@
 import React, { type ReactNode, type SVGProps } from 'react'
 
-type IconName =
+export type IconName =
   | 'arrowLeft'
   | 'arrowRight'
   | 'book'
@@ -12,6 +12,7 @@ type IconName =
   | 'copy'
   | 'download'
   | 'edit'
+  | 'expand'
   | 'file'
   | 'folder'
   | 'image'
@@ -44,7 +45,7 @@ const paths: Record<IconName, ReactNode> = {
   activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
   arrowLeft: <path d="m15 18-6-6 6-6" />,
   arrowRight: <path d="m9 18 6-6-6-6" />,
-  book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z" /><path d="M4 19h16" /></>,
+  book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20" /></>,
   bookmark: <path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v17l-6-3.6L6 21V4Z" />,
   check: <path d="m5 12 4 4L19 6" />,
   chevronDown: <path d="m6 9 6 6 6-6" />,
@@ -53,6 +54,7 @@ const paths: Record<IconName, ReactNode> = {
   copy: <><rect width="13" height="13" x="9" y="9" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>,
   download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></>,
   edit: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>,
+  expand: <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />,
   file: <><path d="M14 3v5h5" /><path d="M15 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-4-5Z" /></>,
   folder: <path d="M4 6a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.6.8l1 1.4H18a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" />,
   image: <><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></>,

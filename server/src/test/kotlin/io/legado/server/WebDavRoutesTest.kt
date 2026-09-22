@@ -286,7 +286,13 @@ class WebDavRoutesTest {
             assertNotNull(token)
             assertTrue(token!!.startsWith("opaquelocktoken:"))
             assertTrue(lock.bodyAsText().contains("<D:locktoken><D:href>$token</D:href></D:locktoken>"))
-            assertTrue(lock.bodyAsText().contains("<D:timeout>Second-59"))
+            // 只断「回显了 Second-<n> 且 n 在 (0, 请求值] 区间」。
+            // 原来断的是字面量 "Second-59"：服务端回的是剩余秒数（600 − 已耗时），
+            // 机器快于 1 秒时直接回 "Second-600"，断言就在测 CI 负载而不是测行为。
+            val echoedTimeout = Regex("<D:timeout>Second-(\\d+)</D:timeout>")
+                .find(lock.bodyAsText())?.groupValues?.get(1)?.toLongOrNull()
+            assertNotNull("LOCK 响应要回显 Second-<n> 超时", echoedTimeout)
+            assertTrue("超时必须在 (0, 600] 内，实际 $echoedTimeout", echoedTimeout!! in 1..600)
             assertTrue(Files.exists(fixture.dataDir.resolve("webdav/locked.txt")))
 
             val propfind = client.request("/webdav/locked.txt") {

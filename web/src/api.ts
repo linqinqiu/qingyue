@@ -10,6 +10,7 @@ import {
 export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number }
 export type SourceRecord = { id: string; json: string; version: number; updatedAt: number }
 export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string }
+export type ExploreTab = { title: string; url: string }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; alternateSources?: SearchResult[] }
 export type Chapter = { index: number; title: string; url: string }
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
@@ -17,6 +18,8 @@ export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; a
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
 export type ImportResponse = { imported: number; updated: number; skipped: number; errors: string[] }
+export type DebugTrace = { field: string; rule: string; value: string; failure: string }
+export type DebugStep = { stage: string; label: string; detail: string; ok: boolean; elapsedMs: number; traces: DebugTrace[] }
 export type LocalBookImportItem = { filename: string; success: boolean; bookUrl?: string; name?: string; author?: string; totalChapters: number; error?: string }
 export type LocalBookImportResponse = { total: number; imported: number; failed: number; results: LocalBookImportItem[] }
 export type SourceSubscription = { id: number; url: string; enabled: boolean; createdAt: number; updatedAt: number; lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string; lastImported: number; contentHash?: string }
@@ -42,7 +45,7 @@ export type SourceHealthCheckItem = {
   ok: boolean
   latencyMs: number
   statusCode: number
-  statusCategory: 'valid' | 'slow' | 'failed' | 'blocked'
+  statusCategory: string  // valid · slow · empty · blocked · needs_login · needs_webview · unreachable · tls · broken · invalid
   error?: string
 }
 
@@ -57,7 +60,7 @@ export type SourceHealthCheckResponse = {
 
 
 export type WebDavEntry = { name: string; path: string; directory: boolean; size: number; modifiedAt: number }
-export type WebDavInfo = { url: string; directory: string; path: string; parent?: string | null; fileCount: number; directoryCount: number; totalBytes: number; entries: WebDavEntry[] }
+export type WebDavInfo = { url: string; directory: string; path: string; parent?: string | null; fileCount: number; directoryCount: number; totalBytes: number; entries: WebDavEntry[]; anonymousLocalAccess?: boolean }
 export type BackupImportSummary = {
   sources: number
   sourcesUpdated: number
@@ -157,6 +160,10 @@ export type SourceLoginActionResult = {
 export type SourceLoginCheckResult = {
   loggedIn: boolean
   message?: string
+  /** 已捕获任意凭据（Cookie/登录头/登录信息），不等于已验证登录。 */
+  hasCredential?: boolean
+  /** 经书源 loginCheckJs 主动验证通过。 */
+  verified?: boolean
 }
 
 export type SourceBrowserSession = {
@@ -267,7 +274,12 @@ export const api = {
     request<SourceHealthCheckResponse>('/api/sources/health-check', { method: 'POST', body: JSON.stringify({ ids, timeoutMs }) }),
   exportSources: (ids?: string[]) =>
     request<string[]>(`/api/sources/export${ids && ids.length > 0 ? `?${ids.map(id => `id=${encodeURIComponent(id)}`).join('&')}` : ''}`),
-  validate: (id: string) => request<{ valid: boolean; errors: string[]; warnings: string[] }>(`/api/sources/${encodeURIComponent(id)}/validate`, { method: 'POST' }),
+  validate: (id: string, draftJson?: string) => request<{ valid: boolean; errors: string[]; warnings: string[] }>(`/api/sources/${encodeURIComponent(id)}/validate`, { method: 'POST', body: JSON.stringify(draftJson ? { json: draftJson } : {}) }),
+  /** 分阶段调试是 SSE 流，交给 EventSource 自己开，这里只负责拼地址。 */
+  debugStreamUrl: (id: string, keyword: string, bookUrl?: string, chapterIndex?: number) =>
+    `/api/sources/${encodeURIComponent(id)}/debug?keyword=${encodeURIComponent(keyword)}`
+      + (bookUrl ? `&bookUrl=${encodeURIComponent(bookUrl)}` : '')
+      + (chapterIndex ? `&chapterIndex=${chapterIndex}` : ''),
   import: (sources: string[]) => request<ImportResponse>('/api/sources/import', { method: 'POST', body: JSON.stringify({ sources }) }),
   subscriptions: () => request<SourceSubscription[]>('/api/subscriptions'),
   saveSubscription: (url: string, enabled = true) => request<SourceSubscription>('/api/subscriptions', { method: 'POST', body: JSON.stringify({ url, enabled }) }),
@@ -293,6 +305,9 @@ export const api = {
   sourceBrowserInlineUrl: (sourceId: string, token: string, key: string) =>
     `/api/sources/${encodeURIComponent(sourceId)}/browser/page?t=${encodeURIComponent(token)}&i=${encodeURIComponent(key)}`,
   search: (keyword: string, sourceIds?: string[], signal?: AbortSignal) => request<SearchResult[]>('/api/search', { method: 'POST', body: JSON.stringify({ keyword, sourceIds }), signal }),
+  exploreSources: () => request<SourceSummary[]>('/api/explore/sources'),
+  exploreTabs: (sourceId: string, signal?: AbortSignal) => request<ExploreTab[]>(`/api/sources/${encodeURIComponent(sourceId)}/explore`, { signal }),
+  explore: (sourceId: string, url: string, signal?: AbortSignal) => request<SearchResult[]>('/api/explore', { method: 'POST', body: JSON.stringify({ sourceId, url }), signal }),
   details: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<BookDetails>('/api/books/details', { method: 'POST', body: JSON.stringify({ sourceId, bookUrl }), signal }),
   chapters: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<Chapter[]>('/api/books/chapters', { method: 'POST', body: JSON.stringify({ sourceId, bookUrl }), signal }),
   content: async (sourceId: string, chapterUrl: string, bookUrl?: string, signal?: AbortSignal) => {
@@ -374,6 +389,7 @@ export const api = {
     return response.json() as Promise<LocalBookImportResponse>
   },
   cover: (key: string) => `/api/covers/${encodeURIComponent(key)}`,
+  bookImage: (url: string, page?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`,
   webDavInfo: (path = '') => request<WebDavInfo>(`/api/webdav/info${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   webDavUpload: (path: string, file: File) => webDavWrite(path, { method: 'PUT', body: file }),
   webDavCreateFolder: (path: string) => webDavWrite(path, { method: 'MKCOL' }),

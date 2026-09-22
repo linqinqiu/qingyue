@@ -32,6 +32,7 @@ import io.ktor.http.content.streamProvider
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import java.net.URI
 import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -47,6 +48,7 @@ fun Route.apiRoutes(
     localBooksDirectory: Path = Path.of(".data/local_books"),
 ) {
     val webView = WebViewProxy(database)
+    val debugger = SourceDebugger(runner)
     route("/api") {
         get("/sources") {
             if (auth.requireSession(call) == null) return@get
@@ -78,8 +80,12 @@ fun Route.apiRoutes(
             }
         }
         post("/sources/health-check") {
-            if (auth.requireSession(call) == null) return@post
-            val req = runCatching { call.receive<SourceHealthCheckRequest>() }.getOrElse { SourceHealthCheckRequest() }
+            // 这个接口会让服务端对全部启用书源发起外呼，属于「能被跨站触发的资源消耗」，
+            // 因此和其余写接口一样要 CSRF；原来还把请求体解析失败吞成默认值，等于允许空体跨站触发。
+            if (auth.requireSession(call, true) == null) return@post
+            val req = runCatching { call.receive<SourceHealthCheckRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
+            }
             val timeoutMs = req.timeoutMs.coerceIn(1000L, 10000L)
             val allSources = database.listSources(null)
             val targetSources = if (!req.ids.isNullOrEmpty()) {
@@ -90,11 +96,8 @@ fun Route.apiRoutes(
             }
 
             val startTotalNs = System.nanoTime()
-            val semaphore = Semaphore(8)
-            val probeClient = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofMillis(timeoutMs))
-                .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
-                .build()
+            val health = SourceHealth(runner)
+            val semaphore = Semaphore(16)
 
             val results = coroutineScope {
                 targetSources.map { summary ->
@@ -108,11 +111,11 @@ fun Route.apiRoutes(
                                     ok = false,
                                     latencyMs = 0L,
                                     statusCode = 0,
-                                    statusCategory = "failed",
+                                    statusCategory = "invalid",
                                     error = "书源记录不存在",
                                 )
                             } else {
-                                probeSingleSourceHealth(probeClient, summary.id, summary.name, record.json, timeoutMs)
+                                health.probe(summary.id, summary.name, record.json, req.keyword ?: "都市", timeoutMs)
                             }
                         }
                     }
@@ -121,7 +124,7 @@ fun Route.apiRoutes(
             val totalDurationMs = (System.nanoTime() - startTotalNs) / 1_000_000
             val successCount = results.count { it.statusCategory == "valid" }
             val slowCount = results.count { it.statusCategory == "slow" }
-            val failedCount = results.count { it.statusCategory == "failed" || it.statusCategory == "blocked" }
+            val failedCount = results.count { !it.ok }
 
             call.respond(
                 SourceHealthCheckResponse(
@@ -166,25 +169,43 @@ fun Route.apiRoutes(
             }
             post("/validate") {
                 if (auth.requireSession(call, true) == null) return@post
-                val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@post }
-                call.respond(SourceCodec.validate(source.json))
+                // 带草稿时校验编辑器里的未保存内容：否则「校验」永远在检查上一次落库的旧版本。
+                val draft = runCatching { call.receive<SourceValidateRequest>().json }.getOrNull()?.takeIf { it.isNotBlank() }
+                val text = draft ?: database.getSource(call.parameters["id"]!!)?.json
+                    ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@post }
+                call.respond(SourceCodec.validate(text))
             }
             get("/debug") {
                 if (auth.requireSession(call) == null) return@get
                 val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@get }
-                call.response.cacheControl(CacheControl.NoStore(null)); call.response.headers.append(HttpHeaders.ContentType, ContentType.Text.EventStream.toString())
+                val keyword = call.request.queryParameters["keyword"]?.takeIf { it.isNotBlank() } ?: "测试"
+                val targetBookUrl = call.request.queryParameters["bookUrl"]
+                val chapterIndex = call.request.queryParameters["chapterIndex"]?.toIntOrNull() ?: 0
+                call.response.cacheControl(CacheControl.NoStore(null))
                 call.respondTextWriter(ContentType.Text.EventStream) {
-                    write("event: start\ndata: ${jsonEvent("开始调试 ${source.id}")}\n\n"); flush(); delay(20)
-                    val validation = SourceCodec.validate(source.json)
-                    if (!validation.valid) write("event: error\ndata: ${jsonEvent(validation.errors.joinToString())}\n\n")
-                    else {
-                        val keyword = call.request.queryParameters["keyword"] ?: "测试"
-                        runCatching { runner.search(source.json, keyword) }
-                            .onSuccess { results -> write("event: result\ndata: ${jsonEvent("搜索完成：${results.size} 项")}\n\n") }
-                            .onFailure { error -> write("event: error\ndata: ${jsonEvent(error.message ?: "执行失败")}\n\n") }
+                    write("event: start\ndata: ${jsonEvent("开始调试 ${source.id}｜关键词「$keyword」")}\n\n"); flush()
+                    // 各阶段最坏要等满引擎超时，所以边跑边发：驱动器在 IO 线程里往 channel 塞，
+                    // 这里逐条写回前端。客户端断开时 `write` 抛取消，IO 侧的发送只是 trySend 失败，不会挂住。
+                    val steps = Channel<DebugStep>(Channel.UNLIMITED)
+                    coroutineScope {
+                        launch(Dispatchers.IO) {
+                            runCatching { debugger.flow(source.json, keyword, targetBookUrl, chapterIndex) { steps.trySend(it) } }
+                                .onFailure { steps.trySend(DebugStep("调试", "驱动器异常", it.message ?: it.javaClass.simpleName, false)) }
+                            steps.close()
+                        }
+                        for (step in steps) {
+                            write("event: step\ndata: ${debugJson.encodeToString(DebugStep.serializer(), step)}\n\n"); flush()
+                        }
                     }
-                    flush()
+                    write("event: done\ndata: ${jsonEvent("调试结束")}\n\n"); flush()
                 }
+            }
+            get("/explore") {
+                if (auth.requireSession(call) == null) return@get
+                val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@get }
+                call.respond(runCatching { runner.exploreTabs(source.json) }.getOrElse { error ->
+                    call.respond(HttpStatusCode.BadGateway, ApiError("explore_failed", error.message ?: "发现页解析失败")); return@get
+                })
             }
             get("/login-ui") {
                 if (auth.requireSession(call) == null) return@get
@@ -228,19 +249,25 @@ fun Route.apiRoutes(
                 call.respond(mapOf("ok" to true))
             }
             options("/login-cookie") {
-                call.response.headers.append(HttpHeaders.AccessControlAllowOrigin, "*")
+                if (!allowCookieSyncOrigin(call, database)) { call.respond(HttpStatusCode.Forbidden); return@options }
                 call.response.headers.append(HttpHeaders.AccessControlAllowMethods, "POST, OPTIONS")
                 call.response.headers.append(HttpHeaders.AccessControlAllowHeaders, "Content-Type, X-CSRF-Token, Authorization")
                 call.respond(HttpStatusCode.OK)
             }
             post("/login-cookie") {
-                call.response.headers.append(HttpHeaders.AccessControlAllowOrigin, "*")
                 val sourceId = call.parameters["id"]!!
                 val targetSource = database.getSource(sourceId)
                     ?: database.listSources(null).firstOrNull {
                         it.id.contains(sourceId) || sourceId.contains(it.id) || (it.url.isNotBlank() && (sourceId.contains(it.url) || it.url.contains(sourceId)))
                     }?.let { database.getSource(it.id) }
 
+                // 这个接口是给「在目标站点页面上运行的书签 / Chrome 扩展」用的，跨站、拿不到会话，
+                // 所以原来写成 Access-Control-Allow-Origin: *。那等于任何网页都能往用户书源的 Cookie 罐里注入。
+                // 改成只放行确实属于该书源站点的 Origin。
+                if (!allowCookieSyncOrigin(call, database, targetSource?.json)) {
+                    call.respond(HttpStatusCode.Forbidden, ApiError("origin_not_allowed", "该页面不属于此书源的站点，已拒绝同步 Cookie"))
+                    return@post
+                }
                 val resolvedSourceId = targetSource?.id ?: sourceId
                 val req = call.receive<SourceLoginCookieUpdateRequest>()
                 val rawCookie = req.cookie.trim()
@@ -462,6 +489,24 @@ fun Route.apiRoutes(
                 }
             }
         }
+        get("/explore/sources") {
+            if (auth.requireSession(call) == null) return@get
+            call.respond(database.listExploreSources())
+        }
+        post("/explore") {
+            if (auth.requireSession(call) == null) return@post
+            val request = call.receive<ExploreRequest>()
+            val source = database.getSource(request.sourceId) ?: run {
+                call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在"))
+                return@post
+            }
+            try {
+                call.respond(runner.explore(source.json, request.url))
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                call.respond(HttpStatusCode.BadGateway, ApiError("explore_failed", error.message ?: "发现页取书失败"))
+            }
+        }
         get("/subscriptions") {
             if (auth.requireSession(call) == null) return@get
             call.respond(database.listSubscriptions())
@@ -538,11 +583,12 @@ fun Route.apiRoutes(
             call.respondCatching {
                 try {
                     withTimeout(4000) {
-                        val chapters = runCatching { runner.chapters(source.json, request.bookUrl) }.getOrElse {
+                        val direct = runCatching { runner.chapters(source.json, request.bookUrl) }.getOrNull()
+                        // 目录地址常常不等于书页地址（`tocUrl` 要从详情里再取一次），
+                        // 按书页取目录会**安静地返回空列表**而不是报错，所以空结果同样要回落到详情。
+                        val chapters = if (!direct.isNullOrEmpty()) direct else {
                             val details = runner.details(source.json, request.bookUrl)
-                            val toc = runner.chapters(source.json, details.tocUrl)
-                            database.saveTocCache(request.sourceId, details.tocUrl, toc)
-                            toc
+                            runner.chapters(source.json, details.tocUrl).also { database.saveTocCache(request.sourceId, details.tocUrl, it) }
                         }
                         if (chapters.isNotEmpty()) {
                             database.saveTocCache(request.sourceId, request.bookUrl, chapters)
@@ -860,6 +906,24 @@ fun Route.apiRoutes(
             call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 7 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
             call.respond(LocalFileContent(file.toFile(), type))
         }
+        get("/book/image") {
+            if (auth.requireSession(call) == null) return@get
+            val url = call.request.queryParameters["url"].orEmpty()
+            if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_image", "图片地址无效")); return@get
+            }
+            // `page` 是图片所在的那一页，拿来当 Referer —— 图站按防盗链判来源，不带就回 403 占位图。
+            val referer = call.request.queryParameters["page"]?.takeIf { it.startsWith("http", ignoreCase = true) }
+            try {
+                val cached = coverCache.cacheContentImage(url, referer)
+                val file = coverCache.file(cached.key) ?: return@get call.respond(HttpStatusCode.NotFound)
+                call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 7 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
+                call.respond(LocalFileContent(file.toFile(), ContentType.parse(cached.contentType)))
+            } catch (error: Exception) {
+                call.application.log.debug("正文图片代理失败 {}: {}", url, error.message)
+                call.respond(HttpStatusCode.BadGateway, ApiError("image_failed", error.message ?: "图片抓取失败"))
+            }
+        }
         get("/reading-progress") {
             if (auth.requireSession(call) == null) return@get
             val sourceId = call.request.queryParameters["sourceId"]
@@ -960,7 +1024,9 @@ fun Route.apiRoutes(
                 }
             }
             post("/speak") {
-                if (auth.requireSession(call) == null) return@post
+                // customUrl 由请求体决定，等于让调用方指定服务端要抓哪个地址；
+                // 之前只验会话不验 CSRF，任何网页发个简单跨站请求就能借这台机器去打内网。
+                if (auth.requireSession(call, true) == null) return@post
                 val req = call.receive<TtsSpeakRequest>()
                 val text = req.text.trim()
                 if (text.isEmpty()) {
@@ -1116,6 +1182,28 @@ internal fun tryCacheCover(coverCache: CoverCache, primaryUrl: String?, alternat
 
 private fun jsonEvent(message: String): String = Json.encodeToString(message)
 
+/** 调试事件的序列化器：`encodeDefaults` 必须开着，否则前端拿到的 JSON 会缺掉空字段。 */
+private val debugJson = Json { encodeDefaults = true }
+
+/**
+ * Cookie 同步接口只接受「该书源自己的站点」发来的跨站请求：没有 Origin 头视为本机工具或同源页面，放行；
+ * 有 Origin 则必须命中书源 `bookSourceUrl` / `loginUrl` 的注册域（或该主机名确实出现在这份书源配置里，
+ * 兼容用自定义标识当 URL 的聚合源）。命中时回显该 Origin 并带 `Vary: Origin`，不再使用 `*`。
+ */
+private fun allowCookieSyncOrigin(call: ApplicationCall, database: Database, sourceJson: String? = null): Boolean {
+    val origin = call.request.headers[HttpHeaders.Origin]?.trim()?.takeIf { it.isNotEmpty() } ?: return true
+    val host = runCatching { URI(origin).host?.lowercase() }.getOrNull()?.takeIf { it.isNotEmpty() }
+        ?: return false
+    val json = sourceJson ?: call.parameters["id"]?.let { database.getSource(it)?.json }
+    val domains = json?.let { runCatching { WebViewProxy.allowedDomains(it) }.getOrNull() }.orEmpty()
+    val registrable = runCatching { WebViewProxy.registrableDomain(host) }.getOrDefault(host)
+    val matchesDomain = domains.any { registrable == it || host == it || host.endsWith(".$it") }
+    if (!matchesDomain && json?.contains(host) != true) return false
+    call.response.headers.append(HttpHeaders.AccessControlAllowOrigin, origin)
+    call.response.headers.append(HttpHeaders.Vary, "Origin")
+    return true
+}
+
 /**
  * 把代理结果写回响应；失败时返回一张可读的 HTML 错误页（因为它会被渲染进内置浏览器 iframe）。
  */
@@ -1215,185 +1303,6 @@ private suspend fun parseImportedReplaceRules(bodyText: String): List<ReplaceRul
             isEnabled = isEnabled,
             order = order,
             timeoutMillisecond = timeoutMs,
-        )
-    }
-}
-
-private suspend fun probeSingleSourceHealth(
-    client: java.net.http.HttpClient,
-    sourceId: String,
-    sourceName: String,
-    rawJson: String,
-    timeoutMs: Long,
-): SourceHealthCheckItem {
-    val validation = SourceCodec.validate(rawJson)
-    if (!validation.valid) {
-        return SourceHealthCheckItem(
-            id = sourceId,
-            name = sourceName,
-            ok = false,
-            latencyMs = 0L,
-            statusCode = 0,
-            statusCategory = "failed",
-            error = validation.errors.firstOrNull() ?: "书源规则语法无效",
-        )
-    }
-
-    val sourceObj = runCatching { Json.parseToJsonElement(rawJson).jsonObject }.getOrNull()
-    val isJs = sourceObj?.get("mainJs")?.let { (it as? JsonPrimitive)?.contentOrNull?.isNotBlank() } == true
-    val bookSourceUrl = (sourceObj?.get("bookSourceUrl") as? JsonPrimitive)?.contentOrNull?.trim()
-    val searchUrl = (sourceObj?.get("searchUrl") as? JsonPrimitive)?.contentOrNull?.trim()
-
-    val candidateUrl = when {
-        bookSourceUrl?.startsWith("http://", ignoreCase = true) == true || bookSourceUrl?.startsWith("https://", ignoreCase = true) == true -> bookSourceUrl
-        searchUrl?.startsWith("http://", ignoreCase = true) == true || searchUrl?.startsWith("https://", ignoreCase = true) == true -> searchUrl.substringBefore("{{").substringBefore("@").substringBefore(",")
-        else -> null
-    }
-
-    if (candidateUrl == null) {
-        return if (isJs) {
-            SourceHealthCheckItem(
-                id = sourceId,
-                name = sourceName,
-                ok = true,
-                latencyMs = 1L,
-                statusCode = 200,
-                statusCategory = "valid",
-                error = null,
-            )
-        } else {
-            SourceHealthCheckItem(
-                id = sourceId,
-                name = sourceName,
-                ok = false,
-                latencyMs = 0L,
-                statusCode = 0,
-                statusCategory = "failed",
-                error = "未配置可达的 HTTP(S) 地址",
-            )
-        }
-    }
-
-    val startNs = System.nanoTime()
-    return try {
-        val cleanUrl = candidateUrl.substringBefore("#").trim()
-        val targetUri = java.net.URI.create(cleanUrl)
-        try {
-            NetworkSecurity.resolveAndValidateSafeHttpTarget(targetUri, "书源")
-        } catch (ssrfEx: IllegalArgumentException) {
-            return SourceHealthCheckItem(
-                id = sourceId,
-                name = sourceName,
-                ok = false,
-                latencyMs = 0L,
-                statusCode = 0,
-                statusCategory = "failed",
-                error = ssrfEx.message ?: "安全校验未通过",
-            )
-        }
-
-        val req = java.net.http.HttpRequest.newBuilder(targetUri)
-            .timeout(java.time.Duration.ofMillis(timeoutMs))
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            .GET()
-            .build()
-
-        val resp = withContext(Dispatchers.IO) {
-            client.send(req, java.net.http.HttpResponse.BodyHandlers.discarding())
-        }
-        val latencyMs = (System.nanoTime() - startNs) / 1_000_000
-        val code = resp.statusCode()
-
-        when (code) {
-            in 200..399 -> {
-                val category = if (latencyMs > 2500) "slow" else "valid"
-                SourceHealthCheckItem(
-                    id = sourceId,
-                    name = sourceName,
-                    ok = true,
-                    latencyMs = latencyMs,
-                    statusCode = code,
-                    statusCategory = category,
-                    error = null,
-                )
-            }
-            401, 403 -> {
-                SourceHealthCheckItem(
-                    id = sourceId,
-                    name = sourceName,
-                    ok = false,
-                    latencyMs = latencyMs,
-                    statusCode = code,
-                    statusCategory = "blocked",
-                    error = "访问受限 (HTTP $code)",
-                )
-            }
-            else -> {
-                SourceHealthCheckItem(
-                    id = sourceId,
-                    name = sourceName,
-                    ok = false,
-                    latencyMs = latencyMs,
-                    statusCode = code,
-                    statusCategory = "failed",
-                    error = "响应异常 (HTTP $code)",
-                )
-            }
-        }
-    } catch (ex: java.net.http.HttpTimeoutException) {
-        val latencyMs = (System.nanoTime() - startNs) / 1_000_000
-        SourceHealthCheckItem(
-            id = sourceId,
-            name = sourceName,
-            ok = false,
-            latencyMs = latencyMs,
-            statusCode = 0,
-            statusCategory = "failed",
-            error = "连接超时 (>${timeoutMs}ms)",
-        )
-    } catch (ex: java.net.UnknownHostException) {
-        SourceHealthCheckItem(
-            id = sourceId,
-            name = sourceName,
-            ok = false,
-            latencyMs = 0L,
-            statusCode = 0,
-            statusCategory = "failed",
-            error = "域名解析失败 (${ex.message ?: "DNS Error"})",
-        )
-    } catch (ex: javax.net.ssl.SSLException) {
-        val latencyMs = (System.nanoTime() - startNs) / 1_000_000
-        SourceHealthCheckItem(
-            id = sourceId,
-            name = sourceName,
-            ok = false,
-            latencyMs = latencyMs,
-            statusCode = 0,
-            statusCategory = "failed",
-            error = "SSL证书或握手失败 (${ex.message ?: "SSL Error"})",
-        )
-    } catch (ex: java.net.ConnectException) {
-        val latencyMs = (System.nanoTime() - startNs) / 1_000_000
-        SourceHealthCheckItem(
-            id = sourceId,
-            name = sourceName,
-            ok = false,
-            latencyMs = latencyMs,
-            statusCode = 0,
-            statusCategory = "failed",
-            error = "连接被拒绝 (${ex.message ?: "Connection Refused"})",
-        )
-    } catch (ex: Throwable) {
-        val latencyMs = (System.nanoTime() - startNs) / 1_000_000
-        SourceHealthCheckItem(
-            id = sourceId,
-            name = sourceName,
-            ok = false,
-            latencyMs = latencyMs,
-            statusCode = 0,
-            statusCategory = "failed",
-            error = ex.message ?: "探测异常",
         )
     }
 }

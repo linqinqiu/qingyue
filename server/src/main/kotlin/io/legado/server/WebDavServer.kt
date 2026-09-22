@@ -428,6 +428,16 @@ private fun ApplicationCall.davPath(): String = runCatching {
 
 private suspend fun ApplicationCall.requireWebDavAuth(auth: AuthService, write: Boolean = false): Boolean {
     if (auth.verifyBasicAuthorization(request.headers[HttpHeaders.Authorization])) return true
+    // 本机免登录部署下，/webdav 不该反过来跟用户要密码：资源管理器/curl 走的是无 Cookie 的本机请求，
+    // 直接放行；但带 Origin 的浏览器请求必须同源，否则 DNS 重绑就能借本机浏览器往用户目录写文件。
+    if (auth.allowsLoopbackWebDav(this)) {
+        val csrf = auth.csrfForPresentedSession(this)
+        if (csrf != null && write && request.headers[AuthService.CSRF_HEADER] != csrf) {
+            respond(HttpStatusCode.Forbidden, ApiError("csrf_invalid", "请求验证失败"))
+            return false
+        }
+        return true
+    }
     val session = sessions.get<UserSession>()
     if (session != null) {
         val csrf = auth.csrf(session)
@@ -477,6 +487,7 @@ private suspend fun ApplicationCall.serveWebDavInfo(auth: AuthService, storage: 
             directoryCount = usage.directories,
             totalBytes = usage.bytes,
             entries = entries,
+            anonymousLocalAccess = auth.loopbackNoAuth,
         )
     )
 }
