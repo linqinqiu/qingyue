@@ -100,6 +100,23 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `content appends subContent after the main body`() {
+        val source = """{
+            "bookSourceUrl":"https://sub.example",
+            "ruleContent":{"content":"@css:#main@html","subContent":"@css:#lyric@html"}
+        }"""
+        val page = """<html><body><div id="main">第一章正文内容</div><div id="lyric">副文：歌词行</div></body></html>"""
+        val runner = RuleRunner { url ->
+            if (url == "https://sub.example/c/1") page else error("unexpected URL: $url")
+        }
+
+        val content = runner.content(source, "https://sub.example/c/1").content
+        assertTrue(content.contains("第一章正文内容"))
+        assertTrue(content.contains("副文：歌词行"))
+        assertTrue(content.indexOf("第一章正文内容") < content.indexOf("副文：歌词行"))
+    }
+
+    @Test
     fun `search returns candidates directly without fetching details TOC or content`() {
         val source = """{
             "bookSourceUrl":"https://source.example",

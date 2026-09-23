@@ -427,6 +427,13 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 throw RuleExecutionException("正文规则未提取到内容$detail")
             }
 
+            // subContent：原版「副文规则，拼接在正文后面」（歌词/副内容等），缺省不影响既有行为。
+            val subRule = rule.string("subContent")?.trim()
+            if (!subRule.isNullOrEmpty()) {
+                val sub = root.value(subRule, jsSandbox, firstBody, chapterUrl)?.cleanContent().orEmpty()
+                if (sub.isNotBlank()) text = if (text.isBlank()) sub else "$text\n\n$sub"
+            }
+
             var title = root.value(rule.string("title"), jsSandbox, firstBody, chapterUrl)
             if (replaceRules.isNotEmpty()) {
                 text = ContentProcessor.processContent(text, replaceRules, jsSandbox, bookName, title)
