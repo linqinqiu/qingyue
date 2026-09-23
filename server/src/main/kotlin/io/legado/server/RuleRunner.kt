@@ -887,6 +887,11 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     private fun nodes(body: String, rule: String): List<NodeValue> {
         // @xpath 方言优先：xpath 里的 `|` 并集不能被当成 Legado 的 `||` 备选来切分
         if (isXpathRule(rule)) return xpathNodes(Jsoup.parse(body), stripXpathPrefix(rule))
+        // @json: 前缀（对齐原版 ruleStr.startsWith("@Json:")）：去前缀后按 JSONPath 读列表
+        if (isJsonPrefixedRule(rule)) {
+            val path = stripJsonPrefix(rule)
+            return runCatching { (JsonPath.read<Any>(body, path) as? List<*>)?.map { NodeValue.json(it) } ?: emptyList() }.getOrDefault(emptyList())
+        }
         val alternatives = splitLegadoAlternatives(rule)
         if (alternatives.size > 1) {
             return alternatives.firstNotNullOfOrNull { branch -> nodes(body, branch).ifEmpty { null } } ?: emptyList()
@@ -1231,7 +1236,7 @@ internal class NodeValue private constructor(private val html: Element?, private
 
     private fun valuePlain(rule: String): String? {
         if (rule.isBlank()) return null
-        return if (json != null) valueJson(rule)
+        return if (json != null) valueJson(if (isJsonPrefixedRule(rule)) stripJsonPrefix(rule) else rule)
         else html?.let { element ->
             if (isXpathRule(rule)) {
                 val path = stripXpathPrefix(rule)
@@ -1424,6 +1429,11 @@ private fun isXpathRule(rule: String): Boolean {
     // CSS 选择器不会以 "/" 开头、JSONPath 以 "$" 开头，故无副作用。
     return XPATH_PREFIX.containsMatchIn(r) || r.startsWith("/")
 }
+
+// @json: 显式前缀（原版 ruleStr.startsWith("@Json:")）：去掉后按 JSONPath 求值。
+private val JSON_PREFIX = Regex("""^@json\s*:\s*""", RegexOption.IGNORE_CASE)
+private fun isJsonPrefixedRule(rule: String): Boolean = JSON_PREFIX.containsMatchIn(rule.trim())
+private fun stripJsonPrefix(rule: String): String = JSON_PREFIX.replace(rule.trim(), "").trim()
 
 private fun stripXpathPrefix(rule: String): String = XPATH_PREFIX.replace(rule.trim(), "").trim()
 

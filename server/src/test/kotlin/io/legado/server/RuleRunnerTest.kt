@@ -81,6 +81,25 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `json-prefixed rules are stripped and evaluated as JSONPath`() {
+        // 原版支持 @Json: 显式前缀（大写不敏感），去前缀后走 JSONPath。真实 JSON 源偶尔这么写。
+        val source = """{
+            "bookSourceUrl":"https://jsonprefix.example",
+            "searchUrl":"https://jsonprefix.example/search?q={{key}}",
+            "ruleSearch":{"bookList":"@JSON:$.data","name":"@JSON:$.title","author":"@JSON:$.author","bookUrl":"@JSON:$.id"}
+        }"""
+        val body = """{"data":[{"id":"b1","title":"剑来","author":"烽火戏诸侯"},{"id":"b2","title":"雪中悍刀行","author":"烽火戏诸侯"}]}"""
+        val runner = RuleRunner { url ->
+            if (url.startsWith("https://jsonprefix.example/search")) body else error("unexpected URL: $url")
+        }
+
+        val results = runner.search(source, "剑来")
+        assertEquals(2, results.size)
+        assertEquals("剑来", results[0].name)
+        assertEquals("https://jsonprefix.example/b1", results[0].bookUrl)
+    }
+
+    @Test
     fun `search returns candidates directly without fetching details TOC or content`() {
         val source = """{
             "bookSourceUrl":"https://source.example",
