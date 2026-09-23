@@ -273,6 +273,23 @@ class SourceLoginTest {
         assertTrue(updatedUi.loginHeader!!.contains("token=xyz999"))
         assertTrue(updatedUi.loginHeader!!.contains("session_id=sess888"))
 
+        // 5b. 跨站来源的 Cookie 同步被拒 —— 防止任意网页往用户书源 Cookie 罐注入（原 ACAO:* 漏洞的回归防线）
+        val foreignOrigin = client.post("/api/sources/$encodedId/login-cookie") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            header(HttpHeaders.Origin, "https://evil.example")
+            setBody(SourceLoginCookieUpdateRequest(cookie = "inject=1", url = sourceRecord.url))
+        }
+        assertEquals(HttpStatusCode.Forbidden, foreignOrigin.status)
+
+        // 5c. 同站来源放行，并回显该 Origin（不再用 *）
+        val sameOrigin = client.post("/api/sources/$encodedId/login-cookie") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            header(HttpHeaders.Origin, "https://api-source.com")
+            setBody(SourceLoginCookieUpdateRequest(cookie = "siteonly=1", url = sourceRecord.url))
+        }
+        assertEquals(HttpStatusCode.OK, sameOrigin.status)
+        assertTrue(sameOrigin.headers[HttpHeaders.AccessControlAllowOrigin]?.contains("api-source.com") == true)
+
         // 6. DELETE /api/sources/{id}/login-info
         val delInfoRes = client.delete("/api/sources/$encodedId/login-info") {
             header("X-CSRF-Token", csrf)
