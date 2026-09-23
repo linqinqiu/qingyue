@@ -134,6 +134,23 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `search results carry kind wordCount and lastChapter`() {
+        val source = """{
+            "bookSourceUrl":"https://srchfields.example",
+            "searchUrl":"https://srchfields.example/s?q={{key}}",
+            "ruleSearch":{"bookList":"//li","name":"@css:.t@text","bookUrl":"@css:a@href","kind":"@css:.k@text","wordCount":"@css:.w@text","lastChapter":"@css:.lc@text"}
+        }"""
+        val page = """<html><body><ul><li><a href="/b/1"><span class="t">搜到的书</span></a><span class="k">都市</span><span class="w">88万字</span><span class="lc">最新一章</span></li></ul></body></html>"""
+        val runner = RuleRunner { url -> if (url.startsWith("https://srchfields.example/s")) page else error("unexpected $url") }
+
+        val result = runner.search(source, "搜").single()
+        assertEquals("搜到的书", result.name)
+        assertEquals("都市", result.kind)
+        assertEquals("88万字", result.wordCount)
+        assertEquals("最新一章", result.lastChapter)
+    }
+
+    @Test
     fun `search returns candidates directly without fetching details TOC or content`() {
         val source = """{
             "bookSourceUrl":"https://source.example",

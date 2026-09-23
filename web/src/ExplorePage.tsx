@@ -185,6 +185,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
                 )}
                 <strong title={book.name}>{book.name}</strong>
                 <small>{book.author || '未知作者'}</small>
+                {(book.kind || book.lastChapter || book.wordCount) && (
+                  <small className="explore-card-meta">{[book.kind, book.wordCount, book.lastChapter].filter(Boolean).join(' · ')}</small>
+                )}
               </button>
             ))}
           </div>

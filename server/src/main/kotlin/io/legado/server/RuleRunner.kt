@@ -87,6 +87,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 bookUrl = url,
                 coverUrl = item.value(rule.string("coverUrl"), jsSandbox, body, sourceUrl)?.absolute(sourceUrl),
                 intro = item.value(rule.string("intro"), jsSandbox, body, sourceUrl),
+                kind = item.value(rule.string("kind"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
+                wordCount = item.value(rule.string("wordCount"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
+                lastChapter = item.value(rule.string("lastChapter"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
             )
         }
     }

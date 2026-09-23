@@ -9,7 +9,7 @@ import {
 
 export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number }
 export type SourceRecord = { id: string; json: string; version: number; updatedAt: number }
-export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string }
+export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string; kind?: string; wordCount?: string; lastChapter?: string }
 export type ExploreTab = { title: string; url: string }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[] }
 export type Chapter = { index: number; title: string; url: string }
