@@ -254,6 +254,30 @@ class RuleRunnerTest {
         assertTrue(content.content.contains("草庙村是一个宁静的小村庄"))
     }
 
+    @Test
+    fun `bare XPath rules without prefix are auto-detected like the original`() {
+        // 原版 AnalyzeRule：以 "/" 开头的规则直接判为 XPath，无需 @XPath: 前缀。
+        // 大量真实书源的 bookList/字段就是这么写的，必须能识别，否则整源搜不到。
+        val source = """{
+            "bookSourceUrl":"https://barexpath.example",
+            "searchUrl":"https://barexpath.example/search?q={{key}}",
+            "ruleSearch":{"bookList":"//ul[@class=\"nums\"]/li","name":"@xpath:.//a/text()","bookUrl":"@xpath:.//a/@href","author":"@xpath:.//span[@class=\"au\"]/text()"}
+        }"""
+        val resultsHtml = """<html><body><ul class="nums">
+            <li><a href="/book/1">凡人修仙</a><span class="au">忘语</span></li>
+            <li><a href="/book/2">仙逆</a><span class="au">耳根</span></li>
+        </ul></body></html>"""
+        val runner = RuleRunner { url ->
+            if (url.startsWith("https://barexpath.example/search")) resultsHtml else error("Unexpected url: $url")
+        }
+
+        val results = runner.search(source, "修仙")
+        assertEquals(2, results.size)
+        assertEquals("凡人修仙", results[0].name)
+        assertEquals("https://barexpath.example/book/1", results[0].bookUrl)
+        assertEquals("耳根", results[1].author)
+    }
+
 
     // --- Tier 2: Boundary, SSRF & Error Handling Tests ---
 

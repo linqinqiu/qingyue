@@ -1418,7 +1418,12 @@ data class DebugTrace(
 
 private val XPATH_PREFIX = Regex("""^@(?:xpath|xp)\s*:\s*""", RegexOption.IGNORE_CASE)
 
-private fun isXpathRule(rule: String): Boolean = XPATH_PREFIX.containsMatchIn(rule.trim())
+private fun isXpathRule(rule: String): Boolean {
+    val r = rule.trim()
+    // 对齐原版 AnalyzeRule：显式 @xpath:/@xp: 前缀，或以 "/" 开头的裸 XPath（真实书源常不带前缀）都判为 XPath。
+    // CSS 选择器不会以 "/" 开头、JSONPath 以 "$" 开头，故无副作用。
+    return XPATH_PREFIX.containsMatchIn(r) || r.startsWith("/")
+}
 
 private fun stripXpathPrefix(rule: String): String = XPATH_PREFIX.replace(rule.trim(), "").trim()
 
