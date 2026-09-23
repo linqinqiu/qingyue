@@ -134,6 +134,25 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `chapters mark volume headers via isVolume and keep them without url`() {
+        val source = """{
+            "bookSourceUrl":"https://vol.example",
+            "ruleToc":{"chapterList":"$.data","chapterName":"title","chapterUrl":"url","isVolume":"isVolume"}
+        }"""
+        val tocJson = """{"data":[{"title":"第一卷 风起","isVolume":true},{"title":"第一章","url":"/c/1","isVolume":false},{"title":"第二卷","isVolume":true},{"title":"第二章","url":"/c/2","isVolume":false}]}"""
+        val runner = RuleRunner { url -> if (url == "https://vol.example/toc") tocJson else error("unexpected $url") }
+
+        val chapters = runner.chapters(source, "https://vol.example/toc")
+        assertEquals(4, chapters.size)
+        assertTrue(chapters[0].isVolume)
+        assertEquals("", chapters[0].url)
+        assertFalse(chapters[1].isVolume)
+        assertEquals("https://vol.example/c/1", chapters[1].url)
+        assertTrue(chapters[2].isVolume)
+        assertEquals("第二章", chapters[3].title)
+    }
+
+    @Test
     fun `search results carry kind wordCount and lastChapter`() {
         val source = """{
             "bookSourceUrl":"https://srchfields.example",

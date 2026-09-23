@@ -755,6 +755,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .chapter-search svg { width: 15px; flex-shrink: 0; }
 .reader-chapters { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: block; contain: strict; will-change: scroll-position; -webkit-overflow-scrolling: touch; }
 .reader-chapter-item { width: 100%; height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 0; border-left: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; font-size: 13px; line-height: 1.3; cursor: pointer; user-select: none; }
+.reader-chapter-volume { width: 100%; height: 40px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; background: var(--surface-muted); color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.3; border-left: 3px solid var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: none; }
 .reader-chapter-item:hover { background: var(--surface-muted); color: var(--ink); }
 .reader-chapter-item.current { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .reader-chapter-item i { width: 5px; height: 5px; flex: none; border-radius: 50%; background: transparent; }

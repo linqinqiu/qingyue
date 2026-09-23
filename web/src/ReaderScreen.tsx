@@ -208,6 +208,17 @@ export function VirtualChapterList({
     >
       {topSpacer > 0 && <div style={{ height: topSpacer }} aria-hidden="true" />}
       {visibleChapters.map(({ chapter }) => {
+        if (chapter.isVolume) {
+          return (
+            <div
+              key={`vol-${chapter.index}`}
+              style={{ height: itemHeight }}
+              className="reader-chapter-volume"
+            >
+              {chapter.title}
+            </div>
+          )
+        }
         const isCached = cachedUrlsSet ? cachedUrlsSet.has(chapter.url) : false
         return (
           <button
@@ -460,8 +471,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [getTtsEngine, settings.ttsEngine])
 
   const preloadNextChapter = useCallback((index: number) => {
-    const next = currentBook.chapters[index + 1]
-    if (!next || preloadedContentRef.current.has(next.url) || preloadingRef.current.has(next.url)) return
+    let j = index + 1
+    while (j < currentBook.chapters.length && (currentBook.chapters[j].isVolume || !currentBook.chapters[j].url)) j++
+    const next = currentBook.chapters[j]
+    if (!next || !next.url || preloadedContentRef.current.has(next.url) || preloadingRef.current.has(next.url)) return
     preloadingRef.current.add(next.url)
     void api.content(currentBook.details.sourceId, next.url, currentBook.bookUrl)
       .then(result => preloadedContentRef.current.set(next.url, result.content))
@@ -470,8 +483,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
 
   const preloadPrevChapter = useCallback((index: number) => {
-    const prev = currentBook.chapters[index - 1]
-    if (!prev || preloadedContentRef.current.has(prev.url) || preloadingRef.current.has(prev.url)) return
+    let j = index - 1
+    while (j >= 0 && (currentBook.chapters[j].isVolume || !currentBook.chapters[j].url)) j--
+    const prev = currentBook.chapters[j]
+    if (!prev || !prev.url || preloadedContentRef.current.has(prev.url) || preloadingRef.current.has(prev.url)) return
     preloadingRef.current.add(prev.url)
     void api.content(currentBook.details.sourceId, prev.url, currentBook.bookUrl)
       .then(result => preloadedContentRef.current.set(prev.url, result.content))
@@ -725,7 +740,19 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }, 1400)
   }, [])
 
-  const changeChapter = useCallback((nextIndex: number, targetPage: 'first' | 'last' | 'auto' = 'auto') => {
+  const changeChapter = useCallback((rawIndex: number, targetPage: 'first' | 'last' | 'auto' = 'auto') => {
+    if (rawIndex < 0 || rawIndex >= currentBook.chapters.length || rawIndex === chapterIndex) {
+      if (rawIndex < 0 || rawIndex >= currentBook.chapters.length) {
+        showBoundaryNotice(rawIndex < 0 ? '已是第一章' : '已是最后一章')
+      }
+      return
+    }
+    // 卷分组头（isVolume，无正文地址）不能当作章节打开：沿移动方向跳到最近的真实章节。
+    let nextIndex = rawIndex
+    const dir = rawIndex > chapterIndex ? 1 : -1
+    while (nextIndex >= 0 && nextIndex < currentBook.chapters.length && currentBook.chapters[nextIndex].isVolume) {
+      nextIndex += dir
+    }
     if (nextIndex < 0 || nextIndex >= currentBook.chapters.length || nextIndex === chapterIndex) {
       if (nextIndex < 0 || nextIndex >= currentBook.chapters.length) {
         showBoundaryNotice(nextIndex < 0 ? '已是第一章' : '已是最后一章')

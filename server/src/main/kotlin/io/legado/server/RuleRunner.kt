@@ -284,20 +284,24 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
 
             // 目录分页：`nextTocUrl` 可以返回 1 个下一页、也可以一次返回多个入口页。
             // 上游用 visited 集合做回环守卫，这里再叠一层页数上限，避免坏规则把请求打成长尾。
-            val collected = LinkedHashMap<String, String>()
+            val collected = LinkedHashMap<String, Triple<String, String, Boolean>>()
             val queue = ArrayDeque(listOf(tocUrl))
             val visited = mutableSetOf(tocUrl)
             var pages = 0
             while (queue.isNotEmpty() && pages < MAX_TOC_PAGES) {
                 val pageUrl = queue.removeFirst()
                 val (pageChapters, nextUrls) = parseTocPage(source, sourceUrl, rule, listRule, nextRule, pageUrl)
-                pageChapters.forEach { (name, url) -> collected.putIfAbsent(url, name) }
+                pageChapters.forEach { (name, url, isVolume) ->
+                    val key = if (url.isNotBlank()) url else "vol:$name"
+                    if (!collected.containsKey(key)) collected[key] = Triple(name, url, isVolume)
+                }
                 nextUrls.forEach { if (visited.add(it)) queue.addLast(it) }
                 pages++
             }
-            val ordered = if (reverse) collected.entries.reversed() else collected.entries.toList()
-            // collected 的键是章节地址（去重靠它）、值是标题，解构顺序别写反。
-            ordered.mapIndexed { index, (url, name) -> Chapter(index, name.ifBlank { "第 ${index + 1} 章" }, url) }
+            val ordered = if (reverse) collected.values.reversed() else collected.values.toList()
+            ordered.mapIndexed { index, (name, url, isVolume) ->
+                Chapter(index, name.ifBlank { if (isVolume) "" else "第 ${index + 1} 章" }, url, isVolume)
+            }
         }
     }
 
@@ -309,7 +313,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         listRule: String,
         nextRule: String,
         pageUrl: String,
-    ): Pair<List<Pair<String, String>>, List<String>> {
+    ): Pair<List<Triple<String, String, Boolean>>, List<String>> {
         val dataPayload = dataUrlPayload(pageUrl)
         val body: String
         val chapterNodes: List<NodeValue>
@@ -324,9 +328,15 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val baseDoc = NodeValue.document(body)
             chapterNodes = if (isJsRule(listRule)) jsListNodes(baseDoc, listRule, body, pageUrl) else nodes(body, listRule)
         }
+        val isVolumeRule = rule.string("isVolume")?.trim()
         val items = chapterNodes.mapNotNull { node ->
-            val chapterHref = node.value(rule.string("chapterUrl"), jsSandbox, body, pageUrl)?.absolute(pageUrl) ?: return@mapNotNull null
-            node.value(rule.string("chapterName"), jsSandbox, body, pageUrl).orEmpty() to chapterHref
+            val isVolume = isVolumeRule?.let { node.value(it, jsSandbox, body, pageUrl) }
+                ?.trim()?.let { it.isNotEmpty() && it != "0" && it != "false" } ?: false
+            val chapterHref = node.value(rule.string("chapterUrl"), jsSandbox, body, pageUrl)?.absolute(pageUrl)
+            val name = node.value(rule.string("chapterName"), jsSandbox, body, pageUrl).orEmpty()
+            // 卷分组头可无正文地址；普通章节没有地址则丢弃（维持原行为）。
+            if (chapterHref == null && !isVolume) return@mapNotNull null
+            Triple(name, chapterHref ?: "", isVolume)
         }
         val nextUrls = if (nextRule.isEmpty()) emptyList() else NodeValue.document(body)
             .value(nextRule, jsSandbox, body, pageUrl)
