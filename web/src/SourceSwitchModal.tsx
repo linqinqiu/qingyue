@@ -192,10 +192,16 @@ export function SourceSwitchModal({
             for (const r of event.results) {
               const key = `${r.sourceId}\u0000${r.bookUrl}`
               // Filter by book name similarity
-              // 书名按清洗后比较：源站常带《》或尾随空白，全等会把同名结果整批滤掉，换源列表就成了空的。
+              // 书名按清洗后比较：源站常带《》或尾随空白/副标题，全等会把同名结果整批滤掉，换源列表就成了空的。
+              // 与章节匹配同款策略：相等，或任一方包含另一方（且都≥2 字符）即视为同一本书。
+              const wantName = cleanTitle(bookName).trim().toLowerCase()
+              const gotName = cleanTitle(r.name).trim().toLowerCase()
+              const sameBook =
+                gotName === wantName ||
+                (gotName.length >= 2 && wantName.length >= 2 && (gotName.includes(wantName) || wantName.includes(gotName)))
               if (
                 !existingKeys.has(key) &&
-                cleanTitle(r.name).trim().toLowerCase() === cleanTitle(bookName).trim().toLowerCase()
+                sameBook
               ) {
                 existingKeys.add(key)
                 const candidate: SourceCandidate = {

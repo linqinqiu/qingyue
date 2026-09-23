@@ -3130,6 +3130,12 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 }
 
 /* Mobile Accordion Flow (<768px) */
+/* 移动端专属：折叠面板与底部沙箱，桌面默认隐藏，窄屏媒体查询再显示 */
+.rule-accordion-item,
+.mobile-sandbox-section {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .rules-page-container {
     grid-template-columns: minmax(0, 1fr);
@@ -3148,12 +3154,16 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
     display: none;
   }
   .rule-accordion-item {
+    display: block;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--surface);
     overflow: hidden;
     margin-bottom: 8px;
     transition: border-color 0.15s ease;
+  }
+  .mobile-sandbox-section {
+    display: block;
   }
   .rule-accordion-item.open {
     border-color: var(--accent);

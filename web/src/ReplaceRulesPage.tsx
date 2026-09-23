@@ -343,7 +343,7 @@ export function ReplaceRulesPage() {
 
                 {/* 移动端专属展开折叠面板 */}
                 {isMobileOpen && (
-                  <div className="rule-accordion-item open" style={{ display: 'none' /* 由媒体查询或类控制 */ }}>
+                  <div className="rule-accordion-item open">
                     <div className="rule-accordion-content">
                       <div className="rules-code-grid" style={{ gridTemplateColumns: '1fr' }}>
                         <div className="rules-code-box">
@@ -402,7 +402,7 @@ export function ReplaceRulesPage() {
         </nav>
 
         {/* 移动端底部沙箱区域 */}
-        <div className="mobile-sandbox-section" style={{ display: 'none' /* 窄屏媒体查询中展示 */ }}>
+        <div className="mobile-sandbox-section">
           <div className="rules-sandbox-header">
             <Icon name="sliders" />
             <span>沙箱清洗测试</span>
