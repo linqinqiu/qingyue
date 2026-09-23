@@ -7,7 +7,7 @@ import os from 'node:os'
 const CHROME_PATH = process.env.CHROME_BIN || '/usr/bin/google-chrome' || '/usr/bin/chromium-browser'
 const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:8095'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
-const SCREENSHOT_DIR = '/root/.gemini/antigravity-cli/brain/49a9b075-2710-4ee0-8194-e7f7ac896718'
+const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || path.join(os.tmpdir(), 'legado-e2e-artifacts')
 
 async function waitForServer(url: string, timeoutMs = 30000): Promise<void> {
   const start = Date.now()
@@ -31,6 +31,7 @@ async function runBrowserVerification() {
   console.log('⏳ Waiting for test server to be ready...')
   await waitForServer(BASE_URL)
   console.log('✅ Server is ready!')
+  await fs.mkdir(SCREENSHOT_DIR, { recursive: true })
 
   const tempUserDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'legado-chrome-test-'))
   const browser = await puppeteer.launch({

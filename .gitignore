@@ -37,3 +37,9 @@ web/coverage/
 
 # 本机改动差异，含本机绝对路径，只作本地留档用，不入库
 local-patches.diff
+
+# 本机开发辅助脚本与杂项：含本机绝对路径 / 端口 / 镜像，属个人环境产物，不随开源仓库分发
+/start.mjs
+/stop.mjs
+/init-mirror.gradle
+/tools/

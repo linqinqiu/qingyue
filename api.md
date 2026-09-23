@@ -21,7 +21,7 @@
 格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)
 
 ```
-URL = http://127.0.0.1:1234/saveBookSource
+URL = http://127.0.0.1:8080/saveBookSource
 Method = POST
 ```
 
@@ -36,7 +36,7 @@ Method = POST
 接口按脚本声明的 `bookSourceUrl` 新建或覆盖，不提供书源 URL 改名能力；需要改名时请在应用内编辑器中操作。
 
 ```
-URL = http://127.0.0.1:1234/saveJsSource
+URL = http://127.0.0.1:8080/saveJsSource
 Method = POST
 Content-Type = text/plain; charset=utf-8
 X-Legado-Token = 设置中配置的令牌
@@ -48,24 +48,24 @@ X-Legado-Token = 设置中配置的令牌
 格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
 
 ```
-URL = http://127.0.0.1:1234/saveBookSources
-URL = http://127.0.0.1:1234/saveRssSources
+URL = http://127.0.0.1:8080/saveBookSources
+URL = http://127.0.0.1:8080/saveRssSources
 Method = POST
 ```
 
 #### 获取书源
 
 ```
-URL = http://127.0.0.1:1234/getBookSource?url=xxx
-URL = http://127.0.0.1:1234/getRssSource?url=xxx
+URL = http://127.0.0.1:8080/getBookSource?url=xxx
+URL = http://127.0.0.1:8080/getRssSource?url=xxx
 Method = GET
 ``` 
 
 #### 获取所有书源or订阅源
 
 ```
-URL = http://127.0.0.1:1234/getBookSources
-URL = http://127.0.0.1:1234/getRssSources
+URL = http://127.0.0.1:8080/getBookSources
+URL = http://127.0.0.1:8080/getRssSources
 Method = GET
 ```
 
@@ -75,8 +75,8 @@ Method = GET
 格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
 
 ```
-URL = http://127.0.0.1:1234/deleteBookSources
-URL = http://127.0.0.1:1234/deleteRssSources
+URL = http://127.0.0.1:8080/deleteBookSources
+URL = http://127.0.0.1:8080/deleteRssSources
 Method = POST
 ```
 
@@ -97,8 +97,8 @@ HTTP 日志仅在设置中启用“记录 HTTP 日志”后写入内存，最多
 `X-Legado-Token` 提供“Web 书源访问令牌”，并且只应在可信局域网中使用。
 
 ```text
-URL = http://127.0.0.1:1234/getHttpLogs?limit=50
-URL = http://127.0.0.1:1234/getHttpLog?id=1
+URL = http://127.0.0.1:8080/getHttpLogs?limit=50
+URL = http://127.0.0.1:8080/getHttpLog?id=1
 Method = GET
 X-Legado-Token = 设置中配置的令牌
 ```
@@ -131,7 +131,7 @@ X-Legado-Token = 设置中配置的令牌
 #### 获取替换规则
 
 ```
-URL = http://127.0.0.1:1234/getReplaceRules
+URL = http://127.0.0.1:8080/getReplaceRules
 Method = GET
 ```
 
@@ -143,14 +143,14 @@ Method = GET
 ##### 删除
 
 ```
-URL = http://127.0.0.1:1234/deleteReplaceRule
+URL = http://127.0.0.1:8080/deleteReplaceRule
 Method = POST
 Body = [ReplaceRule]
 ```
 ##### 插入
 
 ```
-URL = http://127.0.0.1:1234/saveReplaceRule
+URL = http://127.0.0.1:8080/saveReplaceRule
 Method = POST
 Body = [ReplaceRule]
 ```
@@ -160,7 +160,7 @@ Body = [ReplaceRule]
 返回测试文本text替换结果
 
 ```
-URL = http://127.0.0.1:1234/testReplaceRule
+URL = http://127.0.0.1:8080/testReplaceRule
 Method = POST
 Body = { rule: [ReplaceRule], text: [String] }
 ```
@@ -180,21 +180,21 @@ Message = { key: [String] }
 格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/Book.kt)。
 
 ```
-URL = http://127.0.0.1:1234/saveBook
+URL = http://127.0.0.1:8080/saveBook
 Method = POST
 ```
 
 #### 删除书籍
 
 ```
-URL = http://127.0.0.1:1234/deleteBook
+URL = http://127.0.0.1:8080/deleteBook
 Method = POST
 ```
 
 #### 获取所有书籍
 
 ```
-URL = http://127.0.0.1:1234/getBookshelf
+URL = http://127.0.0.1:8080/getBookshelf
 Method = GET
 ```
 
@@ -203,7 +203,7 @@ Method = GET
 #### 获取书籍章节列表
 
 ```
-URL = http://127.0.0.1:1234/getChapterList?url=xxx
+URL = http://127.0.0.1:8080/getChapterList?url=xxx
 Method = GET
 ```
 
@@ -212,7 +212,7 @@ Method = GET
 #### 获取书籍内容
 
 ```
-URL = http://127.0.0.1:1234/getBookContent?url=xxx&index=1
+URL = http://127.0.0.1:8080/getBookContent?url=xxx&index=1
 Method = GET
 ```
 
@@ -221,14 +221,14 @@ Method = GET
 #### 获取封面
 
 ```
-URL = http://127.0.0.1:1234/cover?path=xxxxx
+URL = http://127.0.0.1:8080/cover?path=xxxxx
 Method = GET
 ```
 
 #### 获取正文图片
 
 ```
-URL = http://127.0.0.1:1234/image?url=${bookUrl}&path=${picUrl}&width=${width}
+URL = http://127.0.0.1:8080/image?url=${bookUrl}&path=${picUrl}&width=${width}
 Method = GET
 ```
 
@@ -238,7 +238,7 @@ Method = GET
 格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookProgress.kt)。
 
 ```
-URL = http://127.0.0.1:1234/saveBookProgress
+URL = http://127.0.0.1:8080/saveBookProgress
 Method = POST
 ```
 

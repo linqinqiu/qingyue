@@ -5,7 +5,7 @@ import os from 'node:os'
 
 const CHROME_PATH = process.env.CHROME_BIN || '/usr/bin/google-chrome' || '/usr/bin/chromium-browser'
 const BASE_URL = 'http://127.0.0.1:5173'
-const ARTIFACT_DIR = '/root/.gemini/antigravity-cli/brain/b99e0969-7e8f-4524-99df-e8fd3e8bd17d'
+const ARTIFACT_DIR = process.env.ARTIFACT_DIR || path.join(os.tmpdir(), 'legado-e2e-artifacts')
 const MAX_CONCURRENT_CHROME = 2 // Strict <= 3 limit
 
 class ChromePool {
@@ -283,6 +283,7 @@ async function injectSafeArea(page: Page, top = 47, bottom = 34) {
 async function runReviewCaptures() {
   console.log(`📸 Starting review screenshot captures...`)
   console.log(`📁 Artifact Target: ${ARTIFACT_DIR}`)
+  await fs.mkdir(ARTIFACT_DIR, { recursive: true })
 
   // 1. Mobile Reader Screen (Light, Paper, Dark with Safe-Area insets)
   await withChrome('Mobile Reader Screen - Light & Paper & Dark Themes', async (browser) => {

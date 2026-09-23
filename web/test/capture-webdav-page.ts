@@ -1,10 +1,12 @@
 import puppeteer, { type Page } from 'puppeteer-core'
 import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 
 const CHROME = process.env.CHROME_BIN ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 const BASE = process.env.LEGADO_BASE ?? 'http://127.0.0.1:8080'
 const PASSWORD = process.env.LEGADO_PASSWORD ?? '<你的登录密码>'
-const OUT = process.env.SHOT_DIR ?? 'C:\\Users\\w1593\\AppData\\Local\\Temp\\legado-webdav-shots'
+const OUT = process.env.SHOT_DIR ?? path.join(os.tmpdir(), 'legado-webdav-shots')
 
 async function ensureLoggedIn(page: Page) {
   await page.goto(`${BASE}/`, { waitUntil: 'networkidle2' })

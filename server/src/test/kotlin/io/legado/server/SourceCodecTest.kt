@@ -75,16 +75,22 @@ class SourceCodecTest {
 
     @Test
     fun `parses real-world complex shareBookSource JSON`() {
-        val sampleFile = java.io.File("/Users/zhangran/Downloads/shareBookSource(1).json")
-        if (sampleFile.exists()) {
-            val content = sampleFile.readText()
-            val list = kotlinx.serialization.json.Json.parseToJsonElement(content) as kotlinx.serialization.json.JsonArray
-            val first = list[0].toString()
-            val parsed = SourceCodec.parse(first)
-            assertEquals("大灰狼融合VIP5.0", parsed.id)
-            assertEquals("🍅大灰狼聚合5.8.20(vip完全版)", parsed.name)
-            assertEquals("大灰狼聚合", parsed.group)
-            assertTrue(parsed.hasLogin)
-        }
+        // 内联一份真实形态的聚合书源样例（自定义中文标识 + emoji 名 + loginUrl），
+        // 不再依赖开发者本机的下载文件，保证在任何机器 / CI 上都真正执行断言。
+        val sample = """
+            [{"bookSourceUrl":"大灰狼融合VIP5.0",
+              "bookSourceName":"🍅大灰狼聚合5.8.20(vip完全版)",
+              "bookSourceGroup":"大灰狼聚合",
+              "bookSourceComment":"聚合书源",
+              "loginUrl":"https://example.com/login",
+              "searchUrl":"https://example.com/search?q={{key}}",
+              "enabled":true}]
+        """.trimIndent()
+        val list = kotlinx.serialization.json.Json.parseToJsonElement(sample) as kotlinx.serialization.json.JsonArray
+        val parsed = SourceCodec.parse(list[0].toString())
+        assertEquals("大灰狼融合VIP5.0", parsed.id)
+        assertEquals("🍅大灰狼聚合5.8.20(vip完全版)", parsed.name)
+        assertEquals("大灰狼聚合", parsed.group)
+        assertTrue(parsed.hasLogin)
     }
 }
