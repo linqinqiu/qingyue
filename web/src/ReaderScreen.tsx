@@ -383,6 +383,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     })
   }, [deferredQuery, currentBook.chapters])
 
+  // 目录倒序（借鉴 Legado TocActivity 的 reverse_toc）：仅影响抽屉显示顺序，跳转仍用章节原始 index。
+  const [tocReverse, setTocReverse] = useState(false)
+  const tocList = useMemo(() => (tocReverse ? filteredChapters.slice().reverse() : filteredChapters), [filteredChapters, tocReverse])
+  // 正文配图点击放大（借鉴 Legado「点击预览图片」）：position:fixed 遮罩，点任意处关闭。
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+
   // 拖动进度条时的临时读数：松手/键盘抬起才真正切章，避免拖一格发一次正文请求。
   const [scrubIndex, setScrubIndex] = useState<number | null>(null)
   const shownChapterIndex = scrubIndex ?? chapterIndex
@@ -689,6 +695,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             alt=""
             loading="lazy"
             decoding="async"
+            role="button"
+            tabIndex={0}
+            style={{ cursor: 'zoom-in' }}
+            onClick={event => { event.stopPropagation(); setLightboxSrc(api.bookImage(image, chapter?.url)) }}
             onError={event => { event.currentTarget.closest('figure')?.setAttribute('hidden', '') }}
           />
         </figure>
@@ -1376,6 +1386,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         <div className="drawer-title"><Icon name="list" /><strong>目录</strong><small>共 {currentBook.chapters.length} 章</small></div>
         <div className="drawer-header-actions">
           <IconButton
+            className={`desktop-reverse-btn ${tocReverse ? 'reversed' : ''}`}
+            label={tocReverse ? '切换为正序目录' : '切换为倒序目录'}
+            icon="list"
+            onClick={() => setTocReverse(value => !value)}
+          />
+          <IconButton
             className={`desktop-pin-btn ${settings.sidebarPinned ? 'pinned' : ''}`}
             label={settings.sidebarPinned ? '取消固定目录' : '固定目录到侧边栏'}
             icon={settings.sidebarPinned ? 'pinOff' : 'pin'}
@@ -1398,7 +1414,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         <input value={chapterQuery} onChange={event => setChapterQuery(event.target.value)} placeholder="搜索章节" />
       </div>
       <VirtualChapterList
-        chapters={filteredChapters}
+        chapters={tocList}
         activeChapterIndex={chapterIndex}
         cachedUrlsSet={cachedChapterUrls}
         onSelect={index => {
@@ -1741,6 +1757,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             </button>
           </footer>
         </div>
+      </div>
+    )}
+    {lightboxSrc && (
+      <div className="reader-image-lightbox" onClick={() => setLightboxSrc(null)} role="dialog" aria-label="图片预览">
+        <button type="button" className="reader-image-lightbox-close" aria-label="关闭预览" onClick={() => setLightboxSrc(null)}>✕</button>
+        <img src={lightboxSrc} alt="" onClick={event => event.stopPropagation()} />
       </div>
     )}
   </main>
