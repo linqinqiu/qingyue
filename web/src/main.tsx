@@ -368,7 +368,9 @@ function BookDetailModal({
               <div className="book-detail-stats">
                 <span>{book.chapters.length} 章</span>
                 <span>{availableSources || 1} 个可用书源</span>
-                {latestChapter && <span>最新：{latestChapter.title}</span>}
+                {book.details.wordCount && <span>{book.details.wordCount}</span>}
+                {book.details.kind && <span>{book.details.kind}</span>}
+                {(book.details.lastChapter || latestChapter?.title) && <span>最新：{book.details.lastChapter || latestChapter?.title}</span>}
               </div>
             </div>
           </div>

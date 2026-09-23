@@ -117,6 +117,23 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `details parse kind wordCount and lastChapter from BookInfoRule`() {
+        // 原版 ruleBookInfo 有 kind/wordCount/lastChapter，此前我们的 BookDetails 丢弃了它们。
+        val source = """{
+            "bookSourceUrl":"https://detail.example",
+            "ruleBookInfo":{"name":"@css:h1@text","kind":"@css:.kind@text","wordCount":"@css:.words@text","lastChapter":"@css:.latest@text","tocUrl":"@css:a.toc@href"}
+        }"""
+        val html = """<html><body><h1>书名字</h1><span class="kind">玄幻 连载</span><span class="words">120万字</span><span class="latest">第900章 大结局</span><a class="toc" href="/toc"></a></body></html>"""
+        val runner = RuleRunner { url -> if (url == "https://detail.example/b/1") html else error("unexpected $url") }
+
+        val details = runner.details(source, "https://detail.example/b/1")
+        assertEquals("书名字", details.name)
+        assertEquals("玄幻 连载", details.kind)
+        assertEquals("120万字", details.wordCount)
+        assertEquals("第900章 大结局", details.lastChapter)
+    }
+
+    @Test
     fun `search returns candidates directly without fetching details TOC or content`() {
         val source = """{
             "bookSourceUrl":"https://source.example",

@@ -211,6 +211,9 @@ data class SourceLoginStateRecord(
     val intro: String? = null,
     val coverUrl: String? = null,
     val tocUrl: String,
+    val kind: String? = null,
+    val wordCount: String? = null,
+    val lastChapter: String? = null,
 )
 @Serializable data class Chapter(val index: Int, val title: String, val url: String)
 @Serializable data class ContentRequest(val sourceId: String, val chapterUrl: String = "", val bookUrl: String? = null)

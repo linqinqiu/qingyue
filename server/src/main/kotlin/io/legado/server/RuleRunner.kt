@@ -251,6 +251,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             author = value("author"), intro = value("intro"),
             coverUrl = value("coverUrl")?.absolute(bookUrl),
             tocUrl = value("tocUrl")?.absolute(bookUrl) ?: bookUrl,
+            kind = value("kind")?.trim()?.takeIf { it.isNotBlank() },
+            wordCount = value("wordCount")?.trim()?.takeIf { it.isNotBlank() },
+            lastChapter = value("lastChapter")?.trim()?.takeIf { it.isNotBlank() },
         )
     }
 
