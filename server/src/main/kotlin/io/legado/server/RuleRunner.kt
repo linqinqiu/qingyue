@@ -102,14 +102,14 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     }
 
     /** 按发现页地址取书籍列表：优先 `ruleExplore`，缺省回落到 `ruleSearch`（与 Legado 一致）。 */
-    fun explore(sourceJson: String, urlTemplate: String): List<SearchResult> {
+    fun explore(sourceJson: String, urlTemplate: String, page: Int = 1): List<SearchResult> {
         val source = sourceJson.objectValue()
         val sourceUrl = source.string("bookSourceUrl") ?: throw RuleExecutionException("书源缺少 bookSourceUrl")
         return jsSandbox.withSourceContext(sourceContext(source, sourceUrl)) {
-            val resolved = if (isJsRule(urlTemplate)) evalRuleJs(urlTemplate, mapOf("baseUrl" to sourceUrl, "sourceId" to sourceUrl, "key" to "", "keyword" to "", "page" to 1)) ?: urlTemplate else urlTemplate
+            val resolved = if (isJsRule(urlTemplate)) evalRuleJs(urlTemplate, mapOf("baseUrl" to sourceUrl, "sourceId" to sourceUrl, "key" to "", "keyword" to "", "page" to page)) ?: urlTemplate else urlTemplate
             val (path, options) = splitUrlOptions(resolved)
             val mergedOptions = mergeOptions(parseSourceHeaders(source, sourceUrl), options)
-            val body = fetchUrl(renderUrl(path, "", sourceUrl).absolute(sourceUrl), mergedOptions, null, sourceUrl, database)
+            val body = fetchUrl(renderUrl(path, "", sourceUrl, page).absolute(sourceUrl), mergedOptions, null, sourceUrl, database)
             val rule = source.objectValue("ruleExplore") ?: source.objectValue("ruleSearch") ?: throw RuleExecutionException("该书源未配置 ruleExplore/ruleSearch")
             bookItems(body, rule, sourceUrl)
         }
@@ -843,11 +843,11 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         }
     }
 
-    private fun renderUrl(template: String, keyword: String, sourceUrl: String): String {
+    private fun renderUrl(template: String, keyword: String, sourceUrl: String, page: Int = 1): String {
         val literals = template
             .replace("{{key}}", URLEncoder.encode(keyword, Charsets.UTF_8))
             .replace("{{keyword}}", URLEncoder.encode(keyword, Charsets.UTF_8))
-            .replace("{{page}}", "1")
+            .replace("{{page}}", page.toString())
             .replace("<key>", URLEncoder.encode(keyword, Charsets.UTF_8))
             .replace("{{source.key}}", URLEncoder.encode(keyword, Charsets.UTF_8))
             .replace("{{source.bookSourceUrl}}", sourceUrl)
@@ -862,7 +862,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 jsSandbox.eval(match.groupValues[1], mapOf(
                     "key" to keyword,
                     "keyword" to keyword,
-                    "page" to 1,
+                    "page" to page,
                     "baseUrl" to sourceUrl,
                     "sourceId" to sourceUrl,
                 ))

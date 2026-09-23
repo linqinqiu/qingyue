@@ -183,7 +183,7 @@ data class SourceLoginStateRecord(
 @Serializable data class DebugRequest(val keyword: String = "测试")
 @Serializable data class SearchRequest(val keyword: String, val sourceIds: List<String>? = null)
 @Serializable data class ExploreTab(val title: String, val url: String)
-@Serializable data class ExploreRequest(val sourceId: String, val url: String)
+@Serializable data class ExploreRequest(val sourceId: String, val url: String, val page: Int = 1)
 @Serializable data class SearchStreamEvent(
     val type: String,
     val totalSources: Int = 0,

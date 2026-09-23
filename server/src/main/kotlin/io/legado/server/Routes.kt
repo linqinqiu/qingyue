@@ -501,7 +501,7 @@ fun Route.apiRoutes(
                 return@post
             }
             try {
-                call.respond(runner.explore(source.json, request.url))
+                call.respond(runner.explore(source.json, request.url, request.page.coerceAtLeast(1)))
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 call.respond(HttpStatusCode.BadGateway, ApiError("explore_failed", error.message ?: "发现页取书失败"))

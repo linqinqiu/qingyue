@@ -867,7 +867,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
 
             return (
               <button
-                className={isCurrent ? 'selected' : ''}
+                className={`source-list-item${isCurrent ? ' selected' : ''}`}
                 key={source.id}
                 type="button"
                 onClick={() => { setCreating(false); onSelect(source) }}
@@ -890,6 +890,18 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                   {source.hasLogin && <span className="source-login-badge" title="支持登录鉴权">登录</span>}
                 </div>
                 <small>{splitSourceGroups(source.group).join(' · ') || (source.isJsSource ? 'JS 书源' : '未分组')}</small>
+                <span
+                  className={`source-enable-switch${source.enabled ? ' is-on' : ''}`}
+                  role="switch"
+                  aria-checked={source.enabled}
+                  tabIndex={0}
+                  title={source.enabled ? '点击停用此书源' : '点击启用此书源'}
+                  aria-label={source.enabled ? `停用 ${source.name}` : `启用 ${source.name}`}
+                  onClick={event => { event.stopPropagation(); void flipOne(source) }}
+                  onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); void flipOne(source) } }}
+                >
+                  <span className="source-enable-switch-knob" />
+                </span>
               </button>
             )
           })}
@@ -1087,10 +1099,40 @@ function HighlightText({ text, keyword }: { text: string; keyword: string }) {
   )
 }
 
+const SEARCH_HISTORY_KEY = 'legado-search-history'
+const readSearchHistory = (): string[] => {
+  try {
+    if (typeof localStorage === 'undefined') return []
+    const raw = localStorage.getItem(SEARCH_HISTORY_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+const writeSearchHistory = (list: string[]): void => {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(list.slice(0, 10)))
+  } catch {
+    /* 隐私模式或配额满时静默忽略 */
+  }
+}
+
 function LibraryPage({ sources, onOpen }: { sources: SourceSummary[]; onOpen: (book: OpenBook, index: number) => void }) {
   const search = useSearchStore()
   const [scopeMode, setScopeMode] = useState<'all' | 'group' | 'single'>('all')
   const [scopeGroup, setScopeGroup] = useState('')
+  const [history, setHistory] = useState<string[]>(readSearchHistory)
+  const recordHistory = (keyword: string) => {
+    const kw = keyword.trim()
+    if (!kw) return
+    setHistory(prev => {
+      const next = [kw, ...prev.filter(h => h !== kw)].slice(0, 10)
+      writeSearchHistory(next)
+      return next
+    })
+  }
   const handleSearch = (event: FormEvent) => {
     event.preventDefault()
     if (scopeMode !== 'all' && !scopeIds.length) {
@@ -1099,6 +1141,7 @@ function LibraryPage({ sources, onOpen }: { sources: SourceSummary[]; onOpen: (b
       return
     }
     search.setSelectedSourceIds(scopeMode === 'all' ? null : scopeIds)
+    recordHistory(search.keyword)
     search.startSearch()
   }
   const groupOptions = useMemo(() => {
@@ -1171,6 +1214,24 @@ function LibraryPage({ sources, onOpen }: { sources: SourceSummary[]; onOpen: (b
             </button>
           )}
         </form>
+        {history.length > 0 && (
+          <div className="library-history" role="group" aria-label="最近搜索">
+            <span className="library-history-label">最近搜索</span>
+            <div className="library-history-chips">
+              {history.map(item => (
+                <button
+                  key={item}
+                  type="button"
+                  className="library-history-chip"
+                  onClick={() => { search.setKeyword(item); search.setSelectedSourceIds(scopeMode === 'all' ? null : scopeIds); recordHistory(item); search.startSearch() }}
+                >
+                  {item}
+                </button>
+              ))}
+              <button type="button" className="library-history-clear" onClick={() => { setHistory([]); writeSearchHistory([]) }} title="清空搜索历史">清空</button>
+            </div>
+          </div>
+        )}
         <div className="library-scope">
           <span className="library-scope-label">搜索范围</span>
           <div className="library-scope-modes" role="group" aria-label="搜索范围">

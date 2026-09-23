@@ -17,6 +17,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const [message, setMessage] = useState('')
   const [tabsExpanded, setTabsExpanded] = useState(false)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   // 聚合书源常挂 40+ 个分栏，而且大量重名（每个分类都叫「推荐」「完结」）。
   // 重名的补上序号，否则点了之后根本看不出当前选的是哪一个。
@@ -73,10 +76,13 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
     const timer = setTimeout(() => controller.abort(), 25000)
     setStatus('loading')
     setMessage('')
-    void api.explore(sourceId, tab.url, controller.signal).then(list => {
+    setPage(1)
+    setHasMore(true)
+    void api.explore(sourceId, tab.url, 1, controller.signal).then(list => {
       if (cancelled) return
       setBooks(list)
       setStatus('ready')
+      setHasMore(list.length > 0)
       if (!list.length) setMessage('这个分栏没有返回书籍，换一个试试。')
     }).catch(error => {
       if (cancelled) return
@@ -97,6 +103,31 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
     } catch (error) {
       setStatus('failed')
       setMessage(String(error instanceof Error ? error.message : '这本书打不开'))
+    }
+  }
+
+  // 发现页支持 {{page}} 翻页：下一页按 bookUrl 去重后追加；返回空或整页都是重复即判定到底。
+  const loadMore = async () => {
+    if (!sourceId || !tab || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    const next = page + 1
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 25000)
+    try {
+      const list = await api.explore(sourceId, tab.url, next, controller.signal)
+      const seen = new Set(books.map(b => b.bookUrl))
+      const added = list.filter(b => !seen.has(b.bookUrl))
+      if (added.length > 0) setBooks(prev => {
+        const dedup = new Set(prev.map(b => b.bookUrl))
+        return [...prev, ...list.filter(b => !dedup.has(b.bookUrl))]
+      })
+      if (list.length === 0 || added.length === 0) setHasMore(false)
+      else setPage(next)
+    } catch {
+      setHasMore(false)
+    } finally {
+      clearTimeout(timer)
+      setLoadingMore(false)
     }
   }
 
@@ -157,6 +188,13 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
               </button>
             ))}
           </div>
+          {hasMore && (
+            <div className="explore-more-row">
+              <button type="button" className="ghost-button" disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore ? '加载中…' : '加载更多'}
+              </button>
+            </div>
+          )}
         </section>
       )}
 

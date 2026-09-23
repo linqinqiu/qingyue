@@ -307,7 +307,7 @@ export const api = {
   search: (keyword: string, sourceIds?: string[], signal?: AbortSignal) => request<SearchResult[]>('/api/search', { method: 'POST', body: JSON.stringify({ keyword, sourceIds }), signal }),
   exploreSources: () => request<SourceSummary[]>('/api/explore/sources'),
   exploreTabs: (sourceId: string, signal?: AbortSignal) => request<ExploreTab[]>(`/api/sources/${encodeURIComponent(sourceId)}/explore`, { signal }),
-  explore: (sourceId: string, url: string, signal?: AbortSignal) => request<SearchResult[]>('/api/explore', { method: 'POST', body: JSON.stringify({ sourceId, url }), signal }),
+  explore: (sourceId: string, url: string, page = 1, signal?: AbortSignal) => request<SearchResult[]>('/api/explore', { method: 'POST', body: JSON.stringify({ sourceId, url, page }), signal }),
   details: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<BookDetails>('/api/books/details', { method: 'POST', body: JSON.stringify({ sourceId, bookUrl }), signal }),
   chapters: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<Chapter[]>('/api/books/chapters', { method: 'POST', body: JSON.stringify({ sourceId, bookUrl }), signal }),
   content: async (sourceId: string, chapterUrl: string, bookUrl?: string, signal?: AbortSignal) => {
