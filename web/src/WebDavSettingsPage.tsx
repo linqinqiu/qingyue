@@ -248,7 +248,7 @@ export function WebDavSettingsPage() {
           <strong className="webdav-card-value">
             {info ? `${info.fileCount} 个文件 · ${formatDavSize(info.totalBytes)}` : '—'}
           </strong>
-          <span className="webdav-card-hint">{info ? `${info.directoryCount} 个文件夹 · ${info.directory}` : '正在读取…'}</span>
+          <span className="webdav-card-hint">{info ? `${info.directoryCount} 个文件夹` : '正在读取…'}</span>
         </article>
       </section>
 
