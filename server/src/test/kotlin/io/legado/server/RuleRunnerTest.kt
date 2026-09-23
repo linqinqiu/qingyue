@@ -216,6 +216,45 @@ class RuleRunnerTest {
     }
 
 
+    @Test
+    fun `declarative details chapters and content parse HTML with XPath selectors`() {
+        val source = """{
+            "bookSourceUrl":"https://xpath.example",
+            "ruleBookInfo":{"init":"@xpath://*","name":"@xpath://h1[@class=\"book-title\"]/text()","author":"@xpath://span[@class=\"author-name\"]/text()","intro":"@xpath://p[@class=\"desc\"]/text()","tocUrl":"@xpath://a[@class=\"toc-link\"]/@href"},
+            "ruleToc":{"chapterList":"@xpath://ul[@class=\"chapter-list\"]/li","chapterName":"@xpath:.//a/text()","chapterUrl":"@xpath:.//a/@href"},
+            "ruleContent":{"content":"@xpath://div[@id=\"content\"]","title":"@xpath://h2/text()"}
+        }"""
+
+        val detailsHtml = """<html><body><h1 class="book-title">诛仙前传</h1><span class="author-name">萧鼎</span><p class="desc">青云之巅</p><a class="toc-link" href="/toc.html">目录</a></body></html>"""
+        val tocHtml = """<html><body><ul class="chapter-list"><li><a href="/c/1.html">第1章 草庙村</a></li><li><a href="/c/2.html">第2章 入青云</a></li></ul></body></html>"""
+        val contentHtml = """<html><body><h2 class="chapter-title">第1章 草庙村</h2><div id="content"><p>草庙村是一个宁静的小村庄。</p><p>夜幕降临...</p></div></body></html>"""
+
+        val runner = RuleRunner { url ->
+            when (url) {
+                "https://xpath.example/book/1" -> detailsHtml
+                "https://xpath.example/toc.html" -> tocHtml
+                "https://xpath.example/c/1.html" -> contentHtml
+                else -> error("Unexpected url: $url")
+            }
+        }
+
+        val details = runner.details(source, "https://xpath.example/book/1")
+        assertEquals("诛仙前传", details.name)
+        assertEquals("萧鼎", details.author)
+        assertEquals("青云之巅", details.intro)
+        assertEquals("https://xpath.example/toc.html", details.tocUrl)
+
+        val chapters = runner.chapters(source, details.tocUrl)
+        assertEquals(2, chapters.size)
+        assertEquals("第1章 草庙村", chapters[0].title)
+        assertEquals("https://xpath.example/c/1.html", chapters[0].url)
+
+        val content = runner.content(source, chapters[0].url)
+        assertEquals("第1章 草庙村", content.title)
+        assertTrue(content.content.contains("草庙村是一个宁静的小村庄"))
+    }
+
+
     // --- Tier 2: Boundary, SSRF & Error Handling Tests ---
 
     @Test

@@ -1,5 +1,6 @@
 package io.legado.server
 
+import cn.wanghaomiao.xpath.model.JXDocument
 import com.jayway.jsonpath.JsonPath
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -11,7 +12,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
+import org.jsoup.nodes.TextNode
+import org.jsoup.select.Elements
 import org.mozilla.javascript.BaseFunction
 import org.mozilla.javascript.ClassShutter
 import org.mozilla.javascript.Context
@@ -880,6 +885,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         if (Regex("""-?\d+\.0+""").matches(text)) text.substringBefore('.') else text
 
     private fun nodes(body: String, rule: String): List<NodeValue> {
+        // @xpath 方言优先：xpath 里的 `|` 并集不能被当成 Legado 的 `||` 备选来切分
+        if (isXpathRule(rule)) return xpathNodes(Jsoup.parse(body), stripXpathPrefix(rule))
         val alternatives = splitLegadoAlternatives(rule)
         if (alternatives.size > 1) {
             return alternatives.firstNotNullOfOrNull { branch -> nodes(body, branch).ifEmpty { null } } ?: emptyList()
@@ -1226,6 +1233,12 @@ internal class NodeValue private constructor(private val html: Element?, private
         if (rule.isBlank()) return null
         return if (json != null) valueJson(rule)
         else html?.let { element ->
+            if (isXpathRule(rule)) {
+                val path = stripXpathPrefix(rule)
+                val texts = xpathTexts(element, path.substringBefore("##"))
+                if (texts.isEmpty()) return null
+                return applyRegexReplace(texts.joinToString("\n"), path).takeIf { it.isNotBlank() }
+            }
             val selector = rule.removePrefix("@css:")
             val segments = selector.split('@')
             val lastSegment = segments.last()
@@ -1400,3 +1413,44 @@ data class DebugTrace(
     val value: String,
     val failure: String = "",
 )
+
+// ---------------------------------------------------------------- @xpath 方言（JsoupXpath）
+
+private val XPATH_PREFIX = Regex("""^@(?:xpath|xp)\s*:\s*""", RegexOption.IGNORE_CASE)
+
+private fun isXpathRule(rule: String): Boolean = XPATH_PREFIX.containsMatchIn(rule.trim())
+
+private fun stripXpathPrefix(rule: String): String = XPATH_PREFIX.replace(rule.trim(), "").trim()
+
+/** JXDocument 2.5.1 只吃 Document / Elements / String / List，不接受裸 Node，这里按类型适配。 */
+private fun jx(node: Node): JXDocument = when (node) {
+    is Document -> JXDocument(node)
+    is Element -> JXDocument(Elements(listOf(node)))
+    else -> JXDocument(node.toString())
+}
+
+/** 列表选择：从文档/元素出发按 xpath 选出节点。元素结果包成可继续取值的 html 节点，文本/属性结果当作文本节点。 */
+private fun xpathNodes(node: Node, path: String): List<NodeValue> =
+    runCatching {
+        jx(node).sel(path).mapNotNull { item ->
+            when (item) {
+                is Element -> NodeValue.html(item)
+                is TextNode -> NodeValue.document(item.getWholeText())
+                null -> null
+                else -> NodeValue.document(item.toString())
+            }
+        }
+    }.getOrDefault(emptyList())
+
+/** 字段取值：按 xpath 求值后把结果统一成文本（Element 取可见文本，TextNode/属性取文本）。 */
+private fun xpathTexts(node: Node, path: String): List<String> =
+    runCatching {
+        jx(node).sel(path).mapNotNull { item ->
+            when (item) {
+                is Element -> item.text().ifBlank { item.wholeText().ifBlank { null } }
+                is TextNode -> item.getWholeText().ifBlank { null }
+                null -> null
+                else -> item.toString().ifBlank { null }
+            }
+        }
+    }.getOrDefault(emptyList())

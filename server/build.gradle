@@ -79,6 +79,8 @@ dependencies {
     implementation "io.ktor:ktor-server-status-pages:3.4.3"
     implementation "org.xerial:sqlite-jdbc:3.49.1.0"
     implementation "org.jsoup:jsoup:1.18.3"
+    // 规则引擎的 @xpath 方言支持（与 Legado 同款 xpath-on-jsoup），本地已有缓存版本 2.5.1
+    implementation "cn.wanghaomiao:JsoupXpath:2.5.1"
     implementation "com.jayway.jsonpath:json-path:2.9.0"
     implementation "org.mozilla:rhino:1.8.0"
     implementation "org.slf4j:slf4j-simple:2.0.16"
