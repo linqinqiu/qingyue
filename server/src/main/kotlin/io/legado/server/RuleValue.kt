@@ -106,13 +106,10 @@ internal class NodeValue private constructor(private val html: Element?, private
 
     private fun documentText(): String = html?.html() ?: json?.toString() ?: ""
 
-    /** `@put:{k:rule}`：求值存表并吃掉这段；正则形状与上游 `AnalyzeRule.putPattern` 一致。 */
+    /** `@put:{k:rule,...}`：每个键都求值存表并吃掉这段（多键解析见 `putPairs`）。 */
     private fun storePutVariables(rule: String, jsSandbox: JsSandbox?, rawBody: String?, baseUrl: String?): String =
         PUT_VARIABLE.replace(rule) { match ->
-            val body = match.groupValues[1]
-            val key = body.substringBefore(':').trim().removeSurrounding("\"")
-            val subRule = body.substringAfter(':', "")
-            if (key.isNotEmpty() && subRule.isNotEmpty()) {
+            putPairs(match.groupValues[1]).forEach { (key, subRule) ->
                 ruleVariables[key] = value(subRule, jsSandbox, rawBody, baseUrl) ?: ""
             }
             ""

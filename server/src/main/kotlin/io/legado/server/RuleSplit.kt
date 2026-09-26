@@ -1,5 +1,8 @@
 package io.legado.server
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 规则切分层：对应上游 model/analyzeRule/RuleAnalyzer —— 先把整条规则切成分支、内联 JS 段、索引段，再交给取值层。
@@ -12,6 +15,76 @@ package io.legado.server
 internal fun splitLegadoAlternatives(rule: String): List<String> {
     val (separator, parts) = splitLegadoBranches(rule)
     return if (separator == "||") parts else listOf(rule.trim()).filter { it.isNotEmpty() }
+}
+
+/**
+ * `@put:{…}` 里可以有**多个**键值对。上游 `AnalyzeRule.splitPutRule` 把整段当 map 解析
+ * （先严格 JSON，失败再走宽松 GSON 并提示「≡@put 规则 JSON 格式不规范」），
+ * 我们以前只 `substringBefore(':')` 取第一个键，其余全丢 —— 实测库里 `@put` 出现 492 次、
+ * 其中 **278 次是多键**（普查见 tools/verify/context-dialect-census.mjs），
+ * 于是引用 `@get:{第二个键}` / `{{第二个键}}` 的位置恒为空，整源取不到值还不报错。
+ *
+ * 现网三种形状都得吃：裸键 `{sid:$.sandboxId,smg:$.magic}`（最多）、带换行的准 JSON、
+ * 严格 JSON。值里可能含 `:` `,` `[]` `{}`（如 `@js:[{a:1,b:2}]`），
+ * 所以按**顶层**逗号切，跳过引号与嵌套括号。
+ */
+internal fun putPairs(body: String): List<Pair<String, String>> {
+    parseStrictPutJson(body)?.let { return it }
+    val pairs = mutableListOf<Pair<String, String>>()
+    var start = 0
+    while (start < body.length) {
+        val colon = indexOfOutsideQuotes(body, start, ':') ?: break
+        val key = body.substring(start, colon).trim().removeSurrounding("\"").removeSurrounding("'")
+        val comma = indexOfTopLevelChar(body, colon + 1, ',') ?: body.length
+        val value = body.substring(colon + 1, comma).trim().removeSurrounding("\"")
+        if (key.isNotEmpty() && value.isNotEmpty()) pairs += key to value
+        start = comma + 1
+    }
+    return pairs
+}
+
+/** 严格 JSON 形状（`{"n":"$.name"}`）优先，成对顺序与书写一致。 */
+private fun parseStrictPutJson(body: String): List<Pair<String, String>>? = runCatching {
+    val root = Json.parseToJsonElement("{$body}") as? JsonObject ?: return null
+    root.map { (key, value) ->
+        key to when (value) {
+            is JsonPrimitive -> value.content
+            else -> value.toString()
+        }
+    }.takeIf { it.isNotEmpty() && it.all { pair -> pair.first.isNotBlank() && pair.second.isNotBlank() } }
+}.getOrNull()
+
+/** 只在引号之外找第一个 ch（键名里不会有引号，所以键的搜索不必看括号深度）。 */
+private fun indexOfOutsideQuotes(text: String, from: Int, ch: Char): Int? {
+    var quote: Char? = null
+    for (index in from until text.length) {
+        val current = text[index]
+        if (quote != null) {
+            if (current == quote) quote = null
+        } else if (current == '\'' || current == '"') {
+            quote = current
+        } else if (current == ch) {
+            return index
+        }
+    }
+    return null
+}
+
+/** 在引号与嵌套括号之外找第一个 ch —— 值里的 `[{a:1,b:2}]` 不能被从中间劈开。 */
+private fun indexOfTopLevelChar(text: String, from: Int, ch: Char): Int? {
+    var quote: Char? = null
+    var depth = 0
+    for (index in from until text.length) {
+        val current = text[index]
+        when {
+            quote != null -> if (current == quote) quote = null
+            current == '\'' || current == '"' -> quote = current
+            current == '{' || current == '[' -> depth++
+            current == '}' || current == ']' -> depth = (depth - 1).coerceAtLeast(0)
+            depth == 0 && current == ch -> return index
+        }
+    }
+    return null
 }
 
 /**

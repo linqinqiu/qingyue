@@ -574,6 +574,23 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `stores every key of a multi-key put rule`() {
+        // 实测 278 处 @put 是多键形状。以前只 substringBefore(':') 取第一个键，
+        // 其余键的 {{k}} / @get:{k} 引用恒为空 —— 表现为 URL 拼出一串空段，还不报错。
+        val source = """{
+            "bookSourceUrl":"https://putmulti.example",
+            "ruleBookInfo":{
+                "name":"bn@put:{cid:$.cid,au:$.author,ty:$.type}",
+                "tocUrl":"https://putmulti.example/{{cid}}/@get:{au}/@get:{ty}/index.html"
+            }
+        }"""
+        val runner = RuleRunner { """{"bn":"多键测试书","cid":"777","author":"某作者","type":"comic"}""" }
+        val details = runner.details(source, "https://putmulti.example/b/1")
+        assertEquals("多键测试书", details.name)
+        assertEquals("https://putmulti.example/777/某作者/comic/index.html", details.tocUrl)
+    }
+
+    @Test
     fun `follows nextTocUrl and nextContentUrl and stops on loops`() {
         // 实测语料里 `nextTocUrl` 非空的有 1,165 个源、`nextContentUrl` 非空 1,693 个，
         // 以前被整个忽略：目录只剩第一页、长章只拿到第一屏，且不报错，只是"看起来书短了"。
