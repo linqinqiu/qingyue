@@ -212,6 +212,22 @@ function BookDetailModal({
 
   const latestChapter = book.chapters.at(-1)
   const availableSources = choices.length
+  /**
+   * 详情页封面优先于搜索结果封面，但源站详情页常给出一个打不开的地址（防盗链、http、已失效），
+   * 直接渲染就是一个破图框。这里排好候选队列，onError 逐级降级到别的源拿到的封面。
+   */
+  const coverCandidates = useMemo(() => {
+    const seen = new Set<string>()
+    return [book.details.coverUrl, ...choices.map(choice => choice.result.coverUrl)]
+      .map(url => sanitizeImageUrl(url ?? undefined))
+      .filter((url): url is string => {
+        if (!url || seen.has(url)) return false
+        seen.add(url)
+        return true
+      })
+  }, [book.details.coverUrl, choices])
+  const [coverTried, setCoverTried] = useState(0)
+  const cover = coverCandidates[coverTried]
 
   const runInspection = useCallback((forceRefresh = false) => {
     abortControllerRef.current?.abort()
@@ -356,8 +372,8 @@ function BookDetailModal({
       >
         <header className="book-detail-modal-header">
           <div className="book-detail-heading">
-            {sanitizeImageUrl(book.details.coverUrl) ? (
-              <img className="book-detail-cover" src={sanitizeImageUrl(book.details.coverUrl)!} alt="" referrerPolicy="no-referrer" />
+            {cover ? (
+              <img className="book-detail-cover" src={cover} alt="" referrerPolicy="no-referrer" onError={() => setCoverTried(count => count + 1)} />
             ) : (
               <div className="book-detail-cover-placeholder">{book.details.name.slice(0, 1)}</div>
             )}
@@ -2130,6 +2146,8 @@ function App() {
   })
   const [showReplaceRules, setShowReplaceRules] = useState(false)
   const [showOfflineCache, setShowOfflineCache] = useState(false)
+  /** 发现页点中的书：先进详情弹窗（与搜索页同一套），点「开始阅读」才进阅读器。 */
+  const [explorePick, setExplorePick] = useState<{ result: SearchResult; book: OpenBook } | null>(null)
   const search = useSearchStore()
 
   useEffect(() => {
@@ -2207,6 +2225,15 @@ function App() {
     sessionStorage.setItem(readerStorageKey, JSON.stringify(value))
     location.hash = '#reader'
     setPage('reader')
+  }
+
+  /**
+   * 发现页点击：只取详情与目录，然后弹详情窗 —— 和搜索页走同一个 BookDetailModal。
+   * 以前一步直达阅读器，等于在用户还没决定读不读的时候就把书塞进书架。
+   */
+  const openExploreDetail = async (result: SearchResult) => {
+    const book = await loadSourceBook(result)
+    setExplorePick({ result, book })
   }
 
   const openShelfItem = async (item: BookshelfItem) => {
@@ -2305,9 +2332,23 @@ function App() {
       ) : page === 'shelf' ? (
         <ShelfPage onOpen={item => void openShelfItem(item)} />
       ) : page === 'explore' ? (
-        <ExplorePage onOpen={async result => openReader(await loadSourceBook(result), 0, 'explore')} />
+        <ExplorePage onOpen={openExploreDetail} />
       ) : (
         <LibraryPage sources={sources} onOpen={(book, index) => openReader(book, index, 'library')} />
+      )}
+      {explorePick && page === 'explore' && (
+        <BookDetailModal
+          book={explorePick.book}
+          choices={[{ result: explorePick.result, status: 'loaded', book: explorePick.book }]}
+          resumeIndex={0}
+          onOpen={index => {
+            const book = explorePick.book
+            setExplorePick(null)
+            openReader(book, index, 'explore')
+          }}
+          onChooseSource={() => undefined}
+          onClose={() => setExplorePick(null)}
+        />
       )}
       <ReplaceRulesModal
         isOpen={showReplaceRules}

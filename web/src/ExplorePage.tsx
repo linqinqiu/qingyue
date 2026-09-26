@@ -137,7 +137,7 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
         <div>
           <span className="section-kicker">按书源发现</span>
           <h1>发现</h1>
-          <p>读取书源自带的发现页分栏（榜单、分类、专题），点书直接开始阅读。</p>
+          <p>读取书源自带的发现页分栏（榜单、分类、专题），点书先看详情，再决定读不读。</p>
         </div>
         <label className="explore-source-picker">
           <span>书源</span>
