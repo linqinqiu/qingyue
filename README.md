@@ -233,6 +233,28 @@ docker compose up -d
    docker compose --env-file .env -f compose.server.yml run --rm legado-server reset-password 'new_password_at_least_12_chars'
    ```
 
+### 📍 本机 jar 部署：安装与数据位置全部可自定义
+
+整个文件夹可以随意改名或搬到任何盘 —— 启动器以**自己所在目录**为安装根（也可用 `LEGADO_HOME` 显式指定），
+不再写死绝对路径。所有位置走环境变量，优先级 `.env` > 进程环境 > 默认值：
+
+| 变量 | 默认 | 作用 |
+| --- | --- | --- |
+| `LEGADO_HOME` | 启动器所在目录 | 安装根 |
+| `LEGADO_ENV` | `<安装根>/.env` | 配置文件位置 |
+| `LEGADO_DATA_DIR` | `<安装根>/data` | 数据库、封面缓存、WebDAV、本地书都从这里派生 |
+| `LEGADO_DATABASE` | `<数据目录>/legado.sqlite` | 单独指定库文件 |
+| `LEGADO_LOG_FILE` | `<安装根>/server.log` | 日志 |
+| `LEGADO_TMP_DIR` | `<安装根>/tmp` | **JVM 临时目录**（`-Djava.io.tmpdir`） |
+| `LEGADO_HOST` / `LEGADO_PORT` | `127.0.0.1` / `1234` | 监听地址与端口（`stop.mjs` 读同一份配置） |
+| `LEGADO_SECURE_COOKIES` / `LEGADO_LOOPBACK_NO_AUTH` | `false` / `true` | 明文 http 联调开关 |
+
+**不写系统盘**：JVM 临时目录不指定的话会落到 `C:\Users\<用户>\AppData\Local\Temp`，SQLite 的本地库
+（`sqlite-3.x-…-sqlitejdbc.dll`）每次启动都要往那儿解包一份。现在默认指向 `<安装根>/tmp`，实测：
+一轮完整流量（搜索 + 目录 + 正文 + 封面 + WebDAV）后 C 盘 Temp 条目 **17 → 17（零新增）**，
+解出的 dll 出现在 `E:\…\tmp\`。WebDAV 上传的 `.part` 临时文件本来就写在目标文件同目录，不涉及系统盘。
+（构建期的 Gradle / npm 缓存不在本节范围内 —— 那是开发机自己的事。）
+
 > [!TIP]
 > 生产环境建议通过 Nginx / Caddy 配置 HTTPS 反向代理，并开启 WebSocket 升级支持。
 
