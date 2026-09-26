@@ -1,6 +1,7 @@
 {
   "name": "legado-server",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",
   "keywords": [
     "legado",
@@ -17,9 +18,8 @@
     "webdav",
     "docker"
   ],
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm --prefix web test"
   },
   "repository": {
     "type": "git",
