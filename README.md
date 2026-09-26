@@ -464,6 +464,20 @@ server {
 
 ---
 
+## 🧭 参照与协议边界
+
+本仓库**不是**下列任何仓库的 GitHub fork（`origin` 指向本项目自身），代码全部自写，只借鉴其语义与信息架构：
+
+| 参照对象 | 借鉴了什么 | 协议 | 是否拷过代码 |
+| --- | --- | --- | --- |
+| **[LegadoTeam/legado](https://github.com/LegadoTeam/legado)** | 代码基准：书源规则 DSL 的求值语义、`checkKeyWord` 体检、书架版式编号 `bookshelfLayout`、书源编辑字段分组（`modules/web/src/config/bookSourceEditConfig.ts`） | GPL-3.0 | 否，按 Kotlin 源码逐条自实现 |
+| **[hectorqin/reader](https://github.com/hectorqin/reader)** | 仅交互与信息架构（Web 端布局最接近的同类） | **AGPL-3.0** | **否**。AGPL 的网络服务条款与本项目 GPL-3.0 不等价，其代码不得引入本仓库 |
+| **[gedoor/legado_web_source_editor](https://github.com/gedoor/legado_web_source_editor)** | 书源编辑器的字段分栏形式（已停更，且本身是第三方并入） | MIT | 否 |
+
+因此：任何后续贡献都**不得**从 `hectorqin/reader`（AGPL-3.0）复制源码到本仓库的 `server/` 或 `web/`；可以照它做交互设计，但实现必须自己写。
+
+---
+
 ## 📄 开源许可证
 
 本项目基于 **[GPL-3.0 License](LICENSE)** 开源。
