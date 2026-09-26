@@ -398,7 +398,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val contentRule = rule.string("content") ?: throw RuleExecutionException("缺少 ruleContent.content")
             val nextRule = rule.string("nextContentUrl").orEmpty().trim()
             val replaceRegex = rule.string("replaceRegex")
-            val patterns = replaceRegex?.split(Regex("[\r\n]+|&&"))?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
+            // 不 trim 每条：`##正则##替换` 的替换串里前后空格是有意义的（上游也原样保留）
+            val patterns = replaceRegex?.split(Regex("[\r\n]+|&&"))?.filter { it.isNotBlank() }.orEmpty()
 
             // 正文分页：`nextContentUrl` 非空的源实测 1,693 个，以前被整个忽略，长章只拿到第一页。
             // 与目录同一套走法：visited 回环守卫 + 页数上限，翻页文本按上游一样直接串接。
@@ -422,8 +423,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                         if (candidate.length > pageText.length) pageText = candidate
                     }
                 }
-                for (pattern in patterns) {
-                    pageText = runCatching { pageText.replace(Regex(pattern), "") }.getOrDefault(pageText)
+                for (entry in patterns) {
+                    pageText = applyReplaceEntry(entry, pageText)
                 }
                 pageTexts += pageText
                 if (nextRule.isNotEmpty()) {
@@ -921,7 +922,11 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         }
         return when {
             rule.startsWith("$") -> (JsonPath.read<Any>(body, rule) as? List<*>)?.map { NodeValue.json(it) } ?: emptyList()
-            else -> Jsoup.parse(body).select(rule.css()).map(NodeValue::html)
+            else -> {
+                val (base, ops) = splitIndexSuffix(rule)
+                val selected = Jsoup.parse(body).select(base.css()).map(NodeValue::html)
+                if (ops.isEmpty()) selected else applyIndexTokens(selected, ops)
+            }
         }
     }
 
@@ -934,15 +939,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             if (trimmed.isEmpty()) continue
             if (trimmed in setOf("text", "href", "src", "content", "html", "textNodes", "textNode")) break
             if (trimmed.startsWith("attr(") || trimmed.startsWith("text(") || trimmed.startsWith("all")) break
-            if ("!" in trimmed) {
-                val (tag, notIndex) = trimmed.split("!", limit = 2)
-                val idx = notIndex.toIntOrNull()
-                if (idx != null) {
-                    cssParts.add("$tag:not(:nth-child(${idx + 1}))")
-                } else {
-                    cssParts.add(tag)
-                }
-            } else if (trimmed.startsWith("class.")) {
+            if (trimmed.startsWith("class.")) {
                 val cls = trimmed.removePrefix("class.")
                 if ("." in cls) {
                     val (cName, idxStr) = cls.split(".", limit = 2)
@@ -1303,6 +1300,11 @@ internal class NodeValue private constructor(private val html: Element?, private
     private fun selectAllLegado(element: Element, selector: String): List<Element> = runCatching {
         val trimmed = selector.trim()
         if (trimmed == "children") return@runCatching element.children().toList()
+        val (base, ops) = splitIndexSuffix(trimmed)
+        if (ops.isNotEmpty()) {
+            if (base.isBlank()) return@runCatching applyIndexTokens(element.children().toList(), ops)
+            return@runCatching applyIndexTokens(selectAllLegado(element, base), ops)
+        }
         val idOnly = Regex("^id\\.([a-zA-Z0-9_-]+)$").find(trimmed)
         if (idOnly != null) {
             val el = element.getElementById(idOnly.groupValues[1])
@@ -1429,6 +1431,107 @@ internal class NodeValue private constructor(private val html: Element?, private
         }
         fun json(value: Any?) = NodeValue(null, value)
     }
+}
+
+/**
+ * `ruleContent.replaceRegex` 这个**字段**走的是上游同一套解析：它被当成一条规则字符串喂给
+ * `SourceRule`，而 SourceRule 是按 `##` 切分的 —— `##正则` 删掉全部匹配、`##正则##替换` 换成替换串、
+ * `##正则##替换###` 只取第一个匹配再替换；正则编译不过时上游退化成字面量替换，这里照抄。
+ *
+ * 以前整条（连开头的 `##`）被当成正则去 replace 成空串，等于什么都没删：
+ * 库里 1,285 个配了该字段的源中 1,230 个是 `##` 开头形状（普查见 tools/verify/replace-regex-census.mjs）。
+ * `<js>` / `@js:` 包起来的（55 个）不在这里处理 —— 那要先能把正文喂进 JS 桥（任务 #24）。
+ */
+internal fun applyReplaceEntry(entry: String, text: String): String {
+    if (entry.isBlank()) return text
+    val head = entry.trimStart()
+    if (!head.startsWith("##")) {
+        // 上游在这种形状下会把整条当**取值规则**去跑（结果通常是空，等于把正文清空），这里故意不跟：
+        // 库里确有源写成「纯正则 + 换行分隔」，按「删掉匹配」才有实用价值（既有测试锁住这条）。
+        return runCatching { text.replace(Regex(entry.trim()), "") }.getOrDefault(text)
+    }
+    // 只 trim 左侧：上游对 replacement 一个字符都不动，`##时间## ` 这种结尾空格是要留的
+    val parts = head.split("##")
+    val pattern = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return text
+    val replacement = parts.getOrNull(2) ?: ""
+    val regex = runCatching { Regex(pattern) }.getOrNull()
+        ?: return text.replace(pattern, replacement)
+    return if (parts.size > 3) {
+        val match = regex.find(text) ?: return ""
+        match.value.replaceFirst(regex, replacement)
+    } else {
+        regex.replace(text, replacement)
+    }
+}
+
+/**
+ * Legado 选择器尾部的**索引段**（上游 `AnalyzeByJSoup` 的「索引列表处理器」）：
+ * `tag!0,2` 从结果列表里排除第 0、2 个，`tag[1]`/`tag[-1]` 取第 2 个/最后一个，
+ * `tag[1:4]`、`tag[0:6:2]` 是区间与步长。负数一律从尾部数。
+ *
+ * 注意 `[attr=val]` 这种 CSS 属性选择器**不是**索引，内容必须是数字/冒号/逗号/负号才算。
+ * 以前 `!N` 被映射成 `:not(:nth-child(N+1))`：nth-child 数的是同一父元素下的兄弟，
+ * 而 Legado 数的是**这条规则匹配到的列表**，两者在真实 DOM 里通常不等，取错元素还不报错。
+ */
+internal fun splitIndexSuffix(rule: String): Pair<String, List<String>> {
+    val tokens = mutableListOf<String>()
+    var text = rule.trimEnd()
+    while (text.isNotEmpty()) {
+        if (text.endsWith("]")) {
+            val open = text.lastIndexOf('[')
+            val inner = if (open >= 0) text.substring(open + 1, text.length - 1) else ""
+            if (open < 0 || !Regex("[\\d\\s,:\\-]+").matches(inner) || !inner.any { it.isDigit() }) break
+            tokens.add(0, inner)
+            text = text.substring(0, open).trimEnd()
+        } else {
+            val match = Regex("!([\\d\\s,:\\-]*)$").find(text) ?: break
+            val inner = match.groupValues[1]
+            if (!inner.any { it.isDigit() }) break
+            tokens.add(0, "!$inner")
+            text = text.substring(0, match.range.first).trimEnd()
+        }
+    }
+    return text to tokens
+}
+
+/** 把索引段作用到已匹配列表上（保持文档顺序）。 */
+internal fun <T> applyIndexTokens(input: List<T>, tokens: List<String>): List<T> {
+    var current = input
+    for (token in tokens) {
+        if (current.isEmpty()) return emptyList()
+        current = if (token.startsWith("!")) {
+            val drop = parseIndexSpec(token.removePrefix("!"), current.size).toSet()
+            current.filterIndexed { index, _ -> index !in drop }
+        } else {
+            parseIndexSpec(token, current.size).mapNotNull { current.getOrNull(it) }
+        }
+    }
+    return current
+}
+
+/** `3` 单个、`0,2` 多选、`1:4` 区间、`0:6:2` 带步长；负数从尾部数。 */
+internal fun parseIndexSpec(spec: String, size: Int): List<Int> {
+    val out = mutableListOf<Int>()
+    for (raw in spec.split(',')) {
+        val part = raw.trim()
+        if (part.isEmpty()) continue
+        if (':' in part) {
+            val bits = part.split(':').map { it.trim() }
+            val start = bits.getOrNull(0)?.toIntOrNull() ?: 0
+            val end = bits.getOrNull(1)?.toIntOrNull() ?: size
+            val step = bits.getOrNull(2)?.toIntOrNull()?.takeIf { it > 0 } ?: 1
+            var index = if (start < 0) start + size else start
+            val stop = if (end < 0) end + size else end
+            while (index < stop && index < size) {
+                if (index >= 0) out += index
+                index += step
+            }
+        } else {
+            val value = part.toIntOrNull() ?: continue
+            out += if (value < 0) value + size else value
+        }
+    }
+    return out
 }
 
 class RuleExecutionException(message: String) : RuntimeException(message)
