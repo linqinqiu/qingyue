@@ -720,7 +720,7 @@ fun Route.apiRoutes(
                 call.respond(cached)
             } else call.respondCatching {
                 try {
-                    runner.content(source.json, request.chapterUrl, bookName).also { content ->
+                    runner.content(source.json, request.chapterUrl, bookName, bookUrl).also { content ->
                         bookUrl?.let { database.cacheBookContent(request.sourceId, it, request.chapterUrl, content) }
                     }
                 } catch (error: Throwable) {

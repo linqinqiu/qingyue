@@ -377,7 +377,39 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         JsonNull -> null
     }
 
-    fun content(sourceJson: String, chapterUrl: String, bookName: String? = null): ChapterContent {
+    /**
+     * 把 `book.*` / `chapter.*` 的真值喂进执行上下文。
+     *
+     * 上游是把 Book / BookChapter 对象直接交给 Rhino，所以书源 JS 里 `book.origin`、
+     * `chapter.title` 随手就能用。我们的桥对象建好了，但除登录流程外**从来没人填值**：
+     * content() 只 copy 了一个 chapterUrl，于是库里 449 个引用 book./chapter. 的源
+     * 取到的是空串 —— 不报错，只是拼出来的请求地址和标题不对、脚本自己判空走进另一条分支。
+     * 这里把书架与目录缓存里查得到的字段补上（查不到就维持原样，绝不编造）。
+     */
+    private fun readingContext(
+        base: JsExecutionContext,
+        sourceId: String?,
+        bookUrl: String?,
+        bookName: String?,
+        chapterUrl: String?,
+    ): JsExecutionContext {
+        val withChapter = base.copy(chapterUrl = chapterUrl)
+        val db = database ?: return withChapter
+        if (sourceId.isNullOrBlank() || bookUrl.isNullOrBlank()) return withChapter
+        val shelf = db.shelfBook(sourceId, bookUrl) ?: return withChapter
+        val chapters = db.getTocCache(sourceId, shelf.tocUrl)
+        val index = chapters?.indexOfFirst { it.url == chapterUrl }?.takeIf { it >= 0 }
+        return withChapter.copy(
+            bookUrl = bookUrl,
+            bookName = bookName?.takeIf { it.isNotBlank() } ?: shelf.name,
+            bookAuthor = shelf.author,
+            bookTocUrl = shelf.tocUrl,
+            chapterIndex = index ?: shelf.chapterIndex,
+            chapterTitle = index?.let { chapters?.getOrNull(it)?.title },
+        )
+    }
+
+    fun content(sourceJson: String, chapterUrl: String, bookName: String? = null, bookUrl: String? = null): ChapterContent {
         val source = sourceJson.objectValue()
         val sourceUrl = source.string("bookSourceUrl")
         val sourceName = source.string("bookSourceName")
@@ -392,7 +424,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         }
 
         return jsSandbox.withSourceContext(
-            sourceContext(source, sourceUrl).let { it.copy(chapterUrl = chapterUrl) },
+            readingContext(sourceContext(source, sourceUrl), sourceUrl, bookUrl, bookName, chapterUrl),
         ) {
             val rule = source.objectValue("ruleContent") ?: throw RuleExecutionException("该书源未配置 ruleContent")
             val contentRule = rule.string("content") ?: throw RuleExecutionException("缺少 ruleContent.content")

@@ -90,7 +90,7 @@ class BookCacheService(private val database: Database, private val runner: RuleR
                         async {
                             semaphore.withPermit {
                                 try {
-                                    val content = withContext(Dispatchers.IO) { runner.content(source.json, chapter.url, bookName) }
+                                    val content = withContext(Dispatchers.IO) { runner.content(source.json, chapter.url, bookName, book.bookUrl) }
                                     if (content.content.toByteArray().size <= MAX_CHAPTER_BYTES) {
                                         database.cacheBookContent(
                                             book.sourceId, book.bookUrl, chapter.url,

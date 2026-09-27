@@ -192,19 +192,23 @@ class JsSandbox(private val runner: RuleRunner? = null) {
         ScriptableObject.putProperty(book, "bookUrl", execContext?.bookUrl ?: "")
         ScriptableObject.putProperty(book, "tocUrl", execContext?.bookTocUrl ?: "")
         ScriptableObject.putProperty(book, "durChapterIndex", execContext?.chapterIndex ?: 0)
-        ScriptableObject.putProperty(book, "durChapterTitle", "")
+        ScriptableObject.putProperty(book, "durChapterTitle", execContext?.chapterTitle ?: "")
+        ScriptableObject.putProperty(book, "durChapterPos", 0)
         ScriptableObject.putProperty(book, "order", 0)
+        // 上游 Book.origin 就是书源域名，46 个源用它拼请求地址；以前这个属性根本不存在，
+        // 脚本里 `book.origin` 取到 undefined 再拼进 URL，表现为"抓回来一个 about:blank"。
+        ScriptableObject.putProperty(book, "origin", execContext?.sourceId ?: "")
+        ScriptableObject.putProperty(book, "coverUrl", "")
+        ScriptableObject.putProperty(book, "kind", "")
+        ScriptableObject.putProperty(book, "wordCount", "")
+        ScriptableObject.putProperty(book, "lastChapter", "")
+        ScriptableObject.putProperty(book, "intro", "")
+        ScriptableObject.putProperty(book, "readMeUrl", "")
         val readConfig = NativeObject()
         readConfig.parentScope = scope
         ScriptableObject.putProperty(book, "readConfig", readConfig)
 
-        ScriptableObject.putProperty(book, "getVariable", object : BaseFunction() {
-            override fun call(cx: Context, s: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
-                val key = args.firstOrNull()?.toString() ?: return "null"
-                return execContext?.bookVariables?.get(key) ?: "null"
-            }
-        })
-        ScriptableObject.putProperty(book, "setVariable", object : BaseFunction() {
+        val putVariable = object : BaseFunction() {
             override fun call(cx: Context, s: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val key = args.firstOrNull()?.toString()
                 if (key != null) {
@@ -212,7 +216,17 @@ class JsSandbox(private val runner: RuleRunner? = null) {
                 }
                 return Context.getUndefinedValue()
             }
+        }
+        ScriptableObject.putProperty(book, "getVariable", object : BaseFunction() {
+            override fun call(cx: Context, s: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
+                val key = args.firstOrNull()?.toString() ?: return "null"
+                return execContext?.bookVariables?.get(key) ?: "null"
+            }
         })
+        // 上游 Book 实现 RuleDataInterface，方法名是 putVariable；setVariable 是它的别名。
+        // 只给 setVariable 的话，54 个写 `book.putVariable('k',v)` 的源直接抛 TypeError。
+        ScriptableObject.putProperty(book, "putVariable", putVariable)
+        ScriptableObject.putProperty(book, "setVariable", putVariable)
         val noop = object : BaseFunction() {
             override fun call(cx: Context, s: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any =
                 Context.getUndefinedValue()
