@@ -3,10 +3,7 @@ import { Icon, type IconName } from './icons'
 import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import type { ReaderSettings } from './readerSettings'
-import { BUILTIN_SKINS } from './readerSettings'
 
-// 外壳认得的页面。 的路由联合类型必须是它的超集（onNavigate 的入参更宽会不兼容）；
-// 加新页面时两边一起加，changelog 那一页由另一会话连同 ChangelogPage.tsx 一起落地时补进来。
 export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup'
 
 export interface AppRailProps {
@@ -17,20 +14,17 @@ export interface AppRailProps {
   onNavigate: (page: AppPage) => void
   onOpenOfflineCache?: () => void
   onOpenLogs?: () => void
-  /**
-   * 「更新日志」与「自定义」。两套外壳传的是**同一个 shellProps 对象**（见 main.tsx），
-   * 所以入口集合天然相等 —— ui-layout-check 就是按"切了布局不许少功能"判的。
-   */
-  onOpenChangelog?: () => void
-  onOpenCustomize?: () => void
   /** 服务端 /healthz 报回来的版本号；空串表示还没问到（离线或启动中）。 */
   version?: string
 }
 
-/** 皮肤名单一来源在 readerSettings（两套外壳 + 「自定义」弹窗共用，各自定义一份迟早漂移）。 */
-export const APP_THEMES = BUILTIN_SKINS
+export const APP_THEMES: ReadonlyArray<{ id: ReaderSettings['theme']; name: string }> = [
+  { id: 'light', name: '晓白' },
+  { id: 'paper', name: '护眼' },
+  { id: 'dark', name: '夜读' },
+]
 
-type RailItem = { page?: AppPage; action?: 'offline' | 'logs' | 'customize'; icon: IconName; label: string }
+type RailItem = { page?: AppPage; action?: 'offline' | 'logs'; icon: IconName; label: string }
 
 /**
  * 导航按"读什么 / 管什么 / 顺手用什么"分三档。
@@ -61,8 +55,6 @@ const RAIL_SECTIONS: ReadonlyArray<{ label: string; items: RailItem[] }> = [
     items: [
       { action: 'offline', icon: 'download', label: '离线缓存' },
       { action: 'logs', icon: 'activity', label: '运行日志' },
-      { action: 'customize', icon: 'sliders', label: '自定义' },
-      { page: 'changelog', icon: 'file', label: '更新日志' },
     ],
   },
 ]
@@ -73,7 +65,7 @@ const TAB_PAGES: AppPage[] = ['library', 'shelf', 'explore', 'subscriptions', 's
 const COLLAPSE_KEY = 'legado.rail.collapsed'
 
 /**
- * 渲染期不碰 `localStorage`：门禁里有用 `renderToStaticMarkup` 做静态渲染的用例，
+ * 渲染期不碰 ：门禁里有用  做静态渲染的用例，
  * Node 侧不一定有这个全局（AGENTS §5「组件渲染期严禁直接取 location」同一类坑）。
  */
 const readCollapsed = () => {
@@ -100,8 +92,6 @@ export function AppRail({
   onNavigate,
   onOpenOfflineCache,
   onOpenLogs,
-  onOpenChangelog,
-  onOpenCustomize,
   version = '',
 }: AppRailProps) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
@@ -146,31 +136,29 @@ export function AppRail({
     if (item.page) onNavigate(item.page)
     else if (item.action === 'offline') onOpenOfflineCache?.()
     else if (item.action === 'logs') onOpenLogs?.()
-    else if (item.action === 'customize') onOpenCustomize?.()
   }
 
   const available = (item: RailItem) =>
     (item.page && item.page !== 'reader') ||
     (item.action === 'offline' && Boolean(onOpenOfflineCache)) ||
-    (item.action === 'logs' && Boolean(onOpenLogs)) ||
-    (item.action === 'customize' && Boolean(onOpenCustomize))
+    (item.action === 'logs' && Boolean(onOpenLogs))
 
   const themeButtons = (
     <div className="rail-themes" role="radiogroup" aria-label="全站主题选择">
-      {availableSkins(settings).map(skin => {
-        const selected = settings.theme === skin.id
+      {APP_THEMES.map(theme => {
+        const selected = settings.theme === theme.id
         return (
           <button
-            key={skin.id}
+            key={theme.id}
             type="button"
-            className={`rail-theme theme-option-${skin.builtin ? skin.id : 'custom'} ${selected ? 'selected' : ''}`}
+            className={`rail-theme theme-option-${theme.id} ${selected ? 'selected' : ''}`}
             role="radio"
             aria-checked={selected}
-            title={skin.name}
-            onClick={() => onSettingsChange({ ...settings, theme: skin.id })}
+            title={theme.name}
+            onClick={() => onSettingsChange({ ...settings, theme: theme.id })}
           >
-            <span className={`theme-swatch theme-swatch-${skin.builtin ? skin.id : 'custom'}`} />
-            <span className="theme-name">{skin.name}</span>
+            <span className={`theme-swatch theme-swatch-${theme.id}`} />
+            <span className="theme-name">{theme.name}</span>
           </button>
         )
       })}
