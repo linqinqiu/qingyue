@@ -149,15 +149,20 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
 
   return (
     <main className="explore-page">
-      <header className="page-bar">
-        <h1>发现</h1>
+      <header className="explore-header">
+        <div>
+          <span className="section-kicker">按书源发现</span>
+          <h1>发现</h1>
+          <p>读取书源自带的发现页分栏（榜单、分类、专题），点书先看详情，再决定读不读。</p>
+        </div>
         {/*
           用户 2026-09-30：「我发现页也用不到这个在这个源里搜书名，需要的是搜对应书源」。
           上一轮加的"源内直搜"打偏了：发现页缺的是**从两千多个配了发现页的源里挑到一个**，
           不是把书库搜索在这儿重摆一遍。所以删掉那个表单，把选源本身做成一眼看得懂的搜索口：
-          过滤框常驻（不等选项变多才自动冒出来）、并报出可发现的总数。
+          标签写「搜书源」、过滤框常驻（不等选项变多才自动冒出来）、并报出可发现的总数。
         */}
         <div className="explore-source-picker">
+          <span>搜书源</span>
           <Select
             ariaLabel="搜索并选择发现页书源"
             placeholder={sources.length ? '按名称或分组搜书源' : '加载中…'}

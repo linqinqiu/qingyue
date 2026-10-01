@@ -85,6 +85,21 @@ try {
   csrf = ''
   ok('服务在跑（不设身份，探活通过就能测）', sess.status === 200, `status=${sess.status}`)
 
+  /*
+    先把**历史残留的探针**清掉再取基线。上一轮如果崩在中途（超时被打断、Ctrl-C），
+    收尾那两条 DELETE 就没跑，留下的 `probe-sub-*` 行会被这一次的界面查找 `find()` 先捞走
+    ——2026-10-01 就红在这里：残的那一条是被上一轮点成「已停用」的，于是这一轮判据读到的是
+    别人的状态，报出一条"订阅不能停用"的假红（AGENTS §3 第②条同一形状）。
+    只删 url 里带 `probe-sub-` 的，真订阅一律不碰。
+  */
+  const staleSubs = (await listSubs()).filter(item => /probe-sub-/.test(item.url ?? ''))
+  for (const item of staleSubs) await raw('DELETE', `/api/subscriptions/${item.id}`)
+  const staleRss = (await listRss()).filter(item => /probe-sub-rss/.test(item.sourceUrl ?? ''))
+  for (const item of staleRss) await raw('DELETE', `/api/rss/sources?sourceUrl=${encodeURIComponent(item.sourceUrl)}`)
+  if (staleSubs.length || staleRss.length) {
+    console.log(`  清扫历史探针：订阅 ${staleSubs.length} 条、RSS ${staleRss.length} 条（上一轮崩在中途留下的）`)
+  }
+
   const rssBefore = (await listRss()).filter(item => !item.sourceUrl.includes(STAMP))
   const subsBefore = (await listSubs()).filter(item => !item.url.includes(STAMP))
 
@@ -152,13 +167,16 @@ try {
   const pageErrors = []
   page.on('pageerror', event => pageErrors.push(String(event.message)))
   if (cookie) await page.evaluateOnNewDocument(value => { document.cookie = value }, cookie)
+  // 界面按**本轮自己的** token 找那一行（`window.__SUB_TOKEN`）。原来找的是常量前缀
+  // 'probe-sub-list'，一旦库里有上一轮崩在中途留下的同前缀残留，`find()` 捞到的是别人的行。
+  await page.evaluateOnNewDocument(token => { window.__SUB_TOKEN = token }, SUB_TOKEN)
 
   const goto = async hash => {
     await page.goto(`${BASE}/${hash}`, { waitUntil: 'domcontentloaded' })
     // 冷启动到第一屏要等多久取决于这台机器此刻多忙（同一台机器实测 3~36 秒不等）。
     // 只 sleep 固定 1.4 秒的话，负载高的那一次会把"应用还在载入"读成"这一类数据是空的"，
     // 于是假红一条"本机有真订阅时不显示空态"。先等外壳出现，再给内容一点时间。
-    await page.waitForSelector('.page-bar h1, .app-rail', { timeout: 60000 }).catch(() => null)
+    await page.waitForSelector('.page-title h1, .subscription-tabs', { timeout: 60000 }).catch(() => null)
     await sleep(1400)
   }
 
@@ -188,7 +206,7 @@ try {
   // ② 失败行：一行结论 + 可展开原文
   const failureRow = await page.evaluate(() => {
     const article = [...document.querySelectorAll('.subscription-list article')]
-      .find(node => node.textContent?.includes('probe-sub-list'))
+      .find(node => node.textContent?.includes(window.__SUB_TOKEN))
     if (!article) return null
     const error = article.querySelector('.sub-error')
     const rawBlock = article.querySelector('.sub-raw')
@@ -210,7 +228,7 @@ try {
   // 停用后仍可同步（这条把"停用 = 只能等自动同步"的死角堵掉）
   const toggled = await page.evaluate(() => {
     const article = [...document.querySelectorAll('.subscription-list article')]
-      .find(node => node.textContent?.includes('probe-sub-list'))
+      .find(node => node.textContent?.includes(window.__SUB_TOKEN))
     const button = [...(article?.querySelectorAll('button') ?? [])].find(node => /已启用|已停用/.test(node.textContent ?? ''))
     button?.click()
     return button?.textContent?.trim() ?? ''
@@ -218,7 +236,7 @@ try {
   await sleep(1200)
   const afterToggle = await page.evaluate(() => {
     const article = [...document.querySelectorAll('.subscription-list article')]
-      .find(node => node.textContent?.includes('probe-sub-list'))
+      .find(node => node.textContent?.includes(window.__SUB_TOKEN))
     return {
       label: [...(article?.querySelectorAll('button') ?? [])].map(node => node.textContent?.trim()).join('/'),
       hasOffNote: !!article?.querySelector('.sub-muted'),
@@ -228,7 +246,7 @@ try {
     `${toggled} → ${afterToggle.label} 说明=${afterToggle.hasOffNote}`)
   await page.evaluate(() => {
     const article = [...document.querySelectorAll('.subscription-list article')]
-      .find(node => node.textContent?.includes('probe-sub-list'))
+      .find(node => node.textContent?.includes(window.__SUB_TOKEN))
     const button = [...(article?.querySelectorAll('button') ?? [])].find(node => /已启用|已停用/.test(node.textContent ?? ''))
     button?.click()
   })

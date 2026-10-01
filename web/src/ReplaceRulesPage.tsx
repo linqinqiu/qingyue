@@ -212,23 +212,16 @@ export function ReplaceRulesPage() {
 
   return (
     <main className="rules-page-container">
-      <header className="page-bar">
-        <h1>替换净化</h1>
-        <span className="page-bar-meta">{rules.length} 条规则 · 净化正文里的反爬文字对调、乱码错别字、引流广告与多余排版</span>
-        <div className="page-bar-actions">
-          <button
-            type="button"
-            className="primary-button"
-            onClick={openCreateModal}
-          >
-            <Icon name="plus" />
-            <span>新建规则</span>
-          </button>
-        </div>
-      </header>
-
       {/* 侧边栏（桌面端列表 / 移动端折叠卡片列表） */}
       <aside className="rules-sidebar">
+        <header className="rules-sidebar-header">
+          <div className="rules-sidebar-title">
+            <Icon name="sliders" />
+            <span>替换净化规则</span>
+            <span className="rules-count-badge">{rules.length}</span>
+          </div>
+        </header>
+
         {/* 工具条：搜索与快捷按钮 */}
         <div className="rules-toolbar">
           <div className="rules-search-wrap">
@@ -444,6 +437,24 @@ export function ReplaceRulesPage() {
 
       {/* 桌面端主展示与沙箱区域 */}
       <section className="rules-content-area">
+        <header className="page-title">
+          <div>
+            <span className="section-kicker">青阅</span>
+            <h1>替换净化规则</h1>
+            <p>净化网页抓取正文中的反爬文字对调、乱码错别字、引流广告与多余排版。</p>
+          </div>
+          <div className="page-title-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={openCreateModal}
+            >
+              <Icon name="plus" />
+              <span>新建规则</span>
+            </button>
+          </div>
+        </header>
+
         {/* 选中规则详情卡片 */}
         {selectedRule ? (
           <div className="rules-detail-card">

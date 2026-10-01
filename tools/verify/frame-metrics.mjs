@@ -79,7 +79,7 @@ const collect = () => {
     const r = b.getBoundingClientRect()
     // 只量**内容区**的控件：页头条与侧栏是改版新增的外框，把它们算进中位数，
     // 每个页面都会凭空多出十几个 34px 的侧栏按钮，密度对比就变成在量侧栏（实测踩过）。
-    if (b.closest('.page-bar, .app-rail, .rail-tabs, .app-page-header')) return false
+    if (b.closest('.page-title, .app-page-header, .desk-header')) return false
     return r.width > 0 && r.height > 0 && r.top < vh
   })
   const heights = buttons.map(b => px(getComputedStyle(b).height)).sort((a, b) => a - b)

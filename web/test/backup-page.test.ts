@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { AppRail } from '../src/AppRail'
+import { AppHeader } from '../src/AppHeader'
 import { toast } from '../src/Toast'
 import { defaultReaderSettings } from '../src/readerSettings'
 import { BackupPage, reportImportSummary } from '../src/BackupPage'
@@ -62,20 +62,20 @@ test('套用只在前端映射得动的条目上出现，映射结果如实播�
   assert.equal(merged.lineHeight, 1.5, '10dp 行距 / 20 号字 = 1 + 0.5 倍')
 })
 
-test('导航：备份包直接摆在侧栏一级，不再收进「我的」☰；active 高亮对当前页生效', () => {
+test('导航：规则/备份收进「我的」☰ 菜单；active 高亮仍对主导航页生效', () => {
   const html = renderToStaticMarkup(
-    React.createElement(AppRail, {
+    React.createElement(AppHeader, {
       page: 'sources',
       settings: { ...defaultReaderSettings },
       onSettingsChange: () => undefined,
       onNavigate: () => undefined,
+      onLogout: () => undefined,
     }),
   )
   assert.ok(html.includes('书源'), '主导航要有书源这一档')
-  assert.ok(html.includes('备份包'), '备份包是一级入口，不该再藏在一个 ☰ 后面')
-  assert.ok(html.includes('替换净化'), '替换净化是一级入口')
-  assert.ok(html.includes('rail-item active'), '当前页要高亮')
-  assert.ok(html.includes('header-menu-btn'), '窄屏底部标签栏保留「更多」浮层')
+  assert.ok(html.includes('我的'), '「我的」菜单入口在位（规则/备份收在这里）')
+  assert.ok(html.includes('header-menu-btn'), '☰ 功能菜单按钮在位')
+  assert.ok(html.includes('class="active"'), '当前页要高亮')
   assert.ok(!/WebDAV/i.test(html), '导航文案不能再承诺 WebDAV')
 })
 

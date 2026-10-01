@@ -220,6 +220,12 @@ ok('不存在书源 404', ghost.status === 404, `${ghost.status}`);
 const garbage = await raw('POST', '/api/search', Buffer.from('{不是 json'), cookie, csrf, { 'content-type': 'application/json' });
 ok('坏 JSON 不导致 500', garbage.status === 400, `${garbage.status}`);
 
+// 随包更新日志：读的是打进 jar 的那一份（不是磁盘上的仓库文件），所以这一条同时也在验打包环节。
+const chlog = await raw('GET', '/api/changelog');
+ok('随包 CHANGELOG 可用（200 + markdown + 有版本号段）',
+  chlog.status === 200 && /^text\/markdown/.test(chlog.headers['content-type'] ?? '') && /^## \[[^\]]+\]/m.test(chlog.text),
+  `${chlog.status} ${chlog.headers['content-type'] ?? ''} ${chlog.text.length}B`);
+
 const listen = execSync('netstat -ano', { encoding: 'utf8' }).split(/\r?\n/).filter((l) => new RegExp(`:${PORT}\\s`).test(l) && /LISTENING/i.test(l)).map((l) => l.trim().split(/\s+/).join(' '));
 const localOnly = listen.length === 1 && /\b127\.0\.0\.1:/.test(listen[0]);
 ok('只监听回环', localOnly, listen.map((l) => l.split(' ').slice(0, 2).join(' ')).join(' | ') || '无');

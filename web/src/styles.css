@@ -41,6 +41,25 @@ svg { width: 18px; height: 18px; flex: none; }
 .nav-search-indicator { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); animation: nav-search-pulse 1.4s ease-in-out infinite; }
 @keyframes nav-search-pulse { 0%, 100% { opacity: .3; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.35); } }
 
+.app-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: calc(62px + var(--safe-top));
+  padding-top: var(--safe-top);
+  padding-left: max(clamp(16px, 4vw, 48px), var(--safe-left));
+  padding-right: max(clamp(16px, 4vw, 48px), var(--safe-right));
+  padding-bottom: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
 .app-brand {
   display: inline-flex;
   align-items: center;
@@ -71,6 +90,53 @@ svg { width: 18px; height: 18px; flex: none; }
 }
 .app-brand:hover .app-brand-logo {
   transform: scale(1.08);
+}
+.app-page-header nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  /* 窄屏放不下 7 个入口时，让这一排横向滚动，而不是把每个按钮压窄、
+     导致「书架」竖着断成「书/架」两个字（用户 2026-09-30 报的导航错位）。 */
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app-page-header nav::-webkit-scrollbar { display: none; }
+.app-page-header nav button {
+  position: relative;
+  height: 100%;
+  padding: 0 16px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 标签绝不换行、按钮绝不被压窄：宁可整排滚动，也不让两个汉字断成两行。 */
+  white-space: nowrap;
+  flex: 0 0 auto;
+  transition: color 0.15s ease;
+}
+.app-page-header nav button:hover {
+  color: var(--ink);
+}
+.app-page-header nav button.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+.app-page-header nav button.active::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 2.5px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: '';
 }
 .header-actions {
   position: relative;
@@ -304,7 +370,12 @@ svg { width: 18px; height: 18px; flex: none; }
 .source-sidebar { min-height: 100vh; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--surface); }
 .sources-page { min-height: calc(100vh - 68px); display: grid; grid-template-columns: 280px minmax(0, 1fr); }
 .sources-page .source-sidebar { min-height: calc(100vh - 68px); overflow: hidden; }
+.source-sidebar-heading { display: flex; justify-content: space-between; align-items: center; padding: 20px 18px 3px; color: var(--ink); font-family: Georgia, "Noto Serif SC", serif; font-size: 17px; }
+.source-sidebar-heading small { color: var(--muted); font-family: Inter, sans-serif; font-size: 12px; }
 .sources-content { width: min(1180px, 100%); display: grid; align-content: start; gap: 28px; padding: clamp(28px, 5vw, 68px); margin: 0 auto; }
+.page-title { display: flex; align-items: end; justify-content: space-between; gap: 22px; }
+.page-title h1, .library-hero h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(28px, 3vw, 38px); font-weight: 600; line-height: 1.2; }
+.page-title p { margin-top: 11px; color: var(--muted); font-size: 14px; }
 .source-sidebar > header { height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--line); }
 .workspace-brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 15px; }
 .workspace-brand svg { color: var(--accent); }
@@ -374,6 +445,14 @@ svg { width: 18px; height: 18px; flex: none; }
 /* 这条是「JSON 原文」栏的整块编辑器样式；不排除的话会把表单里的小字段框一起撑成 270px 高、去掉边框 */
 .source-editor textarea:not(.source-field-textarea) { width: 100%; min-height: 270px; resize: vertical; padding: 21px 22px; background: var(--surface); border: 0; outline: 0; color: var(--ink); font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .source-editor footer { padding: 11px 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.empty-editor { place-items: center; align-content: center; gap: 10px; padding: 36px; text-align: center; }
+.empty-editor > svg { width: 29px; height: 29px; color: var(--accent); }
+.empty-editor p { color: var(--muted); font-size: 14px; }
+.source-summary { display: flex; flex-wrap: wrap; justify-content: center; width: min(620px, 100%); margin: 14px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.source-summary > div { display: grid; gap: 4px; justify-items: center; padding: 0 22px; border-right: 1px solid var(--line); }
+.source-summary > div:last-child { border-right: 0; }
+.source-summary dt { color: var(--muted); font-size: 12px; }
+.source-summary dd { font-family: Georgia, "Noto Serif SC", serif; font-size: 20px; }
 
 /* Search and book details */
 .desk-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px; border-bottom: 1px solid var(--line); }
@@ -410,7 +489,13 @@ svg { width: 18px; height: 18px; flex: none; }
 
 /* Library page */
 .library-page { width: min(1240px, 100%); display: grid; gap: 26px; padding: clamp(26px, 4vw, 56px) clamp(18px, 4vw, 44px); margin: 0 auto; }
+.library-hero { display: grid; gap: 13px; padding: 8px 0 28px; border-bottom: 1px solid var(--line); }
+.library-hero p { color: var(--muted); font-size: 14px; }
+.library-hero form { width: min(780px, 100%); height: 48px; display: flex; align-items: center; gap: 10px; margin-top: 17px; padding-left: 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); box-shadow: var(--shadow); }
+.library-hero form input { width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--ink); outline: none; }
+.library-hero form .primary-button { height: 48px; padding: 0 20px; border-radius: 0 5px 5px 0; flex: 0 0 auto; }
 .library-history { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.library-history-label { color: var(--muted); font-size: 12px; flex: 0 0 auto; }
 .library-history-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .library-history-chip { padding: 4px 11px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-muted); color: var(--ink); font-size: 12px; cursor: pointer; }
 .library-history-chip:hover { border-color: var(--accent); color: var(--accent-ink); }
@@ -518,6 +603,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 /* Shelf */
 .shelf-page { width: min(1240px, 100%); display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; padding: clamp(32px, 6vw, 64px) clamp(18px, 4vw, 48px); margin: 0 auto; }
+.shelf-page .page-title > small { color: var(--muted); font-size: 13px; }
 .shelf-tabs { display: flex; align-items: center; gap: 20px; margin-top: -10px; border-bottom: 1px solid var(--line); }
 .shelf-tabs button { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 39px; padding: 0 2px; color: var(--muted); background: transparent; font-size: 13px; }
 .shelf-tabs button.active { color: var(--accent); font-weight: 650; }
@@ -969,11 +1055,30 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .mobile-reader-nav { display: none; }
 
 @media (max-width: 720px) {
+  .app-page-header {
+    height: 56px;
+    padding: 0 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
   .app-brand strong {
     display: none;
   }
   .app-brand {
     padding: 4px;
+  }
+  .app-page-header nav {
+    gap: 0;
+  }
+  .app-page-header nav button {
+    padding: 0 8px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+  .app-page-header nav button.active::after {
+    right: 6px;
+    left: 6px;
   }
   .header-menu-dropdown {
     position: fixed;
@@ -1008,8 +1113,11 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   }
   .sources-page { min-height: calc(100vh - 58px); grid-template-columns: 1fr; }
   .sources-page .source-sidebar { min-height: auto; height: auto; }
+  .source-sidebar-heading { padding: 14px 14px 6px; }
   .sources-content { padding: 28px 18px; }
+  .page-title { align-items: start; }
   .library-page { gap: 22px; padding: 42px 18px; }
+  .library-hero h1 { font-size: 30px; }
   .library-results > div { grid-template-columns: 1fr; }
   .library-book-detail > header { align-items: stretch; flex-direction: column; }
   .book-detail-modal { width: min(600px, 94vw); max-height: 88vh; border-radius: 14px; }
@@ -2955,8 +3063,31 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
   top: calc(62px + var(--safe-top));
 }
 
+.rules-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 10px;
+}
 
+.rules-sidebar-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
+.rules-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
 
 .rules-toolbar {
   padding: 0 14px 10px;
@@ -3500,8 +3631,24 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
    Source Batch Management, Grouping & Health Check Styles
    ========================================================== */
 
+.source-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
+.source-sidebar-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
+.source-sidebar-top-actions .subtle-button {
+  padding: 4px 8px;
+  font-size: 12px;
+  height: 28px;
+  border-radius: 6px;
+}
 
 .health-probe-btn {
   display: inline-flex;
@@ -3516,6 +3663,9 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
   border: 1px solid var(--accent) !important;
 }
 
+.source-group-filter-bar {
+  margin: 10px 16px 0;
+}
 
 .source-group-select { width: 100%; }
 .source-group-select .ui-select-trigger { font-size: 12px; }
@@ -4031,6 +4181,9 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 
 /* 发现页 */
 .explore-page { width: min(1240px, 100%); display: grid; gap: 22px; padding: clamp(26px, 4vw, 56px) clamp(18px, 4vw, 44px); margin: 0 auto; }
+.explore-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.explore-header h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(26px, 3vw, 34px); font-weight: 600; line-height: 1.2; }
+.explore-header p { margin-top: 6px; color: var(--muted); font-size: 14px; }
 .explore-source-picker { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .explore-source-picker .ui-select-trigger { min-height: 34px; max-width: 320px; background: var(--surface); font: inherit; }
 .explore-tabs { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px; max-height: 124px; overflow-y: auto; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
@@ -4148,6 +4301,10 @@ input[type=range] { min-height: 24px; }
 
 /* —— 版式基线 —— */
 .section-kicker { font-size: var(--t-sm); font-weight: 650; letter-spacing: .1em; }
+.page-title h1, .library-hero h1, .explore-header h1 { font-size: var(--t-3xl); }
+.page-title p, .library-hero p, .explore-header p { font-size: var(--t-lg); line-height: 1.7; }
+.source-summary dd { font-variant-numeric: lining-nums tabular-nums; }
+.source-summary dt { font-size: var(--t-sm); }
 
 /* —— 页面骨架：单栏页共用同一套宽度/边距/节奏 —— */
 .library-page, .shelf-page, .explore-page, .subscription-page, .backup-page {
@@ -4159,6 +4316,8 @@ input[type=range] { min-height: 24px; }
   gap: var(--s-5);
   align-content: start;
 }
+.page-title { gap: var(--s-4); }
+.page-title-actions { display: flex; align-items: center; gap: var(--s-2); flex: none; }
 
 /* —— 列表行：徽标不许和书名抢宽度，名字才是主角 —— */
 .source-list-item-title > span { flex: 1 1 auto; }
@@ -4175,6 +4334,17 @@ input[type=range] { min-height: 24px; }
 .explore-tab { min-height: var(--ctl-sm); border-radius: var(--r-pill); font-size: var(--t-md); }
 
 /* —— 书库静置态：搜索框下面不再是一整屏空白 + 一条孤零零的横线 —— */
+.library-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-3); border-top: 0; }
+.library-idle a {
+  display: grid; gap: 6px; padding: var(--s-4);
+  border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface); box-shadow: var(--elev-1);
+  color: var(--ink); text-decoration: none; transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.library-idle a:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); transform: translateY(-2px); box-shadow: var(--elev-2); }
+.library-idle a strong { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-lg); }
+.library-idle a svg { color: var(--accent); }
+.library-idle a small { color: var(--muted); font-size: var(--t-sm); line-height: 1.6; }
+.library-hero { border-bottom: 0; }
 
 /* —— 卡片表面统一：同一套圆角与投影 —— */
 .shelf-card, .explore-card, .explore-results, .source-debug-step { border-radius: var(--r-3); }
@@ -4182,10 +4352,14 @@ input[type=range] { min-height: 24px; }
 .shelf-card:hover { box-shadow: var(--elev-2); }
 
 /* —— 空态与分栏展开按钮 —— */
+.empty-editor { gap: var(--s-3); padding: var(--s-7) var(--s-5); }
+.empty-editor > svg { width: 44px; height: 44px; padding: 11px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.empty-editor h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-2xl); }
 .explore-tabs-toggle { justify-self: start; margin-top: calc(0px - var(--s-3)); padding: 0 var(--s-3); font-size: var(--t-md); }
 
 /* 书源空态继承了编辑器的 grid-template-rows（中间一行 minmax(270px,1fr)），
    图标/标题/说明之间被撑出三段空洞。 */
+.empty-editor { grid-template-rows: none; grid-auto-rows: min-content; place-content: center; gap: var(--s-3); }
 
 /* ============================================================
    界面波 v3 —— 书架密度与布局切换 · 应用内右键菜单 · 搜索范围三分法
@@ -4338,6 +4512,9 @@ input[type=range] { min-height: 24px; }
    页头压扁成一行、加「继续阅读」条、网格卡封面底部给阅读进度、
    占位封面不再重复书名（卡下面已经写了书名）。
    ============================================================ */
+.shelf-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; }
+.shelf-bar h1 { display: inline-flex; align-items: baseline; gap: 9px; font-family: Georgia, "Noto Serif SC", serif; font-size: 23px; font-weight: 600; line-height: 1.3; }
+.shelf-bar h1 small { color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: var(--t-sm); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* —— 继续阅读条 —— */
 .shelf-resume { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 11px 14px; border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface); box-shadow: var(--elev-1); }
@@ -4383,6 +4560,7 @@ input[type=range] { min-height: 24px; }
 .shelf-grid.shelf-mode-grid .shelf-card-info { padding-top: 7px; }
 
 @media (max-width: 720px) {
+  .shelf-bar h1 { font-size: 20px; }
   .shelf-resume { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; }
   .shelf-resume .primary-button { grid-column: 1 / -1; width: 100%; }
 }
@@ -4728,411 +4906,126 @@ input[type=range] { min-height: 24px; }
 }
 
 /* =============================================================================
- * 界面框架 v2（2026-10-01）
- *
- * 这一节不管配色，只管"版面被谁占走了"。改版前实测（tools/verify/frame-metrics.mjs，
- * 1440x900，out/frame-metrics-before.json）：
- *   库页   版面占用 19%、下方 47% 是空的、页头吃掉 58px
- *   发现页 版面占用 10%、下方 67% 是空的
- *   订阅页 版面占用 17%、两侧 43% 是空的（内容被锁在 920px 居中列里）
- *   备份页 版面占用 40%、两侧 40% 是空的
- *   书源页 版面占用 21%（右半边整块是"等待你选源"的空面板）
- * 三件事造成这些数：每页一行「绿小标 + 34px 衬线大标题 + 一句说明书」；内容统一
- * min(1240px,100%) 居中、两侧各留 140px；一级导航只有 5 个，规则/备份/日志/缓存
- * 全藏在一个 ☰ 里。下面逐条换掉：侧栏 + 单行页头条 + 全宽工作区。
- * 控件高度、卡片尺寸、字号档位一律沿用既有 token，不跟着改版一起变大。
+ * 「更新日志」页与「自定义」弹窗（2026-10-01）
+ * 页面式样沿用其它管理页那一套（max-width + 居中 + 54/32 内边距），
+ * 不引入新的一层设计令牌 —— 这个应用只有一套界面。
  * ========================================================================== */
 
-.app-frame {
-  --rail-w: 208px;
-  display: grid;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr);
-  min-height: 100vh;
-  min-height: 100dvh;
-  background: var(--canvas);
-  color: var(--ink);
+/* 皮肤名要能省略号收住：自定义皮肤那一档叫「自定义（midnight）」，格子里放不下。 */
+.theme-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-swatch-custom {
+  background: repeating-linear-gradient(135deg, var(--surface-muted) 0 4px, var(--line) 4px 8px);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
-.app-frame:has(.app-rail.collapsed) { --rail-w: 54px; }
-.app-workspace { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
+/* 「我的」菜单里那一栏的标题行：左边分组名，右边这一组的动作（皮肤 → 自定义）。 */
+.menu-section-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.menu-section-action {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--accent-ink, var(--accent));
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.menu-section-action:hover { border-color: var(--accent); background: var(--accent-soft); }
 
-/* —— 侧栏 —— */
-.app-rail {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
+/* —— 「自定义」弹窗 —— */
+.customize-dialog {
+  width: min(560px, 94vw);
+  max-height: min(86vh, 760px);
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
-  padding: var(--s-3) var(--s-2);
-  border-right: 1px solid var(--line);
   background: var(--surface);
-  z-index: 60;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+  overflow: hidden;
+  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
 }
-.rail-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 2px 2px; }
-.app-rail .app-brand { font-size: var(--t-xl); padding: 4px 6px; }
-.app-rail .app-brand svg { width: 22px; height: 22px; }
-.rail-collapse {
+.customize-header {
   flex: none;
-  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.customize-header h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 600; }
+.customize-header h2 svg { width: 18px; height: 18px; color: var(--accent); }
+.customize-close {
+  width: 30px; height: 30px;
   display: grid; place-items: center;
-  border-radius: var(--r-1);
-  color: var(--muted);
-  background: transparent;
-}
-.rail-collapse:hover { background: var(--surface-muted); color: var(--ink); }
-.rail-collapse svg { width: 15px; height: 15px; }
-.rail-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: var(--s-4); align-content: start; scrollbar-width: thin; }
-.rail-group { display: grid; gap: 2px; }
-.rail-group-label { padding: 0 8px 3px; color: var(--muted); font-size: var(--t-xs); font-weight: 650; letter-spacing: .08em; }
-.rail-item {
-  display: flex; align-items: center; gap: 10px;
-  height: 32px; padding: 0 8px;
-  border-radius: var(--r-1);
+  border-radius: 6px;
   color: var(--muted); background: transparent;
-  font-size: var(--t-lg); text-align: left;
-  transition: background .12s ease, color .12s ease;
 }
-.rail-item:hover { background: var(--surface-muted); color: var(--ink); }
-.rail-item.active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 650; }
-.rail-item svg { width: 16px; height: 16px; flex: none; }
-.rail-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rail-foot { flex: none; display: grid; gap: var(--s-2); padding: var(--s-2) 4px 0; border-top: 1px solid var(--line); }
-.rail-themes { display: flex; gap: 4px; }
-.rail-theme {
-  flex: 1 1 0; min-width: 0;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  height: 28px; padding: 0 6px;
-  border: 1px solid var(--line); border-radius: var(--r-1);
-  background: var(--surface-muted); color: var(--muted);
-  font-size: var(--t-xs);
+.customize-close:hover { background: var(--surface-muted); color: var(--ink); }
+.customize-close svg { width: 16px; height: 16px; }
+.customize-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 20px; }
+.customize-section { display: grid; gap: 8px; }
+.customize-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.customize-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.customize-hint code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.customize-skin-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.customize-skin, .customize-base {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-muted); color: var(--ink);
+  font-size: 13px; text-align: left;
+  transition: border-color .15s ease, background .15s ease;
 }
-.rail-theme:hover { color: var(--ink); }
-.rail-theme.selected { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
-.theme-swatch { width: 9px; height: 9px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent); flex: none; }
-.theme-swatch-light { background: #f8f9f7; }
-.theme-swatch-paper { background: #eef3e7; }
-.theme-swatch-dark { background: #202522; }
-.app-rail .menu-version { justify-content: space-between; padding: 0 4px; }
+.customize-skin.selected, .customize-base.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink, var(--accent)); font-weight: 600; }
+.customize-skin-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customize-skin-editor { padding-top: 14px; border-top: 1px solid var(--line); }
+.customize-field { display: grid; gap: 6px; color: var(--ink); font-size: 13px; }
+.customize-field > span { color: var(--muted); font-size: 12px; }
+.customize-field input, .customize-css {
+  width: 100%; min-width: 0;
+  border: 1px solid var(--line); border-radius: 5px;
+  background: var(--canvas); color: var(--ink);
+  padding: 9px 11px; outline: none;
+}
+.customize-field input:focus, .customize-css:focus { border-color: var(--accent); }
+.customize-css { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.6; resize: vertical; }
+.customize-base-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.customize-error { margin: 0; color: var(--danger); font-size: 13px; }
+.customize-note { margin: 0; color: var(--muted); font-size: 12px; }
+.customize-note code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.customize-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.customize-saved { color: var(--muted); font-size: 12px; }
 
-/* 收起态：只留图标，名字进 title 提示 */
-.app-rail.collapsed { padding-inline: 6px; }
-.app-rail.collapsed .app-brand strong,
-.app-rail.collapsed .rail-item-label,
-.app-rail.collapsed .rail-group-label,
-.app-rail.collapsed .rail-theme .theme-name,
-.app-rail.collapsed .menu-version span { display: none; }
-.app-rail.collapsed .rail-brand-row { flex-direction: column; }
-.app-rail.collapsed .app-brand { justify-content: center; padding: 4px 0; }
-.app-rail.collapsed .rail-item { justify-content: center; padding: 0; }
-.app-rail.collapsed .rail-themes { flex-direction: column; }
-.app-rail.collapsed .rail-foot { padding-inline: 0; }
-.app-rail.collapsed .menu-version { justify-content: center; }
-
-/* —— 页头条：一页一行，标题 + 就地上下文 + 右侧动作 —— */
-.page-bar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  display: flex; align-items: center; gap: var(--s-3);
-  min-height: 44px;
-  padding: 0 var(--gutter);
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  flex-wrap: wrap;
+/* —— 「更新日志」页 —— */
+.changelog-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+.changelog-loading, .changelog-empty { color: var(--muted); font-size: 14px; }
+.changelog-list { display: grid; gap: 8px; margin-top: 28px; }
+.changelog-release { display: grid; gap: 14px; padding: 20px 0; border-top: 1px solid var(--line); }
+.changelog-release > header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.changelog-release h2 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.changelog-release time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.changelog-flag {
+  padding: 1px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-ink, var(--accent));
+  font-size: 12px; font-weight: 600;
 }
-.page-bar h1 { font-size: var(--t-xl); font-weight: 650; line-height: 1.2; white-space: nowrap; }
-.page-bar-meta { min-width: 0; flex: 1 1 auto; color: var(--muted); font-size: var(--t-sm); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.page-bar-actions { margin-left: auto; display: flex; align-items: center; gap: var(--s-2); flex: none; }
-.page-bar-actions .subtle-button, .page-bar-actions .danger-button, .page-bar-actions .primary-button { min-height: var(--ctl); }
-
-/* 单栏页不再居中锁宽：宽度给工作区，左右只留 gutter */
-:root { --gutter: clamp(14px, 1.8vw, 24px); }
-.library-page, .shelf-page, .explore-page, .subscription-page, .backup-page {
-  width: 100%;
-  max-width: none;
-  margin-inline: 0;
-  padding-inline: 0;
-  padding-block: 0 var(--s-7);
-  gap: var(--s-4);
+.changelog-preamble { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.changelog-group { display: grid; gap: 6px; }
+.changelog-group h3 { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.changelog-group ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.changelog-group li { color: var(--ink); font-size: 14px; line-height: 1.75; }
+.changelog-group li code, .changelog-preamble code {
+  padding: 1px 5px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface-muted);
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
 }
-.library-page > *, .shelf-page > *, .explore-page > *, .subscription-page > *, .backup-page > * {
-  margin-inline: var(--gutter);
-  width: auto;
-}
-.library-page > .page-bar, .shelf-page > .page-bar, .explore-page > .page-bar, .subscription-page > .page-bar, .backup-page > .page-bar { margin-inline: 0; }
-
-/* —— 书库：搜索条就是这一页的第一行，不再垫一句宣传语 —— */
-.library-search {
-  display: flex; align-items: center; gap: var(--s-2);
-  height: var(--ctl-lg);
-  padding: 0 0 0 var(--s-3);
-  border: 1px solid var(--line); border-radius: var(--r-1);
-  background: var(--surface);
-  box-shadow: var(--elev-1);
-}
-.library-search:focus-within { border-color: var(--accent); }
-.library-search svg { width: 16px; height: 16px; color: var(--muted); }
-.library-search input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--ink); outline: none; font-size: var(--t-lg); }
-.library-search .primary-button { height: 100%; border-radius: 0 var(--r-1) var(--r-1) 0; padding: 0 var(--s-5); }
-.library-scope { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
-.library-scope-modes { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-muted); }
-.library-scope-modes button { height: 26px; padding: 0 var(--s-3); border-radius: var(--r-pill); color: var(--muted); background: transparent; font-size: var(--t-md); }
-.library-scope-modes button.active { background: var(--surface); color: var(--accent-ink); font-weight: 650; box-shadow: var(--elev-1); }
-.library-scope-hint { color: var(--muted); font-size: var(--t-sm); }
-.library-history { flex-basis: 100%; }
-.library-resume { display: grid; gap: var(--s-3); }
-.library-resume h2 { font-size: var(--t-lg); font-weight: 650; color: var(--muted); }
-.library-resume-empty { color: var(--muted); font-size: var(--t-md); }
-.resume-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: var(--s-4) var(--s-3); }
-.resume-card { display: grid; gap: 6px; padding: 0; background: transparent; text-align: left; }
-.resume-card > strong { overflow: hidden; font-size: var(--t-md); font-weight: 600; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.resume-card > small { overflow: hidden; color: var(--muted); font-size: var(--t-sm); white-space: nowrap; text-overflow: ellipsis; }
-.resume-card .cover-wrap { aspect-ratio: 3 / 4; border-radius: var(--r-1); overflow: hidden; background: var(--surface-muted); }
-/* BookCover / SearchCover 直接返回 <img> 或 .cover-fallback，没有包裹层：
-   不给宽高就会按图片原始尺寸铺出来，卡片因此互相压在一起（12:57 首版实测）。 */
-.resume-card > img, .resume-card > .cover-fallback {
-  width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
-  border-radius: var(--r-1); background: var(--surface-muted);
-}
-
-/* —— 书源页：没选源时列表铺满，不再常驻一块空详情面板 —— */
-.sources-page {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 100vh;
-  min-height: 100dvh;
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-.sources-page > .page-bar { grid-column: 1 / -1; }
-.sources-page.no-selection { grid-template-columns: minmax(0, 1fr); }
-.sources-page.no-selection .sources-content { display: none; }
-.sources-page .source-sidebar { min-height: 0; height: auto; }
-.sources-content { width: auto; max-width: none; margin: 0; padding: var(--s-4) var(--gutter) var(--s-7); gap: var(--s-4); }
-
-/* —— 窄屏：侧栏换成底部标签栏，页头条不换行成两行 —— */
-.rail-tabs { display: none; }
-@media (max-width: 760px) {
-  .app-frame { grid-template-columns: minmax(0, 1fr); }
-  .app-rail { display: none; }
-  .app-workspace { padding-bottom: calc(58px + var(--safe-bottom)); }
-  .rail-tabs {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    display: flex; align-items: stretch; justify-content: space-around;
-    padding: 2px 4px calc(2px + var(--safe-bottom));
-    border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--surface) 96%, transparent);
-    z-index: 90;
-  }
-  .rail-tabs > button, .rail-tabs .rail-more-wrap { display: inline-flex; }
-  .rail-tabs > button {
-    flex: 1 1 0; min-width: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    height: 52px; padding: 0;
-    color: var(--muted); background: transparent;
-    font-size: var(--t-xs);
-  }
-  .rail-tabs > button svg { width: 18px; height: 18px; }
-  .rail-tabs > button.active { color: var(--accent-ink); font-weight: 650; }
-  .rail-tabs .rail-more-wrap { position: relative; flex: 1 1 0; }
-  .rail-tabs .header-menu-btn { width: 100%; height: 52px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 0; background: transparent; font-size: var(--t-xs); }
-  .rail-tabs .header-menu-btn .header-menu-label { font-size: var(--t-xs); }
-  .rail-tabs .header-menu-dropdown { top: auto; bottom: calc(100% + 8px); right: 0; left: auto; max-height: 60vh; overflow-y: auto; }
-  .page-bar { min-height: 40px; padding-inline: var(--s-3); }
-  .page-bar-meta { flex-basis: 100%; order: 3; white-space: normal; }
-}
-
-/* =============================================================================
- * 界面框架 v2 · 收尾（同日第二轮实测后补）
- * 首版截图（out/shots/v2-first）暴露的四个"框架换了但页内没跟上"的问题：
- *   ① 书库「继续阅读」的封面没有宽高约束，按原图铺出来互相压在一起；
- *   ② 书源页铺满后，筛选框/新建/导入各占一整条 1400px，列表一行一个字右边全空；
- *   ③ 规则页侧栏顶上一遍「替换净化规则 270」，页头条又一遍；
- *   ④ 订阅页与备份页仍是"居中一张卡"，宽屏两侧各空 25% 以上。
- * ========================================================================== */
-
-/* ① 继续阅读：封面按 3:4 收进格子 */
-.resume-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
-
-/* ② 书源页工具条与列表 */
-.source-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: var(--s-3) var(--gutter) 0; }
-.source-toolbar .source-filter { flex: 1 1 220px; min-width: 170px; margin: 0; height: var(--ctl); }
-/* Select 与新建按钮原本各自 width:100%（280px 侧栏里的写法），并排时必须放开 */
-.source-toolbar .ui-select, .source-toolbar .source-group-select { flex: 0 0 auto; width: auto; }
-.source-toolbar .source-group-select .ui-select-trigger { min-width: 170px; }
-.source-toolbar .source-create-btn { flex: none; width: auto; margin: 0; min-height: var(--ctl); padding: 0 var(--s-4); border-radius: var(--r-1); }
-.source-toolbar .import-button { flex: none; width: auto; margin: 0; min-height: var(--ctl); padding: 0 var(--s-4); border-radius: var(--r-1); }
-.sources-page .source-sidebar { border-right: 1px solid var(--line); }
-.sources-page.no-selection .source-sidebar { border-right: 0; padding-inline: var(--gutter); }
-.sources-page.no-selection .source-toolbar { padding-inline: 0; }
-.sources-page.no-selection .source-list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
-.sources-page.no-selection .source-list button.source-list-item { border-left: 0; border-bottom: 1px solid var(--line); }
-.sources-page.no-selection .source-list-more { grid-column: 1 / -1; }
-.sources-page .source-sidebar > .sidebar-notice { margin: var(--s-2) var(--gutter) 0; }
-
-/* ③ 规则页：整页只有一行页头条，侧栏从搜索框开始 */
-.rules-page-container {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  min-height: 100dvh;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-.rules-page-container > .page-bar { grid-column: 1 / -1; }
-.rules-sidebar { height: calc(100vh - 45px); height: calc(100dvh - 45px); top: 45px; }
-.rules-content-area { padding: var(--s-4) var(--gutter) var(--s-7); min-width: 0; }
-
-/* ④ 订阅页：面板不再"卡里套卡"，标题行只留一行 */
-.subscription-panel { margin: 0; padding: var(--s-4) 0 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.subscription-panel > header { align-items: center; gap: var(--s-3); }
-.subscription-panel h2 { margin: 0; font-family: inherit; font-size: var(--t-xl); font-weight: 650; white-space: nowrap; }
-.subscription-panel > header > small { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
-.subscription-panel > header > button { flex: none; }
-.subscription-panel form { margin-top: var(--s-3); }
-.subscription-panel form input { border-radius: var(--r-1); }
-.subscription-list strong { max-width: min(640px, 100%); }
-
-/* ④ 备份页：宽屏两栏，不再一条 920px 居中列 + 两侧各空 25% */
-.backup-page {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
-  gap: var(--s-4) var(--s-5);
-  align-content: start;
-  padding: 0 var(--gutter) var(--s-7);
-}
-.backup-page > * { margin-inline: 0; width: auto; }
-/* 两栏时左栏只有一句提示，不许被行高拉成一块 660px 的空板 */
-.backup-page > .backup-panel { align-self: start; }
-.backup-page > .page-bar { grid-column: 1 / -1; margin-inline: calc(0px - var(--gutter)); padding-inline: var(--gutter); }
-.backup-panel { margin-top: 0; }
-.backup-scope > div { grid-template-columns: 96px minmax(0, 1fr); }
-
-/* 发现页的选源口跟着页头条走，不再单独占一行 */
-.explore-source-picker { margin-left: auto; flex: none; }
-.explore-source-picker .ui-select { min-width: 240px; max-width: 320px; }
-.explore-source-count { white-space: nowrap; }
-@media (max-width: 900px) {
-  .explore-source-picker { margin-left: 0; flex: 1 1 100%; }
-  .explore-source-picker .ui-select { min-width: 0; width: 100%; }
-}
-
-/* 窄一点的桌面窗口（<=1280）自动收成图标栏：208px 的文字侧栏会把书架那一档挤掉一列
-   （1180 宽实测 7 列 -> 6 列，卡片本身没变小，是轨道不够了）。图标档只有 54px，列数回来。 */
-@media (max-width: 1280px) {
-  .app-frame { --rail-w: 54px; }
-  .app-rail { padding-inline: 6px; }
-  .app-rail .app-brand strong,
-  .app-rail .rail-item-label,
-  .app-rail .rail-group-label,
-  .app-rail .rail-theme .theme-name,
-  .app-rail .menu-version span { display: none; }
-  .app-rail .rail-brand-row { flex-direction: column; }
-  .app-rail .app-brand { justify-content: center; padding: 4px 0; }
-  .app-rail .rail-item { justify-content: center; padding: 0; }
-  .app-rail .rail-themes { flex-direction: column; }
-  .app-rail .rail-foot { padding-inline: 0; }
-  .app-rail .menu-version { justify-content: center; }
-}
-/* 390 档实测横向溢出：minmax(430px,1fr) 在 390 宽的窗口里仍然要 430px，整页被撑出滚动条。 */
-.backup-page { grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr)); }
-
-/* 侧栏底部（主题档 + 版本号）在图标档 54px 里会被撑破：`0.2.0` 那个 code 加内边距
-   与描边正好比内容宽 11px，source-scale-check 在 tablet(834) 七张页面各报一条。
-   图标档把这一行收紧，并给所有子元素 min-width:0 —— 侧栏是固定宽的，宁可省略号也不许顶破。 */
-.rail-foot { min-width: 0; }
-.rail-foot > * { min-width: 0; max-width: 100%; }
-.rail-theme { min-width: 0; overflow: hidden; }
-.menu-version { min-width: 0; }
-.menu-version code { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.app-rail.collapsed .rail-theme,
-.app-frame:has(.app-rail.collapsed) .rail-theme { padding: 0 4px; }
-@media (max-width: 1280px) {
-  .app-rail .rail-theme { padding: 0 4px; }
-  .app-rail .menu-version code { padding: 1px 4px; font-size: 10px; }
-}
-
-/* =============================================================================
- * 旧顶栏外壳的样式：界面框架 v2 成为默认之后，这一套只在
- * 「自定义 → 界面布局 = 顶部导航」时出现（readerSettings.uiLayout）。
- * 保留它是有意的：两套外壳共用同一份页面内容，切布局不许少功能，也不许切过去是裸样式。
- * ========================================================================== */
-.app-page-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  height: calc(62px + var(--safe-top));
-  padding-top: var(--safe-top);
-  padding-left: max(clamp(16px, 4vw, 48px), var(--safe-left));
-  padding-right: max(clamp(16px, 4vw, 48px), var(--safe-right));
-  padding-bottom: 0;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: background-color 0.2s ease, border-color 0.2s ease;
-}
-.app-page-header nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-  /* 窄屏放不下 7 个入口时，让这一排横向滚动，而不是把每个按钮压窄、
-     导致「书架」竖着断成「书/架」两个字（用户 2026-09-30 报的导航错位）。 */
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.app-page-header nav::-webkit-scrollbar { display: none; }
-.app-page-header nav button {
-  position: relative;
-  height: 100%;
-  padding: 0 16px;
-  color: var(--muted);
-  background: transparent;
-  font-size: 14px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* 标签绝不换行、按钮绝不被压窄：宁可整排滚动，也不让两个汉字断成两行。 */
-  white-space: nowrap;
-  flex: 0 0 auto;
-  transition: color 0.15s ease;
-}
-.app-page-header nav button:hover {
-  color: var(--ink);
-}
-.app-page-header nav button.active {
-  color: var(--ink);
-  font-weight: 600;
-}
-.app-page-header nav button.active::after {
-  position: absolute;
-  right: 12px;
-  bottom: 0;
-  left: 12px;
-  height: 2.5px;
-  border-radius: 2px 2px 0 0;
-  background: var(--accent);
-  content: '';
-}
-.header-actions {
-  position: relative;
-  display: flex;
-  align-items: center;
+.changelog-source { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.changelog-source svg { width: 14px; height: 14px; }
+.changelog-source code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+@media (max-width: 640px) {
+  .changelog-page { padding: 32px 18px 44px; }
+  .customize-base-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

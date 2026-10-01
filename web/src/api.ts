@@ -282,8 +282,15 @@ export type TtsSessionChunkRequest = {
   customBody?: string
 }
 
-export type LogEntry = {
-  id: number
+/** 更新日志的一节（一个版本）。前端 `parseChangelog` 从 `CHANGELOG.md` 文本解析出来。 */
+export type ChangelogRelease = {
+  version: string
+  date: string
+  preamble: string[]
+  groups: Array<{ title: string; items: string[] }>
+}
+
+export type LogEntry = {  id: number
   timestamp: string
   category: string
   level: string
@@ -323,6 +330,12 @@ export const api = {
     return request<LogEntry[]>(`/api/logs?${q.toString()}`)
   },
   clearLogs: () => request<void>('/api/logs', { method: 'DELETE' }),
+  /** 随包发出的 CHANGELOG.md 原文（不是仓库文件路径，是打进 jar 的那一份）。 */
+  changelog: async (): Promise<string> => {
+    const res = await fetch('/api/changelog')
+    if (!res.ok) throw new Error(`更新日志读取失败（HTTP ${res.status}）`)
+    return res.text()
+  },
   shelfGroups: () => request<BookGroup[]>('/api/bookshelf/groups'),
   createShelfGroup: (name: string) => request<BookGroup>('/api/bookshelf/groups', { method: 'POST', body: JSON.stringify({ name }) }),
   removeShelfGroup: (id: number) => request<void>(`/api/bookshelf/groups/${id}`, { method: 'DELETE' }),

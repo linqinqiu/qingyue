@@ -121,12 +121,13 @@ export const SourceEditor: React.FC<{
   selected: SourceSummary | null
   /** 新建模式：左侧列表不选中任何书源，编辑器填一份空模板，保存时才落库。 */
   creating: boolean
+  summary?: { total: number; enabled: number; js: number; login: number; groups: number }
   onSaved: () => void
   onCreateCancel: () => void
   onCreated: (source: SourceSummary) => void
   onOpenLogin?: (source: SourceSummary) => void
   onOpenDebug?: (source: SourceSummary) => void
-}> = ({ selected, creating, onSaved, onCreateCancel, onCreated, onOpenLogin, onOpenDebug }) => {
+}> = ({ selected, creating, summary, onSaved, onCreateCancel, onCreated, onOpenLogin, onOpenDebug }) => {
   const [record, setRecord] = useState<SourceRecord | null>(null)
   const [text, setText] = useState('')
   const [status, setStatus] = useState('')
@@ -218,10 +219,22 @@ export const SourceEditor: React.FC<{
     }
   }
 
-  // 没选中也没在新建时不再摆一块"等待你选源"的空面板：那一整块空面板在 1440 宽下占了
-  // 屏幕右半边 60% 的面积（改版实测：书源页版面占用只有 21%）。现在列表直接铺满，
-  // 统计数字搬到页头条上。
-  if (!selected && !creating) return null
+  if (!selected && !creating) return (
+    <section className="source-editor empty-editor">
+      <Icon name="book" />
+      <h2>选择一个书源</h2>
+      <p>从左侧列表挑选书源，新建一条，或导入一个 JSON 文件。</p>
+      {summary && (
+        <dl className="source-summary">
+          <div><dt>书源</dt><dd>{summary.total}</dd></div>
+          <div><dt>已启用</dt><dd>{summary.enabled}</dd></div>
+          <div><dt>JS 书源</dt><dd>{summary.js}</dd></div>
+          <div><dt>支持登录</dt><dd>{summary.login}</dd></div>
+          <div><dt>分组</dt><dd>{summary.groups}</dd></div>
+        </dl>
+      )}
+    </section>
+  )
 
   return (
     <section className="source-editor source-editor-form">

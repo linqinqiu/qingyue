@@ -40,16 +40,23 @@ try {
     })
   })()
 
+  // 冷启动到这一屏要多久取决于机器多忙（实测 3~30 秒）。原来这里直接 querySelector 拿输入框，
+  // 没渲染出来时 `setter.call(null, …)` 抛 `Illegal invocation` 把整条门禁带走 ——
+  // 先等元素出现，等不到就明说，别让探针的时序冒充产品缺陷。
+  await page.waitForSelector('.library-hero form input', { timeout: 60000 }).catch(() => null)
   await page.evaluate(() => {
     [...document.querySelectorAll('.library-scope-modes button')].find(node => node.textContent?.includes('全部书源'))?.click()
   })
-  await page.evaluate(() => {
-    const input = document.querySelector('.library-search input')
+  const typed = await page.evaluate(() => {
+    const input = document.querySelector('.library-hero form input')
+    if (!input) return false
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
     setter.call(input, '我的')
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.closest('form')?.requestSubmit()
+    return true
   })
+  if (!typed) throw new Error('60 秒内没等到书库搜索框（.library-hero form input），这一屏没法继续')
 
   /**
    * 挑一本"多路源都返回了"的书开弹窗。
@@ -80,7 +87,7 @@ try {
     note('搜到结果卡片', `全库搜「${KEYWORD}」90 秒内没出卡片，弹窗无法验证`)
   } else {
     await page.evaluate(() => {
-      [...document.querySelectorAll('.library-search button')].find(node => node.textContent?.includes('停止'))?.click()
+      [...document.querySelectorAll('.library-hero form button')].find(node => node.textContent?.includes('停止'))?.click()
     })
     await sleep(800)
 

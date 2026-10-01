@@ -42,6 +42,28 @@ test('syncErrors - 连不上、超时、证书各自有结论', () => {
   assert.equal(describeSyncError('javax.net.ssl.SSLHandshakeException: Remote host closed connection').headline, 'HTTPS 证书握手失败')
 })
 
+/**
+ * 「握手上了但请求被中途掐断」不是"连不上"，也不是超时：这台机器上实测到的签名是
+ * JDK 的 `Connection reset`（2026-10-01 订阅探针同步失败那一行就是它），Windows 那侧另有中文说法。
+ * 补之前界面上糊的是英文原文，用户读不出下一步 —— 判据在 `tools/verify/subscription-check.mjs`
+ * 里要求"说清原因"，那条当时红的是产品，不是探针。
+ */
+test('syncErrors - 连接被中途断开单独有一句结论（不糊英文原文，也不误并报成证书问题）', () => {
+  for (const raw of [
+    'java.net.SocketException: Connection reset',
+    'Connection reset by peer',
+    'java.io.IOException: 远程主机强迫关闭了一个现有的连接。',
+  ]) {
+    const info = describeSyncError(raw)
+    assert.equal(info.recognized, true, `这条必须认得：${raw}`)
+    assert.ok(info.headline.startsWith('连不上'), `结论要落在"连不上"这一类：${info.headline}`)
+    assert.ok(info.headline.includes('中途'), `要说清是中途断的，不是端口不通：${info.headline}`)
+    assert.ok(info.hint.includes('代理') || info.hint.includes('反爬'), `提示要给出可照做的原因：${info.hint}`)
+    assert.ok(!/[A-Za-z]{8,}/.test(info.headline), `结论里不许残留英文异常名：${info.headline}`)
+  }
+  assert.equal(looksLikeFailure('java.net.SocketException: Connection reset'), true)
+})
+
 test('syncErrors - 认不出的原文不硬编结论，首行原样当结论', () => {
   const raw = '某种没见过的失败\n第二行不会被显示'
   const info = describeSyncError(raw)

@@ -7,14 +7,17 @@ import { ContextMenuLayer, showContextMenu } from './ContextMenu'
 import { readShelfLayout, readShelfSort, ShelfLayout, ShelfSort, writeShelfLayout, writeShelfSort } from './shelfLayout'
 import { Logo } from './Logo'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
-import { loadReaderSettings, ReaderSettings, saveReaderSettings } from './readerSettings'
-import { AppRail } from './AppRail'
+import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
+import { AppHeader } from './AppHeader'
+import { ChangelogPage } from './ChangelogPage'
+import { CustomizeModal } from './CustomizeModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, SearchFilters, SearchGroup, SortMode } from './searchFilters'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { SourceLoginModal } from './SourceLoginModal'
 import { SourceDebugModal } from './SourceDebugModal'
 import { SourceShareModal } from './SourceShareModal'
+import { ReplaceRulesModal } from './ReplaceRulesModal'
 import { ReplaceRulesPage } from './ReplaceRulesPage'
 import { ExplorePage } from './ExplorePage'
 import { RssPanel } from './RssPanel'
@@ -54,9 +57,40 @@ const splitSourceGroups = (raw?: string) =>
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 
-type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup'
+type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog'
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : 'library'
+const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : 'library'
+
+/**
+ * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
+ *
+ * 用 `document.createElement('style')` + `textContent` 而不是 `dangerouslySetInnerHTML`：
+ * 用户写的 CSS 里出现 `</style>` 也不会拼出新标签（textContent 不走 HTML 解析）。
+ * 规则按用户写的样子挂上去（要求他自己写 `.theme-<id> { … }` 这种完整选择器），
+ * 因为把用户输入包进 `.theme-x{…}` 会依赖 CSS 嵌套语法，老浏览器上一条都不生效。
+ * id 过一遍白名单（`parseSkinId`），只允许 `[a-z0-9-_]`。
+ */
+function SkinStyle({ settings }: { settings: ReaderSettings }) {
+  const id = parseSkinId(settings.customSkinId)
+  const css = (settings.customSkinCss ?? '').trim()
+  useEffect(() => {
+    const marker = 'legado-custom-skin'
+    const existing = document.getElementById(marker)
+    if (!id || !css) {
+      existing?.remove()
+      return
+    }
+    let el = existing as HTMLStyleElement | null
+    if (!el) {
+      el = document.createElement('style')
+      el.id = marker
+      document.head.appendChild(el)
+    }
+    el.textContent = css
+    return () => { document.getElementById(marker)?.remove() }
+  }, [id, css])
+  return null
+}
 
 /**
  * 「在书源页中定位」的握手变量。
@@ -706,10 +740,11 @@ function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
   return (
     <section className="subscription-panel">
       <header>
-        <h2>书源订阅地址</h2>
-        <small title="放的是返回书源 JSON 的直链（Legado「书源管理 · 订阅」里那种链接），不是网页地址。每 6 小时自动同步一次，同一地址的书源会整体覆盖更新。">
-          填返回书源 JSON 的直链 · 每 6 小时自动同步
-        </small>
+        <div>
+          <span className="section-kicker">同步远程书源</span>
+          <h2>书源订阅地址</h2>
+          <p>放的是<b>返回书源 JSON 的直链</b>（Legado「书源管理 · 订阅」里那种链接），不是网页地址。每 6 小时自动同步一次，同一地址的书源会整体覆盖更新。</p>
+        </div>
         <button className="subtle-button" onClick={() => void updateAll()} disabled={busy !== null || items.length === 0}>
           {busy === 'all' ? '同步中...' : '全部同步'}
         </button>
@@ -800,17 +835,21 @@ function SubscriptionPage({ onSourcesChange, onNavigate }: { onSourcesChange: ()
 
   return (
     <main className="subscription-page">
-      <header className="page-bar">
-        <h1>订阅</h1>
-        <nav className="subscription-tabs" aria-label="订阅类型">
-          <button type="button" className={tab === 'sources' ? 'active' : ''} onClick={() => setTab('sources')}>
-            书源订阅{counts.sources !== null && <small>{counts.sources}</small>}
-          </button>
-          <button type="button" className={tab === 'rss' ? 'active' : ''} onClick={() => setTab('rss')}>
-            RSS 订阅{counts.rss !== null && <small>{counts.rss}</small>}
-          </button>
-        </nav>
+      <header className="page-title">
+        <div>
+          <span className="section-kicker">两类订阅</span>
+          <h1>订阅</h1>
+          <p>「书源订阅」同步远程书源列表；「RSS 订阅」是「订阅」页那些源，导入备份包后会出现在那里。</p>
+        </div>
       </header>
+      <nav className="subscription-tabs" aria-label="订阅类型">
+        <button type="button" className={tab === 'sources' ? 'active' : ''} onClick={() => setTab('sources')}>
+          书源订阅{counts.sources !== null && <small>{counts.sources}</small>}
+        </button>
+        <button type="button" className={tab === 'rss' ? 'active' : ''} onClick={() => setTab('rss')}>
+          RSS 订阅{counts.rss !== null && <small>{counts.rss}</small>}
+        </button>
+      </nav>
       {tab === 'sources'
         ? <SubscriptionPanel onSourcesChange={onSourcesChange} onChanged={refresh} onNavigate={onNavigate} />
         : <RssPanel onChanged={refresh} onNavigate={onNavigate} />}
@@ -1101,45 +1140,38 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   }
 
   return (
-    <main className={`sources-page ${isBatchMode ? 'batch-mode-active' : ''}${selected || creating ? '' : ' no-selection'}`}>
-      <header className="page-bar">
-        <h1>书源</h1>
-        <span className="page-bar-meta">
-          启用 {sourceStats.enabled} / {sourceStats.total} · {sourceStats.groups} 个分组 · {sourceStats.login} 个支持登录
-          {sourceStats.js > 0 ? ` · ${sourceStats.js} 个 JS 源` : ''}
-        </span>
-        <div className="page-bar-actions">
-          <button
-            type="button"
-            className="subtle-button icon-button health-probe-btn"
-            title="批量联网体检：每个源拿关键词试搜一次，只看能不能出条目。想先确认 JSON 写没写坏用编辑器里的「校验」（不联网），要看搜索→详情→目录→正文每一步用「调试」。"
-            onClick={() => setShowHealthModal(true)}
-          >
-            <Icon name="activity" />
-            <span>体检</span>
-          </button>
-          <button
-            type="button"
-            className={`subtle-button ${isBatchMode ? 'active-batch-btn' : ''}`}
-            onClick={() => {
-              setIsBatchMode(prev => !prev)
-              setSelectedIds(new Set())
-            }}
-          >
-            {isBatchMode ? '退出批量' : '批量管理'}
-          </button>
-          {selected && (
-            <button type="button" className="danger-button" onClick={() => void remove()}>
-              删除书源
-            </button>
-          )}
-        </div>
-      </header>
+    <main className={`sources-page ${isBatchMode ? 'batch-mode-active' : ''}`}>
       <aside className="source-sidebar">
-        {/* 筛选与两个入口排成一行工具条：280px 侧栏里自动折成两行，
-            没选中书源时侧栏铺满整宽，它们就并成一行，不再各占一整条 1400px。 */}
-        <div className="source-toolbar">
-          {allGroups.length > 0 && (
+        <div className="source-sidebar-heading">
+          <div className="source-sidebar-title-row">
+            <span>书源</span>
+            <small>{sources.length}</small>
+          </div>
+          <div className="source-sidebar-top-actions">
+            <button
+              type="button"
+              className="subtle-button icon-button health-probe-btn"
+              title="批量联网体检：每个源拿关键词试搜一次，只看能不能出条目。想先确认 JSON 写没写坏用编辑器里的「校验」（不联网），要看搜索→详情→目录→正文每一步用「调试」。"
+              onClick={() => setShowHealthModal(true)}
+            >
+              <Icon name="activity" />
+              <span>体检</span>
+            </button>
+            <button
+              type="button"
+              className={`subtle-button ${isBatchMode ? 'active-batch-btn' : ''}`}
+              onClick={() => {
+                setIsBatchMode(prev => !prev)
+                setSelectedIds(new Set())
+              }}
+            >
+              {isBatchMode ? '退出批量' : '批量管理'}
+            </button>
+          </div>
+        </div>
+
+        {allGroups.length > 0 && (
+          <div className="source-group-filter-bar">
             <Select
               className="source-group-select"
               ariaLabel="按分组筛选书源"
@@ -1151,37 +1183,37 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                 { value: '__none__', label: `未分组 (${groupStats.ungrouped})` },
               ]}
             />
-          )}
-
-          <div className="source-filter">
-            <Icon name="search" />
-            <input placeholder="筛选书源" value={query} onChange={event => setQuery(event.target.value)} />
           </div>
+        )}
 
-          <button
-            type="button"
-            className="primary-button source-create-btn"
-            onClick={() => { setCreating(true); onSelect(null) }}
-          >
-            <Icon name="plus" />
-            新建书源
-          </button>
-
-          <label className={`import-button ${importing ? 'disabled' : ''}`}>
-            <Icon name="upload" />
-            {importing ? '导入中...' : '导入 JSON'}
-            <input
-              type="file"
-              accept="application/json,.json,text/plain,.txt,*"
-              disabled={importing}
-              onChange={event => {
-                const file = event.target.files?.[0]
-                event.target.value = ''
-                void importSources(file)
-              }}
-            />
-          </label>
+        <div className="source-filter">
+          <Icon name="search" />
+          <input placeholder="筛选书源" value={query} onChange={event => setQuery(event.target.value)} />
         </div>
+
+        <button
+          type="button"
+          className="primary-button source-create-btn"
+          onClick={() => { setCreating(true); onSelect(null) }}
+        >
+          <Icon name="plus" />
+          新建书源
+        </button>
+
+        <label className={`import-button ${importing ? 'disabled' : ''}`}>
+          <Icon name="upload" />
+          {importing ? '导入中...' : '导入 JSON'}
+          <input
+            type="file"
+            accept="application/json,.json,text/plain,.txt,*"
+            disabled={importing}
+            onChange={event => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              void importSources(file)
+            }}
+          />
+        </label>
 
         {notice && <p className="sidebar-notice">{notice}</p>}
 
@@ -1265,9 +1297,24 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
       </aside>
 
       <section className="sources-content">
+        <header className="page-title">
+          <div>
+            <span className="section-kicker">青阅</span>
+            <h1>书源管理</h1>
+            <p>导入、校验与维护你的阅读来源。</p>
+          </div>
+          <div className="page-title-actions">
+            {selected && (
+              <button type="button" className="danger-button" onClick={() => void remove()}>
+                删除书源
+              </button>
+            )}
+          </div>
+        </header>
         <SourceEditor
           selected={selected}
           creating={creating}
+          summary={sourceStats}
           onSaved={() => void load()}
           onCreateCancel={() => setCreating(false)}
           onCreated={source => {
@@ -1455,20 +1502,13 @@ const writeSearchHistory = (list: string[]): void => {
   }
 }
 
-function LibraryPage({ sources, onSourcesChanged, onOpen, onResume }: { sources: SourceSummary[]; onSourcesChanged: () => void; onOpen: (book: OpenBook, index: number) => void; onResume: (item: BookshelfItem) => void }) {
+function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSummary[]; onSourcesChanged: () => void; onOpen: (book: OpenBook, index: number) => void }) {
   const search = useSearchStore()
   const [scopeMode, setScopeMode] = useState<'all' | 'group' | 'single'>('all')
   const [scopeGroup, setScopeGroup] = useState('')
   const [includeDisabledSources, setIncludeDisabledSources] = useState(false)
   const enabledSourceCount = useMemo(() => sources.filter(source => source.enabled).length, [sources])
   const [history, setHistory] = useState<string[]>(readSearchHistory)
-  /** 空搜索时这一屏给"接着读"，不再给三张介绍别的页面的卡片。只在没结果时才去书架取。 */
-  const [resume, setResume] = useState<BookshelfItem[]>([])
-  useEffect(() => {
-    void api.bookshelf()
-      .then(list => setResume([...list].sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0)).slice(0, 12)))
-      .catch(() => undefined)
-  }, [])
   const recordHistory = (keyword: string) => {
     const kw = keyword.trim()
     if (!kw) return
@@ -1533,80 +1573,43 @@ function LibraryPage({ sources, onSourcesChanged, onOpen, onResume }: { sources:
 
   return (
     <main className="library-page">
-      <header className="page-bar">
-        <h1>书库</h1>
-        <span className="page-bar-meta">{sources.length} 个书源 · {enabledSourceCount} 个启用</span>
-      </header>
-
-      <form className="library-search" onSubmit={handleSearch}>
-        <Icon name="search" />
-        <input
-          value={search.keyword}
-          onChange={event => search.setKeyword(event.target.value)}
-          placeholder="输入书名或作者"
-          aria-label="书名或作者"
-        />
-        {search.loading ? (
-          <button
-            key="stop-search-btn"
-            type="button"
-            className="primary-button"
-            onClick={e => {
-              e.preventDefault()
-              e.stopPropagation()
-              search.stopSearch()
-            }}
-          >
-            停止搜索
-          </button>
-        ) : (
-          <button
-            key="start-search-btn"
-            type="submit"
-            className="primary-button"
-          >
-            搜索
-          </button>
-        )}
-      </form>
-
-      <div className="library-scope">
-        <div className="library-scope-modes" role="group" aria-label="搜索范围">
-          {([['all', '全部书源'], ['group', '按分组'], ['single', '指定书源']] as const).map(([key, label]) => (
-            <button key={key} type="button" className={scopeMode === key ? 'active' : ''} onClick={() => setScopeMode(key)}>{label}</button>
-          ))}
-        </div>
-        {scopeMode === 'group' && (
-          <Select
-            ariaLabel="按分组搜索"
-            placeholder="选择分组"
-            value={scopeGroup}
-            onChange={setScopeGroup}
-            options={groupOptions.map(item => ({ value: item.name, label: item.name, hint: `可搜 ${item.ready} / 共 ${item.total}` }))}
+      <section className="library-hero">
+        <span className="section-kicker">在线书库</span>
+        <h1>找一本书，安静地读下去。</h1>
+        <p>从已配置的书源搜索并继续上次阅读。</p>
+        <form onSubmit={handleSearch}>
+          <Icon name="search" />
+          <input
+            value={search.keyword}
+            onChange={event => search.setKeyword(event.target.value)}
+            placeholder="输入书名或作者"
           />
-        )}
-        {scopeMode === 'single' && (
-          <>
-            <Select
-              ariaLabel="指定书源搜索"
-              placeholder={sources.length ? '选择书源' : '书源还在载入'}
-              value={search.selectedSourceId}
-              onChange={search.setSelectedSourceId}
-              options={sourcePickerOptions(sources, includeDisabledSources)}
-            />
-            {/* 默认只列启用中的：停用的源选了必然搜不到，那正是"这个功能不能正常使用"的来源。
-                一个停用源都没有时这条勾不出现 —— 留着它只是让人去勾一个括号里写 0 的开关。 */}
-            {disabledSourceCount > 0 && (
-              <label className="library-scope-toggle">
-                <input type="checkbox" checked={includeDisabledSources} onChange={event => setIncludeDisabledSources(event.target.checked)} />
-                含已停用（{disabledSourceCount}）
-              </label>
-            )}
-          </>
-        )}
-        <small className="library-scope-hint">{scopeHint}</small>
+          {search.loading ? (
+            <button
+              key="stop-search-btn"
+              type="button"
+              className="primary-button"
+              onClick={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                search.stopSearch()
+              }}
+            >
+              停止搜索
+            </button>
+          ) : (
+            <button
+              key="start-search-btn"
+              type="submit"
+              className="primary-button"
+            >
+              搜索
+            </button>
+          )}
+        </form>
         {history.length > 0 && (
           <div className="library-history" role="group" aria-label="最近搜索">
+            <span className="library-history-label">最近搜索</span>
             <div className="library-history-chips">
               {history.map(item => (
                 <button
@@ -1622,51 +1625,76 @@ function LibraryPage({ sources, onSourcesChanged, onOpen, onResume }: { sources:
             </div>
           </div>
         )}
-      </div>
-
-      {/*
-        搜完 0 本时原来什么都不说：状态行只在 loading/stopped 时渲染，于是这一屏直接退回
-        "继续阅读"那排卡片，用户看到的是"页面空白了一下然后什么都没发生"（用户 2026-10-01
-        「指定源搜索还没做好」的另一半）。搜过就得给结论：查了几个源、命中几本、失败/无结果各几个，
-        并给下一步（换源或改词）。role=status 让读屏也会念出来。
-      */}
-      {(search.loading || search.stopped || (search.progress !== null && groups.length === 0)) && (
-        <p className="library-search-status" role="status">
-          {search.stopped
-            ? `已停止，已获得 ${groups.length} 本书。`
-            : search.loading
-              ? `已获得 ${groups.length} 本书，已检查 ${completed} / ${total} 个书源${failures || empty ? `，失败 ${failures} 个、无结果 ${empty} 个` : ''}。`
-              : `搜完了：检查 ${completed} / ${total} 个书源，命中 ${search.progress?.matchedSources ?? 0} 本${failures || empty ? `（失败 ${failures} 个、无结果 ${empty} 个）` : ''}。${scopeMode === 'single' ? '这个源没返回这本书，换个书源或改个关键词再搜。' : '没有一本书命中，换个关键词、换一组书源，或改用「全部书源」再搜。'}`}
-        </p>
-      )}
-
-      {/*
-        没在搜的时候这一屏原本是三张"介绍别的页面"的卡片（书架/发现/书源各一句说明），
-        在 1440×900 下页面下方 47% 是空的。换成真正接着读的东西：本机最近读过的前若干本。
-      */}
-      {groups.length === 0 && !search.loading && (
-        <section className="library-resume" aria-label="继续阅读">
-          {resume.length > 0 && <h2>继续阅读</h2>}
-          <div className="resume-grid">
-            {resume.map(item => (
-              <button
-                key={`${item.sourceId}::${item.bookUrl}`}
-                type="button"
-                className="resume-card"
-                onClick={() => onResume(item)}
-                aria-label={`继续阅读《${item.name}》`}
-              >
-                <BookCover coverKey={item.coverKey} name={item.name} author={item.author} />
-                <strong title={item.name}>{item.name}</strong>
-                <small>{item.completed ? '已读完' : item.chapterIndex !== undefined ? `读到第 ${item.chapterIndex + 1} 章` : (item.author || '未知作者')}</small>
-              </button>
+        <div className="library-scope">
+          <span className="library-scope-label">搜索范围</span>
+          <div className="library-scope-modes" role="group" aria-label="搜索范围">
+            {([['all', '全部书源'], ['group', '按分组'], ['single', '指定书源']] as const).map(([key, label]) => (
+              <button key={key} type="button" className={scopeMode === key ? 'active' : ''} onClick={() => setScopeMode(key)}>{label}</button>
             ))}
           </div>
-          {resume.length === 0 && (
-            <p className="library-resume-empty">
-              还没开始读。搜一本，或去「书架」拖入本地 TXT / EPUB。
-            </p>
+          {scopeMode === 'group' && (
+            <Select
+              ariaLabel="按分组搜索"
+              placeholder="选择分组"
+              value={scopeGroup}
+              onChange={setScopeGroup}
+              options={groupOptions.map(item => ({ value: item.name, label: item.name, hint: `可搜 ${item.ready} / 共 ${item.total}` }))}
+            />
           )}
+          {scopeMode === 'single' && (
+            <>
+              <Select
+                ariaLabel="指定书源搜索"
+                placeholder={sources.length ? '选择书源' : '书源还在载入'}
+                value={search.selectedSourceId}
+                onChange={search.setSelectedSourceId}
+                options={sourcePickerOptions(sources, includeDisabledSources)}
+              />
+              {/* 默认只列启用中的：停用的源选了必然搜不到，那正是"这个功能不能正常使用"的来源。
+                  一个停用源都没有时这条勾不出现 —— 留着它只是让人去勾一个括号里写 0 的开关。 */}
+              {disabledSourceCount > 0 && (
+                <label className="library-scope-toggle">
+                  <input type="checkbox" checked={includeDisabledSources} onChange={event => setIncludeDisabledSources(event.target.checked)} />
+                  含已停用（{disabledSourceCount}）
+                </label>
+              )}
+            </>
+          )}
+          <small className="library-scope-hint">{scopeHint}</small>
+        </div>
+        {/*
+          搜完了但一本都没命中时也必须给一句结论。原来这一行只在 loading/stopped 时渲染，
+          搜完空结果就整行消失、这一屏退回「快速入口」，用户看不出刚才发生过搜索
+          （用户 2026-10-01：「指定源搜索还没做好」里就有这一半）。
+        */}
+        {(search.loading || search.stopped || (search.progress !== null && groups.length === 0)) && (
+          <p className="library-search-status" role="status">
+            {search.stopped
+              ? `已停止，已获得 ${groups.length} 本书。`
+              : search.loading
+                ? `已获得 ${groups.length} 本书，已检查 ${completed} / ${total} 个书源${failures || empty ? `，失败 ${failures} 个、无结果 ${empty} 个` : ''}…`
+                : `搜完了：检查 ${completed} / ${total} 个书源，命中 ${search.progress?.matchedSources ?? 0} 本`
+                  + `${failures || empty ? `（失败 ${failures} · 无结果 ${empty}）` : ''}。`
+                  + (scopeMode === 'single'
+                    ? '这个源没返回这本书，换个书源或改个关键词再搜。'
+                    : '没有一本书命中，换个关键词、换一组书源，或改用「全部书源」再搜。')}
+          </p>
+        )}
+      </section>
+      {groups.length === 0 && !search.loading && (
+        <section className="library-idle" aria-label="快速入口">
+          <a href="#shelf">
+            <strong><Icon name="bookmark" /> 书架</strong>
+            <small>接着上次没读完的地方读，也可以拖入本地 TXT / EPUB。</small>
+          </a>
+          <a href="#explore">
+            <strong><Icon name="activity" /> 发现</strong>
+            <small>读读书源自带的榜单与分类分栏，挑一本新的。</small>
+          </a>
+          <a href="#sources">
+            <strong><Icon name="list" /> 书源</strong>
+            <small>当前接入 {sources.length} 个书源，可导入、体检和逐阶段调试。</small>
+          </a>
         </section>
       )}
       {search.message && <p className="form-error library-message">{search.message}</p>}
@@ -2464,9 +2492,8 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
         }
       }}
     >
-      <header className="page-bar">
-        <h1>书架</h1>
-        <span className="page-bar-meta">{counts.all} 本 · 在读 {counts.reading} · 已读完 {counts.completed}</span>
+      <header className="shelf-bar">
+        <h1>书架<small>{counts.all} 本</small></h1>
         <div className="shelf-header-actions">
           <input
             ref={fileInputRef}
@@ -2896,28 +2923,35 @@ function App() {
   /** 自增一下就能重跑探活（"重试"按钮）。 */
   const [probe, setProbe] = useState(0)
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings)
-  // 系统标题栏/状态栏颜色跟随主题：装成 PWA 或手机全屏时，原来固定成深色的那条边在浅色界面下很突兀。
-  useEffect(() => {
-    // 内置三套的标题栏色；自定义皮肤(其它 id)取不到就走中性回退——皮肤本身仍由 .theme-<id> CSS 生效。
-    const THEME_CANVAS: Record<string, string> = { light: '#f8f9f7', paper: '#eef3e7', dark: '#202522' }
-    const canvas = THEME_CANVAS[settings.theme] ?? '#f8f9f7'
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
-  }, [settings.theme])
   /**
-   * 主题**同时挂到 `<html>`**，不只挂在 `.app-shell` 上。
-   * 起因是用户 2026-10-01：「指定源搜索还没做好，夜读模式下你看看」——
-   * `Select` 的下拉浮层是 `createPortal(…, document.body)`（必须如此：书架/订阅各有自己的
-   * 滚动容器与边框，绝对定位会被祖先裁掉），而 `--surface`/`--ink`/`--line` 这些变量
-   * 只定义在 `.theme-*` 上、`.theme-*` 只在 app shell 那一层 → **portal 出来的浮层一个变量都拿不到**。
-   * 浅色模式下页面底色本来就浅，只是描边和选中态发虚，看不太出来；
-   * 夜读模式下整块菜单就变成"透明板 + 深色字压在深色页上"，也就是用户说的"没做好"。
+   * 当前要挂在根上的皮肤类名（自定义皮肤是**叠**在内置皮肤上的，所以可能有两个类；
+   * 理由见 `readerSettings.themeClassNames`）。收成一份，effect 与各处外壳同引，
+   * 免得某一处忘了跟着改而少挂基类。
+   */
+  const skinClasses = themeClassNames(settings).join(' ')
+  /**
+   * 皮肤类**同时挂到 `<html>`**，不只挂在 `.app-shell` 上。
+   * 起因是用户 2026-10-01：「指定源搜索还没做好，你看看在夜读模式下」——
+   * `Select` 的下拉浮层是 `createPortal(…, document.body)`（必须如此：书架/订阅各有各的
+   * 滚动容器与边框，绝对定位会被祖先裁掉），而 `--surface`/`--ink`/`--line` 这些变量原本只定义在
+   * `.theme-*` 上、`.theme-*` 只在应用外壳那一层 → **portal 出来的浮层一个变量都拿不到**：
+   * 实测菜单底色 `rgba(0,0,0,0)`、文字 `rgb(0,0,0)`。浅色模式只是描边发虚所以藏了很久。
    */
   useEffect(() => {
     const root = document.documentElement
     const stale = [...root.classList].filter(name => name.startsWith('theme-'))
     if (stale.length) root.classList.remove(...stale)
-    root.classList.add(`theme-${settings.theme}`)
-  }, [settings.theme])
+    root.classList.add(...themeClassNames(settings))
+  }, [skinClasses])
+  /**
+   * 系统标题栏/状态栏那条边跟着皮肤走。取的是 `<html>` 上**算出来**的 `--canvas`，
+   * 不是前端写死的三档色表 —— 自定义皮肤（叠在某一档之上的那一套）只有这样才取得到。
+   * 声明顺序要紧：它必须排在上面挂类的那个 effect 之后，否则读到的是上一个皮肤的值。
+   */
+  useEffect(() => {
+    const canvas = getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim()
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas || '#f8f9f7')
+  }, [skinClasses])
   const [page, setPage] = useState<Page>(pageFromHash)
   const [readerReturnPage, setReaderReturnPage] = useState<Page>('shelf')
   const [sources, setSources] = useState<SourceSummary[]>([])
@@ -2931,8 +2965,11 @@ function App() {
       return null
     }
   })
+  const [showReplaceRules, setShowReplaceRules] = useState(false)
   const [showOfflineCache, setShowOfflineCache] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
+  /** 「自定义」弹窗：只有皮肤那一档（界面布局随 v2 一起撤掉了）。 */
+  const [showCustomize, setShowCustomize] = useState(false)
   /** 发现页点中的书：先进详情弹窗（与搜索页同一套），点「开始阅读」才进阅读器。 */
   const [explorePick, setExplorePick] = useState<{ result: SearchResult; book: OpenBook } | null>(null)
   const search = useSearchStore()
@@ -3068,10 +3105,10 @@ function App() {
     }
   }
 
-  if (!ready) return <main className={`app-loading theme-${settings.theme}`}><span>正在打开阅读空间...</span></main>
+  if (!ready) return <main className={`app-loading ${skinClasses}`}><span>正在打开阅读空间...</span></main>
   if (serviceUnreachable) {
     return (
-      <main className={`app-shell theme-${settings.theme}`}>
+      <main className={`app-shell ${skinClasses}`}>
         <ToastContainer />
         <PwaManager />
         <section className="app-unreachable">
@@ -3090,7 +3127,7 @@ function App() {
 
   if (page === 'reader' && reader) {
     return (
-      <div className={`app-shell theme-${settings.theme}`}>
+      <div className={`app-shell ${skinClasses}`}>
         <ToastContainer />
         <ReaderScreen
           openBook={reader.book}
@@ -3108,37 +3145,41 @@ function App() {
   }
 
   return (
-    <div className={`app-frame theme-${settings.theme}`}>
+    <div className={`app-shell ${skinClasses}`}>
+      <SkinStyle settings={settings} />
       <ToastContainer />
       <ContextMenuLayer />
       <PwaManager />
-      <AppRail
+      <AppHeader
         page={page}
         settings={settings}
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
+        onOpenReplaceRules={() => setShowReplaceRules(true)}
         onOpenOfflineCache={() => setShowOfflineCache(true)}
         onOpenLogs={() => setShowLogs(true)}
+        onOpenChangelog={() => navigate('changelog')}
+        onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
       />
-      <div className="app-workspace">
-        {page === 'sources' ? (
-          <SourcesPage selected={selected} onSelect={setSelected} onSourcesChange={setSources} />
-        ) : page === 'subscriptions' ? (
-          <SubscriptionPage onSourcesChange={refreshSources} onNavigate={navigate} />
-        ) : page === 'rules' ? (
-          <ReplaceRulesPage />
-        ) : page === 'backup' ? (
-          <BackupPage />
-        ) : page === 'shelf' ? (
-          <ShelfPage sources={sources} onOpen={item => void openShelfItem(item)} />
-        ) : page === 'explore' ? (
-          <ExplorePage onOpen={openExploreDetail} />
-        ) : (
-          <LibraryPage sources={sources} onSourcesChanged={refreshSources} onOpen={(book, index) => openReader(book, index, 'library')} onResume={item => void openShelfItem(item)} />
-        )}
-      </div>
+      {page === 'sources' ? (
+        <SourcesPage selected={selected} onSelect={setSelected} onSourcesChange={setSources} />
+      ) : page === 'subscriptions' ? (
+        <SubscriptionPage onSourcesChange={refreshSources} onNavigate={navigate} />
+      ) : page === 'rules' ? (
+        <ReplaceRulesPage />
+      ) : page === 'backup' ? (
+        <BackupPage />
+      ) : page === 'changelog' ? (
+        <ChangelogPage serverVersion={serverVersion} />
+      ) : page === 'shelf' ? (
+        <ShelfPage sources={sources} onOpen={item => void openShelfItem(item)} />
+      ) : page === 'explore' ? (
+        <ExplorePage onOpen={openExploreDetail} />
+      ) : (
+        <LibraryPage sources={sources} onSourcesChanged={refreshSources} onOpen={(book, index) => openReader(book, index, 'library')} />
+      )}
       {explorePick && page === 'explore' && (
         <BookDetailModal
           book={explorePick.book}
@@ -3155,11 +3196,18 @@ function App() {
           onClose={() => setExplorePick(null)}
         />
       )}
+      <ReplaceRulesModal
+        isOpen={showReplaceRules}
+        onClose={() => setShowReplaceRules(false)}
+      />
       {showOfflineCache && (
         <OfflineCacheModal onClose={() => setShowOfflineCache(false)} />
       )}
       {showLogs && (
         <LogsModal onClose={() => setShowLogs(false)} />
+      )}
+      {showCustomize && (
+        <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setShowCustomize(false)} />
       )}
     </div>
   )

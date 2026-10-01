@@ -162,8 +162,8 @@ try {
   await sleep(400)
   const chosen = await page.evaluate(() => document.querySelector('.ui-select-trigger .ui-select-value')?.textContent?.trim() ?? '')
   check('点选项后触发按钮回显所选书源', chosen.length > 0 && (!enabledName || chosen === enabledName), chosen)
-  await typeInto(page, '.library-search input', '我的')
-  await page.evaluate(() => document.querySelector('.library-search')?.requestSubmit())
+  await typeInto(page, '.library-hero form input', '我的')
+  await page.evaluate(() => document.querySelector('.library-hero form')?.requestSubmit())
   await sleep(4000)
   const searchState = await page.evaluate(() => ({
     status: document.querySelector('.library-search-status')?.textContent?.trim() ?? '',
@@ -300,8 +300,8 @@ try {
   await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded' })
   await sleep(1500)
   await clickByText(page, '.library-scope-modes button', '全部书源')
-  await typeInto(page, '.library-search input', '我的')
-  await page.evaluate(() => document.querySelector('.library-search')?.requestSubmit())
+  await typeInto(page, '.library-hero form input', '我的')
+  await page.evaluate(() => document.querySelector('.library-hero form')?.requestSubmit())
   await sleep(18000)
   const toc = await openBookWithChapters()
   if (toc) {

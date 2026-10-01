@@ -50,6 +50,17 @@ export function describeSyncError(raw: string): SyncErrorInfo {
   if (lower.includes('failed to connect') || lower.includes('connectexception') || lower.includes('connection refused')) {
     return { headline: '连不上这台站点', hint: '端口不通或对方拒绝连接：确认地址能在本机浏览器直接打开。', recognized: true }
   }
+  /*
+    「连接刚建立就被掐断」与"连不上"是两件事：这条通常已经握上了手，是对方（或本机代理/防火墙）
+    中途把它撕掉。Windows 与 JDK 的说法都不止一种，英文原文糊在页面上用户读不出下一步，
+    所以按签名收进同一句结论，原文照旧留在「原始报错」里。
+    （2026-10-01 本机订阅探针实测到的就是 `Connection reset`：判据要求"说清原因"，
+    而这一类当时确实没人翻译 —— 补的是产品，不是判据。）
+  */
+  if (lower.includes('connection reset') || lower.includes('connection aborted') || lower.includes('broken pipe')
+    || lower.includes('现有连接') || lower.includes('强迫关闭') || lower.includes('software caused connections')) {
+    return { headline: '连不上：连接被对方中途断开', hint: '握手成功但请求被掐断，常见原因是站点反爬、本机代理或防火墙切了这条连接；换个时间再点「立即同步」，或换一个直链。', recognized: true }
+  }
   if (lower.includes('timeout') || lower.includes('timed out')) {
     return { headline: '请求超时', hint: '30 秒内没有响应，站点可能限流或已经没人维护。', recognized: true }
   }

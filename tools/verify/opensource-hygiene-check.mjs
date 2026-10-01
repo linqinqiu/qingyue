@@ -68,13 +68,16 @@ const rules = [
     pattern: /\/webdav|WebDav|webdav/,
     // 归档文档与"已删除"的说明允许提到它；这里只扫代码/配置/部署面
     only: /(\.kt|\.ts|\.tsx|\.mjs|\.py|\.yml|\.yaml|\.json|Dockerfile.*|\.env.*)$/,
-    // 门禁自己的匹配串 + 三个"负向测试"脚本（正是用字符串断言 webdav 端点已 404）按设计就该出现该词，跳过它们
+    // 门禁自己的匹配串 + 四个"负向测试"（正是用字符串断言 webdav 端点/页面已不存在）按设计就该出现该词，跳过它们。
+    // backup-page.test.ts 是 2026-10-01 这轮进来的：它断言的是"页面上不许再出现 WebDAV 字样"，
+    // 于是它自己命中了这条扫描 —— 判据扫到的是**守卫的文本**，不是残留的功能（AGENTS §3：先问是判据旧了还是产品坏了）。
     exempt: [
       'tools/verify/opensource-hygiene-check.mjs',
       'tools/verify/backup-upload-check.mjs',
       'tools/verify/backup-cookie-import-check.mjs',
       'tools/verify/rss-check.mjs',
       'tools/verify/source-editor-check.mjs',
+      'web/test/backup-page.test.ts',
     ],
   },
   {

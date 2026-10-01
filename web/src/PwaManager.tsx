@@ -112,11 +112,34 @@ export function PwaManager() {
       updateTimer = window.setInterval(checkForUpdate, 5 * 60 * 1000)
 
       let refreshing = false
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true
-          window.location.reload()
+      // `registerType: 'autoUpdate'` 生成的 SW 会 skipWaiting + clientsClaim，
+      // 于是**第一次访问**（页面本来没有 controller）装好 SW 的那一刻也会报 controllerchange。
+      // 原来这里无条件 reload，表现是"用户刚点搜索/正在翻页，页面自己刷了一下"：
+      // 搜索请求被丢掉，界面上什么都没发生（书库指定书源搜索打不开就是这个），
+      // 门禁侧则表现为随机的 Execution context was destroyed。
+      // 只有"本来就被旧 SW 控制着、又被新 SW 接管"才是真更新，才需要刷新。
+      let hadController = !!navigator.serviceWorker.controller
+      const busy = () => {
+        const el = document.activeElement
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)) return true
+        // 搜索进行中：那条「停止搜索」按钮就是唯一的在飞标志
+        return [...document.querySelectorAll('button')].some(node => (node.textContent ?? '').trim() === '停止搜索')
+      }
+      const reloadWhenIdle = () => {
+        if (refreshing) return
+        if (busy()) {
+          window.setTimeout(reloadWhenIdle, 1500)
+          return
         }
+        refreshing = true
+        window.location.reload()
+      }
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController) {
+          hadController = !!navigator.serviceWorker.controller
+          return
+        }
+        reloadWhenIdle()
       })
     }
 

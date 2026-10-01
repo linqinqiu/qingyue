@@ -16,7 +16,7 @@ import './SourceSwitchAndCache.test.ts'
 import './SearchStatePersistence.test.ts'
 import './search-sort.test.ts'
 import './source-inspector.test.ts'
-import './AppRail.test.ts'
+import './HeaderMenu.test.ts'
 import './api-client.test.ts'
 import './source-inspector-concurrent.test.ts'
 import './search-store-lifecycle.test.ts'
@@ -39,6 +39,15 @@ import './SourceGrouping.test.ts'
 import './BackupPreferences.test.ts'
 import './PerfCriteria.test.ts'
 import './TtsEngineSwitch.test.ts'
+/*
+  下面几份曾经**存在但没被 import**（`run-all.ts` 是逐个 import 的，不是 glob 扫描）：
+  文件在、名字像测试、跑起来一片绿，其实一条都没执行 —— 这是最难发现的假绿。
+  以后加测试文件必须同时加这一行；"test 目录里的 *.test.ts 都在 run-all.ts 里注册过"
+  本身就是 `CustomizeSkin.test.ts` 最后一条判据。
+*/
+import './LocalBookImport.test.ts'
+import './Changelog.test.ts'
+import './CustomizeSkin.test.ts'
 
 console.log('🚀 Running Legado Web Frontend Comprehensive Test Suite (Tier 1, 2, 4 + Challenger Stress)...\n')
 

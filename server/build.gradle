@@ -67,6 +67,14 @@ processResources {
             into("static")
         }
     }
+    // 更新日志随包发出：界面上那张「更新日志」页读的是 classpath 里这一份，
+    // 不是去猜磁盘上的仓库路径（jar 单独拷到别的机器、Docker 镜像里都不该有路径依赖）。
+    if (file("${rootProject.projectDir}/CHANGELOG.md").exists()) {
+        from("${rootProject.projectDir}/CHANGELOG.md") {
+            into("meta")
+            rename { "changelog.md" }
+        }
+    }
 }
 
 dependencies {

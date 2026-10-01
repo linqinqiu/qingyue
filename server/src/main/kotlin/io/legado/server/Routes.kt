@@ -689,6 +689,27 @@ fun Route.apiRoutes(
             call.respond(HttpStatusCode.NoContent)
         }
         /**
+         * 更新日志：随包发出的 `CHANGELOG.md`（`server/build.gradle` 的 processResources 拷成
+         * `meta/changelog.md`）。界面上那张「更新日志」页读这里。
+         *
+         * 两个刻意的选择：
+         * ① **读 classpath，不读磁盘路径** —— jar 被单独拷到别的机器、或跑在 Docker 里时，
+         *    "仓库根有个 CHANGELOG.md"这件事不成立；
+         * ② 拿不到就 404 + 说明，**不返回 200 空串** —— 空串会被界面渲染成"这个版本没有任何改动"，
+         *    那是把打包环节的问题说成产品事实。
+         */
+        get("/changelog") {
+            val text = runCatching {
+                BuildInfo::class.java.classLoader.getResourceAsStream("meta/changelog.md")
+                    ?.use { it.readBytes().toString(Charsets.UTF_8) }
+            }.getOrNull()
+            if (text.isNullOrBlank()) {
+                call.respond(HttpStatusCode.NotFound, ApiError("changelog_missing", "这个构建产物里没有随包的更新日志"))
+            } else {
+                call.respondText(text, ContentType("text", "markdown").withCharset(Charsets.UTF_8))
+            }
+        }
+        /**
          * RSS 订阅（手机「订阅」页那一栏）。与上面的 `/subscriptions` 是两回事：
          * 这里是**阅读 RSS 源**（上游 `RssSource`），`/subscriptions` 是**书源订阅地址**（上游 `RuleSub`）。
          */

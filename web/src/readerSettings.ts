@@ -1,29 +1,14 @@
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
+/** 内置那三档的 id（自定义皮肤要叠在其中一档之上，所以这个集合要能被类型化地表达）。 */
+export type BuiltinSkinId = 'light' | 'paper' | 'dark'
 export type ReaderFont = 'song' | 'hei' | 'kai' | 'fangsong' | 'system'
 export type ReaderPageMode = 'scroll' | 'paginate'
 export type ReaderColumnMode = 'auto' | 'single' | 'double'
 export type TtsEngineType = 'webSpeech' | 'edge' | 'custom'
-/**
- * 界面外壳。`topbar` 是旧的那套（Logo + 一行一级导航 + 「我的」），
- * `rail` 是 2026-10-01 的「界面框架 v2」（左侧栏 + 单行页头条 + 全宽工作区）。
- * 用户 2026-10-01 拍板：**顶栏为默认**，新框架作为「自定义 → 界面布局」里的可切换项留着
- * （「之前那个界面也留着，这个作为备份放到自定义里面」）。
- */
-export type UiLayout = 'topbar' | 'rail'
 
 export type ReaderSettings = {
   theme: ReaderTheme
-  /**
-   * 界面外壳；只有这两档。**默认是 topbar（旧的那套顶栏）**。
-   *
-   * 这里有过一次相反的判断：做「界面框架 v2」那一轮把默认设成了 rail，理由是用户当时说
-   * 「自主升级，不要遵守之前的规则，毕竟很难看这界面」。用户 2026-10-01 看完两套之后明确选了：
-   * 「之前那个界面也留着，这个作为备份放到自定义里面」→ **旧顶栏为默认，v2 收进「自定义 → 界面布局」**。
-   * 两套外壳共用同一份页面内容与同一组入口（同一个 `shellProps`），切布局不会少功能；
-   * 判据在 `web/test/AppRail.test.ts` 与 `tools/verify/ui-layout-check.mjs`，别再把它改回去。
-   */
-  uiLayout: UiLayout
   /**
    * 自定义皮肤的 id 与 CSS。开源项目允许换皮肤，所以给一条真能生效的通道：
    * CSS 落进一个 `<style data-skin>`，id 拼成 `.theme-<id>` 类名（因此必须过白名单字符）。
@@ -31,6 +16,8 @@ export type ReaderSettings = {
    */
   customSkinId: string
   customSkinCss: string
+  /** 自定义皮肤叠在哪一套之上（见 `themeClassNames`）：只覆盖用户写到的变量，其余沿用这一套。 */
+  customSkinBase: BuiltinSkinId
   fontSize: number
   lineHeight: number
   letterSpacing: number
@@ -66,9 +53,9 @@ export type ReaderSettings = {
 const storageKey = 'legado-reader-settings-v2'
 export const defaultReaderSettings: ReaderSettings = {
   theme: 'light',
-  uiLayout: 'topbar',
   customSkinId: '',
   customSkinCss: '',
+  customSkinBase: 'light',
   fontSize: 19,
   lineHeight: 1.95,
   letterSpacing: 0,
@@ -121,11 +108,6 @@ export function parsePageMode(mode: unknown): ReaderPageMode {
   return mode === 'paginate' ? 'paginate' : 'scroll'
 }
 
-/** 界面外壳只认这两档；没存过这个字段的老数据吃默认值（顶栏）。 */
-export function parseUiLayout(layout: unknown): UiLayout {
-  return layout === 'rail' ? 'rail' : 'topbar'
-}
-
 /**
  * 皮肤 id 会被拼成类名 `.theme-<id>`，所以只允许 `[a-z0-9-_]`：
  * 带空格、引号、`>` 之类的输入会把类名拼坏（甚至拼出别的 selector），一律滤掉。
@@ -136,7 +118,7 @@ export function parseSkinId(id: unknown): string {
 }
 
 /** 内置三套皮肤。名字只写一处，两套外壳与「自定义」弹窗共用（各自定义一份迟早会漂移）。 */
-export const BUILTIN_SKINS: ReadonlyArray<{ id: string; name: string }> = [
+export const BUILTIN_SKINS: ReadonlyArray<{ id: BuiltinSkinId; name: string }> = [
   { id: 'light', name: '晓白' },
   { id: 'paper', name: '护眼' },
   { id: 'dark', name: '夜读' },
@@ -149,6 +131,25 @@ export function availableSkins(settings: ReaderSettings): Array<{ id: string; na
     ? [{ id, name: `自定义（${id}）`, builtin: false }]
     : []
   return [...BUILTIN_SKINS.map(skin => ({ ...skin, builtin: true })), ...custom]
+}
+
+/** 自定义皮肤的**叠在哪一套之上**（只认内置三档，别的值退回默认档）。 */
+export function parseSkinBase(base: unknown): BuiltinSkinId {
+  return BUILTIN_SKINS.some(skin => skin.id === base) ? base as BuiltinSkinId : defaultReaderSettings.customSkinBase
+}
+
+/**
+ * 皮肤类名列表 —— **自定义皮肤是叠在内置皮肤上的，不是替换它**。
+ *
+ * 为什么必须叠：用户只写两三条变量（例如只改 `--canvas`）是常见用法，
+ * 若此时页面上只有 `.theme-midnight` 这一个类，其余 `--surface / --ink / --line` 全部落空，
+ * 界面会直接变成"字和底一个颜色"。叠一层内置皮肤后，没写到的变量沿用那一套的取值，
+ * 写到的由注入的 `<style>` 覆盖（它在 `<head>` 末尾，同特异性下后者胜）。
+ */
+export function themeClassNames(settings: ReaderSettings): string[] {
+  const custom = parseSkinId(settings.customSkinId)
+  if (custom && settings.theme === custom) return [`theme-${parseSkinBase(settings.customSkinBase)}`, `theme-${custom}`]
+  return [`theme-${settings.theme}`]
 }
 
 export function parseColumnMode(mode: unknown): ReaderColumnMode {
@@ -210,9 +211,9 @@ export function loadReaderSettings(): ReaderSettings {
     const saved = JSON.parse(raw ?? '{}') as Partial<ReaderSettings> & { font?: string }
     return {
       theme: typeof saved.theme === 'string' && saved.theme.trim() ? saved.theme.trim() : defaultReaderSettings.theme,
-      uiLayout: parseUiLayout(saved.uiLayout),
       customSkinId: parseSkinId(saved.customSkinId),
       customSkinCss: typeof saved.customSkinCss === 'string' ? saved.customSkinCss : '',
+      customSkinBase: parseSkinBase(saved.customSkinBase),
       fontSize: clampNumber(saved.fontSize, 15, 28, defaultReaderSettings.fontSize),
       lineHeight: clampNumber(saved.lineHeight, 1.45, 2.4, defaultReaderSettings.lineHeight),
       letterSpacing: clampNumber(saved.letterSpacing, -.25, 1.5, defaultReaderSettings.letterSpacing),

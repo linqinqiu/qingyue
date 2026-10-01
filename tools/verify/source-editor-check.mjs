@@ -288,7 +288,10 @@ const removed = await p.evaluate(name => {
 }, TEST_NAME)
 await wait(1200)
 if (removed === 'selected') {
-  for (const btn of await p.$$('.page-bar-actions button')) {
+  // 「删除书源」这一档在**页头**（`.page-title-actions`）里，不在编辑器面板里 ——
+  // 只翻 `.editor-actions` 会一条都找不到，于是清理静默失败、库里留下 `界面自检临时源`，
+  // 下一次跑就被自己上一条"残留"判红（AGENTS §3 ②：崩溃/失败的那一次会留下探针）。
+  for (const btn of await p.$$('.page-title-actions button, .source-editor-header button, .editor-actions button')) {
     if ((await btn.evaluate(el => el.textContent)).includes('删除书源')) { await btn.click(); break }
   }
   await wait(1500)

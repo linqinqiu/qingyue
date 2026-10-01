@@ -1,3 +1,4 @@
+import React from 'react'
 import { describeSyncError, looksLikeFailure } from './syncErrors'
 
 /**

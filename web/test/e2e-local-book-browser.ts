@@ -63,7 +63,7 @@ async function runBrowserVerification() {
     } else {
       await page.keyboard.press('Enter')
     }
-    await page.waitForSelector('.page-bar, .shelf-page, nav[aria-label="主导航"]', { timeout: 15000 })
+    await page.waitForSelector('.app-page-header, .shelf-page, nav[aria-label="主导航"]', { timeout: 15000 })
     console.log('✅ Logged in successfully!')
 
     // Step 2: Navigate to Shelf

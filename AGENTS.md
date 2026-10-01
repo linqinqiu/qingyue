@@ -70,6 +70,16 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/index.html
 > ④ 判据措辞会过期：`source-editor-check` 里"备份密码折叠"那条只认「填备份密码」这个字符串，
 >    界面把话换成「需要解开包里的登录凭据？」之后它红了，而用户在意的事实没变 → 改成三段**行为**判据
 >    （默认无密码框 + 有提到凭据的开关 + 点开确实出现密码框）。
+> ⑤ **探针在界面上找"自己那一行"必须用本轮 STAMP，不能用常量前缀**（2026-10-01 `subscription-check` 的
+>    「订阅可以停用」假红）：上一轮崩在中途没跑收尾，库里留下一条 `probe-sub-list-<旧戳>` 且已被点成「已停用」，
+>    这一轮 `find(node => text.includes('probe-sub-list'))` 先捞到的是**别人的行**，于是读出 `已停用 → 已启用`
+>    这种自相矛盾的详情。两处一起修：runner 启动时先清扫所有 `probe-*` 残留再取基线，界面查找改用
+>    `window.__SUB_TOKEN`（含本轮 STAMP）。同类的还有 `opensource-hygiene-check` —— 它扫"WebDAV 残留"时
+>    会扫到**断言"没有 WebDAV"的那份测试文本**，那要进 exempt，不是把测试删掉。
+> ⑥ 反过来也要敢认产品红：同一轮里「结论里说清了原因」那条红是真的 —— 服务端把 JDK 的
+>    `Connection reset` 原样写进 `lastError`，前端 `describeSyncError` 没有这一档签名，界面上糊的是英文。
+>    已补「连不上：连接被对方中途断开」一档（含 Windows 那句"远程主机强迫关闭了一个现有的连接"），
+>    判据在 `web/test/SubscriptionGuidance.test.ts`。
 
 > **Windows 本机执行注意（详见 [`docs/sessions/SESSION-HIST-008`](docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md)）**：
 > - 编译与测试走**当前 `JAVA_HOME`**（本机实测是 `E:\Apps\DevTools\Eclipse Adoptium\jdk-17.0.19.10-hotspot`；早期归档里写的 Corretto 21 已经不是现状）。JDK 17+ 就够，`gradlew` 加 `--offline` 走本地缓存最稳；
@@ -142,11 +152,36 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
   三条踩过的量法错误：① 按容器矩形量 → 死白恒为 0；② 把 245px 的封面卡算进"按钮中位高度" → 书库"密度"变成在量封面；
   ③ 把新外壳（侧栏 9 个 34px 入口）算进每一页的控件样本 → 每页都"密度漂移"。现在只量 ≤60px 的内容控件，
   并排除 `.page-bar/.app-rail/.rail-tabs/.app-page-header`。**改版前后各出一份 JSON、`--compare` 逐屏比，报告给数字而不是形容词。**
-- **[前端/框架] 改版必须把"旧形状"钉住，否则会被慢慢改回去**：`web/test/AppRail.test.ts` 里两条就是干这个的 ——
-  页面源码不许再出现 `className="page-title"` / `library-hero`；默认外壳必须是 `rail`
-  （`readerSettings.ts` 的 `uiLayout: 'rail'` 与 `parseUiLayout` 的老数据兜底都钉住）。
-  同时**旧顶栏的 CSS 必须留着**：两套外壳共用同一份页面内容（同一个 `shellProps`、同一批 `.page-bar`），
-  切回 `topbar` 是"可以回退"，切回一套裸样式不是。
+- **[前端/框架] 界面框架 v2（侧栏 + 单行页头条）已整体回滚，别把它改回来**：2026-10-01 这一天用户口径变了三次，
+  **最后一次为准** ——「恢复改版前的页面样式」。现状：`AppRail.tsx` / `PageBar.tsx` / `AppRail.test.ts` 已删除，
+  `.app-rail` / `.page-bar` / `.app-frame` / `.rail-tabs` 这些选择器在 `styles.css` 里不存在，
+  页面回到 `.app-page-header` 顶栏 + 每页 `.page-title`（kicker + 衬线大标题 + 说明句）+ `.library-hero` +
+  `min(1240px,100%)` 居中列 + 书源页那块「选择一个书源」空面板。
+  钉住这件事的是 `web/test/CustomizeSkin.test.ts`（断言上述文件与选择器**不许存在**）与
+  `tools/verify/ui-shell-check.mjs`；`ui-layout-check.mjs` 是两套外壳时代的判据，随侧栏一起作废。
+  仍然有效的两条教训：① 默认外壳与入口集合都要钉住，且**切换布局不许少功能**（按能力关键字比，不按 label 文本比 ——
+  同一件事在两处叫「离线缓存」与「本地离线缓存管理」）；② 改版要**连部署一起交付**：这一轮真正被用户看到的
+  不是"源码改完"而是"跑的那个 jar"，17:51 的包一直服务到晚上，用户评价的一直是旧包。
+  判据本身留着有用：`tools/verify/frame-metrics.mjs` 量的仍是"版面被谁占走"，下一次讨论界面时先出数字。
+- **[前端/样式] 同一种类名在两套外壳里尺寸不同，就必须写作用域，否则后写的那条全局规则赢**：
+  `.theme-swatch` 在顶栏菜单里是 22px 带内描边的色片，侧栏底部想要的是 9px 小点 ——
+  直接补一条 `.theme-swatch { width: 9px }` 会按"后来者胜"把顶栏那套也压小（界面没坏，密度被串改，
+  而且没人报错）。当时收进 `.rail-theme .theme-swatch` 是对的；侧栏回滚后这条作用域随文件一起删掉了，
+  但**规则本身仍然成立**：给"另一种外壳/另一个组件"改尺寸时，先量原处那颗的实际宽度，别写全局。
+- **[前端/皮肤] 自定义皮肤是**叠**在内置皮肤上的，不是替换它**：`themeClassNames(settings)` 在选中自定义皮肤时
+  返回 `['theme-<基档>', 'theme-<id>']` 两个类（基档由用户在三颗色片里选，存 `customSkinBase`）。
+  理由：只写两三条变量（例如只改 `--canvas`）是最常见用法，若根上只有 `.theme-midnight` 一个类，
+  `--surface/--ink/--line` 全部落空 → 界面变成"字和底一个颜色"。注入的 `<style>` 追加在 `<head>` 末尾，
+  同特异性下后者胜，所以覆盖仍然成立。**判据带反向对照**：摘掉基类后 `--surface` 必须立刻取不到，
+  否则"叠加"那几条是恒真的。皮肤 id 走 `parseSkinId` 白名单（只留 `[a-z0-9-_]`，因为它被拼进类名）。
+- **[测试/注册] `web/test/run-all.ts` 是一个一个 `import` 的，不扫目录 —— 没注册的测试等于没跑**：
+  本轮发现两份文件存在、名字像测试、套件全绿，其实一条都没执行（`HeaderMenu.test.ts` 被删 AppHeader 时
+  顺带从 runner 摘掉；`LocalBookImport.test.ts` 从来没被引过）。已在 `CustomizeSkin.test.ts` 里把
+  "test 目录下每个 `*.test.ts` 都必须出现在 run-all.ts"本身做成判据。**新增测试文件必须同时加那一行**。
+- **[测试/静态渲染] 组件要被 `renderToStaticMarkup` 渲染，就必须 `import React`**：`web/test` 走的是 classic JSX
+  （`React.createElement`），Vite 构建才走 automatic runtime。少这一行时**构建与页面一切正常，只有测试里抛
+  `React is not defined`** —— 而"没有被测试渲染过的组件"永远不会暴露。PageBar / Notice 这两处就是靠
+  ChangelogPage 的静态渲染才撞出来的，注释也写在这两个文件里防"顺手清理未用导入"。
 - **[前端/空态] 列表没到手之前不许说"你一条都没有"**：`RssPanel` / `SubscriptionPanel` 原来都是
   `items.length === 0 && !notice` 就渲染空态卡，负载下先闪一张"还没有订阅源"，而本机有 178 条。
   与能力波 v27 那条 `api.shelfGroups().catch(() => [])` 是同一个病：**"还没到"、"取失败了"、"确实没有"是三件事**，
@@ -270,6 +305,10 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | 2026-10-01 | Fix | **PWA 让页面自己刷新，把正在发起的搜索吞掉**（「指定源搜索还没做好」的另一半）：`autoUpdate` 的 `clientsClaim` 让第一次装好 SW 也触发 `controllerchange`，而监听里无条件 `location.reload()` → 点完搜索页面重加载、请求丢失。改成"只有被旧 SW 控制过才算更新"，且输入中/搜索在飞时推迟。修复前实测 0 条结果 + `window` 标记消失，修复后同一路径 50 条 | `web/src/PwaManager.tsx` · `tools/verify/specified-source-search-check.mjs`(15) | Tested & Deployed（本机，未推送） |
 | 2026-10-01 | Feat | 书库搜索**搜完 0 本必须给结论**：状态行原来只在 `loading/stopped` 时渲染，搜完空结果就整行消失、这一屏退回「继续阅读」，用户看不出发生过搜索。现在报"检查了几个源 / 命中几本 / 失败与无结果"并按搜索范围给下一步（`role=status`） | `web/src/main.tsx` | Tested & Deployed（本机，未推送） |
 | 2026-10-01 | Docs | 接管上一轮被中断的会话并按用户原始 13 条逐条对账（能力波 v32）+ 夜读模式这条（能力波 v33）；清掉界面上残留的 `✕`/`✓`/`✅`/`⚪`/`⏳` 字形与朗读/日志里的原生 `<select>`；删掉"清单见 `RSS死源只读清单.md`"这句 —— 该文件从未存在；§3 的"跑红先问什么"补到四条（含我自己在 §5 里写错归因又更正的那次） | `docs/实现说明.md` 能力波 v32/v33 | Tested（本机，未推送；仓库自 09-27 起累计 200+ 条路径未提交，见 SESSION-019 的提交波次清单） |
+| 2026-10-01 | Feat | **两套外壳共存 + 「自定义」+ 应用内「更新日志」**（用户三条：「之前那个界面也留着，这个作为备份放到自定义里面」「你还没有做更新日志」「咱们这个是开源允许自定义」）：`uiLayout` 默认改回旧顶栏、侧栏 v2 收进「自定义 → 界面布局」；`AppHeader.tsx` 从 `d6592d2^` 取回，与侧栏展开的是**同一个 `shellProps`**；「自定义」里两件事（布局两档 + 皮肤），皮肤含一条**真生效**的自定义通道（`parseSkinId` 白名单 + `<style id="legado-custom-skin">` + `themeClassNames` 把自定义皮肤**叠**在内置基档之上）；`GET /api/changelog` 读**随包**的 `meta/changelog.md`（`processResources` 把它拷进 jar），取不到一律 404 + `changelog_missing`，绝不返回 200 空串（空串会被界面念成"这一版没有任何改动"） | `web/src/CustomizeModal.tsx` · `web/src/ChangelogPage.tsx` · `server/src/main/kotlin/io/legado/server/Routes.kt` · 能力波 v35 | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Test | 新门禁 `ui-layout-check.mjs`(38/38)：默认外壳是旧顶栏、两套外壳**入口集合相等**（切布局不许少功能，按能力关键字比而不比 label 文本）、切换不重新加载页面（`window` 上的标记活着才算）、更新日志的结构与「当前版本」高亮、自定义皮肤生效 + **反向对照**（摘掉基类后 `--surface` 必须立刻取不到，否则"叠加"那几条是恒真）、皮肤与布局存得住、收尾清探针。顺带把两套外壳的入口对齐（侧栏补「全屏显示」「安装到桌面」，移动端菜单里那两份重复的删掉），并把侧栏小圆点的 9px 规则收进 `.rail-theme` 作用域（写成全局会把顶栏菜单的 22px 色片一起压小） | `tools/verify/ui-layout-check.mjs` · `web/src/AppRail.tsx` | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Test | **找回两份"存在但从未运行"的测试**：`run-all.ts` 是一个个 `import` 的、不扫目录，`HeaderMenu.test.ts`（随 AppHeader 被删时摘掉）与 `LocalBookImport.test.ts`（一直没被引过）都是"绿得没跑过"。现在补 `Changelog.test.ts`(8) + `CustomizeSkin.test.ts`(11)，并把"test 目录下每个 `*.test.ts` 都必须在 run-all.ts 里注册"本身做成判据；删掉两条自己调自己的同义反复用例。撞出两件配套事实：被 `renderToStaticMarkup` 渲染的组件必须 `import React`（测试走 classic JSX，构建不走），标题栏颜色改取算出来的 `--canvas`（写死的三档色表对自定义皮肤一律失真） | `web/test/run-all.ts` · `web/test/CustomizeSkin.test.ts` · `web/src/PageBar.tsx` | Tested（前端 234/234，`tsc -b` 干净） |
+| 2026-10-01 | Fix | 「结论里说清了原因」这条红是产品的：服务端把 JDK 的 `Connection reset` 原样写进 `lastError`，前端 `describeSyncError` 没这一档签名 → 界面上糊的是英文。补「连不上：连接被对方中途断开」（连 Windows 那句"远程主机强迫关闭了一个现有的连接"一起认）。同轮另一条红是探针的：上一轮崩在中途没跑收尾，库里留的 `probe-sub-list-<旧戳>` 被这一轮的 `find('probe-sub-list')` 先捞走，于是读出"已停用 → 已启用"这种自相矛盾的假红 → runner 启动先清扫历史探针，界面按**本轮 STAMP** 找行 | `web/src/syncErrors.ts` · `tools/verify/subscription-check.mjs`(48/48) · AGENTS §3 ⑤⑥ | Tested & Deployed（本机，未推送） |
 
 ---
 
