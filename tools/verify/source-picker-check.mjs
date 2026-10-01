@@ -217,11 +217,19 @@ try {
     hasSearch: !!document.querySelector('.ui-select-search'),
     listed: [...document.querySelectorAll('.ui-select-option')].map(node => node.querySelector('span')?.textContent?.trim() ?? ''),
     disabledLeaked: [...document.querySelectorAll('.ui-select-option')].some(node => (node.textContent ?? '').includes('已停用')),
+    // 虚拟滚动的"全量"证据不是 DOM 行数（那本来就只有视口附近十几行），而是撑起来的占位高度：
+    // 占位高度 / 行高 == 列表里真有的条数。截断成 200 的老写法在这里会露馅。
+    listHeight: document.querySelector('.ui-select-options > div')?.getBoundingClientRect?.().height ?? 0,
   }))
+  const ROW_H = 34
+  const implied = Math.round(explorePickerShape.listHeight / ROW_H)
   check('源下拉一打开就自带过滤框（不是等选项变多才冒出来）', explorePickerShape.hasSearch)
-  check('发现页的源下拉与后端"可发现的书源"同量级（不超过渲染上限）',
-    explorePickerShape.listed.length > 0 && explorePickerShape.listed.length === Math.min(200, exploreList.length),
-    `界面 ${explorePickerShape.listed.length} / 接口 ${exploreList.length}`)
+  check('发现页的源下拉是"全量可滚"而不是截断一屏',
+    implied === exploreList.length,
+    `占位高 ${explorePickerShape.listHeight}px ≈ ${implied} 条 vs 接口 ${exploreList.length} 条 · 同帧 DOM 里 ${explorePickerShape.listed.length} 行`)
+  check('虚拟滚动下同一帧只渲染视口附近若干行（全量不等于全渲染）',
+    explorePickerShape.listed.length > 0 && explorePickerShape.listed.length <= 60,
+    `${explorePickerShape.listed.length} 行`)
   check('发现页下拉里没有停用源', !explorePickerShape.disabledLeaked)
 
   // 过滤框是真能用的：拿第 30 个源的名字当关键字，选项必须收窄且全部对得上这个词
@@ -235,7 +243,7 @@ try {
     const filtered = await page.evaluate(() => [...document.querySelectorAll('.ui-select-option')]
       .map(node => ({ name: node.querySelector('span')?.textContent?.trim() ?? '', hint: node.querySelector('small')?.textContent?.trim() ?? '' })))
     check('按名字过滤能把范围收窄，且筛出来的每一项都含这个关键字',
-      filtered.length > 0 && filtered.length < explorePickerShape.listed.length
+      filtered.length > 0 && filtered.length < implied
         && filtered.every(item => item.name.includes(needle) || item.hint.includes(needle)),
       `关键字「${needle}」→ ${filtered.length} 项：${filtered.slice(0, 3).map(item => item.name).join(' / ').slice(0, 70)}`)
     // 选中它：换源必须真的按新书源重取发现页配置，而不是只把按钮文字改了

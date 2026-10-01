@@ -25,8 +25,14 @@ const STAMP = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).toLower
 const RSS_HOST = `probe-sub-rss-${STAMP}.test`
 const RSS_ID = `https://${RSS_HOST}/`
 const RSS_NAME = `探针订阅源-${STAMP}`
-const SUB_HOST = `probe-sub-list-${STAMP}.test`
-const SUB_URL = `https://${SUB_HOST}/sources.json`
+// 订阅探针要"存得进去、但同步一定失败"，所以域名用可解析的 example.com，token 留在路径里
+// （界面按 'probe-sub-list' 找这一行）。解析不到的 `.test` 与内网地址现在**创建时**就被 SSRF 闸门拒掉，
+// 那是另一条判据（见下面的"内网/解析不到"），不能拿来当"同步失败有交代"的样本 —— 那种地址根本进不了库。
+const SUB_TOKEN = `probe-sub-list-${STAMP}`
+const SUB_HOST = 'example.com'
+const SUB_URL = `https://${SUB_HOST}/${SUB_TOKEN}.json`
+const SUB_BLOCKED_LOOPBACK = `http://127.0.0.1:${PORT + 1}/${SUB_TOKEN}.json`
+const SUB_BLOCKED_DNS = `https://probe-sub-blocked-${STAMP}.test/${SUB_TOKEN}.json`
 const GROUP = `探针分组${STAMP}`
 
 mkdirSync(SHOTS, { recursive: true })
@@ -117,13 +123,26 @@ try {
   ok('RSS 列表的 ?q= 服务端筛选真的生效', (hitQ.json?.length ?? 0) >= 1 && (missQ.json?.length ?? 0) === 0,
     `命中 ${hitQ.json?.length ?? '?'} / 反查 ${missQ.json?.length ?? '?'}`)
 
+  const subsBeforeBlocked = (await listSubs()).length
+  const blockedLoopback = await raw('POST', '/api/subscriptions', { url: SUB_BLOCKED_LOOPBACK, enabled: true })
+  const blockedDns = await raw('POST', '/api/subscriptions', { url: SUB_BLOCKED_DNS, enabled: true })
+  const subsAfterBlocked = (await listSubs()).length
+  ok('内网地址在创建时就被拒，且写明原因（这台服务不设身份，借它打内网是真实风险）',
+    blockedLoopback.status === 400 && /内网|本机/.test(blockedLoopback.text),
+    `${blockedLoopback.status} ${blockedLoopback.text.slice(0, 80)}`)
+  ok('解析不到的域名也在创建时就被拒（不是存进去再永远转圈）',
+    blockedDns.status === 400 && /无法解析|域名/.test(blockedDns.text),
+    `${blockedDns.status} ${blockedDns.text.slice(0, 80)}`)
+  ok('两条被拒的地址都没留下记录', subsAfterBlocked === subsBeforeBlocked,
+    `${subsBeforeBlocked} → ${subsAfterBlocked}`)
+
   const subAdded = await raw('POST', '/api/subscriptions', { url: SUB_URL, enabled: true })
   ok('探针订阅地址已创建', subAdded.status === 200 && subAdded.json?.id, `${subAdded.status} ${subAdded.text.slice(0, 70)}`)
   const subId = subAdded.json?.id
 
   const syncResult = await raw('POST', `/api/subscriptions/${subId}/update`)
   const afterSync = (await listSubs()).find(item => item.id === subId)
-  ok('同步 .test 域名会失败并记下原因（不是静默成功）', syncResult.status >= 400 && !!afterSync?.lastError,
+  ok('同步失败的订阅会记下原因（不是静默成功）', syncResult.status >= 400 && !!afterSync?.lastError,
     `status=${syncResult.status} lastError=${(afterSync?.lastError ?? '').slice(0, 60)}`)
 
   // ——— 界面 ———
@@ -177,8 +196,9 @@ try {
     }
   })
   ok('失败订阅有一行结论', failureRow !== null && failureRow.headline.startsWith('同步失败：'), failureRow?.headline ?? '没找到探针行')
-  ok('结论里说清了原因（域名解析）', /域名解析不到|连不上|超时|HTTP/.test(failureRow?.headline ?? ''), failureRow?.headline ?? '')
-  ok('英文异常原文没有糊在页面上', !(failureRow?.headline ?? '').includes('UnknownHostException'), failureRow?.headline ?? '')
+  ok('结论里说清了原因（域名/连接/状态码/内容格式之一，不是只写"失败"）',
+    /域名解析不到|连不上|超时|HTTP|40[0-9]|50[0-9]|格式|JSON|不是|空/.test(failureRow?.headline ?? ''), failureRow?.headline ?? '')
+  ok('英文异常原文没有糊在页面上', !/Exception|UnknownHost|at java\./.test(failureRow?.headline ?? ''), failureRow?.headline ?? '')
   ok('原始报错收进可展开的一栏', !!failureRow?.hasDetails && failureRow.rawText.length > 0,
     `details=${failureRow?.hasDetails} 原文 ${(failureRow?.rawText ?? '').slice(0, 50)}`)
   ok('停用/失败的订阅仍能手动点「立即同步」', failureRow?.syncDisabled === false, `disabled=${failureRow?.syncDisabled}`)

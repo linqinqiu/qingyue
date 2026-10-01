@@ -244,11 +244,27 @@ check('页上有选包导入按钮，且不再承诺任何网络服务', backupB
 const backupBody = await p.$eval('.backup-page', el => el.innerText)
 check('备份页不再出现 WebDAV 字样', !/webdav/i.test(backupBody), /webdav/i.exec(backupBody)?.[0] ?? '无')
 check('备份页不把主语安在手机上', !/手机恢复|手机端恢复|手机导入/.test(backupBody), /手机\S{0,4}/.exec(backupBody)?.[0] ?? '无')
-// #64：备份密码从主操作行撤掉了，没点开时页面上不该有一个密码输入框
-check('备份密码默认折叠，不再是看着像必填的前置门槛', await p.evaluate(() => {
-  const toggle = [...document.querySelectorAll('.backup-actions button')].some(node => node.textContent?.includes('填备份密码'))
-  return toggle && !document.querySelector('.backup-password')
-}), await p.$$eval('.backup-actions button', nodes => nodes.map(n => n.innerText.trim()).join(' / ')))
+// #64：备份密码从主操作行撤掉了 —— 判据按**行为**判，不按措辞判。
+// 原来这条只匹配「填备份密码」这个字符串，界面上那句话换成「需要解开包里的登录凭据？」
+// 之后它就红了，而用户在意的事实（默认没有密码框、点开才有）其实一直没变。
+// 换成三段可核对的行为：默认无密码框 + 有一个提到"凭据"的开关 + 点开确实出现密码框
+// （第三条防的是"折叠=把功能删了"这种反方向糊弄）。
+const pwBefore = await p.evaluate(() => {
+  const buttons = [...document.querySelectorAll('.backup-page button')]
+  return {
+    toggle: buttons.map(n => (n.innerText ?? '').replace(/\s+/g, ' ').trim()).find(t => /凭据/.test(t)) ?? '',
+    hasInput: !!document.querySelector('.backup-password, .backup-page input[type=password]'),
+  }
+})
+check('备份密码默认折叠：主操作行上没有密码框，只有一个提到「凭据」的开关',
+  !pwBefore.hasInput && pwBefore.toggle.length > 0,
+  `开关文案=${pwBefore.toggle || '没找到'} · 默认已有密码框=${pwBefore.hasInput}`)
+await p.evaluate(() => {
+  ;[...document.querySelectorAll('.backup-page button')].find(n => /凭据/.test(n.innerText ?? ''))?.click()
+})
+await wait(500)
+const pwAfter = await p.evaluate(() => !!document.querySelector('.backup-password, .backup-page input[type=password]'))
+check('点开开关才出现密码框（折叠不等于没有这个能力）', pwAfter, pwAfter ? '密码框出现了' : '仍没有出现')
 
 // ---------- 8. 体检进度条：静态取证 ----------
 // 弹窗一挂载就自动开测整库（这里 4,800+ 源），不能在自检脚本里点开，

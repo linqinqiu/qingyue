@@ -13,10 +13,9 @@ const req = (method, path, body, headers = {}) => new Promise((resolve, reject) 
 const sourceId = process.argv[2] || 'https://fq-book.netsite.cc';
 const keyword = process.argv[3] || '都市';
 
-const sess = await req('GET', '/healthz');
-const cookie = `legado_session=${(/legado_session=([^;]+)/.exec(sess.headers['set-cookie']?.[0] ?? ''))[1]}`;
-const csrf = JSON.parse(sess.text).csrfToken;
-const H = { cookie, 'X-CSRF-Token': csrf };
+// 本服务已删整套身份认证：/healthz 不再发 legado_session cookie / csrfToken，
+// 旧代码去取会 null 崩。写操作只过同源闸门——带上同源 Origin 即可（本机 curl 不带 Origin 也放行）。
+const H = { Origin: 'http://127.0.0.1:1234' };
 
 const search = await req('POST', '/api/search', { keyword, sourceIds: [sourceId] }, H);
 const hits = JSON.parse(search.text);

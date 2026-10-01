@@ -6,7 +6,7 @@
 
 ### 关键迁移与设计原则
 1. **彻底解耦 Android 平台依赖**：严禁在 `server/` 或 `web/` 模块中引入 Android Framework 原生组件（如 Activity、Context、Room、Android WebView、Android UI 等），必须使用跨平台的纯 JVM 技术栈与标准 Web API 替代。
-2. **服务端无头（Headless）化架构**：服务端作为独立的中心服务，承载书源规则解析与执行沙箱（Rhino JS + Jsoup + JsonPath）、多书源并发搜索、离线书籍与封面缓存、订阅同步、PBKDF2/Session 鉴权与 SQLite 数据持久化。
+2. **服务端无头（Headless）化架构**：服务端作为独立的中心服务，承载书源规则解析与执行沙箱（Rhino JS + Jsoup + JsonPath）、多书源并发搜索、离线书籍与封面缓存、订阅同步、
 3. **深度兼容书源生态**：完全复用并兼容 Legado 现有丰富的书源协议与规则定义，确保现有网络书源可在服务端正确、安全且高效地解析。
 4. **现代化 Web 阅读体验**：Web 端作为跨平台终端，提供大章节目录虚拟化、单书源直连秒开、离线缓存进度同步及沉浸式阅读器交互。
 
@@ -46,17 +46,23 @@ docker build -f Dockerfile.server -t test-legado-server:latest .
 docker stop test-legado 2>/dev/null || true
 docker rm -f test-legado 2>/dev/null || true
 docker run -d --name test-legado -p 8080:8080 \
-  -e ADMIN_PASSWORD=admin123 \
-  -e LEGADO_SECURE_COOKIES=false \
+- **[部署/HTTP] 服务不设身份，绑定地址就是唯一的门**：默认只绑 `127.0.0.1`；把 `LEGADO_HOST` 改成 `0.0.0.0` 等于把整个库交给局域网，写操作只剩同源闸门挡着，跨站页面进不来但同网段设备能直接读写。
   -v $(pwd)/.data:/data test-legado-server:latest
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/index.html
 ```
 
+> **门禁跑红先问"是判据旧了、探针脏了，还是产品坏了"**，三条都见过：
+> ① 门禁之间会互相删探针（都往同一个 1234 实例与同一个 SQLite 按 `STAMP` 前缀导入/清扫），并行跑必然互扰 → 判据要串行复跑；
+> ② **崩溃在收尾之前的那一次会留下探针**，下一次跑就被"库里不许有残留"判红（本轮 `source-login-check` 的 34/35 就是我自己的两次中断留下的 6 条 `probe-*.example`，清掉之后 35/35）→ 探针清理要能兜住历史残留，跑红先看残留是谁的戳；
+> ③ 有一类红是**门禁自己不稳**：`rss-check` 的界面段在 Service Worker 接管页面时会抛
+>    `Execution context was destroyed` / `Cannot find context with specified id`，同一台机器串行复跑也在
+>    25~29 条之间跳（本轮试过"先注销 SW 再 reload"，只是把炸点提前了，已回退）。**这条仍未解决**，
+>    别把它当成产品回归，也别为了刷绿去删断言。
+
 > **Windows 本机执行注意（详见 [`docs/sessions/SESSION-HIST-008`](docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md)）**：
-> - JDK 固定用 **Amazon Corretto 21**；`JAVA_HOME` 未持久化时需前缀 `$env:JAVA_HOME="C:\Program Files\Amazon Corretto\jdk21.0.12_9"`；
-> - `./gradlew :server:test` 在本机**长期固定 52 个失败**（测试删不掉被占用的 SQLite，macOS 不暴露）。**判定回归必须与「干净基线 worktree 的失败集合」逐条比对，禁止只看失败数量**；
+> - 编译与测试走**当前 `JAVA_HOME`**（本机实测是 `E:\Apps\DevTools\Eclipse Adoptium\jdk-17.0.19.10-hotspot`；早期归档里写的 Corretto 21 已经不是现状）。JDK 17+ 就够，`gradlew` 加 `--offline` 走本地缓存最稳；
+> - `./gradlew :server:test` 在本机**长期固定 47 个失败**（2026-10-01 实测；测试删不掉被占用的 SQLite，macOS 不暴露）。**判定回归必须与基线的「失败集合」逐条比对，禁止只看失败数量** —— 本轮就是靠"基线 47、跑出 53"这 6 条增量抓到一个让整条本地书导入死掉的正则笔误（`tools/verify/out/baseline-n.txt` 与 `testreport.mjs`）；
 > - 前端依赖缺失时先 `npm --prefix web install --ignore-scripts`（esbuild 的 postinstall 会被拦截），再跑 `check` / `tsx test/run-all.ts`；
-> - 明文 HTTP 联调统一带 `LEGADO_SECURE_COOKIES=false`，否则浏览器不回传 Secure Cookie、表现为「登录后立刻掉线」。
 
 ---
 
@@ -99,22 +105,21 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 - **[交互/导航] 核心系统能力一级导航呈现与阅读器抽屉收敛**：全局核心管理能力（书源、订阅、替换净化规则）必须在一级导航栏设立独立入口；而在沉浸式阅读器中，顶栏严格保持极简（目录、换源、设置、朗读），辅助净化规则统一收敛进「阅读设置」抽屉，杜绝顶栏拥挤。
 - **[PWA/离线缓存] 渐进式离线缓存与脱机阅读架构**：① Service Worker 缓存静态资源与应用壳，排除 `/api/tts/stream` 等实时长音频流；② 正文离线支持按「后50章/后100章/全本/自定义」4 并发切片下载，IndexedDB 存储纯净文本；③ 脱机断网期间阅读进度写入本地队列，网络恢复（`online` 事件）时静默 Flush 同步；④ 目录列表对已离线章节实时打绿点徽标（`●`）；⑤ 全面适配 `safe-area-inset-*` 与 `overscroll-behavior: none`，消除 iOS 橡皮筋下拉与刘海遮挡。
 - **[GitHub/贡献者] Force Push 历史孤立对象导致首页 Contributors 残留**：早期导入或 Force Push 覆盖分支后，GitHub 后端 Git 裸仓库仍残留旧 Commit 悬挂对象，导致仓库首页侧边栏聚合了历史 70+ 位幽灵贡献者，而 Insights 图表仅遍历有效 HEAD 正常显示。通过将远程默认分支切换为 `main`（`gh api repos/:owner/:repo/branches/master/rename -f new_name=main`）并更新本地跟踪与 CI 触发分支，可强制 GitHub 后台重构索引并清除悬挂贡献者。
-- **[WebDAV/Ktor] 尾卡 `{path...}` 参数只捕获首段，WebDAV 路径必须从请求 URI 推导**：Ktor 3.4 中 `route("/webdav/{path...}")` 的 `call.parameters["path"]` 对 `/webdav/a/b` 只返回 `a`（实测），直接用会导致多级路径被静默截断为单级，表现为 `PUT /webdav/x/y/z.txt`、`MKCOL /webdav/x/y` 莫名返回 `405`（落到已存在的单级目录上）。必须改为 `request.path().removePrefix("/webdav").decodeURLPart().trim('/')`；且尾卡不匹配空尾段，根路径 `/webdav` 需单独注册一条路由。
-- **[WebDAV/客户端兼容] 三个必答响应头与最小 Class 2 锁**：① `OPTIONS` 必须返回 `DAV: 1, 2`、完整 `Allow` 与 `MS-Author-Via: DAV`，否则 Windows WebDAV 重定向器按只读处理；② `LOCK` 必须支持对「尚不存在的文件」加锁并返回 `201` + `Lock-Token: <opaquelocktoken:uuid>`，否则资源管理器新建文件流程失败；③ 锁只做登记与续租，`PUT/DELETE` 严禁因锁返回 `423`（客户端异常退出遗留的锁会让写入永久失败，nginx dav 同样不强制）；④ 目录必须用 `<D:resourcetype><D:collection/></D:resourcetype>` 表达且不返回 `getcontentlength`。
-- **[WebDAV/数据落盘] 上传原子化、Range 手写与根目录保护**：`PUT` 先写同目录 `.webdav-upload-*.part` 再 `ATOMIC_MOVE + REPLACE_EXISTING`，避免半截文件被阅读器读到；`GET` 用 `respondBytesWriter(contentType, status, contentLength)` 配合 `FileChannel.position(offset)` 手写单段 Range（`206`/`416`），无需额外插件；相对路径须拒绝 `..`、反斜杠与空字节并 `normalize()` 后校验 `startsWith(root)`；`/webdav` 根目录禁止 `PUT/DELETE/MKCOL/MOVE/COPY`。WebDAV 鉴权走 HTTP Basic（用户名任意 + 管理员密码 PBKDF2），成功结果须按 `Authorization` 头短时缓存，否则客户端每个文件操作都会触发一次 PBKDF2。
-- **[WebDAV/浏览器侧鉴权] 会话 Cookie + CSRF 双轨，页面写操作复用协议本身**：WebDAV 端点必须同时接受 HTTP Basic（外部客户端，天然免疫 CSRF）与**会话 Cookie**（Web 设置页，页面无需接触密码）。会话鉴权下**读**操作（浏览/下载）放行即可，**写**操作（`PUT/DELETE/MKCOL/MOVE/COPY/LOCK/PROPPATCH`）必须校验 `X-CSRF-Token`，缺失或错误返回 `403`，与 `SameSite=Strict` Cookie 构成双重防线。设置页的上传/建目录/删除**必须复用 `PUT`/`MKCOL`/`DELETE` 协议方法**，严禁另建平行 REST 写接口（否则出现两条落盘代码路径）；页面只读状态走 `GET /api/webdav/info?path=` JSON（目录优先排序、占用统计跳过 `.webdav-upload-*.part`），避免前端解析 `PROPFIND` XML。
 - **[PWA/更新] 自托管升级后「界面还是旧版」= Service Worker 预缓存，必须双向兜底**：`registerType: 'prompt'` 下新 SW 会停在 waiting 态，而旧的 precache 会继续把 `navigateFallback` 的 `index.html` 与旧 bundle 返回给浏览器——用户会表现为「新增的导航入口/页面完全不存在」，即使服务端已经返回了新的资源（可用 `curl` 抓 `/` 观察 `assets/index-*.js` 哈希与 bundle 内容自证）。三层兜底：① `PwaManager` 必须在**登录页也挂载**（否则未登录用户永远看不到更新提示）；② 注册成功后立即判定 `reg.waiting && navigator.serviceWorker.controller` 并弹出更新提示（覆盖「上次错过提示」的历史遗留 SW）；③ 页面 `focus` / `visibilitychange` 与每 5 分钟主动 `registration.update()`，避免长期打开的标签页停留在旧版本。排障时让用户用 DevTools → Application → Service Workers → 注销 + 清站点数据，或直接用无痕窗口/换端口验证。
 - **[测试/Puppeteer] tsx + `page.evaluate` 内禁止声明局部函数**：`tsx`（esbuild keepNames）会把被求值函数内的箭头函数/函数声明包成 `__name(...)`，而 `__name` 只存在于 Node 侧，导致浏览器内抛 `ReferenceError: __name is not defined`。`page.evaluate` / `$$eval` 的回调里严禁 `const fn = () => ...` 这类局部函数声明，应改为在 Node 侧多次调用 `$$eval`/`$eval` 组合结果。
-- **[前端/无头渲染] 组件渲染期严禁直接取 `location`**：`replace-rules`、WebDAV 等页面在 `web/test` 中以 `renderToStaticMarkup` 做静态渲染断言，组件内若直接读 `location.origin` 会在 Node 环境抛错；必须封装 `currentOrigin()`（`typeof location === 'undefined'` 时返回空串）后再使用。
+- **[前端/无头渲染] 组件渲染期严禁直接取 `location`**：`replace-rules`、备份页等在 `web/test` 中以 `renderToStaticMarkup` 做静态渲染断言，组件内若直接读 `location.origin` 会在 Node 环境抛错；必须封装 `currentOrigin()`（`typeof location === 'undefined'` 时返回空串）后再使用。
 - **[测试/Windows] 服务端 52 个既有失败的真实根因：判定回归必须比「失败集合」而不是数量**：`./gradlew :server:test` 在本机长期固定 52 个失败，异常均为 `FileSystemException: *.sqlite: 另一个程序正在使用此文件`。根因是这些测试**从不调用 `database.close()`** 就在 `finally` 里删 SQLite（WAL 还有 `-wal`/`-shm`），Windows 不允许删除被占用文件，而 macOS 的 POSIX 语义允许，故原始开发环境永不暴露。**判定自己是否引入回归的唯一正确姿势**：起干净基线 worktree 跑同一套测试并逐条比对失败集合（历史实测：基线 154 用例/52 失败 vs 带新功能 160~162 用例/同样 52 失败且集合完全一致 ⇒ 零回归）。详见 [`SESSION-HIST-008`](docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md)。
 - **[插件/契约] 跨端契约必须用「真实模块导出面」验证，不能只靠文档一致**：插件宿主读 `loaded.activate`（具名导出），而契约文档与示例写的是 `export default function activate(sdk)`（默认导出挂在 `loaded.default`）→ 表现为「web.js 未导出 activate 函数」。定位手法是用 node **真实 import 被服务端托管的模块**打印导出面。同类问题：SDK 的 `settings` 是**顶层成员**（与 `api` 平级），`sdk.api` 只有 `get/post/put/del/plugin/pluginRaw`，示例里写 `api.settings.get()` 必然 `undefined.get`。
 - **[插件/健壮性] 清单解析必须兼容 UTF-8 BOM，接口返回体必须带 charset**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 会写 BOM，使 `plugin.json` 开头多出 `\uFEFF` 导致清单解析失败、全部插件被卸载（重载接口返回 `{"reloaded":0}`）；仓库侧要既修文件也修解析器（与 Legado 书源导入的 BOM 兼容同源）。另外返回 `application/json` 时若省略 `charset=utf-8`，Windows PowerShell 会按 Latin-1 解码让中文变成乱码。
-- **[部署/HTTP] 明文 HTTP 必须显式 `LEGADO_SECURE_COOKIES=false`，拦截者是浏览器而非服务端**：默认配置下服务端照常服务、登录也返回 200 并下发 `legado_session`，但该 Cookie 带 `Secure`，在 `http://` 下浏览器（以及 PowerShell 会话）**不会回传**，表现为「登录成功但立刻又是未登录」。局域网明文自建必须设为 `false`；公网走 HTTPS 反代并保持 `true`；命令行验证改用 `curl` 可绕开该干扰。
 - **[文档/分支] 插件分支的文档编号与 master 撞号，合并前必须重编号**：`feat/plugin-system` 分支上的 `PROPOSAL-011-plugin-system-and-extension-points.md`、`ADR-011-plugin-runtime-dual-js-jar-and-trust-model.md`、`SESSION-012-plugin-system-implementation.md` 与 master 上已占用的 011/012（替换规则引擎、替换规则一级页面）冲突，合并时须整体顺延（015+），否则索引自相矛盾。历史细节见 [`SESSION-HIST-007`](docs/sessions/SESSION-HIST-007-plugin-system-and-api-doc.md)。
 - **[本地书籍/虚拟书源] `loc_book` 虚拟书源与解析入库一体化**：本地上传的电子书（TXT/EPUB）使用标准 `sourceId = "loc_book"` 与 `local://<book_id>` 路径，解析后目录与正文直接写入 `book_toc_cache` 与 `book_content_cache`，使阅读器与 Edge-TTS 能够无差别透明调用，杜绝针对本地书籍另起炉灶建立平行阅读接口；TXT 编码按 BOM -> UTF-8 Strict -> GB18030 Strict 梯度探测，无明确章节时按固定字数自然换行降级切分。
-- **[WebDAV/备份导入] Zip 纯内存流式按需读取与 Zip 炸弹防护**：导入备份包时严禁解压落盘，必须使用 `ZipFile` 按需匹配目标文件名流式读取入内存，并设定单条目（64MB）与整包（256MB）解压体积上限，同时彻底规避 Zip-Slip 与 Zip 炸弹。
+- **[备份导入] Zip 纯内存流式按需读取与 Zip 炸弹防护**：导入备份包时严禁解压落盘，必须使用 `ZipFile` 按需匹配目标文件名流式读取入内存，并设定单条目（64MB）与整包（256MB）解压体积上限，同时彻底规避 Zip-Slip 与 Zip 炸弹。
 - **[数据迁移/书架] 书架 `origin` 必须经 `normalizeSourceId` 归一化**：Legado App 的书架记录常携带带有 `##注解` 的书源 URL，落库前必须调用 `SourceCodec.normalizeSourceId` 剥离注解以与 `book_source` 主键对齐，杜绝书籍悬空。
 - **[数据迁移/进度] 跨端阅读进度写入必须带 `excluded.updated_at >= reading_progress.updated_at` 防回退守卫**：导入备份进度时严禁无条件覆盖，必须以更新时间戳为守卫防止旧备份冲掉新进度；同时 Android 的字符偏移量 `durChapterPos` 不得强塞入服务端的百分比 `scroll_position`。
+- **[正则/类初始化] Kotlin `object` 里一条写坏的 Regex 会让整条功能变成"每次调用都失败"**：`private val CHAPTER_TITLE_REGEX = Regex("…")` 这类顶层正则在 Kotlin 里**编译期不校验**，括号多一个只会在第一次触碰这个 object 时抛 `ExceptionInInitializerError`，此后该类所有调用全是 `NoClassDefFoundError`。表现不是"分章不准"这种可猜的症状，而是**整个本地书导入功能死掉**，且死因藏在栈的第一次触发点。两条防线：① 任何 `object`/`companion` 里的顶层正则必须有直接跑到的用例（`LocalBookParserTest`）；② 判回归必须与基线**比失败集合**，本轮就是靠"基线 47 → 现在 53"这 6 条增量定位到的（详见 §3 与 SESSION-HIST-008）。
+- **[前端/设置项] 改设置必须同时回答"谁还在用旧设置"**：朗读引擎/音色/语速在播放中被换掉时，旧引擎的**分片 onEnd 回调链还在推进 `currentChunkIndex`**，新引擎接着出声 → 用户看到的是"重音、都启动"。凡是"一个后台产线 + 用户可中途改配置"的地方（TTS 流、缓存下载、搜索流），设置面变化都要有对应的停旧动作：把"什么算同一场会话"收成**一处判据**（`ttsSessionKey`），界面与引擎都引它，别留两套同义不同名的 key。
+- **[阅读器/切章] 视觉与朗读对"旧正文"的处理必须分开**：切章时 `setContent('')` 的原始目的是防朗读读进上一章剩下的段落（见本节的跨章竞态那条），一并清掉视觉的代价是"每章先白闪一下"。正确形状：朗读管线吃 `ttsParagraphs`（当前章没到位就给空数组），视觉侧留着旧正文并标「正在载入：新章名」；且正文加载要走 `useLayoutEffect`，否则预载已到手的下一章也要被换成骨架屏闪一帧（passive effect 在浏览器绘制之后才跑）。
+- **[文档/引用] 文档里指向一个不存在的文件比不引用更坏**：本轮清理掉"见工作区导出的 `RSS死源只读清单.md`"这句 —— 那个文件从未被写出。凡是"清单见 X"的句子，X 必须要么真实存在，要么改成**可重跑的生成命令**（`rss-census.mjs`、`GET /api/rss/sources` 的 `hasListRule`）。
 - **[工具/DSH] 历史会话挖掘（`/doc-init` 专用）**：DSH 会话记录位于 `%APPDATA%\dsh-desktop\harness\sessions\<工作区slug>\<session-id>\session.jsonl.zstd`，格式为**多帧 zstd**（一帧一条 JSONL）：`zstdDecompressSync` 只能解出第一帧（会话头），必须按魔数 `28 B5 2F FD` + 帧头/块头扫描帧边界后逐帧解压（Node 流式 zstd 解压器不支持拼接帧，会报 `Unknown frame descriptor`）；**切勿把会话内容交给 PowerShell 管道格式化（会 OOM）**，应让 Node 脚本写报告文件后再读。记录类型：`user/message`（`data.content[].text`）、`assistant/message`（`data.message.content[]`，内含 `tool-call` 项）、`tool/call`（`data.name` + `data.arguments` JSON 字符串）、`tool/result`、`todo/write`（`data.todos` 直接揭示工作范围）、`session/title`。
 
 ---
@@ -138,7 +143,7 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | PROPOSAL-012 | 完整 PWA 渐进式 Web 应用能力、用户自主正文分段离线缓存与沉浸式全屏抽屉适配 | [`docs/proposals/PROPOSAL-012-pwa-capabilities-and-fullscreen-drawer-adaptation.md`](docs/proposals/PROPOSAL-012-pwa-capabilities-and-fullscreen-drawer-adaptation.md) | Accepted |
 | PROPOSAL-013 | 移动端全面屏死区安全区深度适配与替换净化规则 UI 体系化重构 | [`docs/proposals/PROPOSAL-013-mobile-safe-area-and-rules-ui-redesign.md`](docs/proposals/PROPOSAL-013-mobile-safe-area-and-rules-ui-redesign.md) | Accepted |
 | PROPOSAL-014 | 书源批量整理、分组维护与轻量连通性健康体检体系 | [`docs/proposals/PROPOSAL-014-book-source-batch-management-and-health-check.md`](docs/proposals/PROPOSAL-014-book-source-batch-management-and-health-check.md) | Accepted |
-| PROPOSAL-015 | 内置 WebDAV 服务端与数据目录 webdav 存储区（含 Web 端「文件」设置页面） | [`docs/proposals/PROPOSAL-015-webdav-storage-server.md`](docs/proposals/PROPOSAL-015-webdav-storage-server.md) | Tested & Deployed |
+| PROPOSAL-015 | 内置 WebDAV 服务端与数据目录 webdav 存储区（含 Web 端「文件」设置页面）——**已废弃：该服务与页面已于 2026-09-29 删除** | [`docs/proposals/PROPOSAL-015-webdav-storage-server.md`](docs/proposals/PROPOSAL-015-webdav-storage-server.md) | Superseded |
 | PROPOSAL-016 | 本地图书导入与无缝阅读（TXT/EPUB 解析、智能分章与书架集成） | [`docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md`](docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md) | Tested |
 
 ### 架构决策记录 (ADR)
@@ -158,7 +163,7 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | ADR-012 | 采用 vite-plugin-pwa 构筑双层用户可控离线缓存体系与 Safe-Area 沉浸式安全区适配 | [`docs/decisions/ADR-012-vite-plugin-pwa-workbox-and-safe-area-layout.md`](docs/decisions/ADR-012-vite-plugin-pwa-workbox-and-safe-area-layout.md) | Accepted |
 | ADR-013 | 全面屏安全区变量统一继承体系与替换规则设计系统化重构 | [`docs/decisions/ADR-013-safe-area-layout-and-rules-design-system.md`](docs/decisions/ADR-013-safe-area-layout-and-rules-design-system.md) | Accepted |
 | ADR-014 | 书源批量事务管道、轻量并发探针与浮动管理状态机 | [`docs/decisions/ADR-014-source-batch-operations-and-lightweight-probe-pipeline.md`](docs/decisions/ADR-014-source-batch-operations-and-lightweight-probe-pipeline.md) | Accepted |
-| ADR-015 | 进程内 WebDAV 服务端选型、Basic 鉴权与最小 Class 2 锁实现 | [`docs/decisions/ADR-015-webdav-server-class2-minimal.md`](docs/decisions/ADR-015-webdav-server-class2-minimal.md) | Accepted |
+| ADR-015 | 进程内 WebDAV 服务端选型、Basic 鉴权与最小 Class 2 锁实现 —— **已废弃：WebDAV 已删除，恢复改走浏览器直传** | [`docs/decisions/ADR-015-webdav-server-class2-minimal.md`](docs/decisions/ADR-015-webdav-server-class2-minimal.md) | Superseded |
 | ADR-016 | 本地图书（TXT/EPUB）解析引擎、虚拟书源与解析入库一体化架构 | [`docs/decisions/ADR-016-local-book-parsing-and-storage-architecture.md`](docs/decisions/ADR-016-local-book-parsing-and-storage-architecture.md) | Accepted |
 
 ### 工作记忆与历史推演归档 (Sessions Chronicle)
@@ -206,6 +211,31 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | 2026-09-18 | Init | `/doc-init` 增量：挖掘 DSH 历史会话（5 份可用会话 / 18,577 帧 / 67 条用户诉求 / 1,060 次工具调用），补录插件系统时代与 Windows 验证基线，新增 HIST-007/008 两部历史归档并增量更新 AGENTS 索引与部落知识 | [`docs/sessions/SESSION-HIST-007-plugin-system-and-api-doc.md`](docs/sessions/SESSION-HIST-007-plugin-system-and-api-doc.md) · [`docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md`](docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md) | Local（未推送） |
 | 2026-09-19 | Feat | 本地图书（TXT/EPUB）导入解析、虚拟书源与书架无缝集成（智能编码探测、正则分章、纯 JVM EPUB 抽取、SVG 艺术封面） | [`docs/acceptance/ACCEPT-016-local-book-import-txt-epub.md`](docs/acceptance/ACCEPT-016-local-book-import-txt-epub.md) · [`docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md`](docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md) · [`docs/sessions/SESSION-017-local-book-import-txt-epub.md`](docs/sessions/SESSION-017-local-book-import-txt-epub.md) | Tested |
 | 2026-09-20 | Feat | WebDAV「文件」页支持导入 Legado 备份包（书源/替换规则/书架/阅读进度）、纯内存流式解析与防回退守卫 (PR #6) | [`docs/sessions/SESSION-018-webdav-legado-backup-import.md`](docs/sessions/SESSION-018-webdav-legado-backup-import.md) | Accepted & Pushed |
+| 2026-09-29 | Refactor | 删除内置 WebDAV 文件服务与「文件」页；恢复路径只剩浏览器直传 `POST /api/backup/import`，一级导航改为「备份」（`#backup`） | 见 §7 与 `docs/实现说明.md` 能力波 v25 | Tested & Deployed（本机，未推送） |
+| 2026-09-29 | Refactor | 删除整套认证：管理员密码、HTTP Basic、登录页、会话与 CSRF；写操作只保留同源闸门 `requireSameOriginWrite`，`session`/`app_user` 两张表启动即 drop | `docs/实现说明.md` 能力波 v26 · `server/src/test/kotlin/io/legado/server/SameOriginGuardTest.kt` · `tools/verify/authfixes.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | 应用显示名统一为「青阅」（无副标题；仓库名/jar 名/Kotlin 包名/`/api/*` 路径不动）；「指定书源」默认只列启用中的源并给「含已停用」开关；发现页支持源内直搜（**同日按用户要求删除，见下方 v29 行**）；书架 hover 层补全并可右键直接归组；目录预览改为按千章推进的通栏展开条 | `docs/实现说明.md` 能力波 v27 · `tools/verify/source-picker-check.mjs` · `web/test/SourcePicker.test.ts` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Quickfix | 三条陈旧门禁改法修好（`explore-empty` / `cache-range` / `offline-login`），并修掉 `api.shelfGroups().catch(() => [])` 把"接口失败"渲染成"你还没建分组"的静默误导 | `docs/实现说明.md` 能力波 v27 | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | 阅读设置·排版补全：新增首行缩进三档（默认 2 字）、补「排版」分组名、`clampNumber` 挡住 NaN 发到 CSS、把窄屏写死的「左右边距」改成随设置缩放 | `docs/实现说明.md` 能力波 v28 · `tools/verify/reader-typography-check.mjs` · `web/test/ReaderTypography.test.ts` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | 书籍详情弹窗信息收口：换源行显示书源名/分组/属性与体检细节并支持右键管理书源（启停、在书源页定位、复制地址），头部改「标签+值」清单并补阅读进度 | `docs/实现说明.md` 能力波 v28 · `tools/verify/book-detail-check.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Perf | 书源体检：整库规模不再一开弹窗就自动外呼（>300 个源改为显式「开始体检」并写明范围）、补上缺失的停止键、`health-check` 无 ids 时只圈启用中的源 | `docs/实现说明.md` 能力波 v28 · `tools/verify/source-health-check.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | 体检结论可归档：新增 `tag_group`/`untag_group` 批量动作（只追加、幂等、撤销只摘自己那档，不覆盖原分组），体检弹窗给出三档「打标签/撤销」面板 | `docs/实现说明.md` 能力波 v28 · `web/src/sourceGrouping.ts` · `web/test/SourceGrouping.test.ts` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | RSS 普查（176 条仅 16 条能出文章，根因是源侧未配 `ruleArticles` 而非解析缺口）→ 订阅两张都保留，默认只列"能读的"并可一键展开其余 112 条 | `docs/实现说明.md` 能力波 v28 · `tools/verify/rss-census.mjs` · `tools/verify/subscription-check.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Fix | 5,574 个源规模下的界面撑坏实测（三档屏宽 × 七张页面）：抓到书架 hover 层 `dd` 缺 `min-width: 0` 导致长值顶出封面，并建立溢出判据 | `docs/实现说明.md` 能力波 v28 · `tools/verify/source-scale-check.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | 备份包里"没有原生归宿"的 13 类个性化条目改为**原样收下**（`data/backup_kept/`，文件不建表）：界面列出条数与大小、可下载，其中阅读样式与朗读引擎可套到本机阅读设置；收下的条目不再谎报为"不承接" | `docs/实现说明.md` 能力波 v29 · `server/src/main/kotlin/io/legado/server/BackupStore.kt` · `web/src/backupPreferences.ts` · `tools/verify/backup-kept-check.mjs`(33) | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Feat | 版本号单一来源（`server/build.gradle` → fatJar 清单 → `BuildInfo` → `/healthz` → 顶栏菜单）并把 `CHANGELOG.md` 重写成本项目自己的更新日志；前端源码禁止出现字面量版本号 | `tools/verify/version-check.mjs`(15) · `server/src/main/kotlin/io/legado/server/BuildInfo.kt` · `web/test/HeaderMenu.test.ts` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Fix | 发现页删掉「在这个源里搜书名」（用户：「需要的是搜对应书源」），改成常驻的搜书源口并显示可发现源总数；备份密码不再是导入的前置门槛，折叠成一句按需展开的操作；备份页措辞去「手机恢复」化（标题「备份包」） | `docs/实现说明.md` 能力波 v29 · `tools/verify/source-picker-check.mjs`(28+3 SKIP) · `tools/verify/source-editor-check.mjs`(34) | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Fix | **一个慢书源的 30 秒超时会被当成调用方取消往上抛，把整次多源搜索取消成 HTTP 500**（`TimeoutCancellationException` 是 `CancellationException` 的子类）；改为"这一个源失败"，客户端真取消才往上传 | `server/src/test/kotlin/io/legado/server/SearchConcurrencyTest.kt` · `tools/verify/selfcheck.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Quickfix | 三条门禁跟着界面改版改口（`source-editor-check` / `rss-check` / `backup-upload-check`，含探针写进 `backup_kept/` 的条目按内容核对后自收尾），`uiaudit` 发现页那一步恢复可用（还在 `page.select()` 早已删除的原生 `<select>`），三个备份门禁共用的 `crc32` + `makeZip` 收进 `tools/verify/zip-make.mjs` | `tools/verify/zip-make.mjs` · `tools/verify/uiaudit.mjs` | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Test | **性能判据去掉绝对毫秒**：九条 `elapsed < N ms` 测的是"这台机器此刻多闲"，负载下每次红的不是同一条；改成"同一轮里比 n 与 k·n 的耗时比值 + 只挡卡死的宽松上限"（`web/test/perfCriteria.ts`），并加一条扫全部用例禁止写回的守卫。顺带找回 `Challenger2EmpiricalVerification.test.ts` 那 7 条从未被 `run-all.ts` 登记的用例（前端 190 → 197，空载与 8 路 CPU 满载各跑一遍均全绿） | `web/test/perfCriteria.ts` · `web/test/PerfCriteria.test.ts` | Tested |
+| 2026-09-30 | Perf | 停读客户端不再能拖死服务：引擎 `callGroupSize` 由默认（= CPU 核数）提到 64，实测 24 个"读了 8KB 就停手"的对端下 `/healthz` 从 **15,063ms → 4~654ms**；新门禁按**线程数**归因（按日志行计数会把 12 个线程读成 96 个）。60 个对端那一档仍会塌（CIO 一个卡住的写占一条线程），门禁以 NOTE 记录不刷绿，根治需引擎侧写超时（#36） | `server/src/main/kotlin/io/legado/server/Application.kt` · `tools/verify/stalled-client-check.mjs`(6+2 NOTE) | Tested & Deployed（本机，未推送） |
+| 2026-09-30 | Docs | 开源口径体检：`Dockerfile.server` 写死 `legado-server-0.1.0.jar`（版本一升构建就坏）改为通配；`server/README.md` 整份重写（原文还在教 `ADMIN_PASSWORD` / `reset-password`）；计算巢模板与服务文档撤掉管理员密码与两个服务端不存在的变量，并把"公网 URL == 谁拿到谁拥有整个库"写成显式警告；README 去营销化 + 删不存在的 `modules/` 与架构图 `Auth` 节点；`.github` 模板改相对链接；测试夹具里的真机型号/真实书架条目/真实站点域名换合成数据；删掉三份仍打 `/api/auth/login` 的示例脚本与仓库根散落的一次性补丁脚本 | `tools/verify/opensource-hygiene-check.mjs`(8 PASS/4 待拍板) · `docs/实现说明.md` 能力波 v30 | Tested（三件待用户拍板：LICENSE 版权持有者、根目录 `PROJECT/TEST_INFRA/ORIGINAL_REQUEST/api.md` 去留、计算巢公网部署是否整条撤） |
+| 2026-10-01 | Fix | **致命回归**：`LocalBookParser` 顶层分章正则多一个右括号 → `object` 类初始化抛 `ExceptionInInitializerError`，此后每次调用都是 `NoClassDefFoundError`，等于**本地 TXT/EPUB 导入整条功能是死的**；按"与基线比失败集合"（47 → 53）定位到，修正则并把六种标题写法 + 反向对照钉成用例 | `server/src/test/kotlin/io/legado/server/LocalBookParserTest.kt` · 能力波 v32 | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Feat | 运行日志补全：`log_entry` 落库 + `GET/DELETE /api/logs` + 顶栏「我的 → 运行日志」；日志按 rowid 标识（原来按下标展开，刷新后展开的是另一条）；死类别 `AUTH`（认证已删）换成 `GUARD`，同源闸门每拒一次落一条 WARN | `web/src/LogsModal.tsx` · `server/src/main/kotlin/io/legado/server/Guard.kt` | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Fix | 章节之间的过渡：预载命中零白闪（加载 effect 改 `useLayoutEffect`）、正文在飞时旧文字变暗并标「正在载入：新章名」而不是骨架屏挖空、朗读管线改吃 `ttsParagraphs` 保住"不误读上一章"的原意、滚动模式补章末提示条与"触底继续下滑即进下一章" | `web/src/ReaderScreen.tsx` · `tools/verify/reader-transition-check.mjs`(15) | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Fix | 朗读引擎使用中切换重音（旧引擎没人停、分片 onEnd 还在推进）：会话身份收成一处 `ttsSessionKey`，界面与 `ttsEngine.ts` 同引；播放中变更即停旧起新，暂停中交给 `speak()` 的同一判据 | `web/src/readerSettings.ts` · `web/test/TtsEngineSwitch.test.ts` | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Feat | 自定义 HTTP 朗读源补齐"只有一半"的那一半：界面加「发音人标识」「附加请求头」，`voice` 不再硬回退成微软音色 id，服务端新增 `{{speakPitch}}` 并对附加头做清洗（丢 `Host`/`Content-Length`、含 CR/LF 的、空值的） | `server/src/main/kotlin/io/legado/server/EdgeTtsService.kt` · `tools/verify/tts-custom-engine-check.mjs`(19) | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Feat | 书架批量管理（全选/清空/删除/标已读/标未读/移到分组 + 三个服务端批量端点）、批量模式点封面=勾选、`Select` 虚拟滚动去掉 200 条截断并修"一滑就关"、默认封面三条互相覆盖的 `.cover-fallback` 合成一条、分组一大堆时把胶囊墙换成可过滤 `Select`、一级导航收成一行 | `web/src/Select.tsx` · `tools/verify/source-picker-check.mjs` · 能力波 v32 | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Docs | 接管上一轮被中断的会话并按用户原始 13 条逐条对账（记进能力波 v32）；清掉界面上残留的 `✕`/`✓`/`✅`/`⚪`/`⏳` 字形与朗读/日志里的原生 `<select>`；删掉"清单见 `RSS死源只读清单.md`"这句 —— 该文件从未存在 | `docs/实现说明.md` 能力波 v32 | Tested（本机，未推送；仓库自 09-27 起累计 139+ 条路径未提交，见 SESSION-019 的提交波次清单） |
 
 ---
 
@@ -213,7 +243,7 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 
 This repository is dedicated to the standalone Legado Server ecosystem: the standalone backend server and the web client.
 
-- **`server/`**: Standalone headless backend server built with Ktor (`io.legado.server`), Kotlin JVM, and SQLite. Handles source parsing and execution (`RuleRunner` with Jsoup, JsonPath, and Rhino JS engine), authentication/sessions, book and cover caching, source subscription synchronization, and API routing.
+- **`server/`**: Standalone headless backend server built with Ktor (`io.legado.server`), Kotlin JVM, and SQLite. Handles source parsing and execution (`RuleRunner` with Jsoup, JsonPath, and Rhino JS engine), book and cover caching, source subscription synchronization, and API routing. There is **no authentication layer** — write endpoints are guarded only by the same-origin check in `Guard.kt`.
 - **`web/`**: Web reader and management UI (`legado-server-web`) built with React 19, TypeScript, and Vite. Communicates with `server/` APIs to manage sources, search books across sources, debug rules, and read books.
 
 ---
@@ -222,7 +252,7 @@ This repository is dedicated to the standalone Legado Server ecosystem: the stan
 
 - **Kotlin**: Four-space indentation, idiomatic Kotlin constructs. Match nearby code for brace placement, imports, and null handling. Use PascalCase for classes and files (`BookCacheService.kt`), camelCase for functions and properties.
 - **TypeScript / React**: Modern functional components with hooks, strict TypeScript types, and organized CSS in `web/src/styles.css`.
-- **Security & Reliability**: Standalone server must enforce authentication, PBKDF2 password hashing, session cookies, CSRF protection, and sandboxed JS evaluation.
+- **Security & Reliability**: The server runs without any identity layer (no password, no login page, no session): loopback binding is the access boundary, and state-changing requests are additionally gated by a same-origin check (`Origin` must equal `Host`) so a random web page cannot drive the user's browser to mutate the library. and sandboxed JS evaluation.
 
 ---
 

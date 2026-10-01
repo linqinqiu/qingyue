@@ -57,9 +57,9 @@
 
 - **当时的阻塞**（2026-09-16）：无 `gh` CLI、无 SSH key、无 `GITHUB_TOKEN`；git `user.name/user.email` 为空（连 commit 都无法署名）；`git ls-remote/fetch` 到 `github.com` 连接重置（而 `curl` 打 `api.github.com` 却 200）。最终以 **导出 patch（45 文件 / 1.4MB，含 `web/dist`）** 兜底。
 - **现在已解决的通路**（2026-09-17 实测）：
-  1. 凭据：Windows 凭据管理器（GCM）中已存 GitHub 账号 **`wfanan`** 的凭据；`git credential fill` 可取到（**切勿把 token 打印/落盘**）；
-  2. 权限：`wfanan` 对 `lukelzlz/legado-server` **无写权限**（直接 push 403），必须先推 **fork**：`github.com/wfanan/wfanan`（即被重命名的 fork，parent 指向 `lukelzlz/legado-server`）；
-  3. 建 PR：API `POST /repos/lukelzlz/legado-server/pulls`，`head="wfanan:<branch>"`；请求体必须用 **UTF-8 无 BOM** 写文件后 `curl --data-binary @file`（用 PowerShell `Get-Content -Raw` 读 UTF-8 文件会按 ANSI 解码成乱码，导致 `422 Invalid request`）；
+  1. 凭据：走 Windows 凭据管理器（GCM）里已登录的账号，`git credential fill` 可取到（**任何情况下都不要把 token 打印或落盘**）；
+  2. 权限：对上游仓库无写权限时（直接 push 403），先推到自己的 fork，再从 fork 向上游发 PR；
+  3. 建 PR：API `POST /repos/<owner>/<repo>/pulls`，`head="wfanan:<branch>"`；请求体必须用 **UTF-8 无 BOM** 写文件后 `curl --data-binary @file`（用 PowerShell `Get-Content -Raw` 读 UTF-8 文件会按 ANSI 解码成乱码，导致 `422 Invalid request`）；
   4. 提交前必扫密钥：`git grep -n -I "<secret>"` 至少覆盖已暂存内容（本项目曾把部署密码写进文档与测试脚本，已在提交前替换为占位符）。
 - **仓库约定**：`web/dist` 是**被跟踪的构建产物**，功能提交需连同重新构建的 dist 一起提交（历史提交 `0c9d4eb`、`cc6a9b5` 均如此）。
 

@@ -228,7 +228,13 @@ async function uiCheck() {
     })
     await page.waitForFunction(() => document.querySelectorAll('.rss-panel .rss-source-main').length > 0, { timeout: 20000 }).catch(() => null)
     const listAgain = await page.$$eval('.rss-panel .rss-source-main strong', nodes => nodes.map(n => n.textContent.trim()))
-    ok('能退回订阅源列表', back && listAgain.filter(name => name.includes(STAMP)).length === 3, `退回后共 ${listAgain.length} 条、探针 3 条`)
+    // 数量为 0 时要说清是"接口失败、面板给了提示"还是"列表真的空了"：RssPanel 的实现是失败走 setNotice
+    // （RssPanel.tsx:40），不会静默清空列表 —— 把那句话带进详情，下一次红就不必从头猜。
+    // 顺带把详情里写死的"探针 3 条"改成真数出来的条数（原判据在这里报的是不该报的数字）。
+    const listWhy = await page.evaluate(() => document.querySelector('.notice-error, .sidebar-notice')?.textContent?.trim() ?? '')
+    const probeSeen = listAgain.filter(name => name.includes(STAMP)).length
+    ok('能退回订阅源列表', back && probeSeen === 3,
+      `退回后共 ${listAgain.length} 条、探针 ${probeSeen} 条${listWhy ? ` · 面板说：${listWhy.slice(0, 90)}` : ''}`)
     ok('界面过程没有抛未捕获异常', errors.length === 0, errors.slice(0, 2).join(' | '))
   } finally {
     await browser.close()

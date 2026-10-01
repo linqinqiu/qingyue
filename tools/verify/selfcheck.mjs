@@ -8,9 +8,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 const ROOT = process.env.LEGADO_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-const env = Object.fromEntries(fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split(/\r?\n/)
-  .map((l) => /^\s*([A-Z_]+)\s*=\s*(.*)$/.exec(l)).filter(Boolean).map((m) => [m[1], m[2].trim()]));
-const PORT = 1234;
+// .env 可选（且被 .gitignore 忽略）：干净 clone / CI 里没有它不该直接崩，缺失回落空对象。
+const envFile = path.join(ROOT, '.env');
+const env = fs.existsSync(envFile)
+  ? Object.fromEntries(fs.readFileSync(envFile, 'utf8').split(/\r?\n/)
+      .map((l) => /^\s*([A-Z_]+)\s*=\s*(.*)$/.exec(l)).filter(Boolean).map((m) => [m[1], m[2].trim()]))
+  : {};
+// 端口不写死：环境变量 > .env > 本机默认 1234。
+const PORT = Number(process.env.LEGADO_PORT || env.LEGADO_PORT || 1234);
 const rows = [];
 const skips = [];
 const ok = (n, p, d = '') => { rows.push([n, p, d]); console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '   [' + d + ']' : ''}`); };
