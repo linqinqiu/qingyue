@@ -51,13 +51,25 @@ docker run -d --name test-legado -p 8080:8080 \
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/index.html
 ```
 
-> **门禁跑红先问"是判据旧了、探针脏了，还是产品坏了"**，三条都见过：
-> ① 门禁之间会互相删探针（都往同一个 1234 实例与同一个 SQLite 按 `STAMP` 前缀导入/清扫），并行跑必然互扰 → 判据要串行复跑；
-> ② **崩溃在收尾之前的那一次会留下探针**，下一次跑就被"库里不许有残留"判红（本轮 `source-login-check` 的 34/35 就是我自己的两次中断留下的 6 条 `probe-*.example`，清掉之后 35/35）→ 探针清理要能兜住历史残留，跑红先看残留是谁的戳；
-> ③ 有一类红是**门禁自己不稳**：`rss-check` 的界面段在 Service Worker 接管页面时会抛
->    `Execution context was destroyed` / `Cannot find context with specified id`，同一台机器串行复跑也在
->    25~29 条之间跳（本轮试过"先注销 SW 再 reload"，只是把炸点提前了，已回退）。**这条仍未解决**，
->    别把它当成产品回归，也别为了刷绿去删断言。
+> **门禁跑红先问"是判据旧了、探针脏了、机器被自己占满了，还是产品坏了"**，四条都实测过：
+> ① **门禁之间会互相删探针**（都往同一个 1234 实例与同一个 SQLite 按 `STAMP` 前缀导入/清扫），并行跑必然互扰 → 判据串行复跑；
+> ② **崩溃在收尾之前的那一次会留下探针**，下一次跑就被"库里不许有残留"判红（本轮 `source-login-check` 的 34/35
+>    就是我自己的两次中断留下的 6 条 `probe-*.example`，清掉之后 35/35）→ 探针清理要能兜住历史残留，跑红先看残留是谁的戳；
+> ③ **界面门禁的红有两类，都不是产品**：
+>    (a) **全新 Chrome profile 的第一次网络导航在这台机器上要 30~50 秒**（`about:blank` 38ms、同一 profile 第二次 46ms），
+>        于是 `Navigation timeout of 30000 ms exceeded` 与"页面是空的"轮番假红。解法已落地：
+>        `tools/verify/env.mjs` 的 `gateProfile()` 复用 profile，但每次 launch 前删掉
+>        `Service Worker / Cache / Code Cache / Local Storage / Session Storage / blob_storage`
+>        —— **要清的是 SW 与缓存，不是整个 profile**；带 `.lock` 防互抢；`--disable-service-worker` 反而更慢，别用。
+>    (b) **超时被打断的 puppeteer 会留下 chrome.exe**（一次 launch 4~10 个进程），8GB 的机器攒十几个就把
+>        后面的门禁全拖成 `Execution context was destroyed`。数进程时**只数带门禁临时 profile 的那些**
+>        （`CommandLine -like '*legado-*profile*'`），用户自己的 Chrome 命令行里是 `...\User Data`，别碰。
+>    本轮 `rss-check` 在 25~29 条之间飘，我先归因成"SW 换执行上下文"（错），又归因成"残留进程"（只有一半对），
+>    真凶是 (a)。**结论：症状是超时/上下文销毁/首屏空时，先看 harness 与机器再猜产品；
+>    门禁里靠固定 `sleep()` 读界面必然偶发假红，要等条件**（`waitForFunction(有行 || 明确空态)`）。
+> ④ 判据措辞会过期：`source-editor-check` 里"备份密码折叠"那条只认「填备份密码」这个字符串，
+>    界面把话换成「需要解开包里的登录凭据？」之后它红了，而用户在意的事实没变 → 改成三段**行为**判据
+>    （默认无密码框 + 有提到凭据的开关 + 点开确实出现密码框）。
 
 > **Windows 本机执行注意（详见 [`docs/sessions/SESSION-HIST-008`](docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md)）**：
 > - 编译与测试走**当前 `JAVA_HOME`**（本机实测是 `E:\Apps\DevTools\Eclipse Adoptium\jdk-17.0.19.10-hotspot`；早期归档里写的 Corretto 21 已经不是现状）。JDK 17+ 就够，`gradlew` 加 `--offline` 走本地缓存最稳；
@@ -119,8 +131,27 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 - **[正则/类初始化] Kotlin `object` 里一条写坏的 Regex 会让整条功能变成"每次调用都失败"**：`private val CHAPTER_TITLE_REGEX = Regex("…")` 这类顶层正则在 Kotlin 里**编译期不校验**，括号多一个只会在第一次触碰这个 object 时抛 `ExceptionInInitializerError`，此后该类所有调用全是 `NoClassDefFoundError`。表现不是"分章不准"这种可猜的症状，而是**整个本地书导入功能死掉**，且死因藏在栈的第一次触发点。两条防线：① 任何 `object`/`companion` 里的顶层正则必须有直接跑到的用例（`LocalBookParserTest`）；② 判回归必须与基线**比失败集合**，本轮就是靠"基线 47 → 现在 53"这 6 条增量定位到的（详见 §3 与 SESSION-HIST-008）。
 - **[前端/设置项] 改设置必须同时回答"谁还在用旧设置"**：朗读引擎/音色/语速在播放中被换掉时，旧引擎的**分片 onEnd 回调链还在推进 `currentChunkIndex`**，新引擎接着出声 → 用户看到的是"重音、都启动"。凡是"一个后台产线 + 用户可中途改配置"的地方（TTS 流、缓存下载、搜索流），设置面变化都要有对应的停旧动作：把"什么算同一场会话"收成**一处判据**（`ttsSessionKey`），界面与引擎都引它，别留两套同义不同名的 key。
 - **[阅读器/切章] 视觉与朗读对"旧正文"的处理必须分开**：切章时 `setContent('')` 的原始目的是防朗读读进上一章剩下的段落（见本节的跨章竞态那条），一并清掉视觉的代价是"每章先白闪一下"。正确形状：朗读管线吃 `ttsParagraphs`（当前章没到位就给空数组），视觉侧留着旧正文并标「正在载入：新章名」；且正文加载要走 `useLayoutEffect`，否则预载已到手的下一章也要被换成骨架屏闪一帧（passive effect 在浏览器绘制之后才跑）。
+- **[前端/主题] `createPortal(…, document.body)` 的浮层必须让主题变量挂在 `<html>` 上**：主题类只挂在应用外壳（`.app-shell.theme-*`）时，portal 到 body 的下拉/菜单**一个变量都解析不到** —— `background: var(--surface)` 变透明、`color: var(--ink)` 退成纯黑。浅色模式下只是描边发虚（所以能藏很久），夜间模式直接"黑字压在深色页上"，用户报的就是这个（「指定源搜索还没做好，你看看在夜读模式下」）。规则：主题同时 `classList` 到 `document.documentElement`，别假设"浮层也在外壳里"—— 浮层之所以要 portal，正是因为外壳有滚动容器与边框会裁掉它。判据：`tools/verify/portal-theme-check.mjs`（三套皮肤 × 两个 portal 面 + **反向对照**：摘掉 `<html>` 上的主题类必须立刻变透明，否则前面几条是恒真）。
+- **[PWA/更新] `autoUpdate` 的 `controllerchange` 不等于"有新版本"**：`registerType: 'autoUpdate'` 会 `skipWaiting + clientsClaim`，于是**第一次访问**装好 SW 也会触发一次 `controllerchange`；那里无条件 `location.reload()` 的表现就是"用户刚点搜索/刚翻页，页面自己刷了一下，操作被吞掉"（本轮「指定源搜索没做好」的第二半：修复前点提交后 `window` 上的标记连同请求消失、0 条结果；修复后同一路径 50 条）。只有**页面本来就有 controller**（被旧 SW 控制过）才算真更新；真更新时若用户正在输入或请求在飞（界面上还有「停止搜索」按钮）推迟到空闲再刷。排查手法：刷新前在 `window` 上打个标记，看标记有没有在点击之后凭空没了。
 - **[文档/引用] 文档里指向一个不存在的文件比不引用更坏**：本轮清理掉"见工作区导出的 `RSS死源只读清单.md`"这句 —— 那个文件从未被写出。凡是"清单见 X"的句子，X 必须要么真实存在，要么改成**可重跑的生成命令**（`rss-census.mjs`、`GET /api/rss/sources` 的 `hasListRule`）。
 - **[工具/DSH] 历史会话挖掘（`/doc-init` 专用）**：DSH 会话记录位于 `%APPDATA%\dsh-desktop\harness\sessions\<工作区slug>\<session-id>\session.jsonl.zstd`，格式为**多帧 zstd**（一帧一条 JSONL）：`zstdDecompressSync` 只能解出第一帧（会话头），必须按魔数 `28 B5 2F FD` + 帧头/块头扫描帧边界后逐帧解压（Node 流式 zstd 解压器不支持拼接帧，会报 `Unknown frame descriptor`）；**切勿把会话内容交给 PowerShell 管道格式化（会 OOM）**，应让 Node 脚本写报告文件后再读。记录类型：`user/message`（`data.content[].text`）、`assistant/message`（`data.message.content[]`，内含 `tool-call` 项）、`tool/call`（`data.name` + `data.arguments` JSON 字符串）、`tool/result`、`todo/write`（`data.todos` 直接揭示工作范围）、`session/title`。
+- **[前端/框架] 「界面难看」是框架问题，判据要能量出来**：这一轮的病灶不是配色，是版面 —— 每页一行
+  「小标 + 34px 衬线大标题 + 一句说明书」、内容锁在 `min(1240px,100%)` 居中列、四个功能藏在顶栏一个 ☰ 里。
+  别用形容词讨论，用 `tools/verify/frame-metrics.mjs`：它只统计**真正画了东西的叶子节点**（容器往往撑满整屏，
+  量容器等于量白），输出两侧死白 / 底部死白 / 第一行内容起始 / 内容实占宽 / 控件中位高度 / 网格列数 / 卡片宽高。
+  三条踩过的量法错误：① 按容器矩形量 → 死白恒为 0；② 把 245px 的封面卡算进"按钮中位高度" → 书库"密度"变成在量封面；
+  ③ 把新外壳（侧栏 9 个 34px 入口）算进每一页的控件样本 → 每页都"密度漂移"。现在只量 ≤60px 的内容控件，
+  并排除 `.page-bar/.app-rail/.rail-tabs/.app-page-header`。**改版前后各出一份 JSON、`--compare` 逐屏比，报告给数字而不是形容词。**
+- **[前端/框架] 改版必须把"旧形状"钉住，否则会被慢慢改回去**：`web/test/AppRail.test.ts` 里两条就是干这个的 ——
+  页面源码不许再出现 `className="page-title"` / `library-hero`；默认外壳必须是 `rail`
+  （`readerSettings.ts` 的 `uiLayout: 'rail'` 与 `parseUiLayout` 的老数据兜底都钉住）。
+  同时**旧顶栏的 CSS 必须留着**：两套外壳共用同一份页面内容（同一个 `shellProps`、同一批 `.page-bar`），
+  切回 `topbar` 是"可以回退"，切回一套裸样式不是。
+- **[前端/空态] 列表没到手之前不许说"你一条都没有"**：`RssPanel` / `SubscriptionPanel` 原来都是
+  `items.length === 0 && !notice` 就渲染空态卡，负载下先闪一张"还没有订阅源"，而本机有 178 条。
+  与能力波 v27 那条 `api.shelfGroups().catch(() => [])` 是同一个病：**"还没到"、"取失败了"、"确实没有"是三件事**，
+  空态只能由第三件触发（加一个 `loaded` 标志，`finally` 里置位）。界面门禁里凡是"固定 sleep 之后读列表"的，
+  都会把这一类读成假红 —— 改成 `waitForFunction(有行 || 明确空态)`。
 
 ---
 
@@ -235,7 +266,10 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | 2026-10-01 | Fix | 朗读引擎使用中切换重音（旧引擎没人停、分片 onEnd 还在推进）：会话身份收成一处 `ttsSessionKey`，界面与 `ttsEngine.ts` 同引；播放中变更即停旧起新，暂停中交给 `speak()` 的同一判据 | `web/src/readerSettings.ts` · `web/test/TtsEngineSwitch.test.ts` | Tested & Deployed（本机，未推送） |
 | 2026-10-01 | Feat | 自定义 HTTP 朗读源补齐"只有一半"的那一半：界面加「发音人标识」「附加请求头」，`voice` 不再硬回退成微软音色 id，服务端新增 `{{speakPitch}}` 并对附加头做清洗（丢 `Host`/`Content-Length`、含 CR/LF 的、空值的） | `server/src/main/kotlin/io/legado/server/EdgeTtsService.kt` · `tools/verify/tts-custom-engine-check.mjs`(19) | Tested & Deployed（本机，未推送） |
 | 2026-10-01 | Feat | 书架批量管理（全选/清空/删除/标已读/标未读/移到分组 + 三个服务端批量端点）、批量模式点封面=勾选、`Select` 虚拟滚动去掉 200 条截断并修"一滑就关"、默认封面三条互相覆盖的 `.cover-fallback` 合成一条、分组一大堆时把胶囊墙换成可过滤 `Select`、一级导航收成一行 | `web/src/Select.tsx` · `tools/verify/source-picker-check.mjs` · 能力波 v32 | Tested & Deployed（本机，未推送） |
-| 2026-10-01 | Docs | 接管上一轮被中断的会话并按用户原始 13 条逐条对账（记进能力波 v32）；清掉界面上残留的 `✕`/`✓`/`✅`/`⚪`/`⏳` 字形与朗读/日志里的原生 `<select>`；删掉"清单见 `RSS死源只读清单.md`"这句 —— 该文件从未存在 | `docs/实现说明.md` 能力波 v32 | Tested（本机，未推送；仓库自 09-27 起累计 139+ 条路径未提交，见 SESSION-019 的提交波次清单） |
+| 2026-10-01 | Fix | **夜读模式下「指定书源」的下拉吃不到主题变量**：`Select` 的浮层 portal 到 `document.body`，而 `--surface/--ink/--line` 只定义在 `.theme-*`（挂在 `.app-shell` 上）→ 菜单全透明 + 文字纯黑（浅色只是描边发虚，所以藏了很久）。主题同时挂到 `<html>`，一处生效让所有 portal 跟着走 | `web/src/main.tsx` · `tools/verify/portal-theme-check.mjs`(17，含"摘掉 html 类必须立刻变透明"的反向对照) | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Fix | **PWA 让页面自己刷新，把正在发起的搜索吞掉**（「指定源搜索还没做好」的另一半）：`autoUpdate` 的 `clientsClaim` 让第一次装好 SW 也触发 `controllerchange`，而监听里无条件 `location.reload()` → 点完搜索页面重加载、请求丢失。改成"只有被旧 SW 控制过才算更新"，且输入中/搜索在飞时推迟。修复前实测 0 条结果 + `window` 标记消失，修复后同一路径 50 条 | `web/src/PwaManager.tsx` · `tools/verify/specified-source-search-check.mjs`(15) | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Feat | 书库搜索**搜完 0 本必须给结论**：状态行原来只在 `loading/stopped` 时渲染，搜完空结果就整行消失、这一屏退回「继续阅读」，用户看不出发生过搜索。现在报"检查了几个源 / 命中几本 / 失败与无结果"并按搜索范围给下一步（`role=status`） | `web/src/main.tsx` | Tested & Deployed（本机，未推送） |
+| 2026-10-01 | Docs | 接管上一轮被中断的会话并按用户原始 13 条逐条对账（能力波 v32）+ 夜读模式这条（能力波 v33）；清掉界面上残留的 `✕`/`✓`/`✅`/`⚪`/`⏳` 字形与朗读/日志里的原生 `<select>`；删掉"清单见 `RSS死源只读清单.md`"这句 —— 该文件从未存在；§3 的"跑红先问什么"补到四条（含我自己在 §5 里写错归因又更正的那次） | `docs/实现说明.md` 能力波 v32/v33 | Tested（本机，未推送；仓库自 09-27 起累计 200+ 条路径未提交，见 SESSION-019 的提交波次清单） |
 
 ---
 
