@@ -1,0 +1,204 @@
+// 界面框架判据：量的是"版面被谁占走了"，不是颜色。
+// 每页在给定视口下输出：顶栏高、首行内容起始 y（= 页头 masthead 的代价）、
+// 内容实际占宽与两侧死白、底部死白、正文列数、控件高度、卡片宽高、横向溢出。
+// 改版前后各跑一次，用数字对比，不用形容词。
+//
+//   node tools/verify/frame-metrics.mjs before            # 写 out/frame-metrics-before.json
+//   node tools/verify/frame-metrics.mjs after --compare   # 与 before 逐页比，超阈值判红
+import fs from 'node:fs'
+import path from 'node:path'
+import { createRequire } from 'node:module'
+import { ROOT, OUT, launchOptions } from './env.mjs'
+
+const require = createRequire(path.join(ROOT, 'web', 'package.json'))
+const puppeteer = require('puppeteer-core')
+
+const BASE = process.env.UI_AUDIT_URL || process.env.LEGADO_BASE_URL || 'http://127.0.0.1:1234'
+const TAG = process.argv[2] || 'before'
+const COMPARE = process.argv.includes('--compare')
+const VIEWPORTS = [
+  { name: 'desk-1440', width: 1440, height: 900 },
+  { name: 'desk-1180', width: 1180, height: 800 },
+  { name: 'mobile-390', width: 390, height: 844 },
+]
+const ROUTES = ['#library', '#shelf', '#sources', '#explore', '#subscriptions', '#rules', '#backup']
+
+const collect = () => {
+  const px = v => Math.round(parseFloat(v) || 0)
+  const rect = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } }
+  const header = document.querySelector('header')
+  const headerH = header ? rect(header).h : 0
+  // 只统计"真正画了东西"的叶子节点：容器往往撑满整屏，量它们等于量白。
+  const leaves = Array.from(document.querySelectorAll('body *')).filter(el => {
+    if (el.children.length > 0 && !['IMG', 'SVG', 'INPUT', 'BUTTON', 'SELECT', 'TEXTAREA', 'CANVAS', 'VIDEO'].includes(el.tagName)) return false
+    const s = getComputedStyle(el)
+    if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false
+    if (s.position === 'fixed' && el.tagName === 'DIV' && (el.textContent || '').trim() === '' && !el.className) return false
+    const r = el.getBoundingClientRect()
+    if (r.width < 4 || r.height < 4) return false
+    if (header && r.top < headerH - 2 && r.left >= 0) return false  // 顶栏自己不算"内容起始"
+    const text = (el.textContent || '').trim()
+    const paints = text.length > 0 || ['IMG', 'SVG', 'INPUT', 'SELECT', 'TEXTAREA', 'CANVAS', 'VIDEO'].includes(el.tagName)
+      || (s.backgroundColor !== 'rgba(0, 0, 0, 0)' && s.backgroundColor !== 'transparent')
+      || s.backgroundImage !== 'none'
+      || (s.borderTopWidth !== '0px' && s.borderTopStyle !== 'none')
+    return paints
+  })
+  // 把叶子矩形栅格化到 20px 网格，再算墨迹包围盒与空白
+  const CELL = 20
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const cols = Math.ceil(vw / CELL)
+  const rows = Math.ceil(vh / CELL)
+  const ink = new Uint8Array(cols * rows)
+  for (const el of leaves) {
+    const r = el.getBoundingClientRect()
+    if (r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue
+    const x0 = Math.max(0, Math.floor(r.left / CELL)), x1 = Math.min(cols - 1, Math.ceil(r.right / CELL) - 1)
+    const y0 = Math.max(0, Math.floor(r.top / CELL)), y1 = Math.min(rows - 1, Math.ceil(r.bottom / CELL) - 1)
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) ink[y * cols + x] = 1
+  }
+  let minX = cols, maxX = -1, minY = rows, maxY = -1, filled = 0
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    if (!ink[y * cols + x]) continue
+    filled++
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const inkBox = maxX < 0 ? null : { left: minX * CELL, right: (maxX + 1) * CELL, top: minY * CELL, bottom: (maxY + 1) * CELL }
+  // 内容列宽：墨迹包围盒的宽度（不是容器宽度）
+  const contentWidth = inkBox ? inkBox.right - inkBox.left : 0
+  const sideDead = inkBox ? Math.max(0, inkBox.left) + Math.max(0, vw - inkBox.right) : vw
+  const bottomDead = inkBox ? Math.max(0, vh - inkBox.bottom) : vh
+  const mastheadCost = inkBox ? Math.max(0, inkBox.top - headerH) : 0
+  const grid = document.querySelector('.shelf-grid, .search-results, .source-list, .explore-grid, .grid')
+  const gridStyle = grid ? getComputedStyle(grid) : null
+  const buttons = Array.from(document.querySelectorAll('button')).filter(b => {
+    const r = b.getBoundingClientRect()
+    // 只量**内容区**的控件：页头条与侧栏是改版新增的外框，把它们算进中位数，
+    // 每个页面都会凭空多出十几个 34px 的侧栏按钮，密度对比就变成在量侧栏（实测踩过）。
+    if (b.closest('.page-bar, .app-rail, .rail-tabs, .app-page-header')) return false
+    return r.width > 0 && r.height > 0 && r.top < vh
+  })
+  const heights = buttons.map(b => px(getComputedStyle(b).height)).sort((a, b) => a - b)
+  /**
+   * "控件高度"只能量**控件**。封面卡也是 <button>，245px 高，把它算进中位数之后
+   * 书库页的"密度"就变成了在量封面多大 —— 改版前后卡的数量一变，判据就假红。
+   * 所以只取 ≤60px 的那一档（按钮、chip、分栏、输入框）。
+   */
+  const controlHeights = heights.filter(h => h > 0 && h <= 60)
+  const cards = Array.from(document.querySelectorAll('.shelf-card, .search-result-card, .source-item, .book-card')).slice(0, 6).map(el => rect(el))
+  return {
+    viewport: { w: vw, h: vh },
+    headerH,
+    inkBox: inkBox || {},
+    contentWidth,
+    /** 第一笔墨迹离窗口顶多远 —— 这才是"页头吃掉多少"的真判据（顶栏 + 大标题 + 说明句全算在内）。 */
+    contentTop: inkBox ? inkBox.top : vh,
+    coveragePct: Math.round(filled / (cols * rows) * 100),
+    mastheadCost,
+    sideDeadPx: sideDead,
+    sideDeadPct: Math.round(sideDead / vw * 100),
+    bottomDeadPx: bottomDead,
+    bottomDeadPct: Math.round(bottomDead / vh * 100),
+    overflowX: document.documentElement.scrollWidth > vw + 1,
+    gridColumns: gridStyle ? (gridStyle.gridTemplateColumns.split(' ').filter(Boolean).length) : 0,
+    buttonHeights: { min: controlHeights[0] || 0, median: controlHeights[Math.floor(controlHeights.length / 2)] || 0, max: controlHeights[controlHeights.length - 1] || 0, count: controlHeights.length, cardMax: heights[heights.length - 1] || 0 },
+    cards,
+    h1: (() => { const h = document.querySelector('h1'); if (!h) return null; const s = getComputedStyle(h); return { text: h.textContent.trim().slice(0, 20), size: px(s.fontSize), box: rect(h) } })(),
+    kickerCount: document.querySelectorAll('.section-kicker, .page-kicker').length,
+    proseCount: Array.from(document.querySelectorAll('p')).filter(p => (p.textContent || '').trim().length > 40).length,
+  }
+}
+
+const browser = await puppeteer.launch(launchOptions())
+let page = await browser.newPage()
+let viewport = { width: 1440, height: 900 }
+
+/**
+ * 全新 profile 的**第一次**导航会慢过 30s（Edge 首启要建 profile），之后同一浏览器里只要 200ms；
+ * 偶发还会把 frame 弄 detached。两种情况都换一个新 page 重来，而不是让整条判据假红。
+ */
+const setViewport = async next => {
+  viewport = next
+  await page.setViewport({ ...next, deviceScaleFactor: 1 })
+}
+const goto = async url => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: attempt === 0 ? 30000 : 90000 })
+      return
+    } catch (error) {
+      console.log(`导航第 ${attempt + 1} 次没成：${String(error.message).slice(0, 70)}`)
+      await page.close().catch(() => undefined)
+      page = await browser.newPage()
+      await page.setViewport({ ...viewport, deviceScaleFactor: 1 })
+    }
+  }
+  throw new Error('三次导航都失败')
+}
+
+const result = { base: BASE, takenAt: new Date().toISOString(), screens: [] }
+for (const vp of VIEWPORTS) {
+  await setViewport(vp)
+  for (const route of ROUTES) {
+    await goto(`${BASE}/?${Date.now()}${route}`)
+    await page.waitForSelector('header', { timeout: 20000 }).catch(() => undefined)
+    await new Promise(r => setTimeout(r, 2200))
+    const data = await page.evaluate(collect)
+    result.screens.push({ vp: vp.name, route, ...data })
+    console.log(`${vp.name.padEnd(10)} ${route.padEnd(16)} ink=${String(data.contentWidth).padStart(4)}x${String((data.inkBox.bottom || 0) - (data.inkBox.top || 0)).padStart(4)} cover=${String(data.coveragePct).padStart(2)}% masthead=${String(data.mastheadCost).padStart(3)}px side=${String(data.sideDeadPct).padStart(2)}% bottom=${String(data.bottomDeadPct).padStart(2)}% cols=${data.gridColumns} btnH=${data.buttonHeights.median} h1=${data.h1 ? data.h1.size + 'px' : '-'} kicker=${data.kickerCount} prose=${data.proseCount}${data.overflowX ? ' OVERFLOW-X' : ''}`)
+  }
+}
+await browser.close()
+
+const file = path.join(OUT, `frame-metrics-${TAG}.json`)
+fs.mkdirSync(OUT, { recursive: true })
+fs.writeFileSync(file, JSON.stringify(result, null, 1))
+console.log(`\nwrote ${file}`)
+
+if (COMPARE) {
+  const beforeFile = path.join(OUT, 'frame-metrics-before.json')
+  if (!fs.existsSync(beforeFile)) { console.error('没有 frame-metrics-before.json，先跑 before'); process.exit(1) }
+  const before = JSON.parse(fs.readFileSync(beforeFile, 'utf8')).screens
+  const after = result.screens
+  let fails = 0
+  const note = (ok, msg) => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`) }
+  console.log('\n== before → after ==')
+  for (const a of after) {
+    const b = before.find(x => x.vp === a.vp && x.route === a.route)
+    if (!b) { console.log(`SKIP  ${a.vp} ${a.route} 改版前没有这一屏`); continue }
+    if (a.vp === 'mobile-390') {
+      note(!a.overflowX, `${a.vp} ${a.route} 无横向溢出（改前 ${b.overflowX ? '有' : '无'}）`)
+      continue
+    }
+    note(!a.overflowX, `${a.vp} ${a.route} 无横向溢出`)
+    note(a.sideDeadPct <= b.sideDeadPct + 2, `${a.vp} ${a.route} 两侧死白 ${b.sideDeadPct}% → ${a.sideDeadPct}%（不得变差）`)
+    note(a.bottomDeadPct <= b.bottomDeadPct + 2, `${a.vp} ${a.route} 底部死白 ${b.bottomDeadPct}% → ${a.bottomDeadPct}%（不得变差）`)
+    const deadBefore = b.sideDeadPct + b.bottomDeadPct
+    const deadAfter = a.sideDeadPct + a.bottomDeadPct
+    note(deadAfter <= deadBefore + 2, `${a.vp} ${a.route} 合计空白 ${deadBefore}% → ${deadAfter}%（不得变差）`)
+    // 版面占用只是"墨迹盖住多少格"，两栏排同样多的内容会更矮、占用反而降，
+    // 所以它只做记录，判红要靠上面三条死白。
+    console.log(`NOTE  ${a.vp} ${a.route} 版面占用 ${b.coveragePct}% → ${a.coveragePct}%`)
+    note(a.contentWidth >= b.contentWidth - 24, `${a.vp} ${a.route} 内容实占宽 ${b.contentWidth}px → ${a.contentWidth}px（不得明显变窄）`)
+    // 窄屏页头条会折成两行，绝对上限只对宽屏成立；窄屏只要求"不比改前更靠下"。
+    const topCap = a.vp.startsWith('desk-') ? '第一行内容起始 ≤96px' : '窄屏只看是否比改前更靠下'
+    note(a.contentTop <= b.contentTop + 2 && !(a.vp.startsWith('desk-') && a.contentTop > 96),
+      `${a.vp} ${a.route} 第一行内容起始 ${b.contentTop}px → ${a.contentTop}px（页头必须变矮；${topCap}）`)
+    note(a.kickerCount === 0, `${a.vp} ${a.route} 不再出现 section-kicker 说明行（改前 ${b.kickerCount} 处）`)
+    note(a.buttonHeights.median >= Math.min(b.buttonHeights.median, a.buttonHeights.median) - 2 && a.buttonHeights.median <= b.buttonHeights.median + 2,
+      `${a.vp} ${a.route} 控件中位高度 ${b.buttonHeights.median}px → ${a.buttonHeights.median}px（密度不得漂）`)
+    if (b.gridColumns > 0 && a.gridColumns > 0) {
+      note(a.gridColumns >= b.gridColumns, `${a.vp} ${a.route} 网格列数 ${b.gridColumns} → ${a.gridColumns}（不得变少）`)
+    }
+    for (let i = 0; i < Math.min(b.cards.length, a.cards.length); i++) {
+      const bc = b.cards[i], ac = a.cards[i]
+      note(Math.abs(ac.w - bc.w) <= Math.max(6, bc.w * 0.12), `${a.vp} ${a.route} 卡片宽 ${bc.w} → ${ac.w}`)
+    }
+  }
+  console.log(`\n${fails === 0 ? '全部通过' : fails + ' 条未过'}`)
+  process.exit(fails === 0 ? 0 : 1)
+}

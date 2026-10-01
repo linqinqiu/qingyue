@@ -9,10 +9,12 @@ test('ReplaceRulesPage - Static Rendering and Component Structure', () => {
   const element = React.createElement(ReplaceRulesPage)
   const html = renderToStaticMarkup(element)
 
-  // Verify kicker, title, and description
-  assert.ok(html.includes('青阅'), 'Page should contain kicker')
-  assert.ok(html.includes('替换净化规则'), 'Page should contain main title')
-  assert.ok(html.includes('净化网页抓取正文中的反爬文字对调'), 'Page should contain description')
+  // 页头条：页名 + 就地说明（框架 v2 起不再有「青阅 kicker + 34px 大标题 + 一段说明书」）
+  assert.ok(html.includes('class="page-bar"'), 'Page should render the one-line page bar')
+  assert.ok(html.includes('<h1>替换净化</h1>'), 'Page should contain main title')
+  assert.ok(html.includes('条规则'), 'Page bar should say how many rules there are')
+  assert.ok(html.includes('反爬'), 'Page bar keeps the one-line what-for')
+  assert.ok(!html.includes('section-kicker'), '页面级 kicker 已随框架 v2 删除')
 
   // Verify action buttons
   assert.ok(html.includes('新建规则'), 'Page should have new rule button')

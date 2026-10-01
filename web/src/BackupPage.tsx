@@ -113,12 +113,9 @@ export function BackupPage() {
 
   return (
     <main className="backup-page">
-      <header className="page-title">
-        <div>
-          <span className="section-kicker">导入导出</span>
-          <h1>备份包</h1>
-          <p>选一个 Legado 导出的 zip 就能恢复。全程只在本机与这台服务之间传输，不经过任何网盘或网络服务。</p>
-        </div>
+      <header className="page-bar">
+        <h1>备份包</h1>
+        <span className="page-bar-meta">Legado 导出的 zip · 全程只在本机与这台服务之间传输</span>
       </header>
 
       <section className="backup-panel">

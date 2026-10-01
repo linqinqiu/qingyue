@@ -122,18 +122,27 @@ try {
     hashed.length > 0 && hashed.every(name => (name.startsWith('assets/') ? distAssets : distTop).includes(name.split('/').pop() ?? '')),
     `服务 ${hashed.join(',')} · dist/assets ${distAssets.filter(name => name.endsWith('.js')).join(',')} · dist 根 ${distTop.filter(name => name.endsWith('.js')).join(',')}`)
 
-  await page.click('.header-menu-btn')
+  // 框架 v2：版本号常驻在侧栏底部，不再"点开一个菜单才看得到"，所以这里不点击。
+  // 「更多」浮层只在窄屏的底部标签栏里，宽屏没有这个按钮 —— 取不到时按实际情况说话。
+  const menu = await page.evaluate(() => {
+    const trigger = document.querySelector('.header-menu-btn')
+    const visible = Boolean(trigger && trigger.offsetParent !== null)
+    if (visible) trigger.click()
+    return { hasTrigger: visible, version: document.querySelector('.menu-version code')?.textContent?.trim() ?? '' }
+  })
   await sleep(500)
-  const menu = await page.evaluate(() => ({
+  const menuState = await page.evaluate(() => ({
     version: document.querySelector('.menu-version code')?.textContent?.trim() ?? '',
     status: document.querySelector('.menu-header-title')?.textContent?.trim() ?? '',
     loggedIn: document.body.innerText.includes('已登录服务'),
   }))
-  check('顶栏菜单把版本号显示出来了', /^\d+\.\d+\.\d+$/.test(menu.version), menu.version || '（没有 .menu-version code）')
-  if (health) check('界面显示的版本 == /healthz 报的 == gradle 的', menu.version === health.version && menu.version === gradleVersion,
-    `界面 ${menu.version} / 接口 ${health.version} / gradle ${gradleVersion}`)
-  check('状态位说"本机服务在线"，认证那套删了之后不许留"已登录服务"这种谎话',
-    menu.status.includes('在线') && !menu.loggedIn, `${menu.status} · 残留登录字样 ${menu.loggedIn}`)
+  const version = menuState.version || menu.version
+  check('侧栏把版本号显示出来了（不用点开任何菜单）', /^\d+\.\d+\.\d+$/.test(version), version || '（没有 .menu-version code）')
+  if (health) check('界面显示的版本 == /healthz 报的 == gradle 的', version === health.version && version === gradleVersion,
+    `界面 ${version} / 接口 ${health.version} / gradle ${gradleVersion}`)
+  check('认证那套删了之后不许留"已登录服务"这种谎话', !menuState.loggedIn, `残留登录字样 ${menuState.loggedIn}`)
+  if (menuState.status) check('状态位说"本机服务在线"', menuState.status.includes('在线'), menuState.status)
+  else console.log(`NOTE  宽屏没有「更多」浮层，状态位 ${menuState.status ? '内容异常' : '不在此屏出现'}（侧栏已直接显示版本号）`)
   check('全程没有页面 JS 异常', errors.length === 0, errors.slice(0, 2).join(' / '))
 } finally {
   await browser.close()

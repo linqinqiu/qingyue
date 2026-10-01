@@ -44,7 +44,7 @@ try {
     [...document.querySelectorAll('.library-scope-modes button')].find(node => node.textContent?.includes('全部书源'))?.click()
   })
   await page.evaluate(() => {
-    const input = document.querySelector('.library-hero input')
+    const input = document.querySelector('.library-search input')
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
     setter.call(input, '我的')
     input.dispatchEvent(new Event('input', { bubbles: true }))
@@ -80,7 +80,7 @@ try {
     note('搜到结果卡片', `全库搜「${KEYWORD}」90 秒内没出卡片，弹窗无法验证`)
   } else {
     await page.evaluate(() => {
-      [...document.querySelectorAll('.library-hero button')].find(node => node.textContent?.includes('停止'))?.click()
+      [...document.querySelectorAll('.library-search button')].find(node => node.textContent?.includes('停止'))?.click()
     })
     await sleep(800)
 

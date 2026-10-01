@@ -288,7 +288,7 @@ const removed = await p.evaluate(name => {
 }, TEST_NAME)
 await wait(1200)
 if (removed === 'selected') {
-  for (const btn of await p.$$('.page-title-actions button')) {
+  for (const btn of await p.$$('.page-bar-actions button')) {
     if ((await btn.evaluate(el => el.textContent)).includes('删除书源')) { await btn.click(); break }
   }
   await wait(1500)
