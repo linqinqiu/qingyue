@@ -68,7 +68,8 @@ test('AppRail - 版本号只有一个来源：/healthz，前端不写死', () =>
 
   const app = src('main.tsx')
   assert.match(app, /fetch\('\/healthz'\)/, '版本号必须从 /healthz 取')
-  assert.match(app, /version=\{serverVersion\}/, '取到的版本号要真的传给侧栏')
+  // 两套外壳共用同一个 props 对象（shellProps），版本号在那里传一次就两边都吃到
+  assert.match(app, /version:\s*serverVersion|version=\{serverVersion\}/, '取到的版本号要真的传给外壳，不能只 fetch 不用')
 })
 
 /**
@@ -77,7 +78,7 @@ test('AppRail - 版本号只有一个来源：/healthz，前端不写死', () =>
  * 150~180px（实测数字见 tools/verify/frame-metrics.mjs 与 out/frame-metrics-before.json）。
  * 这里钉住"不再回到那个形状"，界面级的空白比例由那条门禁量。
  */
-test('框架 v2：页面级 masthead 已经拆掉，不许长回来', () => {
+test('框架 v2：页面级 masthead 已经拆掉，且默认外壳就是侧栏', () => {
   const pages = ['main.tsx', 'ExplorePage.tsx', 'BackupPage.tsx', 'ReplaceRulesPage.tsx']
   for (const name of pages) {
     const code = src(name)
@@ -87,8 +88,14 @@ test('框架 v2：页面级 masthead 已经拆掉，不许长回来', () => {
   const css = src('styles.css')
   assert.match(css, /\.page-bar \{/, '页头条要有 .page-bar 的定义')
   assert.match(css, /\.app-rail \{/, '侧栏要有 .app-rail 的定义')
-  assert.ok(!/\.app-page-header \{/.test(css), '旧的顶栏 .app-page-header 已经退役，CSS 也要跟着删')
-  assert.ok(!/\.library-hero \{/.test(css), '旧的 .library-hero 已经退役，CSS 也要跟着删')
+  // 两套外壳的样式都必须在（切过去不能是裸样式）。默认哪一套有过一次反复：
+  // 做 v2 那一轮把默认钉成 rail，理由是用户当时说"自主升级"；用户 2026-10-01 看完两套之后
+  // 明确改成「之前那个界面也留着，这个作为备份放到自定义里面」→ **默认是旧顶栏（topbar）**，
+  // v2 收进「自定义 → 界面布局」。别再翻回去，两套都留着才是这次的交付。
+  assert.match(css, /\.app-page-header \{/, '旧顶栏外壳的样式要留着，切回去不能是裸的')
+  const settings = src('readerSettings.ts')
+  assert.match(settings, /uiLayout: 'topbar'/, '默认外壳必须是旧顶栏（用户 2026-10-01 拍板）')
+  assert.match(settings, /return layout === 'rail' \? 'rail' : 'topbar'/, '没存过这个字段的老数据也吃顶栏默认')
 })
 
 /** 说明行只留给弹窗与面板；页面标题行不再各写一套 kicker。 */

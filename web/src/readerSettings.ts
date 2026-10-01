@@ -4,9 +4,33 @@ export type ReaderFont = 'song' | 'hei' | 'kai' | 'fangsong' | 'system'
 export type ReaderPageMode = 'scroll' | 'paginate'
 export type ReaderColumnMode = 'auto' | 'single' | 'double'
 export type TtsEngineType = 'webSpeech' | 'edge' | 'custom'
+/**
+ * 界面外壳。`topbar` 是旧的那套（Logo + 一行一级导航 + 「我的」），
+ * `rail` 是 2026-10-01 的「界面框架 v2」（左侧栏 + 单行页头条 + 全宽工作区）。
+ * 用户 2026-10-01 拍板：**顶栏为默认**，新框架作为「自定义 → 界面布局」里的可切换项留着
+ * （「之前那个界面也留着，这个作为备份放到自定义里面」）。
+ */
+export type UiLayout = 'topbar' | 'rail'
 
 export type ReaderSettings = {
   theme: ReaderTheme
+  /**
+   * 界面外壳；只有这两档。**默认是 topbar（旧的那套顶栏）**。
+   *
+   * 这里有过一次相反的判断：做「界面框架 v2」那一轮把默认设成了 rail，理由是用户当时说
+   * 「自主升级，不要遵守之前的规则，毕竟很难看这界面」。用户 2026-10-01 看完两套之后明确选了：
+   * 「之前那个界面也留着，这个作为备份放到自定义里面」→ **旧顶栏为默认，v2 收进「自定义 → 界面布局」**。
+   * 两套外壳共用同一份页面内容与同一组入口（同一个 `shellProps`），切布局不会少功能；
+   * 判据在 `web/test/AppRail.test.ts` 与 `tools/verify/ui-layout-check.mjs`，别再把它改回去。
+   */
+  uiLayout: UiLayout
+  /**
+   * 自定义皮肤的 id 与 CSS。开源项目允许换皮肤，所以给一条真能生效的通道：
+   * CSS 落进一个 `<style data-skin>`，id 拼成 `.theme-<id>` 类名（因此必须过白名单字符）。
+   * 只存 localStorage —— 这是这台机器自己的外观，不上传服务端，也不进备份包。
+   */
+  customSkinId: string
+  customSkinCss: string
   fontSize: number
   lineHeight: number
   letterSpacing: number
@@ -42,6 +66,9 @@ export type ReaderSettings = {
 const storageKey = 'legado-reader-settings-v2'
 export const defaultReaderSettings: ReaderSettings = {
   theme: 'light',
+  uiLayout: 'topbar',
+  customSkinId: '',
+  customSkinCss: '',
   fontSize: 19,
   lineHeight: 1.95,
   letterSpacing: 0,
@@ -92,6 +119,36 @@ export function parseReaderFont(font: unknown): ReaderFont {
 
 export function parsePageMode(mode: unknown): ReaderPageMode {
   return mode === 'paginate' ? 'paginate' : 'scroll'
+}
+
+/** 界面外壳只认这两档；没存过这个字段的老数据吃默认值（顶栏）。 */
+export function parseUiLayout(layout: unknown): UiLayout {
+  return layout === 'rail' ? 'rail' : 'topbar'
+}
+
+/**
+ * 皮肤 id 会被拼成类名 `.theme-<id>`，所以只允许 `[a-z0-9-_]`：
+ * 带空格、引号、`>` 之类的输入会把类名拼坏（甚至拼出别的 selector），一律滤掉。
+ * 滤完为空就当作"没有自定义皮肤"。
+ */
+export function parseSkinId(id: unknown): string {
+  return typeof id === 'string' ? id.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '').slice(0, 32) : ''
+}
+
+/** 内置三套皮肤。名字只写一处，两套外壳与「自定义」弹窗共用（各自定义一份迟早会漂移）。 */
+export const BUILTIN_SKINS: ReadonlyArray<{ id: string; name: string }> = [
+  { id: 'light', name: '晓白' },
+  { id: 'paper', name: '护眼' },
+  { id: 'dark', name: '夜读' },
+]
+
+/** 当前可选的皮肤：内置三套 + 填了 CSS 的自定义那一套（没填就不出现在列表里，不摆空控件）。 */
+export function availableSkins(settings: ReaderSettings): Array<{ id: string; name: string; builtin: boolean }> {
+  const id = parseSkinId(settings.customSkinId)
+  const custom = id && (settings.customSkinCss ?? '').trim()
+    ? [{ id, name: `自定义（${id}）`, builtin: false }]
+    : []
+  return [...BUILTIN_SKINS.map(skin => ({ ...skin, builtin: true })), ...custom]
 }
 
 export function parseColumnMode(mode: unknown): ReaderColumnMode {
@@ -153,6 +210,9 @@ export function loadReaderSettings(): ReaderSettings {
     const saved = JSON.parse(raw ?? '{}') as Partial<ReaderSettings> & { font?: string }
     return {
       theme: typeof saved.theme === 'string' && saved.theme.trim() ? saved.theme.trim() : defaultReaderSettings.theme,
+      uiLayout: parseUiLayout(saved.uiLayout),
+      customSkinId: parseSkinId(saved.customSkinId),
+      customSkinCss: typeof saved.customSkinCss === 'string' ? saved.customSkinCss : '',
       fontSize: clampNumber(saved.fontSize, 15, 28, defaultReaderSettings.fontSize),
       lineHeight: clampNumber(saved.lineHeight, 1.45, 2.4, defaultReaderSettings.lineHeight),
       letterSpacing: clampNumber(saved.letterSpacing, -.25, 1.5, defaultReaderSettings.letterSpacing),

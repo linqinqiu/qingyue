@@ -188,9 +188,12 @@ try {
     hasInSourceForm: !!document.querySelector('.explore-search'),
     mentionsInSource: document.body.innerText.includes('在这个源里搜'),
   }))
-  check('发现页头部写着「搜书源」，并把可发现的源总数如实报出来',
-    exploreHeader.label === '搜书源' && exploreHeader.count === `${exploreList.length} 个书源配了发现页`,
-    `${exploreHeader.label} · ${exploreHeader.count} · 接口 ${exploreList.length}`)
+  // 措辞判据跟着框架 v2 改口（AGENTS §3 ④：判据措辞会过期，别为了刷绿删断言）：
+  // 页头那行「搜书源」的小标签并进了页头条，选择口的身份现在由 aria-label 与占位文案承担，
+  // 用户在意的事实没变 —— 这是一个**搜书源**的口，且总数如实报出来。
+  check('发现页的选源口就是搜书源，并把可发现的源总数如实报出来',
+    /书源/.test(exploreHeader.aria) && exploreHeader.count === `${exploreList.length} 个书源配了发现页`,
+    `aria=${exploreHeader.aria} · ${exploreHeader.count} · 接口 ${exploreList.length}`)
   check('选源口默认就选中并回显第一个源，不是一句"请选择"',
     exploreHeader.value.length > 0 && !/加载中|请选择/.test(exploreHeader.value), exploreHeader.value)
   check('源内搜书名的表单已删干净（发现页要的是搜书源，不是重摆一遍书库搜索）',

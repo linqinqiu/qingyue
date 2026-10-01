@@ -33,11 +33,18 @@ export function RssPanel({ onChanged, onNavigate }: { onChanged: () => void; onN
   const [article, setArticle] = useState<RssArticle | null>(null)
   const [importing, setImporting] = useState(false)
   const [importText, setImportText] = useState('')
+  /**
+   * 第一份列表到手之前不许说"还没有 RSS 订阅源"。
+   * 本机有 178 条，但负载下这一屏会先闪一张空态卡 —— 那就是把"还没载入完"
+   * 渲染成"你一条都没有"（书架分组那条 `.catch(() => [])` 是同一个病，见能力波 v27）。
+   */
+  const [loaded, setLoaded] = useState(false)
   const importRef = useRef<HTMLTextAreaElement>(null)
 
   const load = useCallback(async () => {
     try { setSources(await api.rssSources()) }
     catch (error) { setNotice(error instanceof Error ? error.message : '无法载入订阅源') }
+    finally { setLoaded(true) }
   }, [])
   useEffect(() => { void load() }, [load])
 
@@ -164,7 +171,7 @@ export function RssPanel({ onChanged, onNavigate }: { onChanged: () => void; onN
       )}
       <Notice text={notice} />
       <div className="subscription-list">
-        {sources.length === 0 && !notice && (
+        {sources.length === 0 && loaded && !notice && (
           <EmptyGuide
             icon="rss"
             title="还没有 RSS 订阅源"

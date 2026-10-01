@@ -60,6 +60,9 @@ try {
       }, [SETTINGS_KEY, patch])
       if (viewport) await page.setViewport({ width: viewport, height: 900, deviceScaleFactor: 1 })
       await page.goto(`${BASE}/?t=${Date.now()}#shelf`, { waitUntil: 'domcontentloaded' })
+      // 冷启动这一屏要多久取决于机器多忙（实测 3~30 秒），固定 sleep 之后点不到卡就等于
+      // 后面 60 秒等一个永远不会出现的 `.reading-content p`。先等卡片真挂上。
+      await page.waitForSelector('.shelf-card', { timeout: 60000 }).catch(() => null)
       await sleep(2200)
       await page.evaluate(name => {
         const card = [...document.querySelectorAll('.shelf-card')]

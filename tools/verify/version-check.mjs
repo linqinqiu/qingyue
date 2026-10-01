@@ -123,7 +123,9 @@ try {
     `服务 ${hashed.join(',')} · dist/assets ${distAssets.filter(name => name.endsWith('.js')).join(',')} · dist 根 ${distTop.filter(name => name.endsWith('.js')).join(',')}`)
 
   // 框架 v2：版本号常驻在侧栏底部，不再"点开一个菜单才看得到"，所以这里不点击。
-  // 「更多」浮层只在窄屏的底部标签栏里，宽屏没有这个按钮 —— 取不到时按实际情况说话。
+  // 但侧栏本身要等 `/healthz` 回来才挂载（App 在 ready 之前只有 loading 屏），
+  // 直接读会读到空 —— 先等这个元素出现，等不到再判红，别把探针的时序当成产品的缺陷。
+  await page.waitForSelector('.menu-version code', { timeout: 20000 }).catch(() => undefined)
   const menu = await page.evaluate(() => {
     const trigger = document.querySelector('.header-menu-btn')
     const visible = Boolean(trigger && trigger.offsetParent !== null)

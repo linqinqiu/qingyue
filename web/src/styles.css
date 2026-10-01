@@ -5044,3 +5044,95 @@ input[type=range] { min-height: 24px; }
 }
 /* 390 档实测横向溢出：minmax(430px,1fr) 在 390 宽的窗口里仍然要 430px，整页被撑出滚动条。 */
 .backup-page { grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr)); }
+
+/* 侧栏底部（主题档 + 版本号）在图标档 54px 里会被撑破：`0.2.0` 那个 code 加内边距
+   与描边正好比内容宽 11px，source-scale-check 在 tablet(834) 七张页面各报一条。
+   图标档把这一行收紧，并给所有子元素 min-width:0 —— 侧栏是固定宽的，宁可省略号也不许顶破。 */
+.rail-foot { min-width: 0; }
+.rail-foot > * { min-width: 0; max-width: 100%; }
+.rail-theme { min-width: 0; overflow: hidden; }
+.menu-version { min-width: 0; }
+.menu-version code { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.app-rail.collapsed .rail-theme,
+.app-frame:has(.app-rail.collapsed) .rail-theme { padding: 0 4px; }
+@media (max-width: 1280px) {
+  .app-rail .rail-theme { padding: 0 4px; }
+  .app-rail .menu-version code { padding: 1px 4px; font-size: 10px; }
+}
+
+/* =============================================================================
+ * 旧顶栏外壳的样式：界面框架 v2 成为默认之后，这一套只在
+ * 「自定义 → 界面布局 = 顶部导航」时出现（readerSettings.uiLayout）。
+ * 保留它是有意的：两套外壳共用同一份页面内容，切布局不许少功能，也不许切过去是裸样式。
+ * ========================================================================== */
+.app-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: calc(62px + var(--safe-top));
+  padding-top: var(--safe-top);
+  padding-left: max(clamp(16px, 4vw, 48px), var(--safe-left));
+  padding-right: max(clamp(16px, 4vw, 48px), var(--safe-right));
+  padding-bottom: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.app-page-header nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  /* 窄屏放不下 7 个入口时，让这一排横向滚动，而不是把每个按钮压窄、
+     导致「书架」竖着断成「书/架」两个字（用户 2026-09-30 报的导航错位）。 */
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.app-page-header nav::-webkit-scrollbar { display: none; }
+.app-page-header nav button {
+  position: relative;
+  height: 100%;
+  padding: 0 16px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 标签绝不换行、按钮绝不被压窄：宁可整排滚动，也不让两个汉字断成两行。 */
+  white-space: nowrap;
+  flex: 0 0 auto;
+  transition: color 0.15s ease;
+}
+.app-page-header nav button:hover {
+  color: var(--ink);
+}
+.app-page-header nav button.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+.app-page-header nav button.active::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 2.5px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  content: '';
+}
+.header-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+}

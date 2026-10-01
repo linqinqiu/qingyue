@@ -155,6 +155,10 @@ try {
 
   const goto = async hash => {
     await page.goto(`${BASE}/${hash}`, { waitUntil: 'domcontentloaded' })
+    // 冷启动到第一屏要等多久取决于这台机器此刻多忙（同一台机器实测 3~36 秒不等）。
+    // 只 sleep 固定 1.4 秒的话，负载高的那一次会把"应用还在载入"读成"这一类数据是空的"，
+    // 于是假红一条"本机有真订阅时不显示空态"。先等外壳出现，再给内容一点时间。
+    await page.waitForSelector('.page-bar h1, .app-rail', { timeout: 60000 }).catch(() => null)
     await sleep(1400)
   }
 
@@ -365,6 +369,8 @@ try {
 
   // 书架排序：换序真的生效（有 ≥2 本书时才断得出顺序变化）
   await goto('#shelf')
+  // 书架的书是进页面后才取的；负载下这一刻还没回来，会被读成"本机 0 本"然后整条 SKIP。
+  await page.waitForFunction(() => document.querySelectorAll('.shelf-card').length > 0, { timeout: 20000, polling: 400 }).catch(() => null)
   const shelfProbe = await page.evaluate(() => ({
     rows: document.querySelectorAll('.shelf-card').length,
   }))
@@ -412,6 +418,10 @@ try {
     button?.click()
   })
   await sleep(1400)
+  // RSS 列表是切页签后才去取的，负载下 1.4 秒可能还在飞 —— 等到"有行"或"明确空态"再读，
+  // 而不是把"还没到"当成"一条都没有"。
+  await page.waitForFunction(() => document.querySelectorAll('.subscription-list article').length > 0
+    || !!document.querySelector('.subscription-list .panel-empty'), { timeout: 30000, polling: 400 }).catch(() => null)
   const rssEmpty = await page.evaluate(() => ({
     guide: !!document.querySelector('.subscription-list .panel-empty'),
     buttons: [...document.querySelectorAll('.panel-empty-actions button')].map(node => node.textContent?.trim()),
