@@ -41,6 +41,25 @@ class CoverCache(private val directory: Path, private val fetcher: ((String) -> 
     fun file(key: String): Path? = key.takeIf { it.matches(Regex("[0-9a-f]{64}")) }?.let(directory::resolve)?.takeIf(Files::exists)
 
     /**
+     * 一次性回收我们替本地书生成的假封面（`LocalBookParser` 里那段彩色 SVG 已经删掉）。
+     * 判据只认自家写死的那个天蓝角标色 `#38bdf8`，所以 EPUB 内嵌的真 SVG 封面不会被误删；
+     * 文件读不到或不含该签名的，一律原样留着。
+     */
+    fun purgeGeneratedLocalCovers(database: Database): Int {
+        var purged = 0
+        database.generatedLocalCoverKeys().forEach { key ->
+            val stored = file(key) ?: return@forEach
+            val generated = runCatching { String(Files.readAllBytes(stored), Charsets.UTF_8) }
+                .getOrDefault("").contains("#38bdf8")
+            if (!generated) return@forEach
+            Files.deleteIfExists(stored)
+            database.forgetCover(key)
+            purged++
+        }
+        return purged
+    }
+
+    /**
      * 正文配图：与封面共用一套落盘缓存，但两条约束不同 ——
      * ① 必须带 Referer（图站普遍防盗链，直连拿回来是 403 占位图）；
      * ② 拒 `image/svg+xml`：代理后与主应用同源，SVG 里可以带脚本，等于给自己开个 XSS 执行面。

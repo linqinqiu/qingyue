@@ -60,8 +60,9 @@ class LocalBookParserTest {
         assertTrue(parsed.chapters[1].content.contains("主角苏醒了"))
         assertEquals("第二章 初入宗门", parsed.chapters[2].title)
         assertEquals("尾声", parsed.chapters[3].title)
-        assertNotNull(parsed.coverBytes)
-        assertEquals("image/svg+xml", parsed.coverContentType)
+        // TXT 没有封面可言：以前按书名哈希生成一张彩色 SVG，一书架本地书下去就是彩虹，现在留空
+        assertNull(parsed.coverBytes)
+        assertNull(parsed.coverContentType)
     }
 
     @Test
@@ -95,6 +96,39 @@ class LocalBookParserTest {
         assertEquals(1, parsed.chapters.size)
         assertEquals("第一章 起源", parsed.chapters[0].title)
         assertEquals("正文内容", parsed.chapters[0].content)
+    }
+
+    /**
+     * 分章的每一种"标题写法" + 反向对照。
+     *
+     * 为什么单独立一条：上一版这里多了一个右括号，`Pattern` 编译不过 → `LocalBookParser` 的类初始化
+     * 抛 `ExceptionInInitializerError`，此后这个对象每次调用都是 `NoClassDefFoundError` ——
+     * 表现不是"分章不准"，而是**本地书导入整条功能是死的**。而当时没有任何一条用例用
+     * "空格分隔的章名"（`第一章 起源`），改坏的人几乎看不到红叉。
+     * 反向对照（正文不许被当章名）同样重要：只判"能匹配"的用例会鼓励把正则改宽，
+     * 宽到把整本书拆成一行一章还全绿。
+     */
+    @Test
+    fun `parseTxt recognises every documented heading shape and nothing else`() {
+        val headings = listOf(
+            "第一章 起源",
+            "第1章：归来",
+            "3. 起飞",
+            "一、旧事",
+            "Chapter 2 The Journey",
+            "尾声",
+            "上部 风起",
+        )
+        // 首字符是数字但后面跟的是汉字 —— 这是正文，不是标题
+        val prose = "2019年冬天，他离开了家乡。这是一段普通的正文。"
+        val content = headings.joinToString("\n") { "$it\n$prose\n" }
+        val parsed = LocalBookParser.parseTxt("分章形态.txt", content.toByteArray(StandardCharsets.UTF_8))
+
+        assertEquals("标题写法要全部认得，且正文不许被切成章", headings.size, parsed.chapters.size)
+        assertEquals(headings, parsed.chapters.map { it.title })
+        parsed.chapters.forEach { chapter ->
+            assertTrue("《${chapter.title}》没拿到正文", chapter.content.contains("他离开了家乡"))
+        }
     }
 
     @Test
@@ -140,7 +174,7 @@ class LocalBookParserTest {
         val tempDir = Files.createTempDirectory("local-book-db-test")
         val dbPath = tempDir.resolve("legado.sqlite").toString()
         val database = Database(dbPath)
-        database.initialize("admin123")
+        database.initialize()
 
         val coverCache = CoverCache(tempDir.resolve("covers"))
 
@@ -148,8 +182,9 @@ class LocalBookParserTest {
             title = "雪中悍刀行",
             author = "烽火戏诸侯",
             intro = "江湖是一张珠帘。",
-            coverBytes = LocalBookParser.generateSvgCover("雪中悍刀行", "烽火戏诸侯").toByteArray(StandardCharsets.UTF_8),
-            coverContentType = "image/svg+xml",
+            // 模拟 EPUB 内嵌的真封面（jpeg）：真封面照旧保留，只有我们生成的那张才回收
+            coverBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()),
+            coverContentType = "image/jpeg",
             chapters = listOf(
                 ParsedChapter("第一章 小二上酒", "小二，来壶黄酒，切两斤熟牛肉！"),
                 ParsedChapter("第二章 白狐儿脸", "听潮亭下，一位绝美白衣男子正在读书。")
@@ -158,11 +193,13 @@ class LocalBookParserTest {
 
         val coverKey = coverCache.saveCoverBytes(parsed.coverBytes!!, parsed.coverContentType!!)
         val bookId = "book123"
-        val item = database.importLocalBook(bookId, parsed, coverKey)
+        val item = database.importLocalBook(bookId, parsed, coverKey, groupId = database.createBookGroup("本地").id)
 
         assertEquals("loc_book", item.sourceId)
         assertEquals("local://book123", item.bookUrl)
         assertEquals("雪中悍刀行", item.name)
+        // 本地书导入要落到「本地」这一组，一次十几本混在线书里就再也找不着了
+        assertEquals(database.listBookGroups().first { it.name == "本地" }.id, item.groupId)
         assertEquals("烽火戏诸侯", item.author)
         assertEquals(2, item.totalChapters)
         assertEquals(2, item.cachedChapters)

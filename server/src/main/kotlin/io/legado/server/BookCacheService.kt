@@ -144,7 +144,7 @@ class BookCacheService(private val database: Database, private val runner: RuleR
 
     private companion object {
         const val MAX_CHAPTER_BYTES = 2 * 1024 * 1024
-        const val CACHE_CONCURRENCY = 4
+        val CACHE_CONCURRENCY = AppConfig.cacheConcurrency
         const val BATCH_THROTTLE_DELAY_MS = 25L
         const val PROGRESS_UPDATE_INTERVAL_MS = 1_000L
     }

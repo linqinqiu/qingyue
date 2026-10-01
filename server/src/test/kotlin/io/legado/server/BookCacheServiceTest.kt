@@ -20,7 +20,7 @@ class BookCacheServiceTest {
     fun `caches all chapters and sets shelf cache state to ready`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "测试书", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -55,7 +55,7 @@ class BookCacheServiceTest {
     fun `breakpoint resume preserves existing cached chapters and completes remaining chapters`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "断点测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -92,7 +92,7 @@ class BookCacheServiceTest {
     fun `book with 100 percent pre-cached chapters immediately transitions to ready`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "已全缓", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -126,7 +126,7 @@ class BookCacheServiceTest {
     fun `start method automatically enqueues all shelf cache requests`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book1 = BookshelfWriteRequest("https://s1.test", "https://book/1", "书1", tocUrl = "https://book/1/toc")
             val book2 = BookshelfWriteRequest("https://s1.test", "https://book/2", "书2", tocUrl = "https://book/2/toc")
             database.saveBookshelf(book1, null)
@@ -162,7 +162,7 @@ class BookCacheServiceTest {
     fun `handles partial chapter download failures without aborting the batch`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "容错测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -199,7 +199,7 @@ class BookCacheServiceTest {
     fun `rejects oversized chapters exceeding 2 MiB limit`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "超大章节测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -234,7 +234,7 @@ class BookCacheServiceTest {
     fun `cancels active cache job cleanly`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "取消测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -269,7 +269,7 @@ class BookCacheServiceTest {
     fun `handles non-existent source gracefully with failed status`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("missing-source", "https://book/1", "无源书", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -290,7 +290,7 @@ class BookCacheServiceTest {
     fun `deduplicates enqueue calls for already caching books`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "去重测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -326,7 +326,7 @@ class BookCacheServiceTest {
     fun `bounded chapter downloads run concurrently within the configured 4 to 8 worker window`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "并发窗口测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 
@@ -367,7 +367,7 @@ class BookCacheServiceTest {
     fun `reports intermediate throttled cache progress while batch is still caching`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("https://s1.test", "https://book/1", "进度测试", tocUrl = "https://book/1/toc")
             database.saveBookshelf(book, null)
 

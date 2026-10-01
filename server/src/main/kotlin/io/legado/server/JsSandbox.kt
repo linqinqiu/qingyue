@@ -32,6 +32,13 @@ data class JsExecutionContext(
     var reRenderUi: Boolean = false,
     /** 脚本执行失败的原始原因，供登录动作回传给前端展示（否则按钮会「假成功」） */
     var lastError: String? = null,
+    /**
+     * 用户已经在上一次调用里被要求打开内置浏览器、并且那一轮已经结束了。
+     * 登录脚本普遍写成 `var r = java.startBrowserAwait(登录页); 从 r.body 里取 token`，
+     * 上游是真 Android WebView 阻塞等页面关掉再返回响应；我们做不到阻塞，就靠客户端在
+     * 「浏览器关掉」之后带这个标记重跑一次，第二次让服务端带着已落库的 Cookie 自己抓那一页。
+     */
+    var browserCompleted: Boolean = false,
     /** 当前书籍上下文，供 book 桥接对象读取 */
     val bookUrl: String? = null,
     val bookName: String? = null,
@@ -93,7 +100,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             cleanScript
         }
 
-        val cx = Context.enter()
+        val cx = BoundedJs.enter()
         try {
             cx.optimizationLevel = -1
             cx.setClassShutter(ClassShutter { false }) // Sandbox: block all Java reflection
@@ -132,7 +139,17 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             if (!sourceId.isNullOrBlank()) {
                 val db = context?.database ?: runner?.database
                 ScriptableObject.putProperty(scope, "source", createSourceBridge(scope, sourceId, db, context))
-                ScriptableObject.putProperty(scope, "cookie", createCookieBridge(scope, sourceId, db))
+                // 凭据改成全局按域共享之后，`cookie.getCookie(任意 url)` 就等于"任何源的登录态都能读"。
+                // 上游是单机 App 不防这个，我们防一道软的：脚本只能读到这本书源配置里出现过的域，
+                // 外加它自己的主域（源没入库时也能读到自己那份）。注意这是**文本**判定 ——
+                // 一个铁了心的恶意源把域名写进规则串就能越过这条线，真正的底线仍然是"只导入信任书源"。
+                val storedJson = db?.getSource(sourceId)?.json
+                val scriptHosts = ((storedJson?.let(WebViewProxy::credentialDomains) ?: emptyList()) + listOfNotNull(
+                    sourceId,
+                    bindings["baseUrl"]?.toString(),
+                    bindings["bookSourceUrl"]?.toString(),
+                )).filter { it.isNotBlank() }
+                ScriptableObject.putProperty(scope, "cookie", createCookieBridge(scope, sourceId, db, scriptHosts))
             }
 
             // Legado 的 book 对象：书源 JS 会用 book.getVariable('custom') 读取书籍级变量
@@ -157,7 +174,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             lastError = detail
             return null
         } finally {
-            Context.exit()
+            BoundedJs.exit()
         }
     }
 
@@ -398,14 +415,22 @@ class JsSandbox(private val runner: RuleRunner? = null) {
         scope: Scriptable,
         sourceId: String,
         db: Database?,
+        allowedHosts: List<String>,
     ): NativeObject = NativeObject().also { api ->
         api.parentScope = scope
+
+        // 只放行这本书源配置里真正会访问的域（按注册域比对，与存桶键同一口径）
+        fun allowed(url: String): Boolean {
+            val bucket = db?.cookieBucket(url) ?: return false
+            return allowedHosts.any { host -> db.cookieBucket(host) == bucket }
+        }
 
         // cookie.getCookie(url)
         ScriptableObject.putProperty(api, "getCookie", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val url = args.firstOrNull()?.toString() ?: return ""
-                return db?.getSourceCookie(sourceId, url) ?: ""
+                if (!allowed(url)) return ""
+                return db?.getCookieForUrl(url) ?: ""
             }
         })
 
@@ -414,7 +439,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val url = args.getOrNull(0)?.toString() ?: return ""
                 val c = args.getOrNull(1)?.toString() ?: return ""
-                db?.setSourceCookie(sourceId, url, c)
+                if (allowed(url)) db?.setCookieForUrl(url, c)
                 return c
             }
         }
@@ -426,7 +451,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
         ScriptableObject.putProperty(api, "removeCookie", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val url = args.firstOrNull()?.toString() ?: return true
-                db?.removeSourceCookie(sourceId, url)
+                if (allowed(url)) db?.removeCookieBucket(url)
                 return true
             }
         })
@@ -436,7 +461,8 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val url = args.getOrNull(0)?.toString() ?: return ""
                 val key = args.getOrNull(1)?.toString() ?: return ""
-                val cookieStr = db?.getSourceCookie(sourceId, url) ?: ""
+                if (!allowed(url)) return ""
+                val cookieStr = db?.getCookieForUrl(url) ?: ""
                 val map = parseCookieString(cookieStr)
                 return map[key] ?: ""
             }
@@ -516,7 +542,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             }
         })
 
-        // java.startBrowser(url, title) / java.startBrowserAwait(url, title) / java.openWeb(url)
+        // java.startBrowser(url, title) / java.openWeb(url)：只请求打开，无返回体
         val browserFn = object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                 val url = args.firstOrNull()?.toString() ?: ""
@@ -529,8 +555,45 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             }
         }
         ScriptableObject.putProperty(api, "startBrowser", browserFn)
-        ScriptableObject.putProperty(api, "startBrowserAwait", browserFn)
+        // java.startBrowserAwait(url, title)：上游返回 `StrResponse{url, body}`，登录脚本会去读
+        // `r.body` 拿 token。第一次调用只把地址交给界面去开浏览器；用户在浏览器里登录完、界面带
+        // `browserCompleted` 重跑时，这里改成**服务端自己带着已落库的 Cookie 抓这一页**，
+        // 把 HTML 放进 body —— 否则脚本永远拿到空串，登录等于没做完。
+        ScriptableObject.putProperty(api, "startBrowserAwait", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
+                val url = args.firstOrNull()?.toString() ?: ""
+                val resObj = NativeObject()
+                resObj.parentScope = scope
+                ScriptableObject.putProperty(resObj, "url", url)
+                val body = if (execContext?.browserCompleted == true && url.startsWith("http")) {
+                    runCatching { runner?.fetch(url, execContext?.sourceId, execContext?.database) }.getOrNull()
+                } else {
+                    execContext?.openUrl = url
+                    null
+                } ?: ""
+                ScriptableObject.putProperty(resObj, "body", body)
+                return resObj
+            }
+        })
         ScriptableObject.putProperty(api, "openWeb", browserFn)
+        // 上游 `JsExtensions.getCookie(tag[, key])`：tag 是地址或域名，实测 15 个源在用 `java.getCookie(...)`，
+        // 我们只有 `cookie.getCookie(...)`，于是这些脚本直接 TypeError。两个名字都要有。
+        val javaGetCookie = object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
+                val tag = args.getOrNull(0)?.toString() ?: return ""
+                val db = execContext?.database ?: return ""
+                val ownId = execContext?.sourceId ?: return ""
+                // 与 cookie 桥同一道软闸：配置里出现过的域 + 它自己的主域。
+                val stored = db.getSource(ownId)?.json?.let(WebViewProxy::credentialDomains) ?: emptyList()
+                val bucket = db.cookieBucket(tag)
+                if ((stored + ownId).none { host -> db.cookieBucket(host) == bucket }) return ""
+                val cookie = db.getCookieForUrl(tag) ?: ""
+                val key = args.getOrNull(1)?.toString()?.takeIf { it.isNotBlank() } ?: return cookie
+                return cookie.split(';').map { it.trim() }.firstOrNull { it.startsWith("$key=") }?.substringAfter('=') ?: ""
+            }
+        }
+        ScriptableObject.putProperty(api, "getCookie", javaGetCookie)
+        ScriptableObject.putProperty(api, "getKey", javaGetCookie)
         // 聚合类书源常用的其它打开网页别名
         ScriptableObject.putProperty(api, "showBrowser", browserFn)
         ScriptableObject.putProperty(api, "showReadingBrowser", browserFn)

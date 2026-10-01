@@ -3,10 +3,10 @@ package io.legado.server
 import kotlinx.serialization.Serializable
 
 @Serializable data class ApiError(val code: String, val message: String)
-@Serializable data class LoginRequest(val password: String)
-@Serializable data class LoginResponse(val csrfToken: String)
-@Serializable data class SessionResponse(val authenticated: Boolean, val csrfToken: String? = null)
-@Serializable data class UserSession(val id: String)
+
+/** 探活兼报版本：界面右上角显示的版本号就来自这里，保证"跑着的 == 构建的 == 界面说的"。 */
+@Serializable
+data class HealthStatus(val title: String, val version: String, val status: String)
 
 @Serializable data class SourceSummary(
     val id: String,
@@ -56,6 +56,10 @@ data class SourceLoginUiResponse(
     val loginInfo: Map<String, String> = emptyMap(),
     val loginHeader: String? = null,
     val sourceVariable: String? = null,
+    /** `loginUrl` 不是网址而是整段登录 JS（聚合源普遍如此），界面要按这个改文案与动作。 */
+    val loginIsScript: Boolean = false,
+    /** 这份书源实际会带凭据去访问的域名，登录页那个排最前（粘贴 Cookie 要能选对地方）。 */
+    val cookieDomains: List<String> = emptyList(),
 )
 
 @Serializable
@@ -70,6 +74,17 @@ data class SourceLoginActionRequest(
     val action: String,
     val loginData: Map<String, String> = emptyMap(),
     val isLongClick: Boolean = false,
+    /** 内置浏览器那一轮已经关掉：让 startBrowserAwait 改为服务端自己抓页面 */
+    val browserCompleted: Boolean = false,
+)
+
+/** 删掉某个域名下的 Cookie 后，把剩下的罐子概况一起回给界面，省一次往返。 */
+@Serializable
+data class SourceCookieRemoveResponse(
+    val ok: Boolean,
+    val removed: Boolean,
+    val count: Int,
+    val domains: List<String> = emptyList(),
 )
 
 @Serializable
@@ -145,6 +160,54 @@ data class SourceBrowserCookieResponse(
     val cookies: Map<String, String>,
 )
 
+/** 全局凭据表里的一桶：注册域 + 它上面的 Cookie 键名（不含值，值不进列表接口）。 */
+data class CookieBucket(
+    val domain: String,
+    val keys: List<String>,
+)
+
+@Serializable
+data class GlobalCookieEntry(
+    val domain: String,
+    val keys: List<String>,
+    /** 有多少本书源的配置里**写到过**这个域（粗筛，不等于"会访问"）。 */
+    val mentionedBy: Int,
+)
+
+@Serializable
+data class GlobalCookieListResponse(
+    val count: Int,
+    val cookies: List<GlobalCookieEntry>,
+)
+
+/**
+ * 某个地址所属注册域上**有没有**凭据 —— 发现页拿它把"这一栏要登录"和"站点真的返回空"分开。
+ * 只回答有/无：上游没有任何"是否已登录"的判定机制（`loginCheckJs` 只是响应改写器），
+ * 所以这里也不能说得比"有凭据/没凭据"更肯定。
+ */
+@Serializable
+data class SourceCredentialStatus(
+    val domain: String,
+    val has: Boolean,
+)
+
+@Serializable
+data class ExternalLoginStatus(
+    /** 我们拉起来的那个真浏览器还在不在。 */
+    val opened: Boolean,
+    val browser: String = "",
+    val port: Int = 0,
+    val pid: Long = 0,
+    /** 这本书源会带凭据去访问的域（按登录优先级排序）。 */
+    val hosts: List<String> = emptyList(),
+    /** 浏览器里**已经出现**这些域的 Cookie —— 也就是"登录已经发生过"的事实依据。 */
+    val seen: List<String> = emptyList(),
+    /** 本轮真正写进凭据表的域。 */
+    val stored: List<String> = emptyList(),
+    /** 该书源当前能带出去的凭据桶数量。 */
+    val count: Int = 0,
+)
+
 data class SourceLoginStateRecord(
     val sourceId: String,
     val loginInfo: Map<String, String>,
@@ -184,6 +247,32 @@ data class SourceLoginStateRecord(
 @Serializable data class SearchRequest(val keyword: String, val sourceIds: List<String>? = null)
 @Serializable data class ExploreTab(val title: String, val url: String)
 @Serializable data class ExploreRequest(val sourceId: String, val url: String, val page: Int = 1)
+
+/**
+ * RSS 订阅源（手机「订阅」页那些源），字段名以上游 `data/entities/RssSource.kt` 为准：
+ * 名称是 `sourceName` 而不是书源的 `bookSourceName`，主键是 `sourceUrl`。
+ */
+@Serializable data class RssSourceSummary(
+    val sourceUrl: String,
+    val name: String,
+    val group: String? = null,
+    val icon: String? = null,
+    val enabled: Boolean,
+    /** `ruleArticles` 有没有配：没配的源服务端解析不了，界面要能说清楚而不是报错。 */
+    val hasListRule: Boolean,
+    val updatedAt: Long,
+)
+@Serializable data class RssArticle(
+    val origin: String,
+    val title: String,
+    val link: String = "",
+    val pubDate: String? = null,
+    val description: String? = null,
+    val image: String? = null,
+)
+@Serializable data class RssArticlesRequest(val sourceUrl: String, val url: String, val page: Int = 1)
+@Serializable data class RssContentRequest(val sourceUrl: String, val link: String)
+@Serializable data class RssSourceEnabledRequest(val sourceUrl: String, val enabled: Boolean)
 @Serializable data class SearchStreamEvent(
     val type: String,
     val totalSources: Int = 0,
@@ -284,13 +373,28 @@ data class CachedBookRequest(
     val chapterIndex: Int? = null,
     val scrollPosition: Double? = null,
     val lastReadAt: Long,
+    /** 目录/内容上次刷新时间（epoch 毫秒），派生自 `book_toc_cache.updated_at`；0 = 尚无目录缓存记录。 */
+    val tocUpdatedAt: Long = 0,
     val cachedChapters: Int = 0,
     val totalChapters: Int = 0,
     val cacheState: String = "idle",
     val cacheError: String? = null,
     val completed: Boolean = false,
     val alternateSources: List<SearchResult> = emptyList(),
+    /** 书架分组，0 = 未分组（见 [BookGroup]）。 */
+    val groupId: Long = 0,
 )
+
+/** 书架分组（上游 `data/entities/BookGroup.kt`）。`bookCount` 由查询侧带出，不落库。 */
+@Serializable data class BookGroup(val id: Long, val name: String, val bookCount: Int = 0)
+@Serializable data class BookGroupCreateRequest(val name: String)
+@Serializable data class BookGroupAssignRequest(val sourceId: String, val bookUrl: String, val groupId: Long)
+
+/** 批量操作请求模型 */
+@Serializable data class BatchDeleteRequest(val books: List<BookIdentifier>)
+@Serializable data class BatchMoveGroupRequest(val books: List<BookIdentifier>, val groupId: Long?)
+@Serializable data class BatchMarkReadRequest(val books: List<BookIdentifier>, val isRead: Boolean)
+@Serializable data class BookIdentifier(val sourceId: String, val bookUrl: String)
 
 @Serializable
 data class TtsVoice(
@@ -462,19 +566,7 @@ data class SourceHealthCheckResponse(
 )
 
 
-/** WebDAV 存储区中的一个条目（供设置页面浏览使用）。 */
-@Serializable
-data class WebDavEntry(
-    val name: String,
-    val path: String,
-    val directory: Boolean,
-    val size: Long,
-    val modifiedAt: Long,
-)
 
-/** WebDAV 设置页「导入」：以存储区内的相对路径指定一份 Legado 备份包。 */
-@Serializable
-data class BackupImportRequest(val path: String)
 
 /** 备份导入结果统计（供页面提示使用）。 */
 @Serializable
@@ -486,8 +578,33 @@ data class BackupImportSummary(
     val books: Int,
     val booksUpdated: Int,
     val progress: Int,
-    /** 备份包里有、但服务端当前承接不了的条目名（RSS/TTS/字典/主题…），如实回报而不是静默丢弃。 */
+    /** 从包内 `cookies.json` 恢复并合并进书源的凭据条数（按 书源×域名 计）。 */
+    val cookies: Int = 0,
+    /** 为什么没恢复成（缺密码 / 密码不对 / 域名匹配不到书源），如实回报不静默。 */
+    val cookiesNote: String? = null,
+    /** 包内 `rssSources.json`（手机「订阅」页的 RSS 源）恢复条数，按 sourceUrl 新增。 */
+    val rssSources: Int = 0,
+    val rssSourcesUpdated: Int = 0,
+    /** 包内 `bookGroup.json` 里落到本机分组表的数量（同名只留一个，手机号已换成本机号）。 */
+    val bookGroups: Int = 0,
+    /** 备份包里有、但服务端当前承接不了的条目名（TTS/字典/主题…），如实回报而不是静默丢弃。 */
     val skippedSections: List<String> = emptyList(),
+    /** 包内条目读得出来但落不了库的原因（某一条书源/RSS 本身坏了）。以前只停在 ImportResponse 里，界面看不见。 */
+    val errors: List<String> = emptyList(),
+    /** 没有原生归宿、但已原样收进数据目录的个性化条目（书签/字典/阅读样式/朗读引擎…）。 */
+    val keptSections: List<KeptBackupEntry> = emptyList(),
+)
+
+/** 备份包里被原样收下的一条个性化内容。appliable 为真时前端可以把它映射到自己的阅读设置上。 */
+@Serializable
+data class KeptBackupEntry(
+    val name: String,
+    /** 中文条目名（书签 / 阅读样式 / 朗读引擎…），直接来自条目名，不猜内容。 */
+    val label: String,
+    val bytes: Long,
+    val items: Int,
+    val appliable: Boolean,
+    val updatedAt: Long,
 )
 
 /** 备份包 `bookshelf.json` 中的一条书架记录（含阅读进度），仅用于导入。 */
@@ -501,25 +618,15 @@ data class BackupShelfEntry(
     val completed: Boolean,
     val chapterIndex: Int,
     val readAt: Long,
+    /** 手机那侧的分组号（`Book.groupId`）。落库前要经 `importBookGroups` 的映射换成本机号。 */
+    val phoneGroupId: Long = 0,
+    /** 映射后的本机组号，0 = 未分组。 */
+    val groupId: Long = 0,
 )
 
 /** 书架与阅读进度导入统计。 */
 data class LibraryImportResult(val imported: Int, val updated: Int, val progress: Int)
 
-/** WebDAV 设置页面的服务状态与当前目录内容。 */
-@Serializable
-data class WebDavInfoResponse(
-    val url: String,
-    val directory: String,
-    val path: String,
-    val parent: String? = null,
-    val fileCount: Int,
-    val directoryCount: Int,
-    val totalBytes: Long,
-    val entries: List<WebDavEntry> = emptyList(),
-    /** 本机回环免登录是否生效：决定「文件」页要不要教用户填密码。 */
-    val anonymousLocalAccess: Boolean = false,
-)
 
 /** 本地图书导入返回条目 */
 @Serializable

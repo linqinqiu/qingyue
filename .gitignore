@@ -36,10 +36,52 @@ web/coverage/
 .pptr-profile/
 
 # 本机改动差异，含本机绝对路径，只作本地留档用，不入库
+# 本机启动器产物：图标与 .lnk 快捷方式（tools/verify/make-ico.mjs 写在这里），含本机路径，不入库
+/assets/
+
 local-patches.diff
 
 # 本机开发辅助：镜像与个人工具链，含本机绝对路径，不随开源仓库分发
 /init-mirror.gradle
-/tools/
+# tools/：默认忽略（顶层 dbq.mjs/Guard.java/JpTest.java + 未被文档引用的一次性探针/渲染/产物脚本，out/ 亦忽略），
+# 但放行 README/AGENTS/CHANGELOG/docs 通篇引用的门禁脚本（tools/verify/*.mjs）及其共享依赖 env/zip-make/multipart，
+# 否则文档叫贡献者跑的门禁根本不在仓库里。要增删分发件改这里逐条列。
+/tools/*
+!/tools/verify/
+/tools/verify/*
+!/tools/verify/authfixes.mjs
+!/tools/verify/backup-cookie-import-check.mjs
+!/tools/verify/backup-kept-check.mjs
+!/tools/verify/backup-upload-check.mjs
+!/tools/verify/book-detail-check.mjs
+!/tools/verify/chaincheck.mjs
+!/tools/verify/context-dialect-census.mjs
+!/tools/verify/controls-audit.mjs
+!/tools/verify/env.mjs
+!/tools/verify/explore-detail-check.mjs
+!/tools/verify/index-selector-census.mjs
+!/tools/verify/multipart.mjs
+!/tools/verify/opensource-hygiene-check.mjs
+!/tools/verify/overlay-audit.mjs
+!/tools/verify/reader-typography-check.mjs
+!/tools/verify/replace-regex-census.mjs
+!/tools/verify/replace-regex-e2e.mjs
+!/tools/verify/rss-census.mjs
+!/tools/verify/rss-check.mjs
+!/tools/verify/selfcheck.mjs
+!/tools/verify/shelf-layout-check.mjs
+!/tools/verify/shelf-layout-measure.mjs
+!/tools/verify/source-editor-check.mjs
+!/tools/verify/source-health-check.mjs
+!/tools/verify/source-login-check.mjs
+!/tools/verify/source-picker-check.mjs
+!/tools/verify/source-scale-check.mjs
+!/tools/verify/stalled-client-check.mjs
+!/tools/verify/subscription-check.mjs
+!/tools/verify/uiaudit.mjs
+!/tools/verify/urloptions-census.mjs
+!/tools/verify/version-check.mjs
+!/tools/verify/webview-login-probe.mjs
+!/tools/verify/zip-make.mjs
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，
 # 不再含任何本机绝对路径，所以从忽略名单里放出来随仓库分发。

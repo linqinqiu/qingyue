@@ -13,7 +13,7 @@ class SubscriptionServiceHttpTest {
         val tempDb = Files.createTempFile("legado-sub-ssrf", ".sqlite").toString()
         try {
             val db = Database(tempDb)
-            db.initialize("test-password-1234")
+            db.initialize()
             val service = SubscriptionService(db) {}
 
             // Save malicious or private network subscriptions
@@ -47,7 +47,7 @@ class SubscriptionServiceHttpTest {
         val tempDb = Files.createTempFile("legado-sub-lifecycle", ".sqlite").toString()
         try {
             val db = Database(tempDb)
-            db.initialize("test-password-1234")
+            db.initialize()
             val service = SubscriptionService(db) {}
 
             service.start()

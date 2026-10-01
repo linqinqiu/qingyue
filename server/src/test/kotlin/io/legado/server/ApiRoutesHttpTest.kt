@@ -19,15 +19,6 @@ import java.nio.file.Path
 
 class ApiRoutesHttpTest {
 
-    private suspend fun setupAuthenticatedClient(client: HttpClient, password: String): String {
-        val resp = client.post("/api/auth/login") {
-            contentType(ContentType.Application.Json)
-            setBody(LoginRequest(password))
-        }
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val loginData = resp.body<LoginResponse>()
-        return loginData.csrfToken
-    }
 
     @Test
     fun `healthz endpoint returns ok status`() = testApplication {
@@ -36,7 +27,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -59,7 +50,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -71,14 +62,12 @@ class ApiRoutesHttpTest {
             val unauthResp = client.get("/api/sources")
             assertEquals(HttpStatusCode.Unauthorized, unauthResp.status)
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             // 2. Import valid sources
             val sampleSource1 = """{"bookSourceUrl":"https://source1.com","bookSourceName":"测试源1","searchUrl":"/search?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b/{{$.id}}"}}"""
             val sampleSource2 = """{"bookSourceUrl":"https://source2.com","bookSourceName":"测试源2","searchUrl":"/search?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b/{{$.id}}"}}"""
 
             val importResp = client.post("/api/sources/import") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(ImportRequest(listOf(sampleSource1, sampleSource2)))
             }
@@ -111,7 +100,6 @@ class ApiRoutesHttpTest {
 
             // 6. Validate source
             val validateResp = client.post("/api/sources/https%3A%2F%2Fsource1.com/validate") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.OK, validateResp.status)
             val validateResult = validateResp.body<ValidateResponse>()
@@ -119,7 +107,6 @@ class ApiRoutesHttpTest {
 
             // 6b. 带草稿时校验未保存内容：编辑器里写坏的结构必须当场暴露，不能去看库里的旧副本
             val draftResp = client.post("/api/sources/https%3A%2F%2Fsource1.com/validate") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SourceValidateRequest("""{"bookSourceName":"缺少地址的草稿"}"""))
             }
@@ -129,7 +116,6 @@ class ApiRoutesHttpTest {
             // 7. Update source (PUT)
             val updatedJson = """{"bookSourceUrl":"https://source1.com","bookSourceName":"更新后的源1","searchUrl":"/s?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b/{{$.id}}"}}"""
             val putResp = client.put("/api/sources/https%3A%2F%2Fsource1.com") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SourceWriteRequest(updatedJson, sourceRecord.version))
             }
@@ -137,7 +123,6 @@ class ApiRoutesHttpTest {
 
             // Update with conflicting version -> 409
             val conflictResp = client.put("/api/sources/https%3A%2F%2Fsource1.com") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SourceWriteRequest(updatedJson, 999))
             }
@@ -154,13 +139,11 @@ class ApiRoutesHttpTest {
 
             // 9. Delete source
             val deleteResp = client.delete("/api/sources/https%3A%2F%2Fsource2.com") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NoContent, deleteResp.status)
 
             // Delete already deleted source -> 404
             val deleteAgainResp = client.delete("/api/sources/https%3A%2F%2Fsource2.com") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NotFound, deleteAgainResp.status)
         } finally {
@@ -176,7 +159,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -184,7 +167,6 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             // 1. Initial bookshelf empty
             val initialShelfResp = client.get("/api/bookshelf")
@@ -193,7 +175,6 @@ class ApiRoutesHttpTest {
 
             // 2. Add book to bookshelf
             val addShelfResp = client.post("/api/bookshelf") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(
                     BookshelfWriteRequest(
@@ -211,7 +192,6 @@ class ApiRoutesHttpTest {
 
             // 3. Update reading progress
             val saveProgressResp = client.put("/api/reading-progress") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(
                     ReadingProgress(
@@ -238,7 +218,6 @@ class ApiRoutesHttpTest {
 
             // 5. Update completed status
             val setCompletedResp = client.put("/api/bookshelf/status") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(BookshelfStatusRequest("https://src.com", "https://src.com/book/1", completed = true))
             }
@@ -247,7 +226,6 @@ class ApiRoutesHttpTest {
 
             // 6. Switch source
             val switchResp = client.post("/api/bookshelf/switch-source") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(
                     BookshelfSourceSwitchRequest(
@@ -269,20 +247,17 @@ class ApiRoutesHttpTest {
 
             // 7. Bookshelf cache endpoints
             val queueCacheResp = client.post("/api/bookshelf/cache") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(BookRequest("https://newsrc.com", "https://newsrc.com/book/1"))
             }
             assertEquals(HttpStatusCode.Accepted, queueCacheResp.status)
 
             val cancelCacheResp = client.delete("/api/bookshelf/cache?sourceId=https%3A%2F%2Fnewsrc.com&bookUrl=https%3A%2F%2Fnewsrc.com%2Fbook%2F1") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NoContent, cancelCacheResp.status)
 
             // 8. Delete book from bookshelf
             val deleteShelfResp = client.delete("/api/bookshelf?sourceId=https%3A%2F%2Fnewsrc.com&bookUrl=https%3A%2F%2Fnewsrc.com%2Fbook%2F1") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NoContent, deleteShelfResp.status)
         } finally {
@@ -298,7 +273,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -306,7 +281,6 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             // 1. Initial list empty
             val listResp = client.get("/api/subscriptions")
@@ -315,7 +289,6 @@ class ApiRoutesHttpTest {
 
             // 2. Add subscription with invalid URL -> 400
             val invalidAddResp = client.post("/api/subscriptions") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SubscriptionWriteRequest("not-a-valid-url", enabled = true))
             }
@@ -323,7 +296,6 @@ class ApiRoutesHttpTest {
 
             // 3. Add subscription with valid URL
             val validAddResp = client.post("/api/subscriptions") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SubscriptionWriteRequest("https://example.com/sources.json", enabled = true))
             }
@@ -333,13 +305,11 @@ class ApiRoutesHttpTest {
 
             // 4. Delete subscription
             val deleteSubResp = client.delete("/api/subscriptions/${sub.id}") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NoContent, deleteSubResp.status)
 
             // Delete non-existent subscription -> 404
             val deleteNonExistent = client.delete("/api/subscriptions/99999") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NotFound, deleteNonExistent.status)
         } finally {
@@ -355,7 +325,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -363,11 +333,9 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             // 1. Search with blank keyword -> 400
             val blankSearchResp = client.post("/api/search") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SearchRequest(keyword = "   "))
             }
@@ -384,7 +352,6 @@ class ApiRoutesHttpTest {
                 "ruleContent":{"content":"$.content"}
             }"""
             client.post("/api/sources/import") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(ImportRequest(listOf(sourceJson)))
             }
@@ -400,14 +367,12 @@ class ApiRoutesHttpTest {
 
             // 4. Books content endpoint validations
             val invalidContentResp = client.post("/api/books/content") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(ContentRequest(sourceId = "", chapterUrl = ""))
             }
             assertEquals(HttpStatusCode.BadRequest, invalidContentResp.status)
 
             val notFoundContentResp = client.post("/api/books/content") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(ContentRequest(sourceId = "https://nonexistent.com", chapterUrl = "https://nonexistent.com/c1"))
             }
@@ -429,7 +394,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -437,11 +402,9 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             val startTime = System.currentTimeMillis()
             val addResp = client.post("/api/bookshelf") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(
                     BookshelfWriteRequest(
@@ -484,7 +447,7 @@ class ApiRoutesHttpTest {
 
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -492,10 +455,8 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             val addResp = client.post("/api/bookshelf") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(
                     BookshelfWriteRequest(
@@ -526,7 +487,7 @@ class ApiRoutesHttpTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "test-password-1234", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -534,7 +495,6 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            val csrf = setupAuthenticatedClient(client, "test-password-1234")
 
             // 1. Import test sources
             val sources = listOf(
@@ -543,7 +503,6 @@ class ApiRoutesHttpTest {
                 """{"bookSourceUrl":"https://batch3.com","bookSourceName":"批量源3","searchUrl":"/search?key={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b/{{$.id}}"}}"""
             )
             val importResp = client.post("/api/sources/import") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(ImportRequest(sources))
             }
@@ -551,7 +510,6 @@ class ApiRoutesHttpTest {
 
             // 2. Batch Disable
             val disableResp = client.post("/api/sources/batch") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(BatchSourceRequest(action = "disable", ids = listOf("https://batch1.com", "https://batch2.com")))
             }
@@ -569,7 +527,6 @@ class ApiRoutesHttpTest {
 
             // 3. Batch Enable
             val enableResp = client.post("/api/sources/batch") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(BatchSourceRequest(action = "enable", ids = listOf("https://batch1.com")))
             }
@@ -579,7 +536,6 @@ class ApiRoutesHttpTest {
 
             // 4. Batch Set Group
             val groupResp = client.post("/api/sources/batch") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(BatchSourceRequest(action = "set_group", ids = listOf("https://batch1.com", "https://batch3.com"), group = "精品新组"))
             }
@@ -595,7 +551,6 @@ class ApiRoutesHttpTest {
 
             // 5. Health Check Endpoint
             val healthResp = client.post("/api/sources/health-check") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(SourceHealthCheckRequest(ids = listOf("https://batch1.com"), timeoutMs = 1000L))
             }
@@ -607,7 +562,6 @@ class ApiRoutesHttpTest {
 
             // 6. Batch Delete
             val deleteResp = client.post("/api/sources/batch") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(BatchSourceRequest(action = "delete", ids = listOf("https://batch1.com", "https://batch2.com", "https://batch3.com")))
             }

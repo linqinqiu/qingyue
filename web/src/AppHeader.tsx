@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import type { ReaderSettings } from './readerSettings'
 
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'webdav'
+export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup'
 
 export interface AppHeaderProps {
   page: AppPage
@@ -14,7 +14,9 @@ export interface AppHeaderProps {
   onNavigate: (page: AppPage) => void
   onOpenReplaceRules?: () => void
   onOpenOfflineCache?: () => void
-  onLogout: () => void
+  onOpenLogs?: () => void
+  /** 服务端 /healthz 报回来的版本号；空串表示还没问到（离线或启动中）。 */
+  version?: string
 }
 
 export const APP_THEMES: ReadonlyArray<{ id: ReaderSettings['theme']; name: string }> = [
@@ -31,7 +33,8 @@ export function AppHeader({
   onNavigate,
   onOpenReplaceRules,
   onOpenOfflineCache,
-  onLogout,
+  onOpenLogs,
+  version = '',
 }: AppHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [canInstall, setCanInstall] = useState(false)
@@ -83,12 +86,6 @@ export function AppHeader({
     }
   }, [menuOpen])
 
-  const handleLogout = () => {
-    if (window.confirm('确定要退出登录吗？')) {
-      setMenuOpen(false)
-      onLogout()
-    }
-  }
 
   const handleThemeChange = (theme: ReaderSettings['theme']) => {
     onSettingsChange({ ...settings, theme })
@@ -100,10 +97,10 @@ export function AppHeader({
         type="button"
         className="app-brand"
         onClick={() => onNavigate('library')}
-        aria-label="阅读服务器"
+        aria-label="青阅"
       >
         <Logo size={22} />
-        <strong>阅读服务器</strong>
+        <strong>青阅</strong>
       </button>
 
       <nav aria-label="主导航">
@@ -130,17 +127,17 @@ export function AppHeader({
         </button>
         <button
           type="button"
-          className={page === 'explore' ? 'active' : ''}
-          onClick={() => onNavigate('explore')}
-        >
-          发现
-        </button>
-        <button
-          type="button"
           className={page === 'sources' ? 'active' : ''}
           onClick={() => onNavigate('sources')}
         >
           书源
+        </button>
+        <button
+          type="button"
+          className={page === 'explore' ? 'active' : ''}
+          onClick={() => onNavigate('explore')}
+        >
+          发现
         </button>
         <button
           type="button"
@@ -149,33 +146,19 @@ export function AppHeader({
         >
           订阅
         </button>
-        <button
-          type="button"
-          className={page === 'rules' ? 'active' : ''}
-          onClick={() => onNavigate('rules')}
-        >
-          规则
-        </button>
-        <button
-          type="button"
-          className={page === 'webdav' ? 'active' : ''}
-          title="WebDAV 文件服务"
-          onClick={() => onNavigate('webdav')}
-        >
-          文件
-        </button>
       </nav>
 
       <div className="header-actions" ref={menuContainerRef}>
         <button
           type="button"
           className={`header-menu-btn ${menuOpen ? 'active' : ''}`}
-          aria-label={menuOpen ? '关闭功能菜单' : '打开功能菜单'}
+          aria-label={menuOpen ? '关闭我的菜单' : '打开我的菜单'}
           aria-expanded={menuOpen}
           aria-haspopup="true"
           onClick={() => setMenuOpen(prev => !prev)}
         >
           <Icon name="menu" />
+          <span className="header-menu-label">我的</span>
         </button>
 
         {menuOpen && (
@@ -186,10 +169,18 @@ export function AppHeader({
               aria-hidden="true"
             />
             <div className="header-menu-dropdown" role="menu" aria-label="功能菜单">
+              {/*
+                  「已登录服务」是认证那套删掉之后留下的谎话：这台服务不设身份，没有登录这回事。
+                  换成真正有用的两件事：这是哪个版本、连的是哪台。
+                */}
               <div className="menu-header">
                 <div className="menu-status-badge">
                   <span className="menu-status-dot" />
-                  <span className="menu-header-title">已登录服务</span>
+                  <span className="menu-header-title">本机服务在线</span>
+                </div>
+                <div className="menu-version">
+                  <span>版本</span>
+                  <code>{version || '未取到'}</code>
                 </div>
               </div>
 
@@ -223,7 +214,7 @@ export function AppHeader({
                   <button
                     type="button"
                     className="menu-logout-btn"
-                    style={{ color: '#14B8A6' }}
+                    style={{ color: 'var(--ink)' }}
                     role="menuitem"
                     onClick={() => void handlePwaInstall()}
                   >
@@ -259,6 +250,21 @@ export function AppHeader({
                   <Icon name="edit" />
                   <span>替换净化规则</span>
                 </button>
+                {onOpenLogs && (
+                  <button
+                    type="button"
+                    className="menu-logout-btn"
+                    style={{ color: 'var(--ink)' }}
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onOpenLogs()
+                    }}
+                  >
+                    <Icon name="activity" />
+                    <span>运行日志</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="menu-logout-btn"
@@ -266,11 +272,11 @@ export function AppHeader({
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false)
-                    onNavigate('webdav')
+                    onNavigate('backup')
                   }}
                 >
                   <Icon name="folder" />
-                  <span>WebDAV 文件服务</span>
+                  <span>备份包</span>
                 </button>
                 <button
                   type="button"
@@ -282,20 +288,6 @@ export function AppHeader({
                 >
                   <Icon name="expand" />
                   <span>{isFullscreen ? '退出全屏' : '全屏显示'}</span>
-                </button>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-section">
-                <button
-                  type="button"
-                  className="menu-logout-btn"
-                  role="menuitem"
-                  onClick={handleLogout}
-                >
-                  <Icon name="logOut" />
-                  <span>退出登录</span>
                 </button>
               </div>
             </div>

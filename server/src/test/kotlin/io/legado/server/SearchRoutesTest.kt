@@ -21,7 +21,7 @@ class SearchRoutesTest {
     fun `search returns candidates immediately without deep 3-tier validation`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val sourceJson = """{
                 "bookSourceUrl":"https://source.example",
                 "searchUrl":"/search?key={{key}}",
@@ -87,7 +87,7 @@ class SearchRoutesTest {
     fun `streaming search emits results per source immediately with accurate counters`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             val sources = (1..5).map { idx ->
                 """{"bookSourceUrl":"https://source$idx.example","bookSourceName":"书源$idx","searchUrl":"/search?key={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/book/{{$.id}}"}}"""
             }
@@ -155,7 +155,7 @@ class SearchRoutesTest {
     fun `search filters records by sourceIds parameter`() = runBlocking {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("test-pass")
+            val database = Database(path); database.initialize()
             database.importSources(listOf(
                 """{"bookSourceUrl":"https://src1.example","bookSourceName":"源1","searchUrl":"/search?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b"}}""",
                 """{"bookSourceUrl":"https://src2.example","bookSourceName":"源2","searchUrl":"/search?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b"}}""",

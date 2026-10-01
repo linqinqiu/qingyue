@@ -1,6 +1,6 @@
 {
   "name": "legado-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",
   "keywords": [
@@ -15,7 +15,6 @@
     "react",
     "pwa",
     "tts",
-    "webdav",
     "docker"
   ],
   "scripts": {

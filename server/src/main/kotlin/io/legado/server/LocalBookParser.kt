@@ -32,9 +32,25 @@ object LocalBookParser {
 
     const val LOC_BOOK_SOURCE_ID = "loc_book"
 
-    // 中文小说章节识别核心正则
+    // 中文小说章节识别核心正则（增强版）
+    // 匹配格式包括：
+    // - 第X章/回/节/卷/集/篇/部（数字、中文、混合）
+    // - Chapter X / Vol. X
+    // - 纯数字前缀：1. 2. 3. 或 一、二、三、
+    // - 特殊章节：引子/序言/楔子/尾声/后记/番外/终章/前言/附录
+    // - 卷部：上部/下部/中部/前传/后传/外传/特别篇
+    // - 标题后缀：`第一章 起源`、`3. 起飞`、`第1章：归来`（分隔符可以只是空格）
+    //
+    // 两个坑，改的时候别碰回去：
+    // ① 所有分支必须整体套在一个 `(?: … )` 里再上 `^…$`。`Regex.matches` 要整行匹配，
+    //    写成顶层 `^(?:A)|(?:B)|…$` 时每条分支各自被 `^`/`$` 卡成不一样的形状
+    //    （只有第一条带 `^`、只有最后一条带 `$`），"第X章 + 空格 + 标题"这类最常见写法反而匹配不上。
+    // ② 上一版这里多了一个右括号，`Pattern` 编译失败 → `LocalBookParser` 的类初始化直接抛
+    //    `ExceptionInInitializerError`，整个对象此后全是 `NoClassDefFoundError`：
+    //    表现不是"分章不准"，而是**本地书导入整条功能是死的**。所以这一组的用例
+    //    （LocalBookParserTest）必须先能跑起来再谈别的。
     private val CHAPTER_TITLE_REGEX = Regex(
-        """^(?:第[0-9一二三四五六七八九十百千万零两]+[章回节卷集幕计篇部]|Chapter\s+[0-9]+|引子|序言|序章|楔子|尾声|后记|番外|终章)(?:[^\r\n]{0,40})$""",
+        """^(?:(?:第\s*[0-9零一二三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[章回节卷集篇部幕计])|(?:Chapter|Vol\.?)\s+[0-9]+|(?:[0-9]{1,4}[.\s、]|[零一二三四五六七八九十百千万]{1,4}[、.]\s*)|(?:引子|序(?:言|章)?|楔子|尾(?:声|章)|后记|番外|终章|前言|附(?:录|记)|跋)|(?:上部|下部|中部|前传|后传|外传|特别篇))(?:\s*[-—·:：]?\s*.+)?$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -74,8 +90,9 @@ object LocalBookParser {
                     chapters.add(ParsedChapter(currentTitle, currentContent.toString().trim()))
                     currentContent.clear()
                 } else if (currentContent.isNotBlank()) {
-                    // 第一章之前的内容作为前言/引子
-                    chapters.add(ParsedChapter("前言", currentContent.toString().trim()))
+                    // 第一章之前的内容作为前言/引子（最多保留 2000 字）
+                    val prologue = currentContent.toString().trim().take(2000)
+                    chapters.add(ParsedChapter("前言", prologue))
                     currentContent.clear()
                 }
                 currentTitle = trimmed
@@ -103,14 +120,12 @@ object LocalBookParser {
             listOf(ParsedChapter("正文", text.trim()))
         } else chapters
 
-        val coverSvg = generateSvgCover(detectedTitle, detectedAuthor)
-
+        // TXT 没有封面可言：以前按书名哈希生成一张彩色 SVG，一书架本地书下去就是彩虹，
+        // 现在留空，由界面的主题化文字占位承担（BookCover → .cover-fallback）。
         return ParsedBook(
             title = detectedTitle,
             author = detectedAuthor,
             intro = if (finalChapters.firstOrNull()?.title == "前言") finalChapters.first().content.take(300) else null,
-            coverBytes = coverSvg.toByteArray(StandardCharsets.UTF_8),
-            coverContentType = "image/svg+xml",
             chapters = finalChapters,
         )
     }
@@ -188,12 +203,6 @@ object LocalBookParser {
                 coverBytes = imgData
                 coverContentType = coverItem.mediaType.ifBlank { "image/jpeg" }
             }
-        }
-
-        if (coverBytes == null) {
-            val coverSvg = generateSvgCover(title, author)
-            coverBytes = coverSvg.toByteArray(StandardCharsets.UTF_8)
-            coverContentType = "image/svg+xml"
         }
 
         // 5. 提取目录 (NCX 或 Nav 或 Spine)
@@ -331,7 +340,7 @@ object LocalBookParser {
         while (start < text.length) {
             var end = (start + chunkSize).coerceAtMost(text.length)
             if (end < text.length) {
-                // 尝试在自然换行处切分
+                // 尝试在自然换行处切分（避免从句子中间劈开）
                 val newlineIdx = text.lastIndexOf('\n', end)
                 if (newlineIdx > start + chunkSize / 2) {
                     end = newlineIdx + 1
@@ -339,6 +348,9 @@ object LocalBookParser {
             }
             val chunk = text.substring(start, end).trim()
             if (chunk.isNotEmpty()) {
+                // 标题只写"第 X 节"。上一版在这里加了"（共约 Y 节）"，意图是让人知道总共分了几个，
+                // 但目录里每一条都挂一遍总数只是噪声，而且"共约"是按字数估的：自然换行会让实际段数与估算不符，
+                // 写进标题就是把一个不确定的数字变成看起来确定的。总数阅读器本来就显示（第 x / y 章）。
                 chapters.add(ParsedChapter("第 $page 节", chunk))
                 page++
             }
@@ -445,42 +457,5 @@ object LocalBookParser {
             }
         }
         return stack.joinToString("/")
-    }
-
-    /**
-     * 生成优雅纯 SVG 艺术字封面
-     */
-    fun generateSvgCover(title: String, author: String?): String {
-        val displayTitle = if (title.length > 8) title.take(7) + "…" else title
-        val displayAuthor = author?.take(10) ?: "本地导入"
-        val bgGradients = listOf(
-            "#1e293b" to "#0f172a",
-            "#1e3a8a" to "#172554",
-            "#14532d" to "#052e16",
-            "#701a75" to "#4a044e",
-            "#7c2d12" to "#431407"
-        )
-        val hash = (title.hashCode().toLong() and 0xffffffffL).toInt()
-        val (c1, c2) = bgGradients[Math.abs(hash) % bgGradients.size]
-
-        return """
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 420" width="300" height="420">
-              <defs>
-                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style="stop-color:$c1;stop-opacity:1" />
-                  <stop offset="100%" style="stop-color:$c2;stop-opacity:1" />
-                </linearGradient>
-              </defs>
-              <rect width="300" height="420" rx="12" fill="url(#grad)" />
-              <rect x="16" y="16" width="268" height="388" rx="8" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
-              <g fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="600">
-                <rect x="24" y="24" width="48" height="20" rx="4" fill="rgba(56,189,248,0.15)" />
-                <text x="48" y="38" text-anchor="middle">本地</text>
-              </g>
-              <text x="150" y="190" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="24" font-weight="bold" text-anchor="middle">$displayTitle</text>
-              <line x1="80" y1="220" x2="220" y2="220" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
-              <text x="150" y="255" fill="rgba(255,255,255,0.7)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="14" text-anchor="middle">$displayAuthor</text>
-            </svg>
-        """.trimIndent()
     }
 }

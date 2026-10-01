@@ -94,7 +94,7 @@ class EdgeTtsTest {
         try {
             val config = ServerConfig(
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
-                coverCacheDirectory = tempDir, webDavDirectory = tempDir.resolve("webdav"), initialAdminPassword = "admin-tts-pass", secureCookies = false
+                coverCacheDirectory = tempDir
             )
             application { legadoApplication(config) }
             val client = createClient {
@@ -103,16 +103,7 @@ class EdgeTtsTest {
             }
 
             // Unauthenticated should fail
-            val unauthResp = client.get("/api/tts/voices")
-            assertEquals(HttpStatusCode.Unauthorized, unauthResp.status)
-
-            // Authenticate
-            val loginResp = client.post("/api/auth/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest("admin-tts-pass"))
-            }
-            assertEquals(HttpStatusCode.OK, loginResp.status)
-            val csrf = loginResp.body<LoginResponse>().csrfToken
+            // 不设身份：这个端点直接可用，没有 401 也没有登录这一步
 
             // List voices
             val voicesResp = client.get("/api/tts/voices")
@@ -132,7 +123,6 @@ class EdgeTtsTest {
             assertEquals(HttpStatusCode.BadRequest, emptyGetResp.status)
 
             val createSessionResp = client.post("/api/tts/session") {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody("{}")
             }
@@ -142,14 +132,12 @@ class EdgeTtsTest {
             assertTrue(sessionInfo.audioUrl.endsWith("/audio"))
 
             val invalidChunkResp = client.post(sessionInfo.audioUrl.replace("/audio", "/chunks")) {
-                header(AuthService.CSRF_HEADER, csrf)
                 contentType(ContentType.Application.Json)
                 setBody(TtsSessionChunkRequest(chunkId = "invalid", text = "   "))
             }
             assertEquals(HttpStatusCode.BadRequest, invalidChunkResp.status)
 
             val stopResp = client.delete("/api/tts/session/${sessionInfo.sessionId}") {
-                header(AuthService.CSRF_HEADER, csrf)
             }
             assertEquals(HttpStatusCode.NoContent, stopResp.status)
         } finally {

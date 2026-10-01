@@ -18,7 +18,7 @@ COPY gradle/libs.versions.toml gradle/libs.versions.toml
 COPY server/ server/
 COPY --from=web-build /src/web/dist/ server/src/main/resources/static/
 RUN --mount=type=cache,target=/home/gradle/.gradle gradle -p server clean installDist --no-daemon --no-build-cache \
-    && jar uf server/build/install/legado-server/lib/legado-server-0.1.0.jar -C server/src/main/resources static
+    && jar uf "$(ls server/build/install/legado-server/lib/legado-server-*.jar)" -C server/src/main/resources static
 
 FROM ${DOCKER_REGISTRY}eclipse-temurin:17-jre-jammy
 RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/* \
@@ -27,7 +27,9 @@ WORKDIR /app
 COPY --from=server-build /src/server/build/install/legado-server/ ./
 COPY server/docker-entrypoint.sh /app/entrypoint.sh
 RUN chmod 755 /app/entrypoint.sh
-ENV LEGADO_DATA_DIR=/data LEGADO_PORT=8080 LEGADO_SECURE_COOKIES=false
+# 容器内需绑 0.0.0.0，才能被宿主发布的端口访问；对外的安全边界由部署方
+# （如 compose 的 127.0.0.1:8080 映射、反代鉴权、安全组白名单）负责。
+ENV LEGADO_DATA_DIR=/data LEGADO_PORT=8080 LEGADO_HOST=0.0.0.0
 EXPOSE 8080
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["/app/bin/legado-server"]

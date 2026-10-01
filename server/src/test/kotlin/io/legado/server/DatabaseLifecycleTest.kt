@@ -23,7 +23,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-admin-password")
+            database.initialize()
 
             DriverManager.getConnection("jdbc:sqlite:$path").use { conn ->
                 // Check WAL mode
@@ -68,7 +68,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Insert a source with a large payload (e.g. 50KB)
             val largeRule = "{\"heavyData\":\"" + "x".repeat(50_000) + "\"}"
@@ -101,7 +101,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             database.importSources(listOf(
                 """{"bookSourceUrl":"https://alpha.example","bookSourceName":"Alpha源"}""",
@@ -136,7 +136,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             database.importSources(listOf(
                 """{"bookSourceUrl":"https://s1.example","bookSourceName":"banana"}""",
@@ -154,60 +154,7 @@ class DatabaseLifecycleTest {
         }
     }
 
-    @Test
-    fun `session lifecycle manages creation CSRF lookup and expiration`() {
-        val path = temporaryDatabase()
-        try {
-            val database = Database(path)
-            database.initialize("test-pass")
 
-            val now = System.currentTimeMillis()
-            val session = database.createSession(now)
-            assertNotNull(session.id)
-            assertTrue(session.id.isNotEmpty())
-
-            // Valid CSRF token retrieval
-            val csrf = database.csrfFor(session, now)
-            assertNotNull(csrf)
-            assertTrue(csrf!!.isNotEmpty())
-
-            // Expired session check
-            val futureTime = now + (31L * 24 * 60 * 60 * 1000) // 31 days later
-            val expiredCsrf = database.csrfFor(session, futureTime)
-            assertNull("Expired session must return null CSRF token", expiredCsrf)
-
-            // Delete session
-            database.deleteSession(session)
-            assertNull("Deleted session must return null CSRF token", database.csrfFor(session, now))
-        } finally {
-            Files.deleteIfExists(java.nio.file.Path.of(path))
-        }
-    }
-
-    @Test
-    fun `admin password verification and reset cycle clears existing sessions`() {
-        val path = temporaryDatabase()
-        try {
-            val database = Database(path)
-            database.initialize("initial-admin-password")
-
-            assertTrue(database.verifyPassword("initial-admin-password"))
-            assertFalse(database.verifyPassword("wrong-password"))
-
-            val session = database.createSession()
-            assertNotNull(database.csrfFor(session))
-
-            // Reset password
-            database.resetPassword("new-secure-password")
-
-            assertTrue(database.verifyPassword("new-secure-password"))
-            assertFalse(database.verifyPassword("initial-admin-password"))
-            // Verify sessions were wiped
-            assertNull(database.csrfFor(session))
-        } finally {
-            Files.deleteIfExists(java.nio.file.Path.of(path))
-        }
-    }
 
     // --- Tier 2: Concurrency, Contention & Migration Tests ---
 
@@ -216,7 +163,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Seed initial data
             val initialSources = (1..20).map { i ->
@@ -270,7 +217,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sub = database.saveSubscription(SubscriptionWriteRequest("https://example.com/subs.json", enabled = true))
             assertEquals("https://example.com/subs.json", sub.url)
@@ -306,7 +253,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val book1 = BookshelfWriteRequest("source-1", "https://book/1", "书名1", "作者1", "https://book/1/toc")
             database.saveBookshelf(book1, CachedCover("cover-key-1", "image/jpeg"))
@@ -334,7 +281,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val book1 = BookshelfWriteRequest("source-1", "https://book/1", "书名1", "作者1", "https://book/1/toc")
             database.saveBookshelf(book1, CachedCover("cover-key-1", "image/jpeg"))
@@ -357,7 +304,7 @@ class DatabaseLifecycleTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sourceJson1 = """{"bookSourceUrl":"https://src.example","bookSourceName":"版本1"}"""
             val record1 = database.saveSource(SourceCodec.parse(sourceJson1), null)

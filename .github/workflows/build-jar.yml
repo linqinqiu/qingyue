@@ -123,7 +123,7 @@ jobs:
             java -jar legado-server.jar
             
             # 自定义端口与数据目录
-            LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data ADMIN_PASSWORD='your_password' java -jar legado-server.jar
+            LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data java -jar legado-server.jar
             ```
           draft: false
           prerelease: false

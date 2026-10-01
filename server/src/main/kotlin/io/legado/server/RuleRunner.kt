@@ -38,6 +38,12 @@ import java.time.Duration
 import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 
+// 接入结构化日志
+import io.legado.server.logNetwork
+import io.legado.server.logRuleExecution
+import io.legado.server.logEngine
+import io.legado.server.logParsing
+
 /**
  * A deliberately small, server-safe subset of Legado's declarative source protocol.
  * It keeps execution away from Android APIs and rejects private-network targets.
@@ -65,7 +71,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 rawSearchUrl
             }
             val (urlTemplate, options) = splitUrlOptions(searchUrl)
-            val mergedOptions = mergeOptions(parseSourceHeaders(source, sourceUrl), options)
+            val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
             val rendered = renderUrl(urlTemplate, keyword, sourceUrl).absolute(sourceUrl)
             val body = fetchUrl(rendered, mergedOptions, keyword, sourceUrl, database)
             val rule = source.objectValue("ruleSearch") ?: throw RuleExecutionException("该书源未配置 ruleSearch")
@@ -116,10 +122,89 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         return jsSandbox.withSourceContext(sourceContext(source, sourceUrl)) {
             val resolved = if (isJsRule(urlTemplate)) evalRuleJs(urlTemplate, mapOf("baseUrl" to sourceUrl, "sourceId" to sourceUrl, "key" to "", "keyword" to "", "page" to page)) ?: urlTemplate else urlTemplate
             val (path, options) = splitUrlOptions(resolved)
-            val mergedOptions = mergeOptions(parseSourceHeaders(source, sourceUrl), options)
+            val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
             val body = fetchUrl(renderUrl(path, "", sourceUrl, page).absolute(sourceUrl), mergedOptions, null, sourceUrl, database)
             val rule = source.objectValue("ruleExplore") ?: source.objectValue("ruleSearch") ?: throw RuleExecutionException("该书源未配置 ruleExplore/ruleSearch")
             bookItems(body, rule, sourceUrl)
+        }
+    }
+
+    /**
+     * RSS 源的栏目（上游 `RssSource.sortUrl`）：与书源 `exploreUrl` 同一套 `标题::地址` 写法，
+     * 也支持整段 JS 返回 `[{title,url}]` 的聚合源（`RssSourceExtensions.sortUrls`）。
+     * 没配 sortUrl 时上游直接拿 sourceUrl 当唯一栏目页，这里保持一致，不让界面出现空的页签条。
+     */
+    fun rssTabs(sourceJson: String): List<ExploreTab> {
+        val source = sourceJson.objectValue()
+        val sourceUrl = source.string("sourceUrl") ?: throw RuleExecutionException("RSS 源缺少 sourceUrl")
+        val raw = source.string("sortUrl")?.trim().orEmpty()
+        if (raw.isEmpty()) return listOf(ExploreTab(source.string("sourceName")?.trim()?.takeIf { it.isNotEmpty() } ?: sourceUrl, sourceUrl))
+        return jsSandbox.withSourceContext(sourceContext(source, sourceUrl)) {
+            val text = if (isJsRule(raw)) evalRuleJs(raw, mapOf("baseUrl" to sourceUrl, "sourceId" to sourceUrl, "key" to "", "page" to 1))
+                ?: return@withSourceContext emptyList() else raw
+            parseExploreTabs(text)
+        }
+    }
+
+    /**
+     * 取 RSS 栏目页的文章列表，字段映射逐条照上游 `model/rss/RssParserByRule.kt`：
+     * `ruleArticles` 取列表（`-` 前缀＝倒序，同书源目录）、标题为空的条目丢掉，
+     * 图片地址按上游第 125 行用 sourceUrl 归一，文章链接用栏目页地址归一。
+     */
+    fun rssArticles(sourceJson: String, urlTemplate: String, page: Int = 1): List<RssArticle> {
+        val source = sourceJson.objectValue()
+        val sourceUrl = source.string("sourceUrl") ?: throw RuleExecutionException("RSS 源缺少 sourceUrl")
+        val rawListRule = source.string("ruleArticles")?.trim()
+            ?: throw RuleExecutionException("该订阅源没有配置 ruleArticles，服务端无法解析列表")
+        return jsSandbox.withSourceContext(sourceContext(source, sourceUrl)) {
+            val resolved = if (isJsRule(urlTemplate)) evalRuleJs(urlTemplate, mapOf("baseUrl" to sourceUrl, "sourceId" to sourceUrl, "key" to "", "page" to page)) ?: urlTemplate else urlTemplate
+            val (path, options) = splitUrlOptions(resolved)
+            val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
+            val pageUrl = renderUrl(path, "", sourceUrl, page).absolute(sourceUrl)
+            val body = fetchUrl(pageUrl, mergedOptions, null, sourceUrl, database)
+            val reverse = rawListRule.startsWith("-")
+            val listRule = rawListRule.removePrefix("-").trim()
+            val nodes0 = if (isJsRule(listRule)) jsListNodes(NodeValue.document(body), listRule, body, pageUrl) else nodes(body, listRule)
+            val items = nodes0.mapNotNull { item ->
+                val title = item.value(source.string("ruleTitle"), jsSandbox, body, pageUrl)?.trim().orEmpty()
+                if (title.isBlank()) return@mapNotNull null
+                val link = item.value(source.string("ruleLink"), jsSandbox, body, pageUrl)?.trim()?.absolute(pageUrl).orEmpty()
+                val description = item.value(source.string("ruleDescription"), jsSandbox, body, pageUrl)?.trim()?.takeIf { it.isNotEmpty() }
+                // 上游只要求标题非空；我们连链接和描述都没有的话，点进去必然是空白页，不如不列
+                if (link.isBlank() && description == null) return@mapNotNull null
+                RssArticle(
+                    origin = sourceUrl,
+                    title = title,
+                    link = link,
+                    pubDate = item.value(source.string("rulePubDate"), jsSandbox, body, pageUrl)?.trim()?.takeIf { it.isNotEmpty() },
+                    description = description,
+                    image = item.value(source.string("ruleImage"), jsSandbox, body, pageUrl)?.trim()?.absolute(sourceUrl)?.takeIf { it.isNotEmpty() },
+                )
+            }
+            if (reverse) items.asReversed() else items
+        }
+    }
+
+    /**
+     * RSS 正文。注意 `RssSource.ruleContent` 是**一条规则字符串**，
+     * 与 `BookSource.ruleContent`（规则对象）同名不同形，不能共用 [content]。
+     */
+    fun rssContent(sourceJson: String, link: String): ChapterContent {
+        val source = sourceJson.objectValue()
+        val sourceUrl = source.string("sourceUrl") ?: throw RuleExecutionException("RSS 源缺少 sourceUrl")
+        val ruleContent = source.string("ruleContent")?.trim()
+            ?: throw RuleExecutionException("该订阅源没有配置 ruleContent，只能直接打开原页")
+        return jsSandbox.withSourceContext(sourceContext(source, sourceUrl)) {
+            val (path, options) = splitUrlOptions(link)
+            val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
+            val body = fetchUrl(path.absolute(sourceUrl), mergedOptions, null, sourceUrl, database)
+            val root = NodeValue.document(body)
+            val text = root.value(ruleContent, jsSandbox, body, link)?.preserveContentImages(link)?.cleanContent().orEmpty()
+            if (text.isBlank()) {
+                val detail = jsSandbox.lastError?.let { "，脚本异常：$it" } ?: ""
+                throw RuleExecutionException("正文规则未提取到内容$detail")
+            }
+            ChapterContent(root.value(source.string("ruleTitle"), jsSandbox, body, link), text)
         }
     }
 
@@ -157,13 +242,50 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     private fun sourceContext(source: JsonObject, sourceUrl: String?): JsExecutionContext {
         val library = buildString {
             source.string("jsLib")?.takeIf { it.isNotBlank() }?.let { append(it) }
-            val loginScript = source.string("loginUrl")?.takeIf { it.isNotBlank() && !it.trim().startsWith("http") }
-            if (loginScript != null) {
+            loginScript(source)?.let {
                 if (isNotEmpty()) append("\n")
-                append(loginScript)
+                append(it)
             }
         }.takeIf { it.isNotBlank() }
         return JsExecutionContext(sourceId = sourceUrl, database = database, jsLib = library)
+    }
+
+    /**
+     * 上游 `BaseSource.getLoginJs()` 的口径：`loginUrl` 整串被 `<js>…</js>` 或 `@js:` 包住时取内层，
+     * 否则**原样当脚本文本**；是网址（http/https 开头）时它不是脚本。
+     * 库内实测：纯网址 293 个、`@js:` 4 个、含 `<js>` 9 个、裸 `function login(){…}` 等 195 个。
+     */
+    private fun loginScript(source: JsonObject): String? {
+        val raw = source.string("loginUrl")?.trim().orEmpty()
+        if (raw.isEmpty() || raw.startsWith("http://", true) || raw.startsWith("https://", true)) return null
+        val unwrapped = if (raw.contains("<js>")) raw.substringAfter("<js>").substringBefore("</js>")
+            else raw.removePrefix("@js:").removePrefix("js:").removePrefix("@javascript:")
+        return unwrapped.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** 界面据此决定「内置浏览器」是直开 loginUrl，还是先执行登录脚本拿地址。 */
+    fun loginIsScript(sourceJson: String): Boolean = loginScript(sourceJson.objectValue()) != null
+
+    /**
+     * 让登录脚本告诉我们要打开哪个地址。
+     *
+     * `loginUrl` 是整段 JS 的书源（实测 208 个），真正的登录页只有脚本自己知道 —— 它们普遍写成
+     * `function login(openBrowser, checkMode){ java.startBrowserAwait(真实地址, "扫码登录") … }`。
+     * 我们原来直接把 `loginUrl` 当网址打开，等于把一段 JS 交给浏览器导航，落到了书源主页；
+     * 上游是靠执行按钮脚本来打开正确页面的。这里按同一条路走：以 `login(true, false)` 跑一遍，
+     * 取它请求打开的地址。
+     */
+    fun loginBrowserStartUrl(sourceJson: String): String? {
+        val source = sourceJson.objectValue()
+        if (loginScript(source) == null) return null
+        val sourceUrl = source.string("bookSourceUrl")
+        val execContext = sourceContext(source, sourceUrl)
+        jsSandbox.eval(
+            "if (typeof login === 'function') { login(true, false); }",
+            mapOf("baseUrl" to sourceUrl.orEmpty(), "sourceId" to sourceUrl.orEmpty(), "result" to emptyMap<String, String>()),
+            execContext,
+        )
+        return execContext.openUrl?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
     }
 
     fun details(sourceJson: String, bookUrl: String): BookDetails {
@@ -218,7 +340,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             baseDoc = NodeValue.json(dataPayload)
         } else {
             val (url, options) = splitUrlOptions(bookUrl)
-            val mergedOptions = mergeOptions(parseSourceHeaders(source, sourceUrl), options)
+            val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
             body = fetchUrl(url, mergedOptions, null, sourceUrl, database)
             baseDoc = NodeValue.document(body)
         }
@@ -323,7 +445,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             chapterNodes = jsListNodes(NodeValue.json(dataPayload), listRule, body, pageUrl)
         } else {
             val (url, options) = splitUrlOptions(pageUrl)
-            val mergedOptions = mergeOptions(parseSourceHeaders(source, sourceUrl), options)
+            val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
             body = fetchUrl(url, mergedOptions, null, sourceUrl, database)
             val baseDoc = NodeValue.document(body)
             chapterNodes = if (isJsRule(listRule)) jsListNodes(baseDoc, listRule, body, pageUrl) else nodes(body, listRule)
@@ -499,7 +621,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val dataPayload = dataUrlPayload(pageUrl)
         if (dataPayload != null) return NodeValue.json(dataPayload) to dataPayload
         val (url, options) = splitUrlOptions(pageUrl)
-        val mergedOptions = mergeOptions(parseSourceHeaders(source, sourceUrl), options)
+        val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
         val body = fetchUrl(url, mergedOptions, null, sourceUrl, database)
         return NodeValue.document(body) to body
     }
@@ -544,6 +666,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         actionCode: String,
         loginData: Map<String, String>,
         isLongClick: Boolean = false,
+        browserCompleted: Boolean = false,
     ): SourceLoginActionResult {
         val source = sourceJson.objectValue()
         val sourceUrl = source.string("bookSourceUrl") ?: ""
@@ -554,6 +677,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             sourceName = sourceName,
             initialLoginInfo = loginData.toMutableMap(),
             isLongClick = isLongClick,
+            browserCompleted = browserCompleted,
         )
 
         val trimmedAction = actionCode.trim()
@@ -564,8 +688,13 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             )
         }
 
-        val fullScript = if (trimmedAction.equals("login", ignoreCase = true) || trimmedAction.startsWith("login(")) {
-            "if (typeof login === 'function') { login.apply(this); } else { $trimmedAction; }"
+        // 上游两条路径要分清：菜单「确定」走 `BaseSource.login()`，那是 `login.apply(this)`（不带实参）；
+        // 而 loginUi 按钮的 action 是**原样执行的 JS**，`login(true,false)` 这类带实参的调用必须保留实参，
+        // 否则脚本里靠 `checkMode` 分支的源会被当成"打开浏览器"那条路走。
+        val bareLogin = trimmedAction.equals("login", ignoreCase = true) ||
+            trimmedAction.replace("\\s".toRegex(), "").let { it == "login()" || it == "login();" }
+        val fullScript = if (bareLogin) {
+            "if (typeof login === 'function') { login.apply(this); } else { throw new Error('该书源脚本未定义 login()'); }"
         } else {
             trimmedAction
         }
@@ -603,9 +732,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val jsLib = source.string("jsLib") ?: ""
 
         if (loginCheckJs.isNullOrBlank()) {
-            val jar = database?.getSourceCookieJar(sourceUrl)
+            val jar = database?.cookieBucketsForHosts(WebViewProxy.credentialDomains(sourceJson)).orEmpty()
             val state = database?.getSourceLoginState(sourceUrl)
-            val hasCookie = jar?.isNotEmpty() == true
+            val hasCookie = jar.isNotEmpty()
             val hasInfo = state?.loginInfo?.isNotEmpty() == true
             val hasHeader = state?.loginHeader?.isNotEmpty() == true
             val hasCredential = hasCookie || hasInfo || hasHeader
@@ -622,45 +751,27 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val execContext = sourceContext(source, sourceUrl)
         val result = jsSandbox.eval(loginCheckJs, mapOf("sourceId" to sourceUrl, "baseUrl" to sourceUrl), execContext)?.trim()
         val isSuccess = result == "true" || (result != null && result.isNotBlank() && result != "false" && result != "0" && !result.contains("未登录"))
-        val jar = database?.getSourceCookieJar(sourceUrl)
+        val jar = database?.cookieBucketsForHosts(WebViewProxy.credentialDomains(sourceJson)).orEmpty()
         val state = database?.getSourceLoginState(sourceUrl)
-        val hasCredential = isSuccess || jar?.isNotEmpty() == true || state?.loginInfo?.isNotEmpty() == true || state?.loginHeader?.isNotEmpty() == true
+        val hasCredential = isSuccess || jar.isNotEmpty() || state?.loginInfo?.isNotEmpty() == true || state?.loginHeader?.isNotEmpty() == true
         return SourceLoginCheckResult(
             loggedIn = isSuccess,
             hasCredential = hasCredential,
             verified = isSuccess,
-            message = if (isSuccess) "登录态已验证" else (result ?: "未登录"),
+            // 上游的 loginCheckJs 是**响应改写器**（`WebBook.kt:77` 拿它处理正文响应，顺带识别掉登录），
+            // 不是"登录状态查询"。我们把它当布尔判定用是一种借用，措辞上不能说得比这更肯定。
+            message = if (isSuccess) "按书源 loginCheckJs 试判为已登录" else (result ?: "未登录"),
         )
     }
 
     internal fun fetch(url: String, sourceId: String? = null, database: Database? = null): String {
         val (cleanUrl, options) = splitUrlOptions(url)
-        val db = database ?: this.database
-        val mergedOptions = if (db != null && !sourceId.isNullOrBlank()) {
-            val headers = mutableMapOf<String, String>()
-            val state = db.getSourceLoginState(sourceId)
-            state?.loginHeader?.takeIf { it.isNotBlank() }?.let { h ->
-                runCatching {
-                    val elem = Json.parseToJsonElement(h)
-                    if (elem is JsonObject) {
-                        elem.entries.filter { it.value is JsonPrimitive }.forEach {
-                            headers[it.key] = (it.value as JsonPrimitive).contentOrNull ?: ""
-                        }
-                    }
-                }
-            }
-            val cookie = db.getSourceCookie(sourceId, cleanUrl)
-            if (!cookie.isNullOrBlank()) {
-                headers["Cookie"] = cookie
-            }
-            mergeOptions(headers, options)
-        } else {
-            options
-        }
-        return fetchUrl(cleanUrl, mergedOptions, null, sourceId, db)
+        // 凭据（库内登录头 + 该域名的 Cookie 罐）由 buildRequest 按**每一跳的地址**合，这里不再预置
+        return fetchUrl(cleanUrl, options, null, sourceId, database ?: this.database)
     }
 
-    private fun parseSourceHeaders(source: JsonObject, sourceUrl: String? = null): Map<String, String> {
+    /** 书源自己的 `header` 字段（`{"User-Agent":"...","Referer":"..."}`）。凭据不在这里合，见 [effectiveHeaders]。 */
+    private fun parseSourceHeaders(source: JsonObject): Map<String, String> {
         val headers = mutableMapOf<String, String>()
         val headerStr = source.string("header")?.trim()
         if (!headerStr.isNullOrBlank()) {
@@ -671,25 +782,6 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                         headers[it.key] = (it.value as JsonPrimitive).contentOrNull ?: ""
                     }
                 }
-            }
-        }
-        val sUrl = sourceUrl ?: source.string("bookSourceUrl")
-        val db = database
-        if (db != null && !sUrl.isNullOrBlank()) {
-            val state = db.getSourceLoginState(sUrl)
-            state?.loginHeader?.takeIf { it.isNotBlank() }?.let { h ->
-                runCatching {
-                    val elem = Json.parseToJsonElement(h)
-                    if (elem is JsonObject) {
-                        elem.entries.filter { it.value is JsonPrimitive }.forEach {
-                            headers[it.key] = (it.value as JsonPrimitive).contentOrNull ?: ""
-                        }
-                    }
-                }
-            }
-            val cookie = db.getSourceCookie(sUrl, sUrl)
-            if (!cookie.isNullOrBlank()) {
-                headers["Cookie"] = cookie
             }
         }
         return headers
@@ -803,7 +895,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     ): String {
         responseFetcher?.let { return it(url) }
         val db = database ?: this.database
-        var request = buildRequest(parseUri(url), options, keyword)
+        var request = buildRequest(parseUri(url), options, keyword, sourceId, db)
         // 首次连接偶发失败（连接复用/握手抖动）时重试一次：书源 JS 常在内部 try/catch 吞掉 ajax 异常，
         // 不重试会表现为「规则执行成功但内容为空」这类极难排查的现象。
         var transientAttempt = 0
@@ -811,6 +903,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val response = try {
                 client.send(request, HttpResponse.BodyHandlers.ofInputStream())
             } catch (error: java.io.IOException) {
+                logNetwork("网络请求 IO 异常", mapOf("url" to url.take(120), "sourceId" to (sourceId ?: ""), "attempt" to transientAttempt.toString()), error)
                 if (transientAttempt == 0) {
                     transientAttempt++
                     client.send(request, HttpResponse.BodyHandlers.ofInputStream())
@@ -824,34 +917,48 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 // 按入口地址存会把 A 站的 Cookie 发给 B 站。
                 val cookieUrl = request.uri().toString()
                 setCookies.forEach { cookieStr ->
-                    db.setSourceCookieFromSetCookie(sourceId, cookieUrl, cookieStr)
+                    db.setCookieFromSetCookie(cookieUrl, cookieStr)
                 }
             }
             if (response.statusCode() !in 300..399) {
                 if (response.statusCode() !in 200..299) {
                     runCatching { response.body().close() }
+                    logNetwork("上游返回错误状态码", mapOf("url" to url.take(120), "statusCode" to response.statusCode().toString(), "sourceId" to (sourceId ?: "")))
                     throw RuleExecutionException("上游返回 HTTP ${response.statusCode()}")
                 }
                 val bytes = response.body().use { readLimited(it) }
-                if (bytes.size > MAX_BODY_BYTES) throw RuleExecutionException("上游响应超过 2 MiB 限制")
+                if (bytes.size > MAX_BODY_BYTES) {
+                    logNetwork("响应体过大", mapOf("url" to url.take(120), "size" to bytes.size.toString()))
+                    throw RuleExecutionException("上游响应超过 2 MiB 限制")
+                }
                 val charset = (options?.charset) ?: Charsets.UTF_8
                 return decodeBody(bytes, response.headers().firstValue("content-encoding").orElse(""), charset)
             }
             runCatching { response.body().close() }
-            val location = response.headers().firstValue("location").orElseThrow { RuleExecutionException("重定向缺少 Location") }
+            val location = response.headers().firstValue("location").orElseThrow { 
+                logNetwork("重定向缺少 Location", mapOf("url" to url.take(120)))
+                RuleExecutionException("重定向缺少 Location") 
+            }
             val redirect = request.uri().resolve(location); validateTarget(redirect)
-            request = buildRequest(redirect, options, keyword)
+            request = buildRequest(redirect, options, keyword, sourceId, db)
         }
+        logNetwork("重定向次数超限", mapOf("initialUrl" to url.take(120)))
         throw RuleExecutionException("重定向次数超过限制")
     }
 
-    private fun buildRequest(initial: URI, options: UrlOptions?, keyword: String?): HttpRequest {
+    private fun buildRequest(
+        initial: URI,
+        options: UrlOptions?,
+        keyword: String?,
+        sourceId: String?,
+        db: Database?,
+    ): HttpRequest {
         validateTarget(initial)
         val builder = HttpRequest.newBuilder(initial)
             .timeout(Duration.ofSeconds(20))
             .header("User-Agent", "LegadoServer/0.1")
             .header("Accept-Encoding", "gzip, deflate")
-        options?.headers?.forEach { (name, value) -> builder.header(name, value) }
+        effectiveHeaders(initial, options, sourceId, db).forEach { (name, value) -> builder.header(name, value) }
         val method = options?.method?.uppercase() ?: "GET"
         val body = options?.body
         if (method != "GET" && body != null) {
@@ -861,6 +968,65 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             builder.method(method, HttpRequest.BodyPublishers.noBody())
         }
         return builder.build()
+    }
+
+    /**
+     * 逐跳合成请求头。凭据必须按**这一跳真正要访问的地址**查，不是按书源的 `bookSourceUrl`：
+     * 阅读类站点的书页域名和接口域名经常不是一个（书页 `www.x.com`、接口 `api.x.com`），
+     * 按书源域名查会让「在内置浏览器里登录留下的 Cookie」永远发不出去，登录看起来成功却对阅读毫无影响。
+     * 优先级照上游 `AnalyzeUrl.setCookie()`：库内登录头 → 该域名的 Cookie 罐 → 本次 URL 自带的 options.headers。
+     * Cookie 按键位合并而不是整串覆盖，否则临时 cookie 会把登录留下的其它键抹掉。
+     */
+    internal fun effectiveHeaders(uri: URI, options: UrlOptions?, sourceId: String?, db: Database?): Map<String, String> {
+        val byKey = LinkedHashMap<String, Pair<String, String>>()
+        fun put(name: String, value: String) {
+            val key = name.lowercase()
+            val previous = byKey[key]
+            byKey[key] = when {
+                key == "cookie" && previous != null -> previous.first to mergeCookieStrings(previous.second, value)
+                else -> name to value
+            }
+        }
+        if (db != null && !sourceId.isNullOrBlank()) {
+            parseHeaderJson(db.getSourceLoginState(sourceId)?.loginHeader).forEach { (name, value) -> put(name, value) }
+            db.getCookieForUrl(uri.toString())?.let { put("Cookie", it) }
+        }
+        options?.headers?.forEach { (name, value) -> put(name, value) }
+        // 不能写成 apply { ... put(...) }：那个 put 会绑到上面那个局部 put 上，返回的表永远是空的
+        val out = LinkedHashMap<String, String>()
+        byKey.values.forEach { (name, value) -> out[name] = value }
+        return out
+    }
+
+    /** 库内登录头存的是 JSON 对象（`{"Authorization":"...","Cookie":"..."}`）；旧数据里的裸串当 Cookie。 */
+    internal fun parseHeaderJson(raw: String?): Map<String, String> {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return emptyMap()
+        val parsed = runCatching { Json.parseToJsonElement(text) }.getOrNull()
+        if (parsed is JsonObject) {
+            return parsed.entries
+                .filter { it.value is JsonPrimitive }
+                .mapNotNull { (key, value) -> (value as JsonPrimitive).contentOrNull?.let { key to it } }
+                .toMap()
+        }
+        return mapOf("Cookie" to text)
+    }
+
+    /**
+     * 合并两段 Cookie 串，后者按键覆盖前者。进来的都已经是 `k=v; k=v` 形态
+     * （落库时 `Database.parseCookieString` 已把 Cookie-Editor 的 JSON / Netscape 归一化过），
+     * 这里只按第一个 `=` 切，值里再带 `=` 的照原样保留。
+     */
+    internal fun mergeCookieStrings(base: String?, override: String?): String {
+        val merged = linkedMapOf<String, String>()
+        listOf(base, override).forEach { raw ->
+            raw?.split(';')?.forEach { piece ->
+                val entry = piece.trim()
+                val split = entry.indexOf('=')
+                if (split > 0) merged[entry.substring(0, split)] = entry.substring(split + 1)
+            }
+        }
+        return merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
     }
 
     private fun decodeBody(bytes: ByteArray, contentEncoding: String, charset: Charset): String {
@@ -898,8 +1064,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
 
     private fun validateTarget(uri: URI) {
         try {
-            NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "书源")
+            NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "站点")
         } catch (e: IllegalArgumentException) {
+            logNetwork("拒绝访问不安全地址", mapOf("uri" to uri.toString(), "reason" to (e.message ?: "内网或本机地址")))
             throw RuleExecutionException(e.message ?: "拒绝访问内网或本机地址")
         }
     }
@@ -1033,8 +1200,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
          * 续取页数上限。上游只靠 visited 集合防回环，服务端替用户发请求，
          * 需要一层硬上限，否则一条坏规则能把开书变成一次爬站。
          */
-        const val MAX_TOC_PAGES = 40
-        const val MAX_CONTENT_PAGES = 30
+        val MAX_TOC_PAGES = AppConfig.maxTocPages
+        val MAX_CONTENT_PAGES = AppConfig.maxContentPages
     }
 }
 
@@ -1058,7 +1225,7 @@ private class JsSourceRunner(private val runner: RuleRunner, private val source:
 
     private fun call(name: String, args: Array<Any?>): String = callOptional(name, args) ?: throw RuleExecutionException("JS书源缺少函数 $name")
     private fun callOptional(name: String, args: Array<Any?>): String? {
-        val context = Context.enter()
+        val context = BoundedJs.enter()
         try {
             context.optimizationLevel = -1; context.setClassShutter(ClassShutter { false })
             val scope = context.initSafeStandardObjects()
@@ -1069,9 +1236,15 @@ private class JsSourceRunner(private val runner: RuleRunner, private val source:
             if (raw == null || raw == Context.getUndefinedValue()) return null
             if (raw is CharSequence) return raw.toString()
             return NativeJSON.stringify(context, scope, raw, null, null).toString()
-        } catch (error: RuleExecutionException) { throw error }
-        catch (error: Exception) { throw RuleExecutionException("JS书源 $name 执行失败: ${error.message}") }
-        finally { Context.exit() }
+        } catch (error: RuleExecutionException) { 
+            logRuleExecution("JS 书源规则执行异常", mapOf("function" to name, "sourceId" to (source.string("bookSourceUrl") ?: ""), "errorType" to "RuleExecutionException"))
+            throw error 
+        }
+        catch (error: Exception) { 
+            logRuleExecution("JS 书源函数调用失败", mapOf("function" to name, "sourceId" to (source.string("bookSourceUrl") ?: ""), "errorMessage" to (error.message ?: "")), error)
+            throw RuleExecutionException("JS书源 $name 执行失败: ${error.message}") 
+        }
+        finally { BoundedJs.exit() }
     }
     private fun ajaxFunction(scope: Scriptable): NativeObject = NativeObject().also { api ->
         api.parentScope = scope

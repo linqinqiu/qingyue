@@ -1,6 +1,8 @@
 package io.legado.server
 
 import java.util.regex.PatternSyntaxException
+import io.legado.server.logRuleExecution
+import io.legado.server.logParsing
 
 object ContentProcessor {
 
@@ -145,6 +147,12 @@ object ContentProcessor {
                                 "title" to (chapterTitle ?: ""),
                             )
                         )
+                    }.onFailure { 
+                        logRuleExecution("净化规则 JS 执行失败", mapOf(
+                            "ruleId" to rule.id.toString(),
+                            "pattern" to rule.pattern.take(80),
+                            "errorMessage" to (it.message ?: "")
+                        ), it)
                     }.getOrNull() ?: m.value
                     sb.append(jsResult)
                     lastIdx = m.range.last + 1
@@ -155,10 +163,20 @@ object ContentProcessor {
                 // 普通正则替换（原生支持 $1, $2 捕获组）
                 regex.replace(text, rule.replacement)
             }
-        } catch (_: PatternSyntaxException) {
-            text // 语法错误直接安全跳过
-        } catch (_: Throwable) {
-            text
+        } catch (e: PatternSyntaxException) {
+            logParsing("净化规则正则编译失败", mapOf(
+                "ruleId" to rule.id.toString(),
+                "pattern" to rule.pattern.take(120),
+                "errorMessage" to (e.message ?: "")
+            ), e)
+            text // 正则无效时保留原文，不中断阅读
+        } catch (e: Throwable) {
+            logRuleExecution("净化规则执行失败", mapOf(
+                "ruleId" to rule.id.toString(),
+                "pattern" to rule.pattern.take(120),
+                "errorMessage" to (e.message ?: "")
+            ), e)
+            text // 任何意外都保留原文，不中断阅读
         }
     }
 }

@@ -1,13 +1,10 @@
 import { spawn } from 'node:child_process';
 import { openSync, readdirSync } from 'node:fs';
 import net from 'node:net';
+import path from 'node:path';
 import { childEnvironment, ensureDirectories, resolveRuntime } from './scripts/runtime.mjs';
 
 const runtime = resolveRuntime();
-if (!runtime.adminPassword) {
-  console.error(`缺少 ADMIN_PASSWORD（读的是 ${runtime.envFileUsed}）：它同时是 WebDAV 的 Basic 凭据，不能空。`);
-  process.exit(1);
-}
 
 const jars = readdirSync(runtime.libs).filter((name) => name.endsWith('-all.jar'));
 if (!jars.length) { console.error(`没有 ${runtime.libs}\\*-all.jar，先跑 gradle :server:fatJar`); process.exit(1); }
@@ -24,7 +21,8 @@ probe.once('error', (err) => {
 probe.listen(runtime.port, runtime.host, () => {
   probe.close(() => {
     const log = openSync(runtime.logFile, 'a');
-    const java = process.env.JAVA_HOME ? process.env.JAVA_HOME + '\\bin\\java.exe' : 'java';
+    const javaBin = process.platform === 'win32' ? 'java.exe' : 'java';
+    const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', javaBin) : javaBin;
     const jvmArgs = [
       // JDK 18+ 控制台编码默认跟随系统 ANSI（这里是 GBK），中文日志会乱码 → 显式 UTF-8。
       '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8',
@@ -32,7 +30,7 @@ probe.listen(runtime.port, runtime.host, () => {
       `-Djava.io.tmpdir=${runtime.tmpDir}`,
     ];
     // detached + unref：服务作为独立进程存活，不随调用方退出而被回收。
-    const child = spawn(java, [...jvmArgs, '-jar', `${runtime.libs}\\${jar}`], {
+    const child = spawn(java, [...jvmArgs, '-jar', path.join(runtime.libs, jar)], {
       env, stdio: ['ignore', log, log], detached: true, windowsHide: true,
     });
     child.unref();

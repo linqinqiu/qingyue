@@ -18,6 +18,17 @@ data class ParsedSource(
     val json: String,
 )
 
+/** [SourceCodec.parseRss] 的结果：摊平出列表页要用的字段，规则原文整体留在 [json] 里交给引擎。 */
+data class ParsedRssSource(
+    val sourceUrl: String,
+    val name: String,
+    val group: String?,
+    val icon: String?,
+    val enabled: Boolean,
+    val hasListRule: Boolean,
+    val json: String,
+)
+
 object SourceCodec {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -83,6 +94,29 @@ object SourceCodec {
 
     /** 对外复用：把书源标识（可带 `#` / `##` 注解）归一化为服务端使用的 sourceId（备份导入时对齐书架 origin）。 */
     fun normalizeSourceId(raw: String): String = normalizeSourceUrl(raw)
+
+    /**
+     * RSS 订阅源（手机「订阅」页那些源，上游 `data/entities/RssSource.kt`）。字段名与书源不同：
+     * 名称是 `sourceName`、主键是 `sourceUrl`，正文规则 `ruleContent` 是**规则字符串**而不是书源那样的规则对象。
+     * `sourceUrl` 原样保留，不剥 `#` 注解 —— 上游就是拿它直接当 baseUrl 发请求的。
+     */
+    fun parseRss(text: String): ParsedRssSource {
+        val cleanText = text.trim().removePrefix("\uFEFF")
+        require(cleanText.toByteArray().size <= MAX_SOURCE_BYTES) { "RSS 源不能超过 1 MiB" }
+        val source = try { json.parseToJsonElement(cleanText) as? JsonObject } catch (_: Exception) { null }
+            ?: throw IllegalArgumentException("RSS 源必须是 JSON 对象")
+        val url = source.string("sourceUrl") ?: throw IllegalArgumentException("缺少 sourceUrl")
+        require(url.isNotBlank()) { "sourceUrl 不能为空" }
+        return ParsedRssSource(
+            sourceUrl = if (url.startsWith("//")) "https:$url" else url,
+            name = source.string("sourceName")?.takeIf { it.isNotBlank() } ?: url,
+            group = source.string("sourceGroup")?.takeIf { it.isNotBlank() },
+            icon = source.string("sourceIcon")?.takeIf { it.isNotBlank() },
+            enabled = source.boolean("enabled") ?: true,
+            hasListRule = !source.string("ruleArticles").isNullOrBlank(),
+            json = cleanText,
+        )
+    }
 
     private fun normalizeSourceUrl(rawUrl: String): String = rawUrl
         .substringBefore("##")

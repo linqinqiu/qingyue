@@ -17,7 +17,7 @@ class WebViewProxyTest {
 
     private fun tempDatabase(): Database {
         val path = Files.createTempFile("legado-webview-test", ".sqlite").toString()
-        return Database(path).also { it.initialize("admin123") }
+        return Database(path).also { it.initialize() }
     }
 
     @Test
@@ -167,16 +167,14 @@ class WebViewProxyTest {
     }
 
     @Test
-    fun `setSourceCookieFromSetCookie stores only the name value pair`() {
+    fun `setCookieFromSetCookie stores only the name value pair`() {
         val db = tempDatabase()
 
-        db.setSourceCookieFromSetCookie("s1", "https://example.com/chapter/1", "sid=42; Path=/; HttpOnly; Max-Age=3600")
+        db.setCookieFromSetCookie("https://example.com/chapter/1", "sid=42; Path=/; HttpOnly; Max-Age=3600")
 
-        val jar = db.getSourceCookieJar("s1")
-        assertEquals("sid=42", jar["example.com"])
+        assertEquals(listOf("example.com"), db.listCookieBuckets().map { it.domain })
         // 属性绝不能被当成 Cookie 发送出去
-        val header = db.getSourceCookie("s1", "https://example.com/chapter/2")
-        assertEquals("sid=42", header)
+        assertEquals("sid=42", db.getCookieForUrl("https://example.com/chapter/2"))
     }
 
     @Test
@@ -220,22 +218,45 @@ class WebViewProxyTest {
         assertTrue(error is WebViewException)
     }
 
+    /**
+     * 凭据按**注册域**归桶（上游 `CookieManager` 用 `getSubDomain(url)` 做键），
+     * 所以 `example.com` 与 `www.example.com` 是同一桶、合并成一份；
+     * 而"看着像子域其实是别的注册域"的写法必须各归各的 —— 旧实现用子串模糊匹配，
+     * 会把 `example.com` 的 Cookie 误发给 `example.com.evil.net`。
+     */
     @Test
-    fun `getSourceCookie prefers exact host and falls back to parent domain`() {
+    fun `cookies bucket by registrable domain and never leak across suffix tricks`() {
         val db = tempDatabase()
-        db.setSourceCookie("s1", "https://example.com/", "root=1")
-        db.setSourceCookie("s1", "https://www.example.com/", "leaf=2")
+        db.setCookieForUrl("https://example.com/", "root=1")
+        db.setCookieForUrl("https://www.example.com/", "leaf=2")
 
-        // 精确域名命中，同时合并父域 Cookie，同名时以更精确的为准
-        val wwwHeader = db.getSourceCookie("s1", "https://www.example.com/book/1")
-        assertTrue(wwwHeader!!.contains("root=1"))
-        assertTrue(wwwHeader.contains("leaf=2"))
+        val bucket = db.getCookieForUrl("https://m.example.com/book/1")!!
+        assertTrue(bucket, bucket.contains("root=1") && bucket.contains("leaf=2"))
+        assertEquals(listOf("example.com"), db.listCookieBuckets().map { it.domain })
 
-        // 父域本身只拿到自己的 Cookie
-        assertEquals("root=1", db.getSourceCookie("s1", "https://example.com/book/1"))
+        assertNull(db.getCookieForUrl("https://example.com.evil.net/book/1"))
+        assertNull(db.getCookieForUrl("https://notexample.com/book/1"))
 
-        // 无关域名不得命中（旧实现用子串模糊匹配，会把 www.example.com 误配给 example.com.evil.net）
-        assertNull(db.getSourceCookie("s1", "https://example.com.evil.net/book/1"))
-        assertNull(db.getSourceCookie("s1", "https://notexample.com/book/1"))
+        // 多级公共后缀按整段算注册域，不能退化成 cc
+        db.setCookieForUrl("https://www.book.com.cn/", "cn=1")
+        assertEquals("cn=1", db.getCookieForUrl("https://m.book.com.cn/x"))
+        assertNull(db.getCookieForUrl("https://book.com.cn.evil.net/x"))
+
+        // IP 直连的书源（库里真有 http://154.37.154.143/ 这种）整串地址就是域，
+        // 按"最后两段"归桶会把 127.0.0.1 折成 "0.1" 这种无意义键，不同 IP 之间还可能撞桶。
+        db.setCookieForUrl("http://127.0.0.1:8399/", "ip=1")
+        assertEquals("ip=1", db.getCookieForUrl("http://127.0.0.1:9000/x"))
+        assertNull(db.getCookieForUrl("http://154.37.154.143/x"))
+    }
+
+    /**
+     * 跨书源共享就是这套归桶带来的结果：A 源存的凭据，B 源请求同一个域时拿得到 ——
+     * 这正是"登录一次、番茄所有源都带上"的机制，也是我们要的。
+     */
+    @Test
+    fun `one domain bucket serves every source that requests it`() {
+        val db = tempDatabase()
+        db.setCookieForUrl("https://fanqienovel.com/login", "sessionid=s-9")
+        assertEquals("sessionid=s-9", db.getCookieForUrl("https://fanqienovel.com/reading/bookapi/bookshelf/info"))
     }
 }

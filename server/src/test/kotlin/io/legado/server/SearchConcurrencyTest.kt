@@ -1,6 +1,9 @@
 package io.legado.server
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -70,6 +73,51 @@ class SearchConcurrencyTest {
         val failOutcome = searchSourceOutcome(runner, failSource, "失败")
         assertEquals(true, failOutcome.failed)
         assertEquals(0, failOutcome.results.size)
+    }
+
+    /**
+     * 一个源到点不许把整次搜索取消。判据是"别的源的结果还在"，不是"没抛异常"——
+     * 早先那句 `if (error is CancellationException) throw error` 恰好把超时当成调用方的取消往上抛。
+     */
+    @Test
+    fun `a single slow source times out without cancelling its siblings`() = runBlocking {
+        val slowSource = """{"bookSourceUrl":"https://src.slow","searchUrl":"/search?k={{key}}&slow=1","ruleSearch":{"bookList":"$.data","bookUrl":"/b/{{$.id}}","name":"$.title"}}"""
+        val fastSource = """{"bookSourceUrl":"https://src.fast","searchUrl":"/search?k={{key}}","ruleSearch":{"bookList":"$.data","bookUrl":"/b/{{$.id}}","name":"$.title"}}"""
+        val runner = RuleRunner { url ->
+            if (url.contains("slow")) {
+                Thread.sleep(600)
+                """{"data":[{"id":"9","title":"迟到的书"}]}"""
+            } else {
+                """{"data":[{"id":"1","title":"书1"}]}"""
+            }
+        }
+
+        val outcomes = boundedConcurrentMap(listOf(slowSource, fastSource), 2) { source ->
+            searchSourceOutcome(runner, source, "测试", timeoutMs = 120)
+        }
+
+        assertTrue("慢源应记为这一个源失败，而不是拖死整次搜索", outcomes[0].failed)
+        assertEquals(0, outcomes[0].results.size)
+        assertEquals(false, outcomes[1].failed)
+        assertEquals(1, outcomes[1].results.size)
+        assertEquals("书1", outcomes[1].results[0].name)
+    }
+
+    /** 反过来：调用方真的取消时不许被吞成"这个源失败了"，否则客户端停读后白烧线程也说不清。 */
+    @Test
+    fun `caller cancellation still propagates`() = runBlocking {
+        val source = """{"bookSourceUrl":"https://src.slow","searchUrl":"/search?k={{key}}&slow=1","ruleSearch":{"bookList":"$.data","bookUrl":"/b/{{$.id}}","name":"$.title"}}"""
+        val runner = RuleRunner { Thread.sleep(400); """{"data":[]}""" }
+        var caught: Throwable? = null
+        val job = launch {
+            try {
+                withTimeout(60) { searchSourceOutcome(runner, source, "测试", timeoutMs = 5_000) }
+            } catch (error: Throwable) {
+                caught = error
+            }
+        }
+        job.join()
+        assertTrue("调用方取消必须原样往上传", caught is CancellationException)
     }
 }
 

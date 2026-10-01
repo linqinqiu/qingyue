@@ -21,7 +21,7 @@ class E2EScenariosTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Setup 15 realistic sources (10 matching, 3 empty, 2 failing)
             val sources = (1..15).map { i ->
@@ -138,7 +138,7 @@ class E2EScenariosTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sourceJson = """{"bookSourceUrl":"https://bigsource.com","ruleToc":{"chapterList":"$.data","chapterName":"$.title","chapterUrl":"$.url"},"ruleContent":{"content":"$.content"}}"""
             database.saveSource(SourceCodec.parse(sourceJson), null)
@@ -217,7 +217,7 @@ class E2EScenariosTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sourceJson = """{"bookSourceUrl":"https://src.com","ruleToc":{"chapterList":"$.data","chapterName":"$.title","chapterUrl":"$.url"},"ruleContent":{"content":"$.content"}}"""
             database.saveSource(SourceCodec.parse(sourceJson), null)
@@ -284,7 +284,7 @@ class E2EScenariosTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sourceJson = """{"bookSourceUrl":"https://src.com","ruleToc":{"chapterList":"$.data","chapterName":"$.title","chapterUrl":"$.url"},"ruleContent":{"content":"$.content"}}"""
             database.saveSource(SourceCodec.parse(sourceJson), null)
@@ -376,7 +376,7 @@ class E2EScenariosTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Batch import 100 sources with varied schemas and mixed casing
             val rawSources = (1..100).map { i ->

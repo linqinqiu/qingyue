@@ -31,14 +31,10 @@ export function resolveRuntime() {
     port: Number(pick('LEGADO_PORT', '1234')),
     dataDir,
     database: pick('LEGADO_DATABASE', join(dataDir, 'legado.sqlite')),
-    // 日志与 JVM 临时目录以前一个写死在仓库根、一个默认落到 C:\Users\<用户>\AppData\Local\Temp。
-    // 明文 HTTP 下浏览器不回传 Secure cookie，表现为「登录成功立刻掉线」，所以默认 false。
+    // 日志与 JVM 临时目录以前一个写死在仓库根、一个默认落到系统临时目录（Windows 上是 C:\Users\<用户>\AppData\Local\Temp），装到哪都会往系统盘写；现在两者都相对安装根、可 env 覆盖。
     logFile: pick('LEGADO_LOG_FILE', join(root, 'server.log')),
     tmpDir: pick('LEGADO_TMP_DIR', join(root, 'tmp')),
-    secureCookies: pick('LEGADO_SECURE_COOKIES', 'false'),
     // 免登录：服务端还要求绑定地址本身就是回环，改成 0.0.0.0 会自动失效。
-    loopbackNoAuth: pick('LEGADO_LOOPBACK_NO_AUTH', 'true'),
-    adminPassword: pick('ADMIN_PASSWORD', ''),
   };
 }
 
@@ -50,8 +46,6 @@ export function childEnvironment(runtime) {
     LEGADO_PORT: String(runtime.port),
     LEGADO_DATA_DIR: runtime.dataDir,
     LEGADO_DATABASE: runtime.database,
-    LEGADO_SECURE_COOKIES: runtime.secureCookies,
-    LEGADO_LOOPBACK_NO_AUTH: runtime.loopbackNoAuth,
   };
 }
 

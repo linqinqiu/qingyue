@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -24,6 +25,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import io.ktor.http.content.PartData
@@ -36,9 +38,25 @@ import java.net.URI
 import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicInteger
 
+/** 外部浏览器登录的统一回包：开着没有、是哪个浏览器、目标域、以及哪些域已经见到 Cookie。 */
+private fun externalLoginStatus(
+    externalLogin: ExternalBrowserLogin,
+    hosts: List<String>,
+    seen: List<String>?,
+) = ExternalLoginStatus(
+    opened = externalLogin.status() != null,
+    browser = externalLogin.status()?.browser ?: "",
+    port = externalLogin.status()?.port ?: 0,
+    pid = externalLogin.status()?.pid ?: 0,
+    hosts = hosts,
+    seen = seen ?: emptyList(),
+)
+
+/** 不设身份后，朗读会话的"归属者"就是这台机器上的唯一用户。 */
+internal const val LOCAL_TTS_OWNER = "local"
+
 fun Route.apiRoutes(
     database: Database,
-    auth: AuthService,
     runner: RuleRunner,
     coverCache: CoverCache,
     subscriptions: SubscriptionService,
@@ -48,14 +66,43 @@ fun Route.apiRoutes(
     localBooksDirectory: Path = Path.of(".data/local_books"),
 ) {
     val webView = WebViewProxy(database)
+    // 备份包里没有原生归宿的个性化条目，原样收在数据目录下的一个文件夹里（见 BackupStore 的取舍说明）。
+    val backupKeep = BackupStore(localBooksDirectory.resolveSibling("backup_kept"))
+    // 真浏览器登录：profile 放在数据目录下（与 local_books 同级），登录态跨次启动保留。
+    val externalLogin = ExternalBrowserLogin(database, localBooksDirectory.resolveSibling("external-browser-profile"))
     val debugger = SourceDebugger(runner)
     route("/api") {
         get("/sources") {
-            if (auth.requireSession(call) == null) return@get
             call.respond(database.listSources(call.request.queryParameters["q"]))
         }
+        // 全局登录凭据表：删书源不再连带清桶（凭据按注册域共享），所以必须有个地方
+        // 能看见全部、能逐个撤掉 —— 否则就成了"看不见又删不掉"。
+        get("/cookies") {
+            val rows = withContext(Dispatchers.IO) {
+                // 一次扫描拿到全部桶的计数：逐桶查以前把这个接口拖到 2 分半
+                val mentions = database.cookieBucketMentions()
+                database.listCookieBuckets().map { bucket ->
+                    GlobalCookieEntry(
+                        domain = bucket.domain,
+                        keys = bucket.keys,
+                        mentionedBy = mentions[bucket.domain] ?: 0,
+                    )
+                }
+            }
+            call.respond(GlobalCookieListResponse(count = rows.size, cookies = rows))
+        }
+        delete("/cookies") {
+            if (!call.requireSameOriginWrite()) return@delete
+            val target = call.request.queryParameters["u"]?.trim()
+            if (target.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("missing_parameter", "缺少 u 参数（要删除哪个域的凭据）"))
+                return@delete
+            }
+            val removed = withContext(Dispatchers.IO) { database.removeCookieBucket(target) }
+            call.respond(mapOf("ok" to true, "removed" to removed))
+        }
         post("/sources/batch") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val req = call.receive<BatchSourceRequest>()
             if (req.ids.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("empty_selection", "请先选择需要操作的书源"))
@@ -68,6 +115,8 @@ fun Route.apiRoutes(
                     "disable" -> "已成功停用 $count 个书源"
                     "delete" -> "已成功删除 $count 个书源"
                     "set_group" -> if (req.group.isNullOrBlank()) "已清空 $count 个书源的分组" else "已将 $count 个书源移至分组“${req.group}”"
+                    "tag_group" -> "已为 $count 个书源加上标签“${req.group}”"
+                    "untag_group" -> "已摘掉 $count 个书源的标签“${req.group}”"
                     else -> "已处理 $count 个书源"
                 }
                 call.application.log.info("source batch operation: action={}, count={}", req.action, count)
@@ -82,17 +131,21 @@ fun Route.apiRoutes(
         post("/sources/health-check") {
             // 这个接口会让服务端对全部启用书源发起外呼，属于「能被跨站触发的资源消耗」，
             // 因此和其余写接口一样要 CSRF；原来还把请求体解析失败吞成默认值，等于允许空体跨站触发。
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val req = runCatching { call.receive<SourceHealthCheckRequest>() }.getOrElse {
                 call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
             }
             val timeoutMs = req.timeoutMs.coerceIn(1000L, 10000L)
             val allSources = database.listSources(null)
+            // 没点名 ids 时只体检**启用中**的源。整库 5,574 个里被用户停用的那批他根本不读，
+            // 探它们既慢（并发 16、单个 5 秒超时，一轮就是几十分钟）又会在结果里堆一大片
+            // 「连不上」，把真正要看的那几十个淹掉 —— 这正是「体检过慢、管理功能异常」的实测成因。
+            // 停用的那批仍可显式点名（ids）或在界面上勾「连停用的一起体检」来覆盖。
             val targetSources = if (!req.ids.isNullOrEmpty()) {
                 val idSet = req.ids.toSet()
                 allSources.filter { it.id in idSet }
             } else {
-                allSources
+                allSources.filter { it.enabled }
             }
 
             val startTotalNs = System.nanoTime()
@@ -138,37 +191,35 @@ fun Route.apiRoutes(
             )
         }
         get("/sources/export") {
-            if (auth.requireSession(call) == null) return@get
             call.respondText(
                 text = Json.encodeToString(database.exportSources(call.request.queryParameters.getAll("id"))),
                 contentType = ContentType.Application.Json.withCharset(Charsets.UTF_8),
             )
         }
         post("/sources/import") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val response = database.importSources(call.receive<ImportRequest>().sources)
             call.application.log.info("source import completed: imported={}, updated={}, skipped={}", response.imported, response.updated, response.skipped)
             call.respond(response)
         }
         route("/sources/{id}") {
             get {
-                if (auth.requireSession(call) == null) return@get
                 val source = database.getSource(call.parameters["id"]!!)
                 if (source == null) call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")) else call.respond(source)
             }
             put {
-                if (auth.requireSession(call, true) == null) return@put
+                if (!call.requireSameOriginWrite()) return@put
                 val request = call.receive<SourceWriteRequest>()
                 try { call.respond(database.saveSource(SourceCodec.parse(request.json), request.version)); call.application.log.info("source updated: {}", call.parameters["id"]) }
                 catch (_: VersionConflict) { call.respond(HttpStatusCode.Conflict, ApiError("version_conflict", "书源已在其他页面更新，请刷新后重试")) }
                 catch (error: IllegalArgumentException) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_source", error.message ?: "书源无效")) }
             }
             delete {
-                if (auth.requireSession(call, true) == null) return@delete
+                if (!call.requireSameOriginWrite()) return@delete
                 if (database.deleteSource(call.parameters["id"]!!)) { call.application.log.info("source deleted: {}", call.parameters["id"]); call.respond(HttpStatusCode.NoContent) } else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在"))
             }
             post("/validate") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 // 带草稿时校验编辑器里的未保存内容：否则「校验」永远在检查上一次落库的旧版本。
                 val draft = runCatching { call.receive<SourceValidateRequest>().json }.getOrNull()?.takeIf { it.isNotBlank() }
                 val text = draft ?: database.getSource(call.parameters["id"]!!)?.json
@@ -176,7 +227,6 @@ fun Route.apiRoutes(
                 call.respond(SourceCodec.validate(text))
             }
             get("/debug") {
-                if (auth.requireSession(call) == null) return@get
                 val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@get }
                 val keyword = call.request.queryParameters["keyword"]?.takeIf { it.isNotBlank() } ?: "测试"
                 val targetBookUrl = call.request.queryParameters["bookUrl"]
@@ -201,14 +251,12 @@ fun Route.apiRoutes(
                 }
             }
             get("/explore") {
-                if (auth.requireSession(call) == null) return@get
                 val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@get }
                 call.respond(runCatching { runner.exploreTabs(source.json) }.getOrElse { error ->
                     call.respond(HttpStatusCode.BadGateway, ApiError("explore_failed", error.message ?: "发现页解析失败")); return@get
                 })
             }
             get("/login-ui") {
-                if (auth.requireSession(call) == null) return@get
                 val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@get }
                 val items = runner.parseLoginUi(source.json)
                 val state = database.getSourceLoginState(source.id)
@@ -225,24 +273,26 @@ fun Route.apiRoutes(
                         loginInfo = state?.loginInfo ?: emptyMap(),
                         loginHeader = state?.loginHeader,
                         sourceVariable = state?.sourceVariable,
+                        loginIsScript = runner.loginIsScript(source.json),
+                        cookieDomains = WebViewProxy.credentialDomains(source.json),
                     )
                 )
             }
             post("/login-info") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val sourceId = call.parameters["id"]!!
                 val req = call.receive<SourceLoginInfoUpdateRequest>()
                 database.saveSourceLoginInfo(sourceId, req.loginInfo)
                 call.respond(mapOf("ok" to true))
             }
             delete("/login-info") {
-                if (auth.requireSession(call, true) == null) return@delete
+                if (!call.requireSameOriginWrite()) return@delete
                 val sourceId = call.parameters["id"]!!
                 database.removeSourceLoginInfo(sourceId)
                 call.respond(mapOf("ok" to true))
             }
             post("/login-header") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val sourceId = call.parameters["id"]!!
                 val req = call.receive<SourceLoginHeaderUpdateRequest>()
                 database.saveSourceLoginHeader(sourceId, req.loginHeader)
@@ -251,7 +301,7 @@ fun Route.apiRoutes(
             options("/login-cookie") {
                 if (!allowCookieSyncOrigin(call, database)) { call.respond(HttpStatusCode.Forbidden); return@options }
                 call.response.headers.append(HttpHeaders.AccessControlAllowMethods, "POST, OPTIONS")
-                call.response.headers.append(HttpHeaders.AccessControlAllowHeaders, "Content-Type, X-CSRF-Token, Authorization")
+                call.response.headers.append(HttpHeaders.AccessControlAllowHeaders, "Content-Type")
                 call.respond(HttpStatusCode.OK)
             }
             post("/login-cookie") {
@@ -264,10 +314,16 @@ fun Route.apiRoutes(
                 // 这个接口是给「在目标站点页面上运行的书签 / Chrome 扩展」用的，跨站、拿不到会话，
                 // 所以原来写成 Access-Control-Allow-Origin: *。那等于任何网页都能往用户书源的 Cookie 罐里注入。
                 // 改成只放行确实属于该书源站点的 Origin。
-                if (!allowCookieSyncOrigin(call, database, targetSource?.json)) {
+                //
+                // 但界面自己的「粘贴 Cookie」也是 POST，Chrome 必然带上 Origin=本站，
+                // 按域名规则永远不匹配 —— 那个页签一点就是 403，等于功能被安全加固顺手打死。
+                // 同源这一支单独放行，条件是必须带有效会话 + CSRF 头；跨站仍然只认书源自己的域名。
+                val sameOrigin = sameOriginCall(call)
+                if (!sameOrigin && !allowCookieSyncOrigin(call, database, targetSource?.json)) {
                     call.respond(HttpStatusCode.Forbidden, ApiError("origin_not_allowed", "该页面不属于此书源的站点，已拒绝同步 Cookie"))
                     return@post
                 }
+                // 上面已经按 Origin 判过（同源或命中该书源自己的域），这里不再要会话
                 val resolvedSourceId = targetSource?.id ?: sourceId
                 val req = call.receive<SourceLoginCookieUpdateRequest>()
                 val rawCookie = req.cookie.trim()
@@ -275,7 +331,7 @@ fun Route.apiRoutes(
                 if (rawCookie.isNotEmpty()) {
                     val cookieMap = database.parseCookieString(rawCookie)
                     savedCount = cookieMap.size
-                    database.setSourceCookie(resolvedSourceId, req.url ?: resolvedSourceId, rawCookie)
+                    database.setCookieForUrl(req.url ?: resolvedSourceId, rawCookie)
                     val cookieStr = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
                     val state = database.getSourceLoginState(resolvedSourceId)
                     if (state?.loginHeader.isNullOrBlank() && cookieStr.isNotBlank()) {
@@ -287,27 +343,37 @@ fun Route.apiRoutes(
                 call.respond(SourceLoginCookieResponse(ok = true, message = "Cookie 同步成功", count = savedCount))
             }
             delete("/login-header") {
-                if (auth.requireSession(call, true) == null) return@delete
+                if (!call.requireSameOriginWrite()) return@delete
                 val sourceId = call.parameters["id"]!!
                 database.removeSourceLoginHeader(sourceId)
                 call.respond(mapOf("ok" to true))
             }
             post("/login-action") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@post }
                 val req = call.receive<SourceLoginActionRequest>()
-                val outcome = runner.executeLoginAction(source.json, req.action, req.loginData, req.isLongClick)
+                val outcome = runner.executeLoginAction(source.json, req.action, req.loginData, req.isLongClick, req.browserCompleted)
                 call.respond(outcome)
             }
             get("/login-check") {
-                if (auth.requireSession(call) == null) return@get
                 val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@get }
                 val check = runner.checkLoginStatus(source.json)
                 call.respond(check)
             }
+            // 某个地址的注册域上到底有没有凭据 —— 发现页用它把"这一栏要登录"和"站点确实返回空"分开。
+            // 只回答有/无，不假装能判定登录态（上游没有这个机制，loginCheckJs 只是响应改写器）。
+            get("/credential") {
+                val url = call.request.queryParameters["u"]?.trim()
+                if (url.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiError("missing_parameter", "缺少 u 参数（要查哪个地址所在域）"))
+                    return@get
+                }
+                val domain = database.cookieBucket(url)
+                call.respond(SourceCredentialStatus(domain = domain, has = database.getCookieForUrl(url) != null))
+            }
             route("/browser") {
                 post("/session") {
-                    if (auth.requireSession(call, true) == null) return@post
+                    if (!call.requireSameOriginWrite()) return@post
                     val source = database.getSource(call.parameters["id"]!!) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@post }
                     val sourceObj = runCatching { Json.parseToJsonElement(source.json).jsonObject }.getOrNull()
                     val loginUrl = (sourceObj?.get("loginUrl") as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.startsWith("http") }
@@ -321,7 +387,12 @@ fun Route.apiRoutes(
                         call.respond(HttpStatusCode.BadRequest, ApiError("unsupported_url", "内置浏览器仅支持 HTTP(S) 地址或书源脚本生成的内置页面"))
                         return@post
                     }
-                    val startUrl = requestedHttp ?: loginUrl ?: homeUrl ?: WebViewProxy.defaultStartUrl(source.json)
+                    val startUrl = requestedHttp
+                        // loginUrl 是整段登录 JS 时，真正的登录地址只有脚本知道（`java.startBrowserAwait(...)`）
+                        ?: runner.loginBrowserStartUrl(source.json)
+                        ?: loginUrl
+                        ?: homeUrl
+                        ?: WebViewProxy.defaultStartUrl(source.json)
                     if (startUrl == null && !inlineOnly) {
                         call.respond(HttpStatusCode.BadRequest, ApiError("no_login_url", "该书源未配置 loginUrl，且书源内容中没有任何网址，无法打开内置浏览器"))
                         return@post
@@ -338,15 +409,84 @@ fun Route.apiRoutes(
                     )
                 }
                 delete("/session") {
-                    if (auth.requireSession(call, true) == null) return@delete
+                    if (!call.requireSameOriginWrite()) return@delete
                     call.request.queryParameters["t"]?.let { webView.revokeTicket(it) }
                     call.respond(HttpStatusCode.NoContent)
                 }
                 get("/cookies") {
-                    if (auth.requireSession(call) == null) return@get
                     val sourceId = call.parameters["id"]!!
-                    val jar = withContext(Dispatchers.IO) { webView.jarSnapshot(sourceId) }
+                    val json = database.getSource(sourceId)?.json ?: "{}"
+                    val jar = withContext(Dispatchers.IO) { webView.jarSnapshot(json) }
                     call.respond(SourceBrowserCookieResponse(count = jar.size, domains = jar.keys.toList(), cookies = jar))
+                }
+                // 删掉某个注册域的凭据（界面要能单独撤掉误抓来的统计域，比如 hm.baidu.com）。
+                // 域是全局共享的：这一删对所有会访问该域的书源同时生效，界面必须把这点说清楚。
+                delete("/cookies") {
+                    if (!call.requireSameOriginWrite()) return@delete
+                    val sourceId = call.parameters["id"]!!
+                    val json = database.getSource(sourceId)?.json ?: "{}"
+                    val target = call.request.queryParameters["u"]?.trim()
+                    if (target.isNullOrBlank()) {
+                        call.respond(HttpStatusCode.BadRequest, ApiError("missing_parameter", "缺少 u 参数（要删除哪个域名的 Cookie）"))
+                        return@delete
+                    }
+                    val removed = withContext(Dispatchers.IO) { database.removeCookieBucket(target) }
+                    val jar = withContext(Dispatchers.IO) { webView.jarSnapshot(json) }
+                    call.respond(SourceCookieRemoveResponse(ok = true, removed = removed, count = jar.size, domains = jar.keys.toList()))
+                }
+                // 真浏览器登录（外部 Chromium + CDP 回读），与内置代理浏览器并列的另一条路：
+                // 内嵌 iframe 过不了站点风控，这里交给真引擎，登录完自动按域读回 HttpOnly 凭据。
+                route("/external-login") {
+                    suspend fun targetHosts(id: String): Pair<String, List<String>> {
+                        val source = database.getSource(id) ?: return id to emptyList()
+                        return source.id to WebViewProxy.credentialDomains(source.json)
+                    }
+                    post {
+                        if (!call.requireSameOriginWrite()) return@post
+                        val sourceId = call.parameters["id"]!!
+                        val source = database.getSource(sourceId)
+                            ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("source_not_found", "书源不存在"))
+                        val startUrl = runCatching {
+                            Json.parseToJsonElement(call.receiveText().ifBlank { "{}" }).jsonObject["url"]
+                                ?.jsonPrimitive?.contentOrNull?.takeIf { it.startsWith("http") }
+                        }.getOrNull()
+                            ?: runner.loginBrowserStartUrl(source.json)
+                            ?: WebViewProxy.defaultStartUrl(source.json)
+                            ?: source.id
+                        val (resolvedId, _) = targetHosts(sourceId)
+                        val outcome = runCatching { withContext(Dispatchers.IO) { externalLogin.start(startUrl) } }
+                        outcome.getOrElse { error ->
+                            call.respond(HttpStatusCode.ServiceUnavailable, ApiError("browser_unavailable", error.message ?: "启动浏览器失败"))
+                            return@post
+                        }
+                        call.application.log.info("external browser opened for source: {}, pid: {}", resolvedId, outcome.getOrThrow().pid)
+                        call.respond(externalLoginStatus(externalLogin, targetHosts(sourceId).second, null))
+                    }
+                    get {
+                        val sourceId = call.parameters["id"]!!
+                        val (resolvedId, hosts) = targetHosts(sourceId)
+                        val seen = withContext(Dispatchers.IO) { externalLogin.peekDomains(hosts) }
+                        call.respond(externalLoginStatus(externalLogin, hosts, seen))
+                    }
+                    post("/capture") {
+                        if (!call.requireSameOriginWrite()) return@post
+                        val sourceId = call.parameters["id"]!!
+                        val (resolvedId, hosts) = targetHosts(sourceId)
+                        val stored = withContext(Dispatchers.IO) { externalLogin.capture(hosts) }
+                        val json = database.getSource(sourceId)?.json ?: "{}"
+                        val jar = withContext(Dispatchers.IO) { webView.jarSnapshot(json) }
+                        call.application.log.info(
+                            "external login captured cookies for {}: {} domains",
+                            resolvedId,
+                            stored.size,
+                        )
+                        call.respond(externalLoginStatus(externalLogin, hosts, stored).copy(stored = stored, count = jar.size))
+                    }
+                    delete {
+                        if (!call.requireSameOriginWrite()) return@delete
+                        withContext(Dispatchers.IO) { externalLogin.stop() }
+                        call.respond(HttpStatusCode.NoContent)
+                    }
                 }
                 get("/page") {
                     val sourceId = call.parameters["id"]!!
@@ -369,7 +509,7 @@ fun Route.apiRoutes(
                     call.respondProxied { webView.openPage(sourceId, token, target) }
                 }
                 post("/inline") {
-                    if (auth.requireSession(call, true) == null) return@post
+                    if (!call.requireSameOriginWrite()) return@post
                     val sourceId = call.parameters["id"]!!
                     val req = call.receive<SourceBrowserInlineRequest>()
                     try {
@@ -418,7 +558,7 @@ fun Route.apiRoutes(
             }
         }
         post("/search") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<SearchRequest>()
             if (request.keyword.isBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_keyword", "请输入搜索关键词")); return@post }
             val sourceRecords = database.listSearchSourceRecords(request.sourceIds)
@@ -426,9 +566,9 @@ fun Route.apiRoutes(
             call.respond(results)
         }
         webSocket("/search/stream") {
-            val csrf = call.request.queryParameters["csrf"]
-            if (!auth.hasWebSocketSession(call, csrf)) {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "请先登录"))
+            // 没有凭据可校验了：流式搜索同样只认"这个连接是不是本机页面发起的"
+            if (!originMatchesHost(call)) {
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "跨站页面不能驱动本机搜索"))
                 return@webSocket
             }
             val request = (incoming.receive() as? Frame.Text)?.readText()?.let { text -> runCatching { Json.decodeFromString<SearchRequest>(text) }.getOrNull() }
@@ -490,11 +630,9 @@ fun Route.apiRoutes(
             }
         }
         get("/explore/sources") {
-            if (auth.requireSession(call) == null) return@get
             call.respond(database.listExploreSources())
         }
         post("/explore") {
-            if (auth.requireSession(call) == null) return@post
             val request = call.receive<ExploreRequest>()
             val source = database.getSource(request.sourceId) ?: run {
                 call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在"))
@@ -508,11 +646,10 @@ fun Route.apiRoutes(
             }
         }
         get("/subscriptions") {
-            if (auth.requireSession(call) == null) return@get
             call.respond(database.listSubscriptions())
         }
         post("/subscriptions") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<SubscriptionWriteRequest>()
             try {
                 validateSubscriptionUrl(request.url)
@@ -522,24 +659,164 @@ fun Route.apiRoutes(
             }
         }
         delete("/subscriptions/{id}") {
-            if (auth.requireSession(call, true) == null) return@delete
+            if (!call.requireSameOriginWrite()) return@delete
             val id = call.parameters["id"]?.toLongOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("invalid_subscription", "订阅标识无效"))
             if (database.deleteSubscription(id)) call.respond(HttpStatusCode.NoContent) else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅不存在"))
         }
         post("/subscriptions/{id}/update") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val id = call.parameters["id"]?.toLongOrNull() ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_subscription", "订阅标识无效"))
             try { call.respond(subscriptions.updateOne(id)) }
             catch (_: NoSuchElementException) { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅不存在")) }
             catch (error: Throwable) { call.respond(HttpStatusCode.BadGateway, ApiError("subscription_update_failed", error.message ?: "订阅更新失败")) }
         }
         post("/subscriptions/update") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val results = subscriptions.updateAll()
             call.respond(mapOf("updated" to results.count { it.second.isSuccess }, "failed" to results.count { it.second.isFailure }))
         }
+        // 运行日志：前端「运行日志」弹窗读这里。category/level 用枚举名过滤，limit 夹在 1~1000。
+        get("/logs") {
+            val params = call.request.queryParameters
+            val category = params["category"]?.takeIf { it.isNotBlank() }?.let { runCatching { LogCategory.valueOf(it) }.getOrNull() }
+            val level = params["level"]?.takeIf { it.isNotBlank() }?.let { runCatching { LogLevel.valueOf(it) }.getOrNull() }
+            val limit = params["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 200
+            call.respond(LogService.queryLogs(category, level, limit))
+        }
+        delete("/logs") {
+            if (!call.requireSameOriginWrite()) return@delete
+            LogService.clearLogs()
+            call.respond(HttpStatusCode.NoContent)
+        }
+        /**
+         * RSS 订阅（手机「订阅」页那一栏）。与上面的 `/subscriptions` 是两回事：
+         * 这里是**阅读 RSS 源**（上游 `RssSource`），`/subscriptions` 是**书源订阅地址**（上游 `RuleSub`）。
+         */
+        /**
+         * 浏览器直传备份包导入：选一个手机导出的 zip 就能恢复，不需要 WebDAV。
+         *
+         * 以前只能"先把 zip 放进存储区（WebDAV 或手工拷），再在文件页点导入" —— 而 WebDAV 只绑回环时
+         * 手机根本推不上来，这条路对用户等于不存在。落盘走临时文件，`BackupImporter` 全程按需读条目，
+         * 解包与大小上限由它自己把关（单条目 64 MiB / 整包 256 MiB），密码只在内存里用一次、绝不写日志。
+         */
+        /*
+         * 备份包里"收下了但服务端还没有原生界面"的那些条目（书签/字典/阅读记录/阅读样式…）。
+         * 列表与原文都只读：写操作发生在导入那一次，这里给的是"你包里的东西现在在哪、能不能用"。
+         */
+        get("/backup/kept") {
+            call.respond(backupKeep.list())
+        }
+        get("/backup/kept/{name}") {
+            val name = call.parameters["name"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("invalid_name", "缺少条目名"))
+            val body = backupKeep.read(name)
+                ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("not_kept", "服务器上没有这个条目"))
+            call.respondText(body, ContentType.Application.Json)
+        }
+        post("/backup/import") {
+            if (!call.requireSameOriginWrite()) return@post
+            val multipart = call.receiveMultipart()
+            var password: String? = null
+            var upload: Pair<String, ByteArray>? = null
+            multipart.forEachPart { part ->
+                when (part) {
+                    is PartData.FormItem -> if (part.name == "password") password = part.value
+                    is PartData.FileItem -> if (upload == null) upload = (part.originalFileName ?: "backup.zip") to part.streamProvider().readBytes()
+                    else -> {}
+                }
+                part.dispose()
+            }
+            val (filename, bytes) = upload
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("no_file", "没有收到备份包"))
+            if (!filename.lowercase().endsWith(".zip")) {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_backup", "只支持手机导出的 .zip 备份包"))
+            }
+            if (bytes.isEmpty()) return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_backup", "备份包是空的"))
+            val staged = Files.createTempFile("legado-backup-", ".zip")
+            try {
+                Files.write(staged, bytes)
+                val summary = runCatching {
+                    withContext(Dispatchers.IO) { BackupImporter(database, backupKeep).import(staged, password?.takeIf { it.isNotBlank() }) }
+                }
+                val result = summary.getOrElse { error ->
+                    if (error is CancellationException) throw error
+                    call.respond(HttpStatusCode.BadRequest, ApiError("invalid_backup", error.message ?: "备份包解析失败"))
+                    return@post
+                }
+                call.application.log.info(
+                    "backup uploaded and imported: {} (sources={}, rules={}, books={}, rss={}, groups={})",
+                    filename,
+                    result.sources + result.sourcesUpdated,
+                    result.rules + result.rulesUpdated,
+                    result.books + result.booksUpdated,
+                    result.rssSources + result.rssSourcesUpdated,
+                    result.bookGroups,
+                )
+                call.respond(result)
+            } finally {
+                runCatching { Files.deleteIfExists(staged) }
+            }
+        }
+        route("/rss") {
+            get("/sources") {
+                // 这里是 queryParameters：`call.parameters["q"]` 读的是路径参数，
+                // 永远为 null，等于服务端筛选从来没生效过。
+                call.respond(database.listRssSources(call.request.queryParameters["q"]))
+            }
+            post("/sources") {
+                if (!call.requireSameOriginWrite()) return@post
+                val response = database.importRssSources(call.receive<ImportRequest>().sources)
+                call.application.log.info("rss source import completed: imported={}, updated={}", response.imported, response.updated)
+                call.respond(response)
+            }
+            post("/sources/enabled") {
+                if (!call.requireSameOriginWrite()) return@post
+                val request = call.receive<RssSourceEnabledRequest>()
+                if (database.setRssSourceEnabled(request.sourceUrl, request.enabled)) call.respond(HttpStatusCode.NoContent)
+                else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
+            }
+            delete("/sources") {
+                if (!call.requireSameOriginWrite()) return@delete
+                val sourceUrl = call.parameters["sourceUrl"]
+                    ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "缺少 sourceUrl"))
+                if (database.deleteRssSource(sourceUrl)) call.respond(HttpStatusCode.NoContent)
+                else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
+            }
+            get("/tabs") {
+                val sourceUrl = call.parameters["sourceUrl"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "缺少 sourceUrl"))
+                val payload = database.getRssSource(sourceUrl)
+                    ?: return@get call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
+                if (!database.rssSourceIsEnabled(sourceUrl)) {
+                    call.respond(HttpStatusCode.Conflict, ApiError("rss_source_disabled", "该订阅源已停用，先在列表里点「已停用」把它启用"))
+                    return@get
+                }
+                call.respondCatching { runner.rssTabs(payload) }
+            }
+            post("/articles") {
+                val request = call.receive<RssArticlesRequest>()
+                val payload = database.getRssSource(request.sourceUrl)
+                    ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
+                if (!database.rssSourceIsEnabled(request.sourceUrl)) {
+                    call.respond(HttpStatusCode.Conflict, ApiError("rss_source_disabled", "该订阅源已停用，先在列表里点「已停用」把它启用"))
+                    return@post
+                }
+                try {
+                    call.respond(runner.rssArticles(payload, request.url, request.page.coerceAtLeast(1)))
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    call.respond(HttpStatusCode.BadGateway, ApiError("rss_articles_failed", error.message ?: "订阅列表解析失败"))
+                }
+            }
+            post("/content") {
+                val request = call.receive<RssContentRequest>()
+                val payload = database.getRssSource(request.sourceUrl)
+                    ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
+                call.respondCatching { runner.rssContent(payload, request.link) }
+            }
+        }
         post("/books/details") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<BookRequest>()
             if (request.sourceId == LocalBookParser.LOC_BOOK_SOURCE_ID) {
                 val shelf = database.listBookshelf().firstOrNull { it.sourceId == request.sourceId && it.bookUrl == request.bookUrl }
@@ -559,7 +836,7 @@ fun Route.apiRoutes(
             call.respondCatching { runner.details(source.json, request.bookUrl) }
         }
         post("/books/chapters") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<BookRequest>()
             val cachedToc = database.getTocCache(request.sourceId, request.bookUrl)
                 ?: database.getTocCache(request.sourceId, request.bookUrl.removeSuffix("/toc") + "/toc")
@@ -596,6 +873,9 @@ fun Route.apiRoutes(
                         chapters
                     }
                 } catch (error: Throwable) {
+                    // 客户端真取消（JobCancellationException）要原样上抛，别兜底后对着已断的连接 respond；
+                    // 本地 withTimeout 抛的 TimeoutCancellationException 才是「这次超时」，继续走回落。
+                    if (error is CancellationException && error !is TimeoutCancellationException) throw error
                     if (fallbackFromContent.isNotEmpty()) {
                         fallbackFromContent
                     } else {
@@ -606,19 +886,17 @@ fun Route.apiRoutes(
         }
         route("/replace-rules") {
             get {
-                if (auth.requireSession(call) == null) return@get
                 val q = call.request.queryParameters["q"]
                 val group = call.request.queryParameters["group"]
                 val scope = call.request.queryParameters["scope"] ?: call.request.queryParameters["bookName"]
                 call.respond(database.listReplaceRules(q, group, scope))
             }
             get("/{id}") {
-                if (auth.requireSession(call) == null) return@get
                 val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "缺少规则 ID"))
                 database.getReplaceRule(id)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.NotFound, ApiError("not_found", "规则不存在"))
             }
             post {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val rule = call.receive<ReplaceRule>()
                 if (rule.pattern.isBlank()) {
                     call.respond(HttpStatusCode.BadRequest, ApiError("invalid_rule", "匹配模式不能为空"))
@@ -627,7 +905,7 @@ fun Route.apiRoutes(
                 call.respond(database.saveReplaceRule(rule))
             }
             put("/{id}") {
-                if (auth.requireSession(call, true) == null) return@put
+                if (!call.requireSameOriginWrite()) return@put
                 val id = call.parameters["id"] ?: return@put call.respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "缺少规则 ID"))
                 val rule = call.receive<ReplaceRule>().copy(id = id)
                 if (rule.pattern.isBlank()) {
@@ -637,25 +915,24 @@ fun Route.apiRoutes(
                 call.respond(database.saveReplaceRule(rule))
             }
             delete("/{id}") {
-                if (auth.requireSession(call, true) == null) return@delete
+                if (!call.requireSameOriginWrite()) return@delete
                 val id = call.parameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "缺少规则 ID"))
                 if (database.deleteReplaceRule(id)) call.respond(HttpStatusCode.NoContent)
                 else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "规则不存在"))
             }
             post("/delete-batch") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val ids = call.receive<List<String>>()
                 val count = database.deleteReplaceRules(ids)
                 call.respond(mapOf("deleted" to count))
             }
             post("/toggle") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val req = call.receive<ReplaceRuleToggleRequest>()
                 val count = database.toggleReplaceRules(req.ids, req.enabled)
                 call.respond(mapOf("updated" to count))
             }
             get("/export") {
-                if (auth.requireSession(call) == null) return@get
                 val ids = call.request.queryParameters.getAll("id")
                 call.respondText(
                     text = Json.encodeToString(database.exportReplaceRules(ids)),
@@ -663,14 +940,13 @@ fun Route.apiRoutes(
                 )
             }
             post("/import") {
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val bodyText = call.receiveText()
                 val parsedRules = parseImportedReplaceRules(bodyText)
                 val response = database.importReplaceRules(parsedRules)
                 call.respond(response)
             }
             post("/preview") {
-                if (auth.requireSession(call) == null) return@post
                 val req = call.receive<ReplaceRulePreviewRequest>()
                 val rules = if (req.rule != null) listOf(req.rule) else database.getEnabledReplaceRulesForScope(req.bookName, req.sourceUrl)
                 val jsSandbox = JsSandbox(runner)
@@ -685,7 +961,7 @@ fun Route.apiRoutes(
             }
         }
         post("/books/content") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<ContentRequest>()
             if (request.sourceId.isBlank() || request.chapterUrl.isBlank()) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("invalid_content", "缺少书源或章节地址"))
@@ -730,11 +1006,10 @@ fun Route.apiRoutes(
             }
         }
         get("/bookshelf") {
-            if (auth.requireSession(call) == null) return@get
             call.respond(database.listBookshelf())
         }
         post("/bookshelf") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<BookshelfWriteRequest>()
             if (request.sourceId.isBlank() || request.bookUrl.isBlank() || request.name.isBlank() || request.tocUrl.isBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "书架数据无效")); return@post }
             val immediateCover = tryFindCachedCover(coverCache, request.coverUrl, request.alternateSources)
@@ -751,11 +1026,14 @@ fun Route.apiRoutes(
             call.respond(item)
         }
         post("/bookshelf/import-local") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val multipart = call.receiveMultipart()
             val items = mutableListOf<LocalBookImportItem>()
             var importedCount = 0
             var failedCount = 0
+            // 本地书统一归到「本地」这一组：一次导入十几本，混在线书里就再也找不着了。
+            // createBookGroup 是按名字找、没有才建，所以重复导入不会堆出第二个「本地」。
+            val localGroupId = database.createBookGroup("本地").id
             multipart.forEachPart { part ->
                 if (part is PartData.FileItem) {
                     val originalFilename = part.originalFileName ?: "book.txt"
@@ -774,7 +1052,7 @@ fun Route.apiRoutes(
                                 coverCache.saveCoverBytes(parsed.coverBytes, parsed.coverContentType ?: "image/jpeg")
                             } else null
 
-                            val item = database.importLocalBook(bookId, parsed, coverKey)
+                            val item = database.importLocalBook(bookId, parsed, coverKey, localGroupId)
                             importedCount++
                             items.add(LocalBookImportItem(
                                 filename = originalFilename,
@@ -803,8 +1081,33 @@ fun Route.apiRoutes(
                 results = items,
             ))
         }
+        get("/bookshelf/groups") {
+            call.respond(database.listBookGroups())
+        }
+        post("/bookshelf/groups") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = runCatching { call.receive<BookGroupCreateRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
+            }
+            try { call.respond(database.createBookGroup(request.name)) }
+            catch (error: IllegalArgumentException) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_group", error.message ?: "分组无效")) }
+        }
+        delete("/bookshelf/groups/{id}") {
+            if (!call.requireSameOriginWrite()) return@delete
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("invalid_group", "分组标识无效"))
+            if (database.deleteBookGroup(id)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "分组不存在"))
+        }
+        put("/bookshelf/group") {
+            if (!call.requireSameOriginWrite()) return@put
+            val request = call.receive<BookGroupAssignRequest>()
+            val updated = database.assignBookGroup(request.sourceId, request.bookUrl, request.groupId)
+                ?: return@put call.respond(HttpStatusCode.NotFound, ApiError("not_found", "分组不存在或这本书不在书架上"))
+            call.respond(updated)
+        }
         delete("/bookshelf") {
-            if (auth.requireSession(call, true) == null) return@delete
+            if (!call.requireSameOriginWrite()) return@delete
             val sourceId = call.request.queryParameters["sourceId"]; val bookUrl = call.request.queryParameters["bookUrl"]
             if (sourceId.isNullOrBlank() || bookUrl.isNullOrBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "缺少书籍标识")); return@delete }
             bookCache.cancel(sourceId, bookUrl)
@@ -824,7 +1127,7 @@ fun Route.apiRoutes(
             call.respond(HttpStatusCode.NoContent)
         }
         post("/bookshelf/cache") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<BookCacheRangeRequest>()
             val item = database.listBookshelf().firstOrNull { it.sourceId == request.sourceId && it.bookUrl == request.bookUrl }
                 ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书籍不在书架中"))
@@ -839,7 +1142,7 @@ fun Route.apiRoutes(
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "queued"))
         }
         get("/bookshelf/cached-chapters") {
-            if (auth.requireSession(call, false) == null) return@get
+            if (!call.requireSameOriginWrite()) return@get
             val sourceId = call.request.queryParameters["sourceId"]
             val bookUrl = call.request.queryParameters["bookUrl"]
             if (sourceId.isNullOrBlank() || bookUrl.isNullOrBlank()) {
@@ -851,7 +1154,7 @@ fun Route.apiRoutes(
             call.respond(CachedChaptersResponse(sourceId, bookUrl, cachedUrls, cachedUrls.size, total))
         }
         delete("/bookshelf/cache") {
-            if (auth.requireSession(call, true) == null) return@delete
+            if (!call.requireSameOriginWrite()) return@delete
             val sourceId = call.request.queryParameters["sourceId"]
             val bookUrl = call.request.queryParameters["bookUrl"]
             val clearData = call.request.queryParameters["clearData"]?.toBooleanStrictOrNull() ?: false
@@ -866,14 +1169,14 @@ fun Route.apiRoutes(
             call.respond(HttpStatusCode.NoContent)
         }
         put("/bookshelf/status") {
-            if (auth.requireSession(call, true) == null) return@put
+            if (!call.requireSameOriginWrite()) return@put
             val request = call.receive<BookshelfStatusRequest>()
             if (request.sourceId.isBlank() || request.bookUrl.isBlank()) return@put call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "缺少书籍标识"))
             database.setBookshelfCompleted(request.sourceId, request.bookUrl, request.completed)?.let { call.respond(it) }
                 ?: call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书籍不在书架中"))
         }
         put("/bookshelf/info") {
-            if (auth.requireSession(call, true) == null) return@put
+            if (!call.requireSameOriginWrite()) return@put
             val request = call.receive<BookshelfInfoUpdateRequest>()
             if (request.sourceId.isBlank() || request.bookUrl.isBlank() || request.name.isBlank()) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "书名不能为空"))
@@ -886,7 +1189,7 @@ fun Route.apiRoutes(
                 ?: call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书籍不在书架中"))
         }
         post("/bookshelf/switch-source") {
-            if (auth.requireSession(call, true) == null) return@post
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<BookshelfSourceSwitchRequest>()
             val book = request.book
             if (request.oldSourceId.isBlank() || request.oldBookUrl.isBlank() || book.sourceId.isBlank() || book.bookUrl.isBlank() || book.name.isBlank() || book.tocUrl.isBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "书架数据无效")); return@post }
@@ -898,8 +1201,69 @@ fun Route.apiRoutes(
             bookCache.enqueue(CachedBookRequest(book.sourceId, book.bookUrl, book.tocUrl))
             call.respond(item)
         }
+        
+        // 批量操作：删除多本书籍
+        post("/bookshelf/batch-delete") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = call.receive<BatchDeleteRequest>()
+            if (request.books.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "书籍列表不能为空"))
+                return@post
+            }
+            var deletedCount = 0
+            for (book in request.books) {
+                if (book.sourceId.isNotBlank() && book.bookUrl.isNotBlank()) {
+                    bookCache.cancel(book.sourceId, book.bookUrl)
+                    if (book.sourceId == LocalBookParser.LOC_BOOK_SOURCE_ID) {
+                        val bookId = book.bookUrl.removePrefix("local://").substringBefore('/')
+                        if (bookId.isNotBlank()) {
+                            runCatching {
+                                if (Files.exists(localBooksDirectory)) {
+                                    Files.list(localBooksDirectory).use { stream ->
+                                        stream.filter { it.fileName.toString().startsWith(bookId) }.forEach { Files.deleteIfExists(it) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    database.removeBookshelf(book.sourceId, book.bookUrl)?.let(coverCache::delete)
+                    deletedCount++
+                }
+            }
+            call.respond(mapOf("deleted" to deletedCount, "total" to request.books.size))
+        }
+        
+        // 批量操作：移动多本书籍到指定分组
+        post("/bookshelf/batch-move-group") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = call.receive<BatchMoveGroupRequest>()
+            if (request.books.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "书籍列表不能为空"))
+                return@post
+            }
+            val movedCount = database.batchUpdateBookshelfGroup(request.books, request.groupId)
+            call.respond(mapOf("moved" to movedCount, "total" to request.books.size))
+        }
+        
+        // 批量操作：标记多本书籍为已读/未读
+        post("/bookshelf/batch-mark-read") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = call.receive<BatchMarkReadRequest>()
+            if (request.books.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "书籍列表不能为空"))
+                return@post
+            }
+            var markedCount = 0
+            for (book in request.books) {
+                if (book.sourceId.isNotBlank() && book.bookUrl.isNotBlank()) {
+                    database.markBookReadStatus(book.sourceId, book.bookUrl, request.isRead)
+                    markedCount++
+                }
+            }
+            call.respond(mapOf("marked" to markedCount, "total" to request.books.size))
+        }
+        
         get("/covers/{key}") {
-            if (auth.requireSession(call) == null) return@get
             val key = call.parameters["key"] ?: return@get call.respond(HttpStatusCode.NotFound)
             val file = coverCache.file(key) ?: return@get call.respond(HttpStatusCode.NotFound)
             val type = database.coverContentType(key)?.let(ContentType::parse) ?: ContentType.Application.OctetStream
@@ -907,7 +1271,6 @@ fun Route.apiRoutes(
             call.respond(LocalFileContent(file.toFile(), type))
         }
         get("/book/image") {
-            if (auth.requireSession(call) == null) return@get
             val url = call.request.queryParameters["url"].orEmpty()
             if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
                 call.respond(HttpStatusCode.BadRequest, ApiError("invalid_image", "图片地址无效")); return@get
@@ -925,30 +1288,26 @@ fun Route.apiRoutes(
             }
         }
         get("/reading-progress") {
-            if (auth.requireSession(call) == null) return@get
             val sourceId = call.request.queryParameters["sourceId"]
             val bookUrl = call.request.queryParameters["bookUrl"]
             if (sourceId.isNullOrBlank() || bookUrl.isNullOrBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_progress", "缺少 sourceId 或 bookUrl")); return@get }
             database.getProgress(sourceId, bookUrl)?.let { call.respond(it) } ?: call.respond(HttpStatusCode.NoContent)
         }
         put("/reading-progress") {
-            if (auth.requireSession(call, true) == null) return@put
+            if (!call.requireSameOriginWrite()) return@put
             val progress = call.receive<ReadingProgress>()
             if (progress.sourceId.isBlank() || progress.bookUrl.isBlank() || progress.chapterUrl.isBlank() || progress.chapterIndex < 0 || !progress.scrollPosition.isFinite() || progress.scrollPosition !in 0.0..1.0) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_progress", "阅读进度无效")); return@put }
             call.respond(database.saveProgress(progress))
         }
         route("/tts") {
             get("/voices") {
-                if (auth.requireSession(call) == null) return@get
                 call.respond(edgeTts.listVoices())
             }
             post("/session") {
-                val session = auth.requireSession(call, true) ?: return@post
-                call.respond(ttsSessions.create(session.id))
+                call.respond(ttsSessions.create(LOCAL_TTS_OWNER))
             }
             post("/session/{id}/chunks") {
-                val owner = auth.requireSession(call, true) ?: return@post
-                val session = ttsSessions.get(call.parameters["id"] ?: "", owner.id)
+                val session = ttsSessions.get(call.parameters["id"] ?: "", LOCAL_TTS_OWNER)
                     ?: run {
                         call.respond(HttpStatusCode.NotFound, ApiError("tts_session_not_found", "朗读会话不存在"))
                         return@post
@@ -965,8 +1324,7 @@ fun Route.apiRoutes(
                 }
             }
             post("/session/{id}/control") {
-                val owner = auth.requireSession(call, true) ?: return@post
-                val session = ttsSessions.get(call.parameters["id"] ?: "", owner.id)
+                val session = ttsSessions.get(call.parameters["id"] ?: "", LOCAL_TTS_OWNER)
                     ?: run {
                         call.respond(HttpStatusCode.NotFound, ApiError("tts_session_not_found", "朗读会话不存在"))
                         return@post
@@ -984,8 +1342,7 @@ fun Route.apiRoutes(
                 call.respond(TtsSessionAck(accepted = true))
             }
             delete("/session/{id}") {
-                val owner = auth.requireSession(call, true) ?: return@delete
-                val session = ttsSessions.get(call.parameters["id"] ?: "", owner.id)
+                val session = ttsSessions.get(call.parameters["id"] ?: "", LOCAL_TTS_OWNER)
                     ?: run {
                         call.respond(HttpStatusCode.NotFound, ApiError("tts_session_not_found", "朗读会话不存在"))
                         return@delete
@@ -994,8 +1351,7 @@ fun Route.apiRoutes(
                 call.respond(HttpStatusCode.NoContent)
             }
             get("/session/{id}/audio") {
-                val owner = auth.requireSession(call) ?: return@get
-                val session = ttsSessions.get(call.parameters["id"] ?: "", owner.id)
+                val session = ttsSessions.get(call.parameters["id"] ?: "", LOCAL_TTS_OWNER)
                     ?: run {
                         call.respond(HttpStatusCode.NotFound, ApiError("tts_session_not_found", "朗读会话不存在"))
                         return@get
@@ -1009,8 +1365,7 @@ fun Route.apiRoutes(
                 }
             }
             get("/session/{id}/events") {
-                val owner = auth.requireSession(call) ?: return@get
-                val session = ttsSessions.get(call.parameters["id"] ?: "", owner.id)
+                val session = ttsSessions.get(call.parameters["id"] ?: "", LOCAL_TTS_OWNER)
                     ?: run {
                         call.respond(HttpStatusCode.NotFound, ApiError("tts_session_not_found", "朗读会话不存在"))
                         return@get
@@ -1026,7 +1381,7 @@ fun Route.apiRoutes(
             post("/speak") {
                 // customUrl 由请求体决定，等于让调用方指定服务端要抓哪个地址；
                 // 之前只验会话不验 CSRF，任何网页发个简单跨站请求就能借这台机器去打内网。
-                if (auth.requireSession(call, true) == null) return@post
+                if (!call.requireSameOriginWrite()) return@post
                 val req = call.receive<TtsSpeakRequest>()
                 val text = req.text.trim()
                 if (text.isEmpty()) {
@@ -1060,7 +1415,6 @@ fun Route.apiRoutes(
                 }
             }
             get("/speak") {
-                if (auth.requireSession(call) == null) return@get
                 val text = call.request.queryParameters["text"]?.trim() ?: ""
                 if (text.isEmpty()) {
                     call.respond(HttpStatusCode.BadRequest, ApiError("invalid_text", "朗读文本不能为空"))
@@ -1088,9 +1442,11 @@ fun Route.apiRoutes(
 private fun validateSubscriptionUrl(value: String) {
     val uri = runCatching { java.net.URI(value) }.getOrNull()
     require(uri?.scheme in setOf("http", "https") && !uri?.host.isNullOrBlank()) { "仅允许 HTTP(S) 订阅地址" }
+    // 保存期就用与抓取期同一道 SSRF 闸门：内网/元数据地址当场拒掉，别等定时更新才失败
+    NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "订阅")
 }
 
-private const val SEARCH_TIMEOUT_MS = 30_000L
+private val SEARCH_TIMEOUT_MS = AppConfig.searchTimeoutMs
 
 private suspend fun readableSearchResults(runner: RuleRunner, sourceJson: String, keyword: String): List<SearchResult> =
     searchSourceOutcome(runner, sourceJson, keyword).results
@@ -1128,18 +1484,35 @@ internal class SearchStreamCounters(private val totalSources: Int) {
     )
 }
 
-internal suspend fun searchSourceOutcome(runner: RuleRunner, sourceJson: String, keyword: String): SearchSourceOutcome {
+internal suspend fun searchSourceOutcome(
+    runner: RuleRunner,
+    sourceJson: String,
+    keyword: String,
+    timeoutMs: Long = SEARCH_TIMEOUT_MS,
+): SearchSourceOutcome {
+    /*
+     * 到点的是**这一个源**，不是整次搜索。
+     * `TimeoutCancellationException` 是 `CancellationException` 的子类，而这里原来只有一句
+     * `if (error is CancellationException) throw error` —— 于是库里某一个源拖过 30 秒，取消就顺着
+     * `coroutineScope` 传到整棵搜索树上：别的源已经搜到的那几十本一起作废，界面收到 500
+     * （selfcheck「多源并发搜索返回的是数组」红过一次就是它，`server.log` 里留的是
+     * `Unhandled request failure: TimeoutCancellationException`）。
+     * 真正该往上传的只有"调用方自己取消了"（客户端停读、页面关了）—— 那种情况回答也没人看。
+     */
     val results = try {
-        withTimeout(SEARCH_TIMEOUT_MS) { withContext(Dispatchers.IO) { runner.search(sourceJson, keyword) } }
+        withTimeout(timeoutMs) { withContext(Dispatchers.IO) { runner.search(sourceJson, keyword) } }
+    } catch (error: TimeoutCancellationException) {
+        return SearchSourceOutcome(emptyList(), failed = true)
+    } catch (error: CancellationException) {
+        throw error
     } catch (error: Throwable) {
-        if (error is CancellationException) throw error
         return SearchSourceOutcome(emptyList(), failed = true)
     }
     return SearchSourceOutcome(results, failed = false)
 }
 
 internal fun sourceSearchConcurrency(processors: Int = Runtime.getRuntime().availableProcessors()): Int =
-    processors.coerceIn(16, 32)
+    processors.coerceIn(AppConfig.searchConcurrencyMin, AppConfig.searchConcurrencyMax)
 
 internal suspend fun <T, R> boundedConcurrentMap(values: List<T>, limit: Int, action: suspend (T) -> R): List<R> = coroutineScope {
     val semaphore = Semaphore(limit.coerceAtLeast(1))
@@ -1190,6 +1563,17 @@ private val debugJson = Json { encodeDefaults = true }
  * 有 Origin 则必须命中书源 `bookSourceUrl` / `loginUrl` 的注册域（或该主机名确实出现在这份书源配置里，
  * 兼容用自定义标识当 URL 的聚合源）。命中时回显该 Origin 并带 `Vary: Origin`，不再使用 `*`。
  */
+/** Origin 的主机与端口都和请求的 Host 一致才算同源（Origin 由浏览器写，页面改不了）。 */
+private fun sameOriginCall(call: ApplicationCall): Boolean {
+    val origin = call.request.headers[HttpHeaders.Origin]?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+    val uri = runCatching { URI(origin) }.getOrNull() ?: return false
+    val originHost = uri.host?.lowercase()?.trim('[', ']')?.takeIf { it.isNotEmpty() } ?: return false
+    val requestHost = call.request.host().lowercase().substringBefore(':').trim('[', ']')
+    if (originHost != requestHost) return false
+    val originPort = if (uri.port > 0) uri.port else if (uri.scheme == "https") 443 else 80
+    return originPort == call.request.port()
+}
+
 private fun allowCookieSyncOrigin(call: ApplicationCall, database: Database, sourceJson: String? = null): Boolean {
     val origin = call.request.headers[HttpHeaders.Origin]?.trim()?.takeIf { it.isNotEmpty() } ?: return true
     val host = runCatching { URI(origin).host?.lowercase() }.getOrNull()?.takeIf { it.isNotEmpty() }

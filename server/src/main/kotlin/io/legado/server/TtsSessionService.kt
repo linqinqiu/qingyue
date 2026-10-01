@@ -297,8 +297,8 @@ class TtsSession(
 
     companion object {
         private val TERMINAL_EVENTS = setOf("stopped", "error")
-        private const val IDLE_TIMEOUT_MS = 10 * 60 * 1000L
-        private const val MAX_LIFETIME_MS = 6 * 60 * 60 * 1000L
+        private val IDLE_TIMEOUT_MS = AppConfig.ttsIdleTimeoutMs
+        private val MAX_LIFETIME_MS = AppConfig.ttsMaxLifetimeMs
         private val MP3_SILENCE_PREAMBLE = byteArrayOf(
             0xFF.toByte(), 0xF3.toByte(), 0x64.toByte(), 0xC4.toByte(), 0x00, 0x00, 0x00, 0x03,
             0x48, 0x00, 0x00, 0x00, 0x00, 0x4C, 0x41, 0x4D,

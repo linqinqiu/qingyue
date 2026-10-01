@@ -27,18 +27,24 @@ class EdgeTtsService(
         .build()
 ) {
     private val cache = ConcurrentHashMap<String, ByteArray>()
-    private val maxCacheSize = 250
+    private val maxCacheSize = AppConfig.edgeTtsCacheMax
 
     companion object {
         private const val MAX_CUSTOM_TTS_BYTES = 8 * 1024 * 1024
+        /** 由 HttpClient 自行管理的请求头：用户填了也只会被丢掉，硬塞会抛 IllegalArgumentException。 */
+        private val RESTRICTED_CUSTOM_HEADERS = setOf(
+            "host", "content-length", "connection", "upgrade", "expect", "transfer-encoding", "te", "keep-alive",
+        )
         private const val TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
         private const val WSS_BASE_URL = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
-        private const val CHROMIUM_FULL_VERSION = "143.0.3650.75"
-        private const val CHROMIUM_MAJOR_VERSION = "143"
-        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$CHROMIUM_MAJOR_VERSION.0.0.0 Safari/537.36 Edg/$CHROMIUM_MAJOR_VERSION.0.0.0"
+        // Chromium 版本可经 env(LEGADO_EDGE_TTS_CHROMIUM_VERSION) 覆盖；UA 与 Sec-MS-GEC-Version 据此派生。
+        // 微软改协议时改这一个 env 即可，不必重编译（旧值会让合成静默返回 0 字节）。
+        private val CHROMIUM_FULL_VERSION = AppConfig.edgeTtsChromiumVersion
+        private val CHROMIUM_MAJOR_VERSION = CHROMIUM_FULL_VERSION.substringBefore('.')
+        private val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$CHROMIUM_MAJOR_VERSION.0.0.0 Safari/537.36 Edg/$CHROMIUM_MAJOR_VERSION.0.0.0"
+        private val SEC_MS_GEC_VERSION = "1-$CHROMIUM_FULL_VERSION"
         private const val ORIGIN = "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold"
         private const val WIN_EPOCH = 11644473600L
-        private const val SEC_MS_GEC_VERSION = "1-$CHROMIUM_FULL_VERSION"
 
         val DEFAULT_VOICES = listOf(
             TtsVoice("zh-CN-XiaoxiaoNeural", "晓晓 (女声·温暖自然·推荐)", "zh-CN", "Female", "中文普通话", "edge", "适合小说叙述与日常对话"),
@@ -314,8 +320,8 @@ class EdgeTtsService(
 
     /**
      * 自定义 TTS 的地址由用户在朗读设置里填，最常见的用法就是指向本机的自建合成服务，
-     * 所以这里**不能**套用封面/书源抓取那套内网拦截。跨站风险由接口的 CSRF 校验挡住
-     * （`POST /api/tts/speak` 现在要求 `X-CSRF-Token`），这里只保证协议合法、体积可控、
+     * 所以这里**不能**套用封面/书源抓取那套内网拦截。跨站风险由写操作的同源闸门挡住
+     * （`POST /api/tts/speak` 带外站 `Origin` 会被判 403，见 Guard.kt），这里只保证协议合法、体积可控、
      * 并且重定向后仍然停留在 HTTP(S)。
      */
     private fun assertSafeTtsTarget(uri: URI) {
@@ -330,6 +336,29 @@ class EdgeTtsService(
         return uri
     }
 
+    /**
+     * 自定义 TTS 的附加请求头。界面上以前没有这一栏，"第三方 TTS 基本都要一个 key"这条路是断的；
+     * 补上入口的同时把口子收住：值或名字里带 CR/LF 的丢掉（那是请求走私与头注入的原料），
+     * `Host` / `Content-Length` 这类由 HttpClient 自己管理的字段丢掉（硬塞上去 JDK 客户端直接抛
+     * IllegalArgumentException，用户看到的是一句 500）。
+     */
+    private fun customHeaders(raw: String?): List<Pair<String, String>> {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return emptyList()
+        return runCatching {
+            Json.parseToJsonElement(text).jsonObject.mapNotNull { (key, value) ->
+                runCatching {
+                    val name = key.trim()
+                    val content = value.jsonPrimitive.content.trim()
+                    if (name.isEmpty() || content.isEmpty()) return@runCatching null
+                    if (name.lowercase() in RESTRICTED_CUSTOM_HEADERS) return@runCatching null
+                    if (name.any { it == '\r' || it == '\n' } || content.any { it == '\r' || it == '\n' }) return@runCatching null
+                    name to content
+                }.getOrNull()
+            }
+        }.getOrDefault(emptyList())
+    }
+
     fun synthesizeCustom(request: TtsSpeakRequest, timeoutSeconds: Long = 15): Pair<String, ByteArray> {
         val targetUrl = request.customUrl ?: throw IllegalArgumentException("customUrl is required for custom TTS")
         val cleanText = request.text.trim()
@@ -340,18 +369,12 @@ class EdgeTtsService(
             .replace("{{speakText}}", URLEncoder.encode(cleanText, StandardCharsets.UTF_8))
             .replace("{{speakVoice}}", URLEncoder.encode(voice, StandardCharsets.UTF_8))
             .replace("{{speakSpeed}}", speedMultiplier.toString())
+            .replace("{{speakPitch}}", request.pitch.toString())
 
         val method = request.customMethod?.uppercase() ?: "GET"
         val reqBuilder = HttpRequest.newBuilder().timeout(Duration.ofSeconds(timeoutSeconds))
 
-        request.customHeader?.let { headerRaw ->
-            runCatching {
-                val json = Json.parseToJsonElement(headerRaw).jsonObject
-                for ((k, v) in json) {
-                    reqBuilder.header(k, v.jsonPrimitive.content)
-                }
-            }
-        }
+        customHeaders(request.customHeader).forEach { (name, value) -> reqBuilder.header(name, value) }
 
         if (method == "POST") {
             val bodyTemplate = request.customBody ?: ""
@@ -359,6 +382,7 @@ class EdgeTtsService(
                 .replace("{{speakText}}", cleanText)
                 .replace("{{speakVoice}}", voice)
                 .replace("{{speakSpeed}}", speedMultiplier.toString())
+                .replace("{{speakPitch}}", request.pitch.toString())
             reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.POST(HttpRequest.BodyPublishers.ofString(resolvedBody, StandardCharsets.UTF_8))
         } else {
@@ -386,19 +410,16 @@ class EdgeTtsService(
             .replace("{{speakText}}", URLEncoder.encode(cleanText, StandardCharsets.UTF_8))
             .replace("{{speakVoice}}", URLEncoder.encode(request.voice, StandardCharsets.UTF_8))
             .replace("{{speakSpeed}}", speedMultiplier.toString())
+            .replace("{{speakPitch}}", request.pitch.toString())
         val method = request.customMethod?.uppercase() ?: "GET"
         val reqBuilder = HttpRequest.newBuilder().timeout(Duration.ofSeconds(timeoutSeconds))
-        request.customHeader?.let { headerRaw ->
-            runCatching {
-                val json = Json.parseToJsonElement(headerRaw).jsonObject
-                for ((k, v) in json) reqBuilder.header(k, v.jsonPrimitive.content)
-            }
-        }
+        customHeaders(request.customHeader).forEach { (name, value) -> reqBuilder.header(name, value) }
         if (method == "POST") {
             val body = (request.customBody ?: "")
                 .replace("{{speakText}}", cleanText)
                 .replace("{{speakVoice}}", request.voice)
                 .replace("{{speakSpeed}}", speedMultiplier.toString())
+                .replace("{{speakPitch}}", request.pitch.toString())
             reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
         } else {

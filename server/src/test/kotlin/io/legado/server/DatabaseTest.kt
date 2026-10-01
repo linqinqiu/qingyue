@@ -17,7 +17,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             database.saveProgress(ReadingProgress("source", "book", "chapter", 3, 0.42))
 
@@ -42,7 +42,7 @@ class DatabaseTest {
             }
 
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             assertEquals(0.0, database.getProgress("source", "book")!!.scrollPosition, 0.0)
             database.close()
@@ -55,7 +55,7 @@ class DatabaseTest {
     fun `removing shelf item clears its progress and returns an orphaned cover`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("source", "book", "书名", "作者", "toc", "cover")
             database.saveBookshelf(book, CachedCover("a".repeat(64), "image/jpeg"))
             database.saveProgress(ReadingProgress("source", "book", "chapter", 3, .42))
@@ -71,7 +71,7 @@ class DatabaseTest {
     fun `alternate sources persist on save and update on switch`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             val alt1 = SearchResult("alt-source-1", "测试书", "测试作者", "https://alt1.com/book")
             val alt2 = SearchResult("alt-source-2", "测试书", "测试作者", "https://alt2.com/book")
             val book = BookshelfWriteRequest("main-source", "https://main.com/book", "测试书", "测试作者", "toc", alternateSources = listOf(alt1, alt2))
@@ -103,7 +103,7 @@ class DatabaseTest {
                     statement.executeUpdate("insert into book_shelf values ('old', 'book', '旧书', null, 'toc', null, null, 1)")
                 }
             }
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             assertEquals(false, database.listBookshelf().single().completed)
 
             database.saveBookshelf(BookshelfWriteRequest("source", "book", "新书", tocUrl = "toc"), null)
@@ -117,7 +117,7 @@ class DatabaseTest {
     fun `batch import deduplicates source URLs and overwrites existing sources`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             val first = """{"bookSourceUrl":"https://source.example","bookSourceName":"初版"}"""
             val replacement = """{"bookSourceUrl":"https://source.example","bookSourceName":"更新版"}"""
 
@@ -138,7 +138,7 @@ class DatabaseTest {
     fun `search source records load enabled sources in one filtered query`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             database.importSources(listOf(
                 """{"bookSourceUrl":"https://enabled.example","bookSourceName":"可用"}""",
                 """{"bookSourceUrl":"https://disabled.example","bookSourceName":"停用","enabled":false}""",
@@ -155,7 +155,7 @@ class DatabaseTest {
     fun `subscription records preserve failure state and can be removed`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             val subscription = database.saveSubscription(SubscriptionWriteRequest("https://example.com/sources.json"))
             database.recordSubscriptionFailure(subscription.id, "网络超时")
             assertEquals("网络超时", database.listSubscriptions().single().lastError)
@@ -170,7 +170,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
             DriverManager.getConnection("jdbc:sqlite:$path").use { conn ->
                 val mode = conn.createStatement().use { statement -> statement.executeQuery("pragma journal_mode").use { result -> result.next(); result.getString(1) } }
                 assertEquals("wal", mode.lowercase())
@@ -183,7 +183,7 @@ class DatabaseTest {
     fun `book content cache is served and removed with its shelf item`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("source", "book", "书名", "作者", "toc")
             database.saveBookshelf(book, null)
             database.beginBookCache("source", "book", 1)
@@ -204,7 +204,7 @@ class DatabaseTest {
     fun `switching a shelf source clears old cached data`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             database.saveBookshelf(BookshelfWriteRequest("old", "old-book", "书名", "作者", "old-toc"), null)
             database.saveProgress(ReadingProgress("old", "old-book", "chapter", 2))
             database.cacheBookContent("old", "old-book", "chapter", ChapterContent(content = "旧缓存"))
@@ -225,7 +225,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             val largePayload = "{\"bookSourceUrl\":\"https://source.large\",\"bookSourceName\":\"大型书源\",\"bookSourceGroup\":\"精品\",\"customData\":\"" + "X".repeat(20000) + "\"}"
             database.importSources(listOf(largePayload))
@@ -254,7 +254,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             database.importSources(listOf(
                 "{\"bookSourceUrl\":\"https://b.com\",\"bookSourceName\":\"b_book\"}",
@@ -282,7 +282,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             database.cacheBookContent("src-1", "book-1", "https://src.com/c1", ChapterContent("第1章", "内容1"))
             database.cacheBookContent("src-1", "book-1", "https://src.com/c2", ChapterContent("第2章", "内容2"))
@@ -303,7 +303,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             val book = BookshelfWriteRequest("src-1", "book-1", "书名", "作者", "toc")
             database.saveBookshelf(book, null)
@@ -329,7 +329,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             val book = BookshelfWriteRequest("src-1", "book-1", "书名", "作者", "toc")
             database.saveBookshelf(book, null)
@@ -356,7 +356,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
 
             database.importSources((1..20).map { "{\"bookSourceUrl\":\"https://src$it.com\",\"bookSourceName\":\"书源$it\"}" })
             database.saveBookshelf(BookshelfWriteRequest("https://src1.com", "https://book1.com", "并发测试", "作者", "toc"), null)
@@ -394,7 +394,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
             database.listSources(null)
             database.saveBookshelf(BookshelfWriteRequest("s", "b", "n", "a", "t"), null)
 
@@ -414,7 +414,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
             database.saveBookshelf(BookshelfWriteRequest("src-1", "https://b1", "旧书名", "旧作者", "https://b1/toc"), CachedCover("cover-old", "image/jpeg"))
 
             val updated = database.updateBookshelfInfo(
@@ -443,7 +443,7 @@ class DatabaseTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("password-for-test")
+            database.initialize()
             database.saveBookshelf(BookshelfWriteRequest("src-1", "https://b1", "未命名书籍", "会说话的肘子", "https://b1/toc"), null)
 
             val updated = database.updateBookshelfInfo(
@@ -470,7 +470,7 @@ class DatabaseTest {
     fun `updateBookshelfCover updates cover key and cover cache record`() {
         val path = temporaryDatabase()
         try {
-            val database = Database(path); database.initialize("password-for-test")
+            val database = Database(path); database.initialize()
             val book = BookshelfWriteRequest("src-1", "https://b1", "未命名书籍", "会说话的肘子", "https://b1/toc")
             val saved = database.saveBookshelf(book, null)
             assertNull(saved.coverKey)

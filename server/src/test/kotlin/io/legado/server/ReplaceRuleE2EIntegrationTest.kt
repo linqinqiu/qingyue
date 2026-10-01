@@ -29,9 +29,6 @@ class ReplaceRuleE2EIntegrationTest {
                 port = 8080,
                 databasePath = dbPath,
                 coverCacheDirectory = tempDir,
-                webDavDirectory = tempDir.resolve("webdav"),
-                initialAdminPassword = "adminPassword123!",
-                secureCookies = false,
             )
 
             application {
@@ -49,18 +46,10 @@ class ReplaceRuleE2EIntegrationTest {
             val healthResp = client.get("/healthz")
             assertEquals(HttpStatusCode.OK, healthResp.status)
 
-            // 2. Login
-            val loginResp = client.post("/api/auth/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest("adminPassword123!"))
-            }
-            assertEquals(HttpStatusCode.OK, loginResp.status)
-            val csrfToken = loginResp.body<LoginResponse>().csrfToken
-            assertNotNull(csrfToken)
+            // 不设身份：直接调用，没有登录这一步
 
             // 3. Test Preview API before saving
             val previewResp = client.post("/api/replace-rules/preview") {
-                header("X-CSRF-Token", csrfToken)
                 contentType(ContentType.Application.Json)
                 setBody(
                     ReplaceRulePreviewRequest(
@@ -83,7 +72,6 @@ class ReplaceRuleE2EIntegrationTest {
 
             // 4. Save Replace Rule
             val saveRuleResp = client.post("/api/replace-rules") {
-                header("X-CSRF-Token", csrfToken)
                 contentType(ContentType.Application.Json)
                 setBody(
                     ReplaceRule(
@@ -104,7 +92,6 @@ class ReplaceRuleE2EIntegrationTest {
 
             // 5. Query Replace Rules List
             val listResp = client.get("/api/replace-rules") {
-                header("X-CSRF-Token", csrfToken)
             }
             assertEquals(HttpStatusCode.OK, listResp.status)
             val rulesList = listResp.body<List<ReplaceRule>>()
@@ -113,14 +100,12 @@ class ReplaceRuleE2EIntegrationTest {
 
             // 6. Test Scope Filter
             val scopeFilterResp = client.get("/api/replace-rules?bookName=宅魔女") {
-                header("X-CSRF-Token", csrfToken)
             }
             assertEquals(HttpStatusCode.OK, scopeFilterResp.status)
             val filteredRules = scopeFilterResp.body<List<ReplaceRule>>()
             assertEquals(1, filteredRules.size)
 
             val otherBookFilterResp = client.get("/api/replace-rules?bookName=诛仙") {
-                header("X-CSRF-Token", csrfToken)
             }
             assertEquals(HttpStatusCode.OK, otherBookFilterResp.status)
             val otherFilteredRules = otherBookFilterResp.body<List<ReplaceRule>>()
@@ -128,26 +113,22 @@ class ReplaceRuleE2EIntegrationTest {
 
             // 7. Toggle Rule
             val toggleResp = client.post("/api/replace-rules/toggle") {
-                header("X-CSRF-Token", csrfToken)
                 contentType(ContentType.Application.Json)
                 setBody(ReplaceRuleToggleRequest(ids = listOf(savedRule.id), enabled = false))
             }
             assertEquals(HttpStatusCode.OK, toggleResp.status)
             val getRuleResp = client.get("/api/replace-rules/${savedRule.id}") {
-                header("X-CSRF-Token", csrfToken)
             }
             assertFalse(getRuleResp.body<ReplaceRule>().isEnabled)
 
             // Re-enable
             client.post("/api/replace-rules/toggle") {
-                header("X-CSRF-Token", csrfToken)
                 contentType(ContentType.Application.Json)
                 setBody(ReplaceRuleToggleRequest(ids = listOf(savedRule.id), enabled = true))
             }
 
             // 8. Test Export
             val exportResp = client.get("/api/replace-rules/export") {
-                header("X-CSRF-Token", csrfToken)
             }
             assertEquals(HttpStatusCode.OK, exportResp.status)
             val exportedRules = exportResp.body<List<ReplaceRule>>()
@@ -155,7 +136,6 @@ class ReplaceRuleE2EIntegrationTest {
 
             // 9. Test Import
             val importResp = client.post("/api/replace-rules/import") {
-                header("X-CSRF-Token", csrfToken)
                 contentType(ContentType.Application.Json)
                 setBody(
                     ReplaceRuleImportRequest(
@@ -171,7 +151,6 @@ class ReplaceRuleE2EIntegrationTest {
 
             // List again: should have 2 rules
             val finalListResp = client.get("/api/replace-rules") {
-                header("X-CSRF-Token", csrfToken)
             }
             assertEquals(2, finalListResp.body<List<ReplaceRule>>().size)
 

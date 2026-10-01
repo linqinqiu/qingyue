@@ -21,7 +21,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Seed 10 sources
             val sources = (1..10).map { i ->
@@ -96,7 +96,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val oldBook = BookshelfWriteRequest("source-old", "https://old/book/1", "修真聊天群", tocUrl = "https://old/toc")
             database.saveBookshelf(oldBook, null)
@@ -138,7 +138,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Initial Source A
             database.saveBookshelf(BookshelfWriteRequest("src-a", "https://a.com/b1", "大奉打更人", tocUrl = "https://a.com/toc"), null)
@@ -183,7 +183,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Seed sources
             val sources = (1..50).map { """{"bookSourceUrl":"https://src$it.com","bookSourceName":"书源$it"}""" }
@@ -251,7 +251,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             // Seed initial 10 sources
             val initial = (1..10).map { """{"bookSourceUrl":"https://src$it.com","bookSourceName":"初版书源$it","searchUrl":"/search?k={{key}}","ruleSearch":{"bookList":"$.data","name":"$.title","bookUrl":"/b/{{$.id}}"}}""" }
@@ -305,7 +305,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sourceJson = """{"bookSourceUrl":"https://src.com","ruleToc":{"chapterList":"$.data","chapterName":"$.title","chapterUrl":"$.url"},"ruleContent":{"content":"$.content"}}"""
             database.saveSource(SourceCodec.parse(sourceJson), null)
@@ -357,7 +357,7 @@ class CrossFeatureBackendTest {
         val path = temporaryDatabase()
         try {
             val database = Database(path)
-            database.initialize("test-pass")
+            database.initialize()
 
             val sourceJson = """{"bookSourceUrl":"https://src.com","ruleToc":{"chapterList":"$.data","chapterName":"$.title","chapterUrl":"$.url"},"ruleContent":{"content":"$.content"}}"""
             database.saveSource(SourceCodec.parse(sourceJson), null)

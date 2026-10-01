@@ -79,7 +79,7 @@ class ReplaceRuleTest {
         val path = Files.createTempFile("legado-server-replace-rules-test", ".sqlite").toString()
         try {
             val db = Database(path)
-            db.initialize("adminPassword123!")
+            db.initialize()
 
             // 1. Initial list empty
             assertEquals(0, db.listReplaceRules().size)

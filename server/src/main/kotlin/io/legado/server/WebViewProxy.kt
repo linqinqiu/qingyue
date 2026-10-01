@@ -164,8 +164,14 @@ class WebViewProxy(private val database: Database) {
         return ProxiedPayload(response.statusCode(), "text/html; charset=utf-8", rewriteHtml(html, uri, sourceId, token).toByteArray(Charsets.UTF_8))
     }
 
-    /** 当前书源已捕获到的 Cookie（按域名分组），用于前端展示登录结果。 */
-    fun jarSnapshot(sourceId: String): Map<String, String> = database.getSourceCookieJar(sourceId)
+    /**
+     * 这本书源**会带出去**的凭据（按注册域归桶）。
+     * 全局按域存，所以这里不是"它的罐子"，而是"它会访问的那些域上各有什么"。
+     */
+    fun jarSnapshot(sourceJson: String): Map<String, String> =
+        database.cookieBucketsForHosts(credentialDomains(sourceJson)).associate { bucket ->
+            bucket.domain to (database.getCookieForUrl("https://${bucket.domain}/") ?: "")
+        }
 
     // ------------------------------------------------- 书源自生成的内置页面
 
@@ -274,7 +280,7 @@ class WebViewProxy(private val database: Database) {
             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
             .header("Accept-Encoding", "gzip, deflate")
         referer?.let { builder.header("Referer", it) }
-        database.getSourceCookie(sourceId, uri.toString())?.takeIf { it.isNotBlank() }?.let {
+        database.getCookieForUrl(uri.toString())?.takeIf { it.isNotBlank() }?.let {
             builder.header("Cookie", it)
         }
         if (body != null) {
@@ -299,7 +305,7 @@ class WebViewProxy(private val database: Database) {
         val setCookies = response.headers().allValues("set-cookie")
         if (setCookies.isEmpty()) return
         setCookies.forEach { header ->
-            runCatching { database.setSourceCookieFromSetCookie(sourceId, uri.toString(), header) }
+            runCatching { database.setCookieFromSetCookie(uri.toString(), header) }
         }
     }
 
@@ -349,6 +355,9 @@ class WebViewProxy(private val database: Database) {
         )
 
         private val URL_PATTERN = Regex("""https?://[^\s"'<>\\]+""", RegexOption.IGNORE_CASE)
+
+        /** IP 直连的书源（库里就有 `http://154.37.154.143/` 这种）不能按"最后两段"归桶，整串就是域。 */
+        private val IPV4_PATTERN = Regex("""^\d{1,3}(\.\d{1,3}){3}$""")
         /** 直接抓主机名，避免书源模板（如 {{key}}）或中文路径导致 URI 解析失败 */
         private val HOST_PATTERN = Regex("""https?://([^/\s"'<>\\:?#]+)""", RegexOption.IGNORE_CASE)
         private val CSS_URL_PATTERN = Regex("""url\(\s*(['"]?)([^'")]+)\1\s*\)""", RegexOption.IGNORE_CASE)
@@ -365,6 +374,7 @@ class WebViewProxy(private val database: Database) {
         /** 取可注册域名（eTLD+1 近似），用于把同站子域一并纳入白名单。 */
         fun registrableDomain(host: String): String {
             val normalized = host.lowercase().trim().trim('.')
+            if (IPV4_PATTERN.matches(normalized) || normalized.contains(':')) return normalized
             val parts = normalized.split('.').filter { it.isNotEmpty() }
             if (parts.size <= 2) return normalized
             val lastTwo = parts.takeLast(2).joinToString(".")
@@ -377,6 +387,32 @@ class WebViewProxy(private val database: Database) {
          * 取书源自身 JSON 中出现的第一个 http(s) 地址，保证「内置浏览器」按钮不会直接死路。
          */
         fun defaultStartUrl(sourceJson: String): String? = URL_PATTERN.find(sourceJson)?.value
+
+        /**
+         * 这份书源**实际会带凭据去访问的主机**，按「最该登录的那个排前面」：
+         * `loginUrl` 的主机 → `bookSourceUrl` 的主机 → 书源里其余地址出现的顺序。
+         *
+         * 排序不是装饰：番茄官方接口直连源的 `bookSourceUrl` 是代理域 `fq-book.netsite.cc`，
+         * 而「番茄书架」那条发现分栏打的是 `fanqienovel.com/reading/bookapi/...`，
+         * 需要登录的恰恰是后者。粘贴 Cookie 时如果只能存到书源主域，这份凭据永远发不出去。
+         *
+         * 键用**完整主机**而不是上游 `getSubDomain` 的注册域：我们的 Cookie 罐就是按完整主机存、
+         * 读取时再逐级回退到父域的（比上游更严格：`hm.baidu.com` 的 Cookie 不会发给别的 baidu 子域），
+         * 界面列出来的必须和罐子里的键、和浏览器 devtools 里看到的主机是同一个东西，否则用户无从核对。
+         */
+        fun credentialDomains(sourceJson: String): List<String> {
+            val ordered = linkedSetOf<String>()
+            fun add(host: String?) {
+                val normalized = host?.trim()?.lowercase()?.trimEnd('.')?.takeIf { it.isNotBlank() && it.contains('.') } ?: return
+                ordered.add(normalized)
+            }
+            val obj = runCatching { Json.parseToJsonElement(sourceJson).jsonObject }.getOrNull()
+            listOf("loginUrl", "bookSourceUrl").forEach { key ->
+                add((obj?.get(key) as? JsonPrimitive)?.contentOrNull?.let { hostOf(it.trim()) })
+            }
+            URL_PATTERN.findAll(sourceJson).forEach { match -> add(hostOf(match.value)) }
+            return ordered.toList()
+        }
 
         /** 书源允许代理的域名集合，来源于书源自身配置中的全部 http(s) 地址。 */
         fun allowedDomains(sourceJson: String): Set<String> {

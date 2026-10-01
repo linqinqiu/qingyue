@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="./web/public/logo.svg" width="96" height="96" alt="Legado Server Logo" />
+<img src="./web/public/favicon.svg" width="96" height="96" alt="青阅 Logo" />
 
-# Legado Server
+# 青阅
 
 **开源阅读（Legado）Headless 服务端与现代化 Web 客户端**
 
-`#legado` `#legado3` `#开源阅读` `#reader` `#novel-reader` `#book-source` `#headless` `#ktor` `#kotlin` `#react19` `#pwa` `#tts` `#webdav` `#docker`
+`#legado` `#legado3` `#开源阅读` `#reader` `#novel-reader` `#book-source` `#headless` `#ktor` `#kotlin` `#react19` `#pwa` `#tts` `#docker`
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.20-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Ktor](https://img.shields.io/badge/Ktor-3.4.3-F88900?logo=ktor&logoColor=white)](https://ktor.io/)
@@ -39,14 +39,14 @@
 - **健壮的数据存储**：采用 SQLite 持久化存储，启用 WAL（Write-Ahead Logging）高性能并发写入模式与连接生命周期治理。
 
 ### ⚡ 2. 高并发流式搜索（Streaming Search）
-- **WebSocket 实时流式推送**：搜索请求通过 WebSocket (`/api/search/stream`) 进行各书源并发检索，书籍信息边搜边出，告别漫长等待。
+- **WebSocket 实时流式推送**：搜索请求通过 WebSocket (`/api/search/stream`) 进行各书源并发检索，书籍信息边搜边出（界面有逐源进度行与停止按钮）。
 - **非阻塞式解析**：封面解析与候选源校验异步化处理，极大降低网络级联阻塞。
 
 ### 📖 3. 现代化沉浸式 Web 阅读器
-- **超大目录虚拟化滚动**：内置 `VirtualChapterList` 虚拟化渲染引擎，5,000+ 章节目录秒级载入，固定 DOM 节点占用，丝滑 60 FPS 滚动并自动定位当前章节。
-- **单书源极速直连秒开**：开卷优先拉取主书源正文，候选书源按需懒加载，彻底消除开卷时的网络风暴。
+- **超大目录虚拟化滚动**：内置 `VirtualChapterList` 虚拟化渲染引擎，5,000+ 章目录只挂载视口内的行（实测 DOM 行数恒定在视口量级），滚动时自动定位当前章节。
+- **单书源直连开卷**：开卷只请求主书源（详情 / 目录 / 正文各一次），候选书源懒加载，不再对几十个源级联发请求。
 - **多书源无缝切换**：书架支持实时换源与同名匹配，平滑迁移阅读进度。
-- **自适应与阅读定制**：支持深色/浅色/护眼多主题切换、字体与字号调节、行高与段距设定、阅读进度双向自动同步。
+- **自适应与阅读定制**：深色/浅色/护眼三档主题、五种字体、字号与字距、行间距与段间距、**首行缩进三档（不缩进 / 1 字 / 2 字，默认 2 字）**、左右边距与版心宽度、连续滚动或平移分页、宽屏双栏；阅读进度双向自动同步。
 
 ### 💾 4. 离线书籍缓存与封面代理
 - **受限并发下载**：基于 Kotlin 协程信号量（`Semaphore`）调度后台全本/分卷缓存任务，防止触发目标站点限流。
@@ -59,15 +59,16 @@
 - **源规则在线校验**：实时分析书源有效性、字段完整性与语法告警。
 
 ### 🔒 6. 生产级安全防护
-- **PBKDF2 安全密码散列**：防彩虹表破解，支持安全 CLI 密码重置工具。
-- **全链路防护**：内置 Secure/HttpOnly 会话管理、CSRF 令牌防御与防暴力破解策略。
+- **本机优先，不设身份**：默认只绑 `127.0.0.1`，没有账号、密码、登录页与会话 —— 打开就能用。
+- **写操作同源闸门**：浏览器发出的跨站写请求一定带 `Origin`，与本机 Host 不一致就 403，任何网页都无法驱动你的浏览器改这个库。
+- **抓取侧防护**：SSRF 逐跳复验（重定向后重新判地址）、拒绝内网与链路本地目标、正文净化与图片代理、脚本沙箱带超时。
 
-### 🗂️ 7. 内置 WebDAV 文件服务
-- **零依赖挂载**：服务端进程内自带 WebDAV 协议端点（`/webdav`），无需额外进程、端口或容器，即可被 **Windows 资源管理器、macOS Finder、RaiDrive、Cyberduck、rclone** 以及 **Legado App 的 WebDAV 备份客户端**直接挂载读写。
-- **数据目录统一落盘**：客户端上传的数据全部存放于数据目录下的 `webdav/` 文件夹（Docker 中即 `/data/webdav`），随数据卷一起持久化、备份与迁移。
-- **协议能力完整**：支持目录枚举（`PROPFIND`）、上传（`PUT`，原子落盘）、下载（`GET` / `HEAD`，含 `Range` 断点续传）、新建目录（`MKCOL`）、移动/复制（`MOVE` / `COPY`）、删除（`DELETE`）与文件锁（`LOCK` / `UNLOCK`）。
-- **复用既有鉴权**：HTTP Basic 认证，用户名任意填写，密码即管理员密码；越界路径（`..` 穿越等）一律拒绝，无法写出 `webdav/` 目录。
-- **Web 端可视化设置页**：一级导航「文件」内置 WebDAV 面板 —— 展示服务状态与访问地址（一键复制）、已存数据统计、四类客户端接入指引，并可直接在页面上传、新建文件夹、浏览子目录、下载与删除文件（页面内写操作走「会话 + CSRF」鉴权，无需再次输入密码）。
+### 🗂️ 7. 手机备份包一键恢复
+- **浏览器直传**：顶部导航「备份」页选一个手机 Legado 导出的 zip 就恢复，不需要 WebDAV、网盘或额外部署。
+- **恢复范围**：书源、替换净化规则、书架与阅读进度、RSS 订阅源、分组、包内登录凭据（加密条目填备份密码即可解开）。
+- **不冲掉本机选择**：已存在的书源保留你在本机启用/停用的状态，包里的启用位不会把架上筛好的状态刷掉。
+- **包不落盘**：服务端写临时文件、读完即删；备份密码只在内存里用一次，绝不进日志。
+- **承接不了的条目如实上报**：TTS、字典、主题等条目名会在导入结果里念出来，不静默丢弃。
 
 ---
 
@@ -83,7 +84,7 @@ flowchart TD
 
     subgraph Server ["Headless 服务端 (Ktor + Kotlin JVM)"]
         Router["Ktor 路由与 API 网关"]
-        Auth["PBKDF2 鉴权 & CSRF 防御"]
+        Guard["写操作同源闸门（无账号 / 无会话）"]
         
         subgraph CoreEngine ["核心引擎模块"]
             Runner["RuleRunner 沙箱解析器<br/>(Rhino JS + Jsoup + JsonPath)"]
@@ -95,10 +96,9 @@ flowchart TD
         DB[("SQLite 数据库<br/>(WAL 模式 + 连接复用)")]
     end
 
-    UI -->|REST API / Session / CSRF| Router
+    UI -->|REST API（同源写请求）| Router
     WSClient -->|WebSocket /api/search/stream| Router
-    Router --> Auth
-    Auth --> CoreEngine
+    Router --> CoreEngine
     CoreEngine --> DB
     Runner -->|HTTP/HTTPS 请求| Sources["互联网网络书源"]
 ```
@@ -107,7 +107,7 @@ flowchart TD
 
 ## 🚀 快速开始与部署
 
-### ☁️ 方式一：阿里云计算巢一键秒级部署（推荐 · 免运维）
+### ☁️ 方式一：阿里云计算巢部署（云端 · 需要公网访问时用）
 
 无需手动购买/配置 VPS 或安装 Docker 环境，通过阿里云计算巢即可一键自动化拉起专属的云原生 Legado Server 服务实例（弹性容器实例 ECI + NAS 持久化文件存储 + 独立公网 IP）。
 
@@ -116,14 +116,15 @@ flowchart TD
 - **一键直达链接**：[前往阿里云计算巢一键部署 Legado Server](https://computenest.console.aliyun.com/service/instance/create/cn-hangzhou?type=user&ServiceId=service-533806288add4002b02a)
 - **部署步骤**：
   1. 点击上方部署按钮直达计算巢创建页。
-  2. 填写 **管理员初始密码**（至少 12 位），其余规格（如 1核 2G 容器规格与网络）保持默认即可。
-  3. 点击 **立即创建**，约 1~2 分钟即可完成自动化部署。
-  4. 部署成功后在实例详情页点击 **`WebUrl`**（如 `http://<公网IP>:8080`）直接进入 Web 阅读器。
-- **计费说明**：软件 100% 免费开源；云资源按实际使用量秒级计费（弹性 ECI 每小时仅需几分钱），可随时一键暂停或彻底释放。
+  2. 选择可用区与容器规格（1 核 2G 起步即可），其余保持默认 —— 服务**不设身份**，没有任何密码要填。
+  3. ⚠️ 这条路径会给出一个**公网可达、无鉴权**的 URL：谁拿到地址就能读改这台服务上的整个库（书源、书架、凭据）。只适合临时体验；要长期用，请在前面加反代鉴权 / IP 白名单 / 隧道，或干脆只在本机跑。
+  4. 点击 **立即创建**，等待自动化部署完成。
+  5. 部署成功后在实例详情页点击 **`WebUrl`**（如 `http://<公网IP>:8080`）直接进入 Web 阅读器。
+- **计费说明**：本仓库软件本身免费（GPL-3.0）；云资源由阿里云按量计费，金额与所选规格相关，请以创建页的费用预估为准。
 
 ---
 
-### ⚡ 方式二：一行命令极速启动（Docker CLI）
+### ⚡ 方式二：Docker CLI 启动
 
 无需克隆代码仓库，直接运行以下命令即可拉取多架构镜像（支持 x86_64 / ARM64）并启动服务。
 
@@ -142,13 +143,12 @@ docker run -d \
   --restart unless-stopped \
   -p 8080:8080 \
   -v ./ls_data:/data \
-  -e ADMIN_PASSWORD='your_password_at_least_12_chars' \
   crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest
 ```
 
 > **单行复制版：**
 > ```bash
-> docker run -d --name legado-server --restart unless-stopped -p 8080:8080 -v ./ls_data:/data -e ADMIN_PASSWORD='your_password_at_least_12_chars' crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest
+> docker run -d --name legado-server --restart unless-stopped -p 8080:8080 -v ./ls_data:/data crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest
 > ```
 
 #### 🌍 海外 / 国际环境（GitHub Packages GHCR）
@@ -159,20 +159,15 @@ docker run -d \
   --restart unless-stopped \
   -p 8080:8080 \
   -v ./ls_data:/data \
-  -e ADMIN_PASSWORD='your_password_at_least_12_chars' \
   ghcr.io/lukelzlz/legado-server:latest
 ```
 
 > **单行复制版：**
 > ```bash
-> docker run -d --name legado-server --restart unless-stopped -p 8080:8080 -v ./ls_data:/data -e ADMIN_PASSWORD='your_password_at_least_12_chars' ghcr.io/lukelzlz/legado-server:latest
+> docker run -d --name legado-server --restart unless-stopped -p 8080:8080 -v ./ls_data:/data ghcr.io/lukelzlz/legado-server:latest
 > ```
 
-- **访问 Web 端**：浏览器打开 `http://127.0.0.1:8080`，输入您设置的 `ADMIN_PASSWORD` 登录。
-- **重置密码（如遗忘）**：
-  ```bash
-  docker exec -it legado-server /app/bin/legado-server reset-password 'new_password_at_least_12_chars'
-  ```
+- **访问 Web 端**：浏览器打开 `http://127.0.0.1:8080` 即可使用；默认只绑回环，局域网访问不到。
 
 ---
 
@@ -192,8 +187,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      ADMIN_PASSWORD: your_password_at_least_12_chars
-      LEGADO_SECURE_COOKIES: "true"
     volumes:
       - ./ls_data:/data
 ```
@@ -215,9 +208,9 @@ docker compose up -d
    ```bash
    cp .env.example .env
    ```
-   编辑 `.env` 文件，填入您的初始管理员密码：
+   编辑 `.env` 文件按需改端口与数据目录（服务不设身份，没有密码要填）：
    ```env
-   ADMIN_PASSWORD=your_secure_password_at_least_12_chars
+# 服务不设身份：没有密码、没有登录
    ```
 
 3. **构建并启动容器**
@@ -226,12 +219,8 @@ docker compose up -d
    ```
 
 4. **访问服务**
-   打开浏览器访问：`http://127.0.0.1:8080`，使用配置的密码登录即可。
+不需要登录，打开即用
 
-5. **重置管理员密码（如遗忘）**
-   ```bash
-   docker compose --env-file .env -f compose.server.yml run --rm legado-server reset-password 'new_password_at_least_12_chars'
-   ```
 
 ### 📍 本机 jar 部署：安装与数据位置全部可自定义
 
@@ -242,17 +231,16 @@ docker compose up -d
 | --- | --- | --- |
 | `LEGADO_HOME` | 启动器所在目录 | 安装根 |
 | `LEGADO_ENV` | `<安装根>/.env` | 配置文件位置 |
-| `LEGADO_DATA_DIR` | `<安装根>/data` | 数据库、封面缓存、WebDAV、本地书都从这里派生 |
+数据库、封面缓存、本地书都从这里派生
 | `LEGADO_DATABASE` | `<数据目录>/legado.sqlite` | 单独指定库文件 |
 | `LEGADO_LOG_FILE` | `<安装根>/server.log` | 日志 |
 | `LEGADO_TMP_DIR` | `<安装根>/tmp` | **JVM 临时目录**（`-Djava.io.tmpdir`） |
 | `LEGADO_HOST` / `LEGADO_PORT` | `127.0.0.1` / `1234` | 监听地址与端口（`stop.mjs` 读同一份配置） |
-| `LEGADO_SECURE_COOKIES` / `LEGADO_LOOPBACK_NO_AUTH` | `false` / `true` | 明文 http 联调开关 |
 
 **不写系统盘**：JVM 临时目录不指定的话会落到 `C:\Users\<用户>\AppData\Local\Temp`，SQLite 的本地库
 （`sqlite-3.x-…-sqlitejdbc.dll`）每次启动都要往那儿解包一份。现在默认指向 `<安装根>/tmp`，实测：
-一轮完整流量（搜索 + 目录 + 正文 + 封面 + WebDAV）后 C 盘 Temp 条目 **17 → 17（零新增）**，
-解出的 dll 出现在 `E:\…\tmp\`。WebDAV 上传的 `.part` 临时文件本来就写在目标文件同目录，不涉及系统盘。
+一轮完整流量（搜索 + 目录 + 正文 + 封面）
+备份包直传的临时文件写在系统临时目录、读完即删，
 （构建期的 Gradle / npm 缓存不在本节范围内 —— 那是开发机自己的事。）
 
 > [!TIP]
@@ -271,7 +259,7 @@ docker compose up -d
   # 编译 Web 前端与服务端独立 JAR
   npm --prefix web run build
   ./gradlew :server:fatJar
-  # 生成产物位于 server/build/libs/legado-server-0.1.0-all.jar
+  # 产物名带版本号，取自 server/build.gradle 的 version（当前形如 legado-server-<版本>-all.jar）
   ```
 
 #### 2. 启动服务
@@ -280,13 +268,14 @@ docker compose up -d
 # 极简启动（默认端口 8080，数据持久化在 ./data）
 java -jar legado-server.jar
 
-# 自定义端口、数据目录与管理员密码
-LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data ADMIN_PASSWORD='your_password_at_least_12_chars' java -jar legado-server.jar
+# 自定义端口与数据目录
+LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data java -jar legado-server.jar
 ```
 
-#### 3. CLI 工具（如命令行重置管理员密码）
+#### 3. CLI 工具（启动与停止）
 ```bash
-java -jar legado-server.jar reset-password 'new_password_at_least_12_chars'
+node start.mjs      # 后台拉起，写 server.log
+node stop.mjs       # 按端口找进程并停掉
 ```
 
 ---
@@ -333,57 +322,31 @@ npm run build
 
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
-| `LEGADO_HOST` | `0.0.0.0` | 服务端监听绑定的主机地址 |
+| `LEGADO_HOST` | `0.0.0.0` | **容器内**的绑定地址（宿主机侧仍只映射 `127.0.0.1:8080`，见 `compose.server.yml`） |
 | `LEGADO_PORT` | `8080` | 服务端 HTTP / WebSocket 监听端口 |
-| `LEGADO_DATA_DIR` | `/data` | 数据持久化根目录（存放数据库 `legado.sqlite`、封面 `covers/` 与 WebDAV 数据 `webdav/`） |
+数据持久化根目录（存放数据库 `legado.sqlite`、封面 `covers/` 与本地书
 | `LEGADO_DATABASE` | `$LEGADO_DATA_DIR/legado.sqlite` | SQLite 数据库文件绝对路径 |
-| `ADMIN_PASSWORD` | 无 | 首次初始化时设置的管理员密码（至少 12 位） |
-| `LEGADO_SECURE_COOKIES` | `true` | 是否对 Session Cookie 启用 Secure 标记（公网 HTTPS 建议开启） |
 
 ---
 
-## 🗂️ WebDAV 文件服务（内置）
+## 🗂️ 手机备份包恢复
 
-服务端内置 WebDAV 协议端点，用于把文件直接放进数据目录，无需 SFTP 或额外部署 NAS。
+手机上「我的 → 备份与恢复 → 备份到本地」会产出一个 Legado 备份包（zip）。
+把它选进本项目的「备份」页（`#backup`）即可恢复，全程只在本机与这台服务之间传输。
 
-### 连接参数
-
-| 项目 | 值 |
+| 项目 | 说明 |
 | --- | --- |
-| 地址 | `http://<服务器地址>:8080/webdav` |
-| 用户名 | 任意（例如 `legado`，服务端不校验用户名） |
-| 密码 | `ADMIN_PASSWORD`（管理员密码） |
-| 存储位置 | `LEGADO_DATA_DIR/webdav`（Docker 中为 `/data/webdav`） |
+| 入口 | 顶部导航「备份」→「选择备份包导入」 |
+| 接口 | `POST /api/backup/import`（multipart：`file` + 可选 `password`） |
+| 恢复内容 | 书源 / 替换净化规则 / 书架与阅读进度 / RSS 订阅源 / 分组 / 登录凭据 |
+| 启用位 | 已存在的书源**保留本机启用/停用选择**，只更新规则内容；新入库的源按包内值启用 |
+| 分组号 | 包内 `bookGroup.json` 的组号按**组名**映射到本机现有组，同名只留一个 |
+| 加密条目 | 包内 `cookies.json` 用备份密码加密（口径同上游：`AES(MD5(password)[:16])`），填密码才解得开 |
+| 临时文件 | 写完即删，不留在数据目录；日志里只有文件名与条数 |
 
-### 常见客户端接入
-
-- **Windows**：「此电脑」→ 右键 → 映射网络驱动器 → 地址填 `http://<服务器>:8080/webdav` → 使用其他凭据 → 任意用户名 + 管理员密码。
-- **macOS**：Finder → `Cmd + K` → `http://<服务器>:8080/webdav`。
-- **rclone**：
-  ```bash
-  rclone config create legado webdav url=http://127.0.0.1:8080/webdav vendor=other user=legado pass=$(rclone obscure '你的管理员密码')
-  rclone copy ./some-book.txt legado:books/
-  ```
-- **Web 端可视化面板**：登录后在顶部导航点击 **文件**（`#webdav`），可直接查看状态、复制上述连接地址、上传/下载/删除文件。
-- **浏览器自查**：直接打开 `http://<服务器>:8080/webdav/`，输入任意用户名 + 管理员密码即可看到目录清单。
-
-### 命令行速查
-
-```bash
-# 上传（首次 201，覆盖 204）
-curl -u legado:'你的管理员密码' -T ./book.txt http://127.0.0.1:8080/webdav/books/book.txt -w "%{http_code}\n"
-
-# 目录枚举（Depth: 0/1）
-curl -u legado:'你的管理员密码' -X PROPFIND -H "Depth: 1" http://127.0.0.1:8080/webdav/books
-
-# 断点续传下载
-curl -u legado:'你的管理员密码' -r 0-1023 -o part.bin http://127.0.0.1:8080/webdav/books/book.txt
-```
-
-> [!IMPORTANT]
-> WebDAV 使用 HTTP Basic 认证（凭据仅 Base64 编码，非加密）。**公网部署必须通过 HTTPS 反向代理访问**，并建议在反代层为 `/webdav` 单独限流；Nginx 需按需调大 `client_max_body_size` 以放开单文件上传体积。
-
----
+> [!NOTE]
+> 本项目不提供"把服务器上的文件当网盘用"的能力：以前内置的 WebDAV 文件服务已删除 ——
+> 它只绑回环时手机推不上来，能推上来的场景又要求你把数据目录暴露给局域网。
 
 ## 📁 代码目录结构
 
@@ -392,7 +355,7 @@ curl -u legado:'你的管理员密码' -r 0-1023 -o part.bin http://127.0.0.1:80
 ├── server/                      # Ktor 服务端模块 (Kotlin JVM)
 │   ├── src/main/kotlin/io/legado/server/
 │   │   ├── Application.kt       # 服务启动入口与 Ktor 特性装配
-│   │   ├── Auth.kt              # PBKDF2 密码校验、会话管理与 CSRF
+├── Guard.kt             # 写操作同源闸门（服务不设身份）
 │   │   ├── BookCacheService.kt  # 离线书籍章节并发缓存调度引擎
 │   │   ├── CoverCache.kt        # 封面拉取、本地存储与防盗链代理
 │   │   ├── Database.kt          # SQLite 数据层持久化与 WAL 模式连接池
@@ -400,7 +363,6 @@ curl -u legado:'你的管理员密码' -r 0-1023 -o part.bin http://127.0.0.1:80
 │   │   ├── Routes.kt            # REST API 与 WebSocket 路由分发
 │   │   ├── RuleRunner.kt        # Legado 规则执行器 (Rhino JS + Jsoup)
 │   │   ├── SubscriptionService.kt # 书源订阅定时与批量同步
-│   │   └── WebDavServer.kt      # 内置 WebDAV 服务端 (数据目录 webdav 存储区)
 │   └── src/test/kotlin/         # 服务端单元测试与端到端场景测试
 ├── web/                         # Web 前端模块 (React 19 + TypeScript + Vite)
 │   ├── src/
@@ -410,9 +372,6 @@ curl -u legado:'你的管理员密码' -r 0-1023 -o part.bin http://127.0.0.1:80
 │   │   ├── readerSettings.ts    # 阅读器偏好设置持久化
 │   │   └── styles.css           # 响应式排版与主题样式表
 │   └── test/                    # 前端虚拟列表与性能场景回归测试集
-├── modules/                     # 共享核心模块
-│   ├── book/                    # 书源规则定义与模型
-│   └── rhino/                   # Rhino 引擎定制绑定
 ├── compose.server.yml           # Docker Compose 编排文件
 └── Dockerfile.server            # 多阶段 Dockerfile (Web 构建 + Server 打包)
 ```

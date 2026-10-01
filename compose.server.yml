@@ -4,9 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile.server
     restart: unless-stopped
-    environment:
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      LEGADO_SECURE_COOKIES: "true"
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

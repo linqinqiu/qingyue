@@ -13,7 +13,7 @@ import org.junit.Test
 
 /**
  * 跨版本备份兼容的回归锁。语料形状取自上游 `ImportOldData.kt` 的老字段表，
- * 以及真机备份包 `backup2026-08-13-V2425A.zip` 的条目名。
+ * 以及真机备份包（机型名已抹去）的条目名。
  */
 class LegacyBackupTest {
 

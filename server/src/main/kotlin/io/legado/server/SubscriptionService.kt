@@ -79,7 +79,10 @@ class SubscriptionService(private val database: Database, private val log: (Stri
                     return@repeat
                 }
                 require(response.statusCode() in 200..299) { "订阅上游返回 HTTP ${response.statusCode()}" }
-                return body.readBytes().toString(Charsets.UTF_8)
+                // 体积封顶：坏/超大订阅源不该整包读进内存。读满「上限+1」字节即判定超限并拒绝。
+                val bytes = body.readNBytes(MAX_BODY_BYTES + 1)
+                require(bytes.size <= MAX_BODY_BYTES) { "订阅内容超过 ${MAX_BODY_BYTES / (1024 * 1024)}MB 上限，已拒绝" }
+                return bytes.toString(Charsets.UTF_8)
             }
         }
         throw IllegalArgumentException("订阅重定向次数超过限制")
@@ -109,7 +112,8 @@ class SubscriptionService(private val database: Database, private val log: (Stri
     private fun sha256(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000L
+        val UPDATE_INTERVAL_MS = AppConfig.subscriptionUpdateMs
         const val MAX_REDIRECTS = 3
+        const val MAX_BODY_BYTES = 8 * 1024 * 1024 // 8MB：订阅源是 JSON 清单，超过即视为异常
     }
 }
