@@ -95,15 +95,34 @@ export function AppHeader({
 
   return (
     <header className="app-page-header">
-      <button
-        type="button"
-        className="app-brand"
-        onClick={() => onNavigate('library')}
-        aria-label="青阅"
-      >
-        <Logo size={22} />
-        <strong>青阅</strong>
-      </button>
+      <div className="app-brand-group">
+        <button
+          type="button"
+          className="app-brand"
+          onClick={() => onNavigate('library')}
+          aria-label="青阅"
+        >
+          <Logo size={22} />
+          <strong>青阅</strong>
+        </button>
+        {/*
+          版本号常驻顶栏，且本身就是「更新日志」的入口。
+          它此前只挂在「我的」下拉里 —— 不点菜单就读不到"这是哪一版"，
+          于是这个功能对用户等于不存在（用户 2026-10-02：「更新日志和版本号还没有做呢」）。
+          取不到版本时整档不渲染：顶栏上不留一个写着"未取到"的控件。
+        */}
+        {version && (
+          <button
+            type="button"
+            className="brand-version"
+            onClick={() => onOpenChangelog?.()}
+            title={`当前版本 ${version} · 看这一版改了什么`}
+            aria-label={`当前版本 ${version}，打开更新日志`}
+          >
+            {version}
+          </button>
+        )}
+      </div>
 
       <nav aria-label="主导航">
         <button

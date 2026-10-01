@@ -91,6 +91,34 @@ svg { width: 18px; height: 18px; flex: none; }
 .app-brand:hover .app-brand-logo {
   transform: scale(1.08);
 }
+.app-brand-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+/*
+  顶栏常驻的版本号 = 「更新日志」的入口，所以做成芯片而不是纯文本：
+  看得见、点得动。此前版本号只挂在「我的」下拉里，不点菜单就等于没有。
+  高度压在 .app-brand 那一档内，别把顶栏撑高。
+*/
+.brand-version {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.brand-version:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .app-page-header nav {
   display: flex;
   align-items: center;
@@ -4758,6 +4786,48 @@ input[type=range] { min-height: 24px; }
 .search-card-hover > span { margin-top: 6px; color: var(--muted); font-size: var(--t-xs); }
 @media (max-width: 640px) { .search-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 16px 10px; } }
 @media (hover: none) { .search-card-hover { display: none; } }
+/*
+  简介只在列表档出现。隐藏规则必须带上容器类：`.library-results small { display: block }`
+  是"一个类 + 一个元素"的特异性，比单写 `.search-card-intro` 高，直接写会被它压过、
+  于是简介在网格档也漏出来（同 AGENTS §5 那条"全局规则压组件"的老毛病）。
+*/
+.search-grid .search-card-intro { display: none; }
+.library-results-tools { display: flex; align-items: center; gap: 12px; }
+/*
+  三档共用同一份 DOM（与上面 `.shelf-mode-*` 那套同一做法）：切换只改容器类名，
+  由 CSS 决定封面 / 简介 / hover 层谁显示 —— 换档不重新拉数据，也不改变点击行为。
+  列表档：封面缩成一枚、简介占右侧一整块；紧凑档：一行一本，封面与简介都藏掉。
+*/
+.search-mode-list, .search-mode-compact { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.search-mode-list .search-card {
+  display: grid; grid-template-columns: 48px minmax(0, 14em) minmax(0, 1fr);
+  align-items: center; gap: 2px 14px;
+  padding: 11px 20px; border-bottom: 1px solid var(--line); background: transparent; text-align: left;
+}
+.search-mode-list .search-card:last-child { border-bottom: 0; }
+.search-mode-list .search-card-cover { width: 48px; box-shadow: none; }
+.search-mode-list .search-card-hover { display: none; }
+.search-mode-list .search-card-intro {
+  display: -webkit-box; overflow: hidden; color: var(--muted);
+  font-size: var(--t-sm); line-height: 1.5; white-space: normal;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.search-mode-list .search-card:hover { background: var(--surface-muted); }
+.search-mode-compact .search-card {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 20px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.search-mode-compact .search-card:last-child { border-bottom: 0; }
+.search-mode-compact .search-card:hover { background: var(--surface-muted); }
+.search-mode-compact .search-card-cover, .search-mode-compact .search-card-intro { display: none; }
+.search-mode-compact .search-card-name { flex: 0 1 auto; }
+.search-mode-compact .search-card-author { flex: 0 1 9em; }
+/* 窄屏：列表档挤不下"封面 + 书名 + 简介"三段，就把封面让掉（与书架窄屏同一取舍） */
+@media (max-width: 720px) {
+  .search-mode-list .search-card { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .search-mode-list .search-card-cover { display: none; }
+  .search-mode-list .search-card-intro { -webkit-line-clamp: 3; }
+}
 
 /* ============================================================
    阶段 3 · 订阅页可用性与空态引导

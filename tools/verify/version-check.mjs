@@ -122,29 +122,48 @@ try {
     hashed.length > 0 && hashed.every(name => (name.startsWith('assets/') ? distAssets : distTop).includes(name.split('/').pop() ?? '')),
     `服务 ${hashed.join(',')} · dist/assets ${distAssets.filter(name => name.endsWith('.js')).join(',')} · dist 根 ${distTop.filter(name => name.endsWith('.js')).join(',')}`)
 
-  // 框架 v2：版本号常驻在侧栏底部，不再"点开一个菜单才看得到"，所以这里不点击。
-  // 但侧栏本身要等 `/healthz` 回来才挂载（App 在 ready 之前只有 loading 屏），
-  // 直接读会读到空 —— 先等这个元素出现，等不到再判红，别把探针的时序当成产品的缺陷。
-  await page.waitForSelector('.menu-version code', { timeout: 20000 }).catch(() => undefined)
-  const menu = await page.evaluate(() => {
+  // 版本号要**不点任何菜单**就读得到。
+  // 这条以前叫「不用点开任何菜单」，实际却是先 `trigger.click()` 再读 `.menu-version code` ——
+  // 那是侧栏 v2 时代的说法；回滚成单顶栏之后版本号退进了下拉菜单，判据的名字与行为反了，
+  // 于是一路绿着，而用户看不见（用户 2026-10-02：「更新日志和版本号还没有做呢」）。
+  // 现在读顶栏常驻的 .brand-version，并带一条反向对照：读的时候菜单根本不该挂在 DOM 上。
+  await page.waitForSelector('.brand-version', { timeout: 20000 }).catch(() => undefined)
+  const brand = await page.evaluate(() => ({
+    version: document.querySelector('.brand-version')?.textContent?.trim() ?? '',
+    menuMounted: !!document.querySelector('.header-menu-dropdown'),
+    isButton: document.querySelector('.brand-version')?.tagName === 'BUTTON',
+  }))
+  check('不点任何菜单就能在顶栏读到版本号', /^\d+\.\d+\.\d+$/.test(brand.version), brand.version || '（没有 .brand-version）')
+  check('反向对照：读版本号的时候菜单并没有挂到 DOM 上', !brand.menuMounted, `菜单已挂载=${brand.menuMounted}`)
+  const version = brand.version
+  // 版本号本身就是入口：点它要真的落到「更新日志」页，并高亮当前这一版。
+  await page.evaluate(() => document.querySelector('.brand-version')?.click())
+  await sleep(1500)
+  const landed = await page.evaluate(() => ({
+    hash: location.hash,
+    current: document.querySelector('.changelog-release.current h2')?.textContent?.trim() ?? '',
+    items: document.querySelectorAll('.changelog-release li').length,
+  }))
+  check('点版本号真的进「更新日志」，且当前版本被标出来',
+    brand.isButton && landed.hash === '#changelog' && !!landed.current && landed.items > 0,
+    `${landed.hash} · 当前版本=${landed.current || '(没高亮)'} · ${landed.items} 条`)
+  await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded' })
+  await sleep(800)
+  const menuState = await page.evaluate(() => {
     const trigger = document.querySelector('.header-menu-btn')
-    const visible = Boolean(trigger && trigger.offsetParent !== null)
-    if (visible) trigger.click()
-    return { hasTrigger: visible, version: document.querySelector('.menu-version code')?.textContent?.trim() ?? '' }
+    if (trigger && trigger.offsetParent !== null) trigger.click()
+    return {
+      version: document.querySelector('.menu-version code')?.textContent?.trim() ?? '',
+      status: document.querySelector('.menu-header-title')?.textContent?.trim() ?? '',
+      loggedIn: document.body.innerText.includes('已登录服务'),
+    }
   })
   await sleep(500)
-  const menuState = await page.evaluate(() => ({
-    version: document.querySelector('.menu-version code')?.textContent?.trim() ?? '',
-    status: document.querySelector('.menu-header-title')?.textContent?.trim() ?? '',
-    loggedIn: document.body.innerText.includes('已登录服务'),
-  }))
-  const version = menuState.version || menu.version
-  check('侧栏把版本号显示出来了（不用点开任何菜单）', /^\d+\.\d+\.\d+$/.test(version), version || '（没有 .menu-version code）')
   if (health) check('界面显示的版本 == /healthz 报的 == gradle 的', version === health.version && version === gradleVersion,
     `界面 ${version} / 接口 ${health.version} / gradle ${gradleVersion}`)
   check('认证那套删了之后不许留"已登录服务"这种谎话', !menuState.loggedIn, `残留登录字样 ${menuState.loggedIn}`)
   if (menuState.status) check('状态位说"本机服务在线"', menuState.status.includes('在线'), menuState.status)
-  else console.log(`NOTE  宽屏没有「更多」浮层，状态位 ${menuState.status ? '内容异常' : '不在此屏出现'}（侧栏已直接显示版本号）`)
+  else console.log(`NOTE  这一屏没有「我的」下拉（状态位在菜单里），版本号已常驻顶栏，不依赖这个浮层`)
   check('全程没有页面 JS 异常', errors.length === 0, errors.slice(0, 2).join(' / '))
 } finally {
   await browser.close()

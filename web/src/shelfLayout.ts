@@ -36,28 +36,58 @@ export function decodeLayout(value: string): ShelfLayout | null {
   return suffix !== null && (suffix === '' || RETIRED_DENSITY.includes(suffix)) ? { mode: 'grid' } : null
 }
 
-export function readShelfLayout(): ShelfLayout {
+function readStoredLayout(key: string): ShelfLayout | null {
   try {
-    const raw = localStorage.getItem(KEY)
-    if (raw !== null) {
-      const parsed = decodeLayout(raw)
-      if (parsed) return parsed
-    }
-    const legacy = localStorage.getItem(LEGACY_KEY)
-    // 只有真的存过旧编号才迁移；全新用户直接吃默认值。
-    return legacy === null ? DEFAULT_LAYOUT : layoutFromLegacyCode(Number(legacy))
+    const raw = localStorage.getItem(key)
+    return raw === null ? null : decodeLayout(raw)
   } catch {
-    return DEFAULT_LAYOUT
+    return null
   }
 }
 
-export function writeShelfLayout(layout: ShelfLayout) {
+function writeStoredLayout(key: string, layout: ShelfLayout) {
   try {
-    localStorage.setItem(KEY, encodeLayout(layout))
-    localStorage.removeItem(LEGACY_KEY)
+    localStorage.setItem(key, encodeLayout(layout))
   } catch {
     // 隐私模式下 localStorage 会抛，布局偏好丢了不影响阅读
   }
+}
+
+export function readShelfLayout(): ShelfLayout {
+  return readStoredLayout(KEY) ?? (() => {
+    try {
+      // 只有真的存过旧编号才迁移；全新用户直接吃默认值。
+      const legacy = localStorage.getItem(LEGACY_KEY)
+      return legacy === null ? DEFAULT_LAYOUT : layoutFromLegacyCode(Number(legacy))
+    } catch {
+      return DEFAULT_LAYOUT
+    }
+  })()
+}
+
+export function writeShelfLayout(layout: ShelfLayout) {
+  writeStoredLayout(KEY, layout)
+  try {
+    localStorage.removeItem(LEGACY_KEY)
+  } catch {
+    // 同上
+  }
+}
+
+/**
+ * 搜索结果的展示形态：三档与书架用同一套词汇（网格 / 列表 / 紧凑列表），
+ * 但**各存各的偏好** —— 在书架上习惯看封面，不代表搜索时也想先看封面。
+ * 默认仍是网格：搜索页原来就是封面网格，改默认等于替用户做决定。
+ */
+const SEARCH_KEY = 'legado-search-layout-v1'
+export const DEFAULT_SEARCH_LAYOUT: ShelfLayout = { mode: 'grid' }
+
+export function readSearchLayout(): ShelfLayout {
+  return readStoredLayout(SEARCH_KEY) ?? DEFAULT_SEARCH_LAYOUT
+}
+
+export function writeSearchLayout(layout: ShelfLayout) {
+  writeStoredLayout(SEARCH_KEY, layout)
 }
 
 /** 书架排序偏好（桌面端库管理）。默认按最后阅读时间倒序。 */

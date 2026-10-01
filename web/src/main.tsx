@@ -4,14 +4,14 @@ import { api, BookDetails, BookGroup, BookshelfItem, Chapter, SearchResult, Sear
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import { ContextMenuLayer, showContextMenu } from './ContextMenu'
-import { readShelfLayout, readShelfSort, ShelfLayout, ShelfSort, writeShelfLayout, writeShelfSort } from './shelfLayout'
+import { readSearchLayout, readShelfLayout, readShelfSort, ShelfLayout, ShelfSort, writeSearchLayout, writeShelfLayout, writeShelfSort } from './shelfLayout'
 import { Logo } from './Logo'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
 import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
 import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
 import { CustomizeModal } from './CustomizeModal'
-import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, SearchFilters, SearchGroup, SortMode } from './searchFilters'
+import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { SourceLoginModal } from './SourceLoginModal'
@@ -1566,6 +1566,12 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
   const groups = useMemo(() => groupSearchResults(search.results), [search.results])
   const visibleGroups = useMemo(() => filterSearchGroups(groups, search.filters, search.keyword), [groups, search.filters, search.keyword])
   const hasFilters = !!search.filters.query.trim()
+  // 三档展示形态与书架同一套词汇，但各存各的偏好（在书架看封面 ≠ 搜索时也想先看封面）。
+  const [resultLayout, setResultLayout] = useState<ShelfLayout>(() => readSearchLayout())
+  const chooseResultLayout = (next: ShelfLayout) => {
+    setResultLayout(next)
+    writeSearchLayout(next)
+  }
   const completed = search.progress?.completedSources ?? 0
   const total = search.progress?.totalSources ?? 0
   const failures = search.progress?.failedSources ?? 0
@@ -1727,16 +1733,49 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
           <section className="library-results">
             <header>
               <h2>搜索结果</h2>
-              <small>{visibleGroups.length} 本书{hasFilters && ` / ${groups.length}`}</small>
+              <div className="library-results-tools">
+                <small>{visibleGroups.length} 本书{hasFilters && ` / ${groups.length}`}</small>
+                {/* 与书架同一套三档：网格看封面、列表看简介、紧凑列表一屏塞最多。 */}
+                <div className="shelf-layout-picker" role="group" aria-label="搜索结果布局">
+                  <button
+                    type="button"
+                    className={resultLayout.mode === 'grid' ? 'active' : ''}
+                    aria-label="封面网格"
+                    title="封面网格：一行多张封面，挑书先看脸"
+                    onClick={() => chooseResultLayout({ mode: 'grid' })}
+                  >
+                    <Icon name="columns" />
+                  </button>
+                  <button
+                    type="button"
+                    className={resultLayout.mode === 'list' ? 'active' : ''}
+                    aria-label="列表"
+                    title="列表：一行一本，右边显示简介"
+                    onClick={() => chooseResultLayout({ mode: 'list' })}
+                  >
+                    <Icon name="list" />
+                  </button>
+                  <button
+                    type="button"
+                    className={resultLayout.mode === 'compact' ? 'active' : ''}
+                    aria-label="紧凑列表"
+                    title="紧凑列表：只看书名、作者与来源数，一屏放最多"
+                    onClick={() => chooseResultLayout({ mode: 'compact' })}
+                  >
+                    <Icon name="menu" />
+                  </button>
+                </div>
+              </div>
             </header>
             {/*
-              与书架、发现页同一套封面网格：一行一条的列表把封面完全浪费掉了，
-              而挑书时最先看的恰恰是封面；来源数与「精准匹配」收进 hover 层。
+              三档共用同一份 DOM（与书架同一套做法）：切换只改容器类名，
+              由 CSS 决定封面、简介、hover 层谁显示 —— 换档不重新拉数据，也不改变点击行为。
             */}
-            <div className="search-grid">
+            <div className={`search-grid search-mode-${resultLayout.mode}`}>
               {visibleGroups.map(group => {
                 const isExact = isExactMatch(group, search.keyword)
                 const cover = sanitizeImageUrl(group.sources.map(source => source.coverUrl).find(Boolean))
+                const blurb = pickBlurb(group)
                 return (
                   <button
                     key={group.key}
@@ -1761,6 +1800,8 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
                     <strong className="search-card-name" title={group.name}><HighlightText text={group.name} keyword={search.keyword} /></strong>
                     <small className="search-card-author">{group.author || '未知作者'}</small>
                     <small className="search-card-sources">{group.sources.length} 个书源{isExact ? ' · 精准匹配' : ''}</small>
+                    {/* 只有列表档显示：挑书时最该看的是这本书讲什么，而不是又一个书名。没简介也没最新章就整栏不渲染。 */}
+                    {blurb && <small className="search-card-intro">{blurb}</small>}
                   </button>
                 )
               })}

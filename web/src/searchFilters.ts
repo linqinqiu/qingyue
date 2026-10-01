@@ -2,6 +2,19 @@ import { SearchResult } from './api'
 
 export type SortMode = 'smart' | 'sources' | 'exact' | 'name'
 
+/**
+ * 列表档右侧那一栏写什么：一条搜索结果可能来自好几个书源，
+ * 取第一条真正写了简介的；没配 `ruleSearch.intro` 的源很常见（服务端不猜），
+ * 就退成「最新：某章」。**两个都没有就返回空串，让那一栏整栏不渲染** ——
+ * 在列表里给每本书挂一句"暂无简介"，是把数据的缺口变成界面的噪声。
+ */
+export function pickBlurb(group: SearchGroup): string {
+  const intro = group.sources.map(source => source.intro?.trim()).find(Boolean)
+  if (intro) return intro
+  const latest = group.sources.map(source => source.lastChapter?.trim()).find(Boolean)
+  return latest ? `最新：${latest}` : ''
+}
+
 export type SearchGroup = {
   key: string
   name: string
