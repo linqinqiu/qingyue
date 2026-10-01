@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { api, TtsVoice } from './api'
 import { Icon } from './icons'
 import { ReaderSettings, TtsEngineType } from './readerSettings'
+import { Select } from './Select'
 
-export type SleepTimerOption = 'off' | '15' | '30' | '45' | '60' | 'chapter' | 'paragraph'
+export type SleepTimerOption = 'off' | '15' | '30' | '45' | '60' | 'chapter'
 
 export interface TtsSettingsModalProps {
   settings: ReaderSettings
@@ -89,7 +90,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
           <div className="source-login-title-group">
             <h3 className="source-login-title"><Icon name="volume2" /> 听书朗读设置</h3>
           </div>
-          <button type="button" className="source-login-action-btn" onClick={onClose} title="关闭">✕</button>
+          <button type="button" className="source-login-action-btn" onClick={onClose} title="关闭" aria-label="关闭"><Icon name="close" /></button>
         </header>
 
         <div className="source-login-body tts-modal-content">
@@ -128,34 +129,35 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
           {settings.ttsEngine === 'edge' && (
             <div className="tts-setting-section">
               <label className="tts-section-label">发音人 (音色)</label>
-              <select
-                className="login-ui-select"
+              <Select
+                className="tts-voice-select"
+                ariaLabel="Edge 发音人"
+                searchable
                 value={settings.ttsVoice}
-                onChange={e => onChange({ ...settings, ttsVoice: e.target.value })}
-              >
-                {edgeVoices.map(v => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.localeName})
-                  </option>
-                ))}
-              </select>
+                options={edgeVoices.map(v => ({ value: v.id, label: v.name, hint: `${v.localeName} · ${v.description ?? ''}` }))}
+                onChange={voice => onChange({ ...settings, ttsVoice: voice })}
+              />
             </div>
           )}
 
           {settings.ttsEngine === 'webSpeech' && (
             <div className="tts-setting-section">
               <label className="tts-section-label">系统发音人</label>
-              <select
-                className="login-ui-select"
-                value={settings.ttsVoice}
-                onChange={e => onChange({ ...settings, ttsVoice: e.target.value })}
-              >
-                {localVoices.map((v, i) => (
-                  <option key={`${v.voiceURI}-${i}`} value={v.voiceURI}>
-                    {v.name} ({v.lang})
-                  </option>
-                ))}
-              </select>
+              {localVoices.length === 0 ? (
+                <p className="tts-hint">
+                  系统没有交回任何本地音色（这台机器没装中文语音包，或当前浏览器不支持 Web Speech）。
+                  可以先用「微软 Edge-TTS」，或在「自定义 HTTP 源」里接自己的服务。
+                </p>
+              ) : (
+                <Select
+                  className="tts-voice-select"
+                  ariaLabel="系统发音人"
+                  searchable
+                  value={settings.ttsVoice}
+                  options={localVoices.map(v => ({ value: v.voiceURI, label: v.name, hint: v.lang }))}
+                  onChange={voice => onChange({ ...settings, ttsVoice: voice })}
+                />
+              )}
             </div>
           )}
 
@@ -210,7 +212,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
             <div className="tts-slider-header">
               <label className="tts-section-label">睡眠定时器 (定时关闭)</label>
               {remainingSeconds !== null && remainingSeconds > 0 && (
-                <span className="tts-countdown-badge">⏳ 倒计时 {formatTimerRemaining(remainingSeconds)}</span>
+                <span className="tts-countdown-badge">倒计时 {formatTimerRemaining(remainingSeconds)}</span>
               )}
             </div>
             <div className="tts-timer-grid">
@@ -288,7 +290,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
             <div className="tts-setting-section tts-custom-section">
               <label className="tts-section-label">自定义 HTTP 源参数</label>
               <p className="tts-hint">
-                可用占位符：<code>&#123;&#123;speakText&#125;&#125;</code>, <code>&#123;&#123;speakSpeed&#125;&#125;</code>, <code>&#123;&#123;speakVoice&#125;&#125;</code>
+                可用占位符：<code>&#123;&#123;speakText&#125;&#125;</code>, <code>&#123;&#123;speakSpeed&#125;&#125;</code>, <code>&#123;&#123;speakVoice&#125;&#125;</code>, <code>&#123;&#123;speakPitch&#125;&#125;</code>
               </p>
               <div className="login-ui-item-field">
                 <label className="login-ui-field-label">接口 URL</label>
@@ -301,15 +303,37 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
                 />
               </div>
               <div className="login-ui-item-field">
+                <label className="login-ui-field-label">发音人标识（填进 &#123;&#123;speakVoice&#125;&#125;）</label>
+                <input
+                  type="text"
+                  className="login-ui-input"
+                  placeholder="留空即不传发音人；这里填的是你自己服务的音色名，不是微软的音色 id"
+                  value={settings.ttsCustomVoice || ''}
+                  onChange={e => onChange({ ...settings, ttsCustomVoice: e.target.value })}
+                />
+              </div>
+              <div className="login-ui-item-field">
                 <label className="login-ui-field-label">请求方式 (GET / POST)</label>
-                <select
-                  className="login-ui-select"
+                <Select
+                  className="tts-voice-select"
+                  ariaLabel="自定义 TTS 请求方式"
                   value={settings.ttsCustomMethod || 'GET'}
-                  onChange={e => onChange({ ...settings, ttsCustomMethod: e.target.value })}
-                >
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                </select>
+                  options={[{ value: 'GET', label: 'GET' }, { value: 'POST', label: 'POST' }]}
+                  onChange={method => onChange({ ...settings, ttsCustomMethod: method })}
+                />
+              </div>
+              <div className="login-ui-item-field">
+                <label className="login-ui-field-label">附加请求头（JSON 对象，可空）</label>
+                <textarea
+                  className="source-login-textarea"
+                  rows={2}
+                  placeholder='{"Authorization": "Bearer xxx"}'
+                  value={settings.ttsCustomHeader || ''}
+                  onChange={e => onChange({ ...settings, ttsCustomHeader: e.target.value })}
+                />
+                <p className="tts-hint">
+                  服务端只把合法字段名与不含换行的值带上去，<code>Host</code> / <code>Content-Length</code> 这类由客户端自己管的头会被丢掉。
+                </p>
               </div>
               {settings.ttsCustomMethod === 'POST' && (
                 <div className="login-ui-item-field">

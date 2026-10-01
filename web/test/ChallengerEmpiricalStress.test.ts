@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { assertScalesLinearly, assertWithinCeiling } from './perfCriteria.ts'
 
 export type Chapter = {
   index: number
@@ -227,6 +228,8 @@ test('Challenger 1: Search Filtering Speed Benchmark across 5,000 and 20,000 cha
     executeChapterFilter(chapters5k, q)
   }
 
+  // 5,000 这一档不再单独判绝对毫秒，只把数记下来给 20,000 那一档做比值分母
+  const msAt5k = new Map<string, number>()
   for (const q of testQueries) {
     const times: number[] = []
     let result: Chapter[] = []
@@ -236,17 +239,7 @@ test('Challenger 1: Search Filtering Speed Benchmark across 5,000 and 20,000 cha
       times.push(performance.now() - start)
     }
     const avgTime = times.reduce((a, b) => a + b, 0) / times.length
-    const minTime = Math.min(...times)
-    
-    // In steady state, filtering 5,000 items in V8 takes < 5ms (min: ~2.5-4ms, avg < 20ms)
-    assert.ok(
-      minTime < 10,
-      `Filtering "${q}" across 5,000 items min took ${minTime.toFixed(3)}ms (target min < 10ms)`
-    )
-    assert.ok(
-      avgTime < 25,
-      `Filtering "${q}" across 5,000 items avg took ${avgTime.toFixed(3)}ms (target avg < 25ms)`
-    )
+    msAt5k.set(q, avgTime)
 
     if (q === '100') {
       // Should match chapter index 99 (title has 100), index 100 (numQuery-1 or numQuery)
@@ -273,11 +266,13 @@ test('Challenger 1: Search Filtering Speed Benchmark across 5,000 and 20,000 cha
     }
     const avgTime = times.reduce((a, b) => a + b, 0) / times.length
     
-    // For 20,000 items, average time should be under 100ms on variable load test environments
-    assert.ok(
-      avgTime < 100,
-      `Filtering "${q}" across 20,000 items avg took ${avgTime.toFixed(3)}ms (target < 100ms)`
-    )
+    // 数据 4 倍 → 时间允许到 12 倍（线性是 4 倍，平方会到 16 倍）：见 web/test/perfCriteria.ts
+    assertScalesLinearly({
+      name: '目录过滤 5,000→20,000「' + q + '」',
+      smallMs: msAt5k.get(q) ?? 0,
+      bigMs: avgTime,
+      dataFactor: 4,
+    })
     assert.ok(Array.isArray(result))
   }
 })

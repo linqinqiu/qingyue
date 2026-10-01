@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, setCsrfToken, streamSearch } from '../src/api.ts'
+import { api, streamSearch } from '../src/api.ts'
 
-test('api client - setCsrfToken and header injection in requests', async () => {
+test('api client - 不设身份：请求里不再带任何令牌，但 Content-Type 与错误传递照旧', async () => {
   const originalFetch = globalThis.fetch
   const capturedRequests: { url: string; method?: string; headers: Headers; body?: any }[] = []
 
@@ -15,12 +15,6 @@ test('api client - setCsrfToken and header injection in requests', async () => {
       body: init?.body,
     })
 
-    if (input.toString().includes('/api/auth/session')) {
-      return new Response(JSON.stringify({ authenticated: true, csrfToken: 'test-csrf-123' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
     if (init?.method === 'DELETE') {
       return new Response(null, { status: 204 })
     }
@@ -31,22 +25,24 @@ test('api client - setCsrfToken and header injection in requests', async () => {
   }
 
   try {
-    setCsrfToken('csrf-token-abc')
-
-    // GET request (no CSRF header required)
-    const session = await api.session()
-    assert.equal(session.authenticated, true)
+    // GET 请求：什么头都不该带
+    await api.sources()
     assert.equal(capturedRequests[0].headers.get('X-CSRF-Token'), null)
 
-    // POST request (must inject X-CSRF-Token and Content-Type)
-    await api.login('mypassword')
+    // POST 请求：带 Content-Type，但**不带**令牌（写操作由服务端的同源闸门把关）
+    await api.import(['{"bookSourceUrl":"https://source1.com"}'])
     assert.equal(capturedRequests[1].method, 'POST')
-    assert.equal(capturedRequests[1].headers.get('X-CSRF-Token'), 'csrf-token-abc')
+    assert.equal(capturedRequests[1].headers.get('X-CSRF-Token'), null)
     assert.equal(capturedRequests[1].headers.get('Content-Type'), 'application/json')
 
-    // DELETE request (204 returns undefined)
+    // DELETE 请求：204 要落成 undefined，调用方才能直接 await
     const delResult = await api.remove('https://source1.com')
     assert.equal(delResult, undefined)
+
+    // 登录/会话这套客户端 API 必须已经不存在
+    assert.equal((api as Record<string, unknown>).login, undefined)
+    assert.equal((api as Record<string, unknown>).logout, undefined)
+    assert.equal((api as Record<string, unknown>).session, undefined)
 
     // Error handling when response is not ok
     globalThis.fetch = async (): Promise<Response> => {
@@ -77,7 +73,6 @@ test('api client - setCsrfToken and header injection in requests', async () => {
     )
   } finally {
     globalThis.fetch = originalFetch
-    setCsrfToken(null)
   }
 })
 
@@ -116,7 +111,6 @@ test('api client - streamSearch WebSocket lifecycle and error handling', async (
   ;(globalThis as any).location = { protocol: 'http:', host: 'localhost:8080' }
 
   try {
-    setCsrfToken('mock-csrf-ws')
     const events: any[] = []
     let reportedError: string | null = null
     let closed = false
@@ -153,6 +147,5 @@ test('api client - streamSearch WebSocket lifecycle and error handling', async (
   } finally {
     globalThis.WebSocket = originalWebSocket
     globalThis.location = originalLocation
-    setCsrfToken(null)
   }
 })

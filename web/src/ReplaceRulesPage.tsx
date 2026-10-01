@@ -427,7 +427,7 @@ export function ReplaceRulesPage() {
               <div className={`rules-sandbox-result ${testResult.changed ? 'changed' : 'unchanged'}`}>
                 <div>{testResult.cleanedText}</div>
                 <div className="rules-result-status">
-                  {testResult.changed ? '✅ 规则已命中替换' : '⚪ 未产生改动'}
+                  {testResult.changed ? '规则已命中替换' : '未产生改动'}
                 </div>
               </div>
             )}
@@ -439,7 +439,7 @@ export function ReplaceRulesPage() {
       <section className="rules-content-area">
         <header className="page-title">
           <div>
-            <span className="section-kicker">阅读服务器</span>
+            <span className="section-kicker">青阅</span>
             <h1>替换净化规则</h1>
             <p>净化网页抓取正文中的反爬文字对调、乱码错别字、引流广告与多余排版。</p>
           </div>
@@ -464,7 +464,7 @@ export function ReplaceRulesPage() {
                 <div className="rule-meta-tags">
                   <span className="rule-tag">分组: {selectedRule.group || '未分组'}</span>
                   <span className={`rule-status-badge ${selectedRule.isEnabled ? 'enabled' : 'disabled'}`}>
-                    {selectedRule.isEnabled ? '✓ 规则已启用' : '⚪ 规则已禁用'}
+                    {selectedRule.isEnabled ? '规则已启用' : '规则已禁用'}
                   </span>
                   {selectedRule.isRegex && <span className="rule-tag tag-regex">正则表达式</span>}
                   {selectedRule.replacement.startsWith('@js:') && <span className="rule-tag tag-js">JS 沙箱</span>}
@@ -562,7 +562,7 @@ export function ReplaceRulesPage() {
                   <>
                     <div style={{ wordBreak: 'break-all' }}>{testResult.cleanedText}</div>
                     <div className="rules-result-status">
-                      {testResult.changed ? '✅ 已命中并发生替换' : '⚪ 未产生改动'}
+                      {testResult.changed ? '已命中并发生替换' : '未产生改动'}
                     </div>
                   </>
                 ) : (

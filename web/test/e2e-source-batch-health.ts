@@ -185,7 +185,7 @@ async function setupMockRoutes(page: Page) {
     const url = req.url()
     const method = req.method()
 
-    if (url.includes('/api/auth/session')) {
+    if (url.includes('/healthz')) {
       return req.respond({
         status: 200,
         contentType: 'application/json',

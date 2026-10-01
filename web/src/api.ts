@@ -14,7 +14,7 @@ export type ExploreTab = { title: string; url: string }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[] }
 export type Chapter = { index: number; title: string; url: string; isVolume?: boolean }
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
-export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[] }
+export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
 export type ImportResponse = { imported: number; updated: number; skipped: number; errors: string[] }
@@ -23,9 +23,13 @@ export type DebugStep = { stage: string; label: string; detail: string; ok: bool
 export type LocalBookImportItem = { filename: string; success: boolean; bookUrl?: string; name?: string; author?: string; totalChapters: number; error?: string }
 export type LocalBookImportResponse = { total: number; imported: number; failed: number; results: LocalBookImportItem[] }
 export type SourceSubscription = { id: number; url: string; enabled: boolean; createdAt: number; updatedAt: number; lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string; lastImported: number; contentHash?: string }
+export type RssSourceSummary = { sourceUrl: string; name: string; group?: string; icon?: string; enabled: boolean; hasListRule: boolean; updatedAt: number }
+export type RssArticle = { origin: string; title: string; link?: string; pubDate?: string; description?: string; image?: string }
+export type RssArticleContent = { title?: string; content: string }
+export type BookGroup = { id: number; name: string; bookCount: number }
 export type SearchStreamEvent = { type: 'start' | 'results' | 'progress' | 'done' | 'error'; totalSources: number; completedSources: number; matchedSources: number; emptySources: number; failedSources: number; resultCount: number; results: SearchResult[]; message?: string }
 
-export type BatchSourceAction = 'enable' | 'disable' | 'delete' | 'set_group'
+export type BatchSourceAction = 'enable' | 'disable' | 'delete' | 'set_group' | 'tag_group' | 'untag_group'
 export type BatchSourceRequest = {
   action: BatchSourceAction
   ids: string[]
@@ -59,8 +63,6 @@ export type SourceHealthCheckResponse = {
 }
 
 
-export type WebDavEntry = { name: string; path: string; directory: boolean; size: number; modifiedAt: number }
-export type WebDavInfo = { url: string; directory: string; path: string; parent?: string | null; fileCount: number; directoryCount: number; totalBytes: number; entries: WebDavEntry[]; anonymousLocalAccess?: boolean }
 export type BackupImportSummary = {
   sources: number
   sourcesUpdated: number
@@ -69,7 +71,25 @@ export type BackupImportSummary = {
   books: number
   booksUpdated: number
   progress: number
+  /** 从包内 cookies.json 恢复并合并进书源的登录凭据条数 */
+  cookies?: number
+  /** 为什么没恢复成（缺密码 / 密码不对 / 域名匹配不到书源） */
+  cookiesNote?: string | null
+  /** 包内 rssSources.json（手机「订阅」页的 RSS 源）恢复条数 */
+  rssSources?: number
+  rssSourcesUpdated?: number
+  /** 包内 bookGroup.json 落到本机分组表的数量 */
+  bookGroups?: number
+  /** 包内条目读出来但没落库的原因（某一条本身坏了，不是整节跳过） */
+  errors?: string[]
+  /** 备份包里有、服务端既没导入也没收进数据目录的条目名（`config.xml` / `videoConfig.xml` / `autoTask.json` 这类），由服务端报，不在前端写死 */
+  skippedSections?: string[]
+  /** 没有原生归宿、但已原样收进服务器数据目录的个性化条目（书签/阅读样式/朗读引擎…） */
+  keptSections?: KeptBackupEntry[]
 }
+
+/** 备份包里被原样收下的一条个性化内容（服务端 BackupStore）。appliable 为真时前端能套到自己设置上。 */
+export type KeptBackupEntry = { name: string; label: string; bytes: number; items: number; appliable: boolean; updatedAt: number }
 
 export type ReplaceRule = {
   id: string
@@ -134,14 +154,40 @@ export type SourceLoginUiItem = {
   countdown?: number
 }
 
-export type SourceLoginUiResponse = {
-  sourceId: string
+/** 某地址所属注册域上有没有存凭据。只答有/无 —— 没人能凭这个判定"登录态有效"。 */
+export type SourceCredentialStatus = {
+  domain: string
+  has: boolean
+}
+
+/** 真浏览器登录的状态回包。 */
+export type ExternalLoginStatus = {
+  /** 我们拉起来的那个浏览器还在不在。 */
+  opened: boolean
+  browser: string
+  port: number
+  pid: number
+  /** 这本书源会带凭据去访问的域（登录页排最前）。 */
+  hosts: string[]
+  /** 浏览器里已经出现 Cookie 的域 —— 「登录已经发生过」的事实依据。 */
+  seen: string[]
+  /** 本轮真正写进凭据表的域。 */
+  stored: string[]
+  /** 该书源当前能带出去的凭据桶数量。 */
+  count: number
+}
+
+export type SourceLoginUiResponse = {  sourceId: string
   sourceName: string
   hasLogin: boolean
   loginUi: SourceLoginUiItem[]
   loginUrl?: string
   loginInfo: Record<string, string>
   loginHeader?: string
+  /** loginUrl 不是网址而是整段登录 JS（聚合源普遍如此）。 */
+  loginIsScript?: boolean
+  /** 这本书源实际会带凭据访问的域名，登录页那个排最前。 */
+  cookieDomains?: string[]
   sourceVariable?: string
 }
 
@@ -180,35 +226,11 @@ export type SourceBrowserCookies = {
 }
 
 
-/** WebDAV 相对路径 → 逐段编码的 URL 路径（空段会被丢弃，避免出现 `//`）。 */
-export const encodeWebDavPath = (path: string) =>
-  path.split('/').filter(segment => segment.length > 0).map(encodeURIComponent).join('/')
-
-/** 拼出可直接下载/预览的 WebDAV 地址（浏览器带会话 Cookie 访问，无需 Basic 凭据）。 */
-export const webDavFileUrl = (path: string) => `/webdav/${encodeWebDavPath(path)}`
-
-/** 在 WebDAV 相对路径下拼接子项名称。 */
-export const joinWebDavPath = (base: string, name: string) =>
-  [...base.split('/').filter(Boolean), name].join('/')
-
-/** WebDAV 写操作：浏览器侧走会话鉴权，必须显式携带 CSRF 头。 */
-async function webDavWrite(path: string, init: RequestInit): Promise<void> {
-  const headers = new Headers(init.headers)
-  headers.set('X-CSRF-Token', csrfToken ?? '')
-  const response = await fetch(webDavFileUrl(path), { ...init, headers, credentials: 'same-origin' })
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ message: `操作失败（HTTP ${response.status}）` })) as { message?: string }
-    throw new Error(body.message ?? `操作失败（HTTP ${response.status}）`)
-  }
-}
-
-let csrfToken: string | null = null
-export const setCsrfToken = (token: string | null) => { csrfToken = token }
-
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body) headers.set('Content-Type', 'application/json')
-  if (init.method && !['GET', 'HEAD'].includes(init.method)) headers.set('X-CSRF-Token', csrfToken ?? '')
+  // FormData 必须留给浏览器自己带 boundary，写死 application/json 会让服务端收不到文件
+  if (init.body && !(typeof FormData !== 'undefined' && init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
+  // 不设身份：写操作由服务端的同源闸门把关，浏览器自己带 Origin，这里没有令牌要注入
   const response = await fetch(path, { ...init, headers, credentials: 'same-origin' })
   if (!response.ok) {
     const body = await response.json().catch(() => ({ message: response.statusText })) as { message?: string }
@@ -260,10 +282,17 @@ export type TtsSessionChunkRequest = {
   customBody?: string
 }
 
+export type LogEntry = {
+  id: number
+  timestamp: string
+  category: string
+  level: string
+  message: string
+  context?: Record<string, string>
+  stackTrace?: string | null
+}
+
 export const api = {
-  session: () => request<{ authenticated: boolean; csrfToken?: string }>('/api/auth/session'),
-  login: (password: string) => request<{ csrfToken: string }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
-  logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
   sources: (query = '') => request<SourceSummary[]>(`/api/sources?q=${encodeURIComponent(query)}`),
   source: (id: string) => request<SourceRecord>(`/api/sources/${encodeURIComponent(id)}`),
   save: (id: string, json: string, version?: number) => request<SourceRecord>(`/api/sources/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ json, version }) }),
@@ -286,17 +315,50 @@ export const api = {
   removeSubscription: (id: number) => request<void>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
   updateSubscription: (id: number) => request<ImportResponse>(`/api/subscriptions/${id}/update`, { method: 'POST' }),
   updateSubscriptions: () => request<{ updated: number; failed: number }>('/api/subscriptions/update', { method: 'POST' }),
+  logs: (opts: { category?: string; level?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams()
+    if (opts.category) q.set('category', opts.category)
+    if (opts.level) q.set('level', opts.level)
+    q.set('limit', String(opts.limit ?? 200))
+    return request<LogEntry[]>(`/api/logs?${q.toString()}`)
+  },
+  clearLogs: () => request<void>('/api/logs', { method: 'DELETE' }),
+  shelfGroups: () => request<BookGroup[]>('/api/bookshelf/groups'),
+  createShelfGroup: (name: string) => request<BookGroup>('/api/bookshelf/groups', { method: 'POST', body: JSON.stringify({ name }) }),
+  removeShelfGroup: (id: number) => request<void>(`/api/bookshelf/groups/${id}`, { method: 'DELETE' }),
+  setBookGroup: (sourceId: string, bookUrl: string, groupId: number) => request<BookshelfItem>('/api/bookshelf/group', { method: 'PUT', body: JSON.stringify({ sourceId, bookUrl, groupId }) }),
+  // RSS 订阅（手机「订阅」页那一栏）；上面 subscriptions 是「书源订阅地址」，两者不是一回事
+  rssSources: (query?: string) => request<RssSourceSummary[]>(`/api/rss/sources${query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`),
+  addRssSources: (sources: string[]) => request<ImportResponse>('/api/rss/sources', { method: 'POST', body: JSON.stringify({ sources }) }),
+  setRssSourceEnabled: (sourceUrl: string, enabled: boolean) => request<void>('/api/rss/sources/enabled', { method: 'POST', body: JSON.stringify({ sourceUrl, enabled }) }),
+  removeRssSource: (sourceUrl: string) => request<void>(`/api/rss/sources?sourceUrl=${encodeURIComponent(sourceUrl)}`, { method: 'DELETE' }),
+  rssTabs: (sourceUrl: string, signal?: AbortSignal) => request<ExploreTab[]>(`/api/rss/tabs?sourceUrl=${encodeURIComponent(sourceUrl)}`, { signal }),
+  rssArticles: (sourceUrl: string, url: string, page = 1, signal?: AbortSignal) => request<RssArticle[]>('/api/rss/articles', { method: 'POST', body: JSON.stringify({ sourceUrl, url, page }), signal }),
+  rssContent: (sourceUrl: string, link: string, signal?: AbortSignal) => request<RssArticleContent>('/api/rss/content', { method: 'POST', body: JSON.stringify({ sourceUrl, link }), signal }),
   getSourceLoginUi: (sourceId: string) => request<SourceLoginUiResponse>(`/api/sources/${encodeURIComponent(sourceId)}/login-ui`),
   saveSourceLoginInfo: (sourceId: string, loginInfo: Record<string, string>) => request<{ ok: boolean }>(`/api/sources/${encodeURIComponent(sourceId)}/login-info`, { method: 'POST', body: JSON.stringify({ loginInfo }) }),
   saveSourceLoginHeader: (sourceId: string, loginHeader: string) => request<{ ok: boolean }>(`/api/sources/${encodeURIComponent(sourceId)}/login-header`, { method: 'POST', body: JSON.stringify({ loginHeader }) }),
   saveSourceCookie: (sourceId: string, cookie: string, url?: string) => request<{ ok: boolean; message?: string }>(`/api/sources/${encodeURIComponent(sourceId)}/login-cookie`, { method: 'POST', body: JSON.stringify({ cookie, url }) }),
   clearSourceLoginInfo: (sourceId: string) => request<{ ok: boolean }>(`/api/sources/${encodeURIComponent(sourceId)}/login-info`, { method: 'DELETE' }),
   clearSourceLoginHeader: (sourceId: string) => request<{ ok: boolean }>(`/api/sources/${encodeURIComponent(sourceId)}/login-header`, { method: 'DELETE' }),
-  executeSourceLoginAction: (sourceId: string, action: string, loginData: Record<string, string>, isLongClick = false) => request<SourceLoginActionResult>(`/api/sources/${encodeURIComponent(sourceId)}/login-action`, { method: 'POST', body: JSON.stringify({ action, loginData, isLongClick }) }),
+  executeSourceLoginAction: (sourceId: string, action: string, loginData: Record<string, string>, isLongClick = false, browserCompleted = false) => request<SourceLoginActionResult>(`/api/sources/${encodeURIComponent(sourceId)}/login-action`, { method: 'POST', body: JSON.stringify({ action, loginData, isLongClick, browserCompleted }) }),
   checkSourceLogin: (sourceId: string) => request<SourceLoginCheckResult>(`/api/sources/${encodeURIComponent(sourceId)}/login-check`),
   createSourceBrowserSession: (sourceId: string, url?: string) => request<SourceBrowserSession>(`/api/sources/${encodeURIComponent(sourceId)}/browser/session`, { method: 'POST', body: JSON.stringify({ url }) }),
   closeSourceBrowserSession: (sourceId: string, token: string) => request<void>(`/api/sources/${encodeURIComponent(sourceId)}/browser/session?t=${encodeURIComponent(token)}`, { method: 'DELETE' }),
   sourceBrowserCookies: (sourceId: string) => request<SourceBrowserCookies>(`/api/sources/${encodeURIComponent(sourceId)}/browser/cookies`),
+  /** 某地址所在注册域上有没有凭据（只答有/无），发现页用它区分「要登录」与「真的空」。 */
+  sourceCredential: (sourceId: string, url: string) =>
+    request<SourceCredentialStatus>(`/api/sources/${encodeURIComponent(sourceId)}/credential?u=${encodeURIComponent(url)}`),
+  /** 真浏览器登录：服务端拉起本机 Chromium（独立持久 profile），登录完按域自动回读凭据。 */
+  externalLoginStart: (sourceId: string, url?: string) =>
+    request<ExternalLoginStatus>(`/api/sources/${encodeURIComponent(sourceId)}/browser/external-login`, { method: 'POST', body: JSON.stringify(url ? { url } : {}) }),
+  externalLoginStatus: (sourceId: string) =>
+    request<ExternalLoginStatus>(`/api/sources/${encodeURIComponent(sourceId)}/browser/external-login`),
+  externalLoginCapture: (sourceId: string) =>
+    request<ExternalLoginStatus>(`/api/sources/${encodeURIComponent(sourceId)}/browser/external-login/capture`, { method: 'POST', body: '{}' }),
+  externalLoginStop: (sourceId: string) =>
+    request<void>(`/api/sources/${encodeURIComponent(sourceId)}/browser/external-login`, { method: 'DELETE' }),
+  removeSourceCookie: (sourceId: string, url: string) => request<{ ok: boolean; removed: boolean; count: number; domains: string[] }>(`/api/sources/${encodeURIComponent(sourceId)}/browser/cookies?u=${encodeURIComponent(url)}`, { method: 'DELETE' }),
   sourceBrowserPageUrl: (sourceId: string, token: string, target: string) =>
     `/api/sources/${encodeURIComponent(sourceId)}/browser/page?t=${encodeURIComponent(token)}&u=${encodeURIComponent(target)}`,
   /** 书源 JS 生成的数据地址页面：交给服务端解码托管，避免超长 URL 触发请求行 8192 上限 */
@@ -304,7 +366,6 @@ export const api = {
     request<{ key: string }>(`/api/sources/${encodeURIComponent(sourceId)}/browser/inline`, { method: 'POST', body: JSON.stringify({ token, url }) }),
   sourceBrowserInlineUrl: (sourceId: string, token: string, key: string) =>
     `/api/sources/${encodeURIComponent(sourceId)}/browser/page?t=${encodeURIComponent(token)}&i=${encodeURIComponent(key)}`,
-  search: (keyword: string, sourceIds?: string[], signal?: AbortSignal) => request<SearchResult[]>('/api/search', { method: 'POST', body: JSON.stringify({ keyword, sourceIds }), signal }),
   exploreSources: () => request<SourceSummary[]>('/api/explore/sources'),
   exploreTabs: (sourceId: string, signal?: AbortSignal) => request<ExploreTab[]>(`/api/sources/${encodeURIComponent(sourceId)}/explore`, { signal }),
   explore: (sourceId: string, url: string, page = 1, signal?: AbortSignal) => request<SearchResult[]>('/api/explore', { method: 'POST', body: JSON.stringify({ sourceId, url, page }), signal }),
@@ -356,6 +417,24 @@ export const api = {
   },
   addToBookshelf: (book: BookshelfWrite) => request<BookshelfItem>('/api/bookshelf', { method: 'POST', body: JSON.stringify(book) }),
   removeFromBookshelf: (sourceId: string, bookUrl: string) => request<void>(`/api/bookshelf?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}`, { method: 'DELETE' }),
+  
+  // 批量操作 API
+  batchDeleteBooks: (books: Array<{ sourceId: string; bookUrl: string }>) => 
+    request<{ deleted: number; total: number }>('/api/bookshelf/batch-delete', { 
+      method: 'POST', 
+      body: JSON.stringify({ books }) 
+    }),
+  batchMoveToGroup: (books: Array<{ sourceId: string; bookUrl: string }>, groupId: number | null) => 
+    request<{ moved: number; total: number }>('/api/bookshelf/batch-move-group', { 
+      method: 'POST', 
+      body: JSON.stringify({ books, groupId }) 
+    }),
+  batchMarkAsRead: (books: Array<{ sourceId: string; bookUrl: string }>, isRead: boolean) => 
+    request<{ marked: number; total: number }>('/api/bookshelf/batch-mark-read', { 
+      method: 'POST', 
+      body: JSON.stringify({ books, isRead }) 
+    }),
+  
   cacheBookshelfBook: (sourceId: string, bookUrl: string) => request<{ status: string }>('/api/bookshelf/cache', { method: 'POST', body: JSON.stringify({ sourceId, bookUrl }) }),
   cacheBookshelfRange: (data: { sourceId: string; bookUrl: string; startIndex?: number; endIndex?: number; count?: number }) =>
     request<{ status: string }>('/api/bookshelf/cache', { method: 'POST', body: JSON.stringify(data) }),
@@ -375,7 +454,6 @@ export const api = {
       formData.append('file', file, file.name)
     }
     const headers = new Headers()
-    if (csrfToken) headers.set('X-CSRF-Token', csrfToken)
     const response = await fetch('/api/bookshelf/import-local', {
       method: 'POST',
       headers,
@@ -390,11 +468,17 @@ export const api = {
   },
   cover: (key: string) => `/api/covers/${encodeURIComponent(key)}`,
   bookImage: (url: string, page?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`,
-  webDavInfo: (path = '') => request<WebDavInfo>(`/api/webdav/info${path ? `?path=${encodeURIComponent(path)}` : ''}`),
-  webDavUpload: (path: string, file: File) => webDavWrite(path, { method: 'PUT', body: file }),
-  webDavCreateFolder: (path: string) => webDavWrite(path, { method: 'MKCOL' }),
-  webDavDelete: (path: string) => webDavWrite(path, { method: 'DELETE' }),
-  webDavImport: (path: string) => request<BackupImportSummary>('/api/webdav/import', { method: 'POST', body: JSON.stringify({ path }) }),
+  /** 浏览器直传手机备份包：选文件即导入，服务端读完临时文件就删。 */
+  importBackupFile: (file: File, password?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (password) form.append('password', password)
+    return request<BackupImportSummary>('/api/backup/import', { method: 'POST', body: form })
+  },
+  keptBackupEntries: () => request<KeptBackupEntry[]>('/api/backup/kept'),
+  keptBackupEntryUrl: (name: string) => `/api/backup/kept/${encodeURIComponent(name)}`,
+  keptBackupEntry: (name: string) => fetch(`/api/backup/kept/${encodeURIComponent(name)}`).then(response =>
+    response.ok ? response.text() : Promise.reject(new Error('服务器上没有这个条目'))),
   getReplaceRules: (params?: { q?: string; group?: string; scope?: string }) => {
     const sp = new URLSearchParams()
     if (params?.q) sp.set('q', params.q)
@@ -419,7 +503,6 @@ export const api = {
   deleteTtsSession: (sessionId: string) => request<void>(`/api/tts/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   fetchTtsAudioBlob: async (req: TtsSpeakRequest): Promise<Blob> => {
     const headers = new Headers({ 'Content-Type': 'application/json' })
-    if (csrfToken) headers.set('X-CSRF-Token', csrfToken)
     const response = await fetch('/api/tts/speak', {
       method: 'POST',
       headers,
@@ -436,7 +519,7 @@ export const api = {
 
 export function streamSearch(keyword: string, sourceIds: string[] | undefined, onEvent: (event: SearchStreamEvent) => void, onError: (message: string) => void, onClose: () => void): WebSocket {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const socket = new WebSocket(`${protocol}//${location.host}/api/search/stream?csrf=${encodeURIComponent(csrfToken ?? '')}`)
+  const socket = new WebSocket(`${protocol}//${location.host}/api/search/stream`)
   let reported = false
   socket.addEventListener('open', () => queueMicrotask(() => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ keyword, sourceIds }))

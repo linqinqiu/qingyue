@@ -4,10 +4,8 @@ import {
   clearAllOffline,
   clearOfflineBook,
   getOfflineStorageStats,
-  isLruEvictEnabled,
   OfflineBookStat,
   OfflineStorageStats,
-  setLruEvictEnabled,
 } from './offlineStorage'
 import { toast } from './Toast'
 
@@ -25,7 +23,6 @@ function formatBytes(bytes: number): string {
 export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
   const [stats, setStats] = useState<OfflineStorageStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [lruEnabled, setLruEnabled] = useState(isLruEvictEnabled)
   const [clearing, setClearing] = useState(false)
 
   const loadStats = async () => {
@@ -42,13 +39,6 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
   useEffect(() => {
     void loadStats()
   }, [])
-
-  const handleToggleLru = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = e.target.checked
-    setLruEnabled(checked)
-    setLruEvictEnabled(checked)
-    toast.info(checked ? '已开启存储不足时自动清理旧书' : '已关闭自动清理')
-  }
 
   const handleClearBook = async (book: OfflineBookStat) => {
     if (!window.confirm(`确定要清理《${book.name || book.bookUrl}》的本地离线缓存吗？`)) return
@@ -120,20 +110,6 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
                   <span className="overview-label">本地空间占用</span>
                   <strong className="overview-value text-teal">{formatBytes(stats?.totalBytes || 0)}</strong>
                 </div>
-              </div>
-
-              <div className="offline-cache-setting-row">
-                <label className="lru-toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={lruEnabled}
-                    onChange={handleToggleLru}
-                  />
-                  <div>
-                    <strong>空间不足时自动 LRU 清理</strong>
-                    <small>当手机存储配额耗尽时，自动淘汰最早已读完书籍的本地缓存以腾出空间</small>
-                  </div>
-                </label>
               </div>
 
               <div className="offline-books-section">

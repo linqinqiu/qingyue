@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, setCsrfToken } from '../src/api.ts'
+import { api } from '../src/api.ts'
 
 test('Source Login API Client - getSourceLoginUi, save, action, check, and delete', async () => {
   const originalFetch = globalThis.fetch
@@ -56,7 +56,6 @@ test('Source Login API Client - getSourceLoginUi, save, action, check, and delet
   }
 
   try {
-    setCsrfToken('csrf-token-login')
 
     // 1. getSourceLoginUi
     const ui = await api.getSourceLoginUi('https://test.com')
@@ -70,7 +69,7 @@ test('Source Login API Client - getSourceLoginUi, save, action, check, and delet
     const saveRes = await api.saveSourceLoginInfo('https://test.com', { 用户名: 'newuser', 密码: 'pass' })
     assert.equal(saveRes.ok, true)
     assert.equal(capturedRequests[1].method, 'POST')
-    assert.equal(capturedRequests[1].headers.get('X-CSRF-Token'), 'csrf-token-login')
+    assert.equal(capturedRequests[1].headers.get('X-CSRF-Token'), null)
     assert.deepEqual(capturedRequests[1].body, { loginInfo: { 用户名: 'newuser', 密码: 'pass' } })
 
     // 3. executeSourceLoginAction

@@ -4,88 +4,37 @@ export interface LogoProps extends SVGProps<SVGSVGElement> {
   size?: number | string
 }
 
+/**
+ * 应用品牌位。图形与 `web/public/favicon.svg`（标签页）以及由它派生的
+ * 桌面/PWA 图标**完全同一套几何**：绿底圆角方 + 白色翻开书。
+ *
+ * 之前这里是另一套（青绿书 + 金色无穷结），于是"桌面一个样、标签页一个样、
+ * 应用内又一个样"。路径重复是有意的：内联 SVG 才能跟着 `size` 缩放并被 CSS 命中，
+ * 漂移由 `web/test/BrandLogo.test.ts` 逐条比对 `favicon.svg` 的 `d=` 拦下。
+ */
 export function Logo({ className = '', size = 26, ...props }: LogoProps) {
   return (
     <svg
-      viewBox="0 0 128 128"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 512 512"
       width={size}
       height={size}
-      fill="none"
       className={`app-brand-logo ${className}`}
       aria-hidden="true"
       {...props}
     >
       <defs>
-        <linearGradient id="logoTealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#14B8A6" />
-          <stop offset="50%" stopColor="#0D9488" />
-          <stop offset="100%" stopColor="#0F766E" />
-        </linearGradient>
-        <linearGradient id="logoGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FDE68A" />
-          <stop offset="40%" stopColor="#F59E0B" />
-          <stop offset="100%" stopColor="#D97706" />
-        </linearGradient>
-        <linearGradient id="logoGoldDark" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#D97706" />
-          <stop offset="100%" stopColor="#B45309" />
+        <linearGradient id="appBrandLogoBg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#2E8B63" />
+          <stop offset="1" stopColor="#17573F" />
         </linearGradient>
       </defs>
-
-      {/* Book Outer Wings */}
-      <path
-        d="M64 104 C48 97 28 98 18 102 C16.5 102.6 15 101.5 15 100 L15 36 C15 34.5 16.5 33.5 18 33 C28 29 48 30 64 37"
-        stroke="url(#logoTealGrad)"
-        strokeWidth="5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M64 104 C80 97 100 98 110 102 C111.5 102.6 113 101.5 113 100 L113 36 C113 34.5 111.5 33.5 110 33 C100 29 80 30 64 37"
-        stroke="url(#logoTealGrad)"
-        strokeWidth="5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-
-      {/* Center Spine */}
-      <line x1="64" y1="37" x2="64" y2="104" stroke="url(#logoTealGrad)" strokeWidth="4.5" strokeLinecap="round" />
-
-      {/* Page Inset Accents */}
-      <path d="M25 41 C36 38 48 39 58 44" stroke="url(#logoTealGrad)" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
-      <path d="M103 41 C92 38 80 39 70 44" stroke="url(#logoTealGrad)" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
-
-      {/* Top Bookmark Ribbon ('L' Stem) */}
-      <path
-        d="M48 36 L48 18 C48 13.5 53 10 57.5 12.5 C60.5 14 62 17 62 21 L62 30"
-        stroke="url(#logoGoldDark)"
-        strokeWidth="7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M43 38 L43 20 C43 14 48 9.5 53.5 11 C58 12.5 60 16 60 21 L60 36"
-        stroke="url(#logoTealGrad)"
-        strokeWidth="6.5"
-        strokeLinecap="round"
-      />
-      <path d="M38 16 L48 13 L48 29 L43 25 L38 29 Z" fill="url(#logoGoldGrad)" />
-
-      {/* Infinity Mobius Loop (∞) */}
-      <path
-        d="M48 64 C35 52 24 64 24 74 C24 84 37 90 49 80 C58 73 70 63 79 56 C88 49 104 53 104 69 C104 82 90 89 78 80 C68 72 58 64 48 56"
-        stroke="url(#logoTealGrad)"
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M46 66 C35 55 27 64 27 73 C27 80 38 85 48 77 C56 70 71 58 80 52 C89 46 101 51 101 65 C101 77 90 82 80 74 C71 67 56 55 46 66 Z"
-        stroke="url(#logoGoldGrad)"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <rect width="512" height="512" rx="104" fill="url(#appBrandLogoBg)" />
+      <g transform="translate(26 26) scale(0.9)">
+        <path d="M256 156C220 130 160 124 120 132 112 134 108 138 108 146L108 356C108 366 114 372 124 370 162 362 220 366 256 390Z" fill="#FFFFFF" />
+        <path d="M256 156C292 130 352 124 392 132 400 134 404 138 404 146L404 356C404 366 398 372 388 370 350 362 292 366 256 390Z" fill="#FFFFFF" />
+        <path d="M256 156L256 390" stroke="#1B6A4B" strokeWidth="18" strokeLinecap="round" />
+      </g>
     </svg>
   )
 }

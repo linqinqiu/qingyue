@@ -22,8 +22,8 @@ test('SearchStatePersistence - store state updates and reactive subscriptions', 
   assert.equal(store.getSnapshot().selectedSourceId, 'source-1')
   assert.equal(notifiedCount, 2)
 
-  store.setFilters(prev => ({ ...prev, withIntro: true }))
-  assert.equal(store.getSnapshot().filters.withIntro, true)
+  store.setFilters(prev => ({ ...prev, query: '火旺' }))
+  assert.equal(store.getSnapshot().filters.query, '火旺')
   assert.equal(notifiedCount, 3)
 
   unsubscribe()
@@ -129,7 +129,7 @@ test('SearchStatePersistence - store reset clears all state cleanly', () => {
   const store = new SearchStore()
   store.setKeyword('道诡异仙')
   store.setSelectedSourceId('src-abc')
-  store.setFilters({ query: '火旺', minimumSources: 2, withIntro: true, withCover: false })
+  store.setFilters({ query: '火旺', sortMode: 'sources' })
 
   assert.equal(store.getSnapshot().keyword, '道诡异仙')
   assert.equal(store.getSnapshot().selectedSourceId, 'src-abc')
@@ -145,7 +145,7 @@ test('SearchStatePersistence - store reset clears all state cleanly', () => {
   assert.equal(snapshot.openBook, null)
   assert.equal(snapshot.loading, false)
   assert.equal(snapshot.filters.query, '')
-  assert.equal(snapshot.filters.minimumSources, 1)
+  assert.equal(snapshot.filters.sortMode, 'smart', 'reset 要把排序退回默认')
 })
 
 test('SearchStatePersistence - chooseSource synthesizes cover and intro across alternate sources', async () => {

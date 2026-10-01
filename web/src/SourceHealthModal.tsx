@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { api, SourceHealthCheckItem, SourceHealthCheckResponse, SourceSummary } from './api'
+import { buildGroupingPlan, HEALTH_TAGS, type HealthTier } from './sourceGrouping'
 import { Icon } from './icons'
 
 interface SourceHealthModalProps {
@@ -45,6 +46,18 @@ export function SourceHealthModal({
   const cancelledRef = useRef(false)
   const startTimeRef = useRef<number>(0)
 
+  /**
+   * 体检范围。默认只圈启用中的源：这台库 5,574 个全启用时一次整库体检要几十分钟，
+   * 而停用的那批用户根本不读，探它们只是在结果里堆「连不上」并淹掉真正要看的那几十个。
+   * 想连停用的一起看要显式勾，勾完是明确的用户动作，不是我们替他决定。
+   */
+  const [includeDisabled, setIncludeDisabled] = useState(false)
+  const scoped = useMemo(
+    () => (includeDisabled ? sources : sources.filter(source => source.enabled)),
+    [sources, includeDisabled],
+  )
+  const disabledCount = sources.length - sources.filter(source => source.enabled).length
+
   const stats = useMemo(() => {
     let valid = 0
     let slow = 0
@@ -74,7 +87,7 @@ export function SourceHealthModal({
   }, [results, activeTab, filterQuery])
 
   const startCheck = async (targetIds?: string[]) => {
-    const idsToCheck = targetIds ?? sources.map(s => s.id)
+    const idsToCheck = targetIds ?? scoped.map(source => source.id)
     if (idsToCheck.length === 0) {
       onToast('没有可检测的书源', 'info')
       return
@@ -117,14 +130,75 @@ export function SourceHealthModal({
     }
   }
 
+  /**
+   * 手动中止。以前这个弹窗**没有停止键**：一开就自动体检整库，
+   * 唯一的退出方式是关窗（`cancelledRef` 只在卸载时置位），
+   * 于是"体检很慢"变成"想停都停不下来"—— 用户说的「管理功能异常」有一半是这个。
+   */
+  const stopCheck = () => {
+    cancelledRef.current = true
+    setRunning(false)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    onToast(`已停止体检：完成 ${progress.checked} / ${progress.total}，已出的结论都留着了`, 'info')
+  }
+
+  /**
+   * 打开弹窗不再无条件自动开跑。
+   *
+   * 以前是 `useEffect(() => void startCheck(), [])` —— 一开就对着整库外呼。
+   * 本机 5,574 个源全启用时那是 44 批 × 每批最多 40 秒，几十分钟起步，
+   * 而且用户只是点开想看上次体检的结果，就被迫发起了一轮新扫描（「过慢」的一半成因）。
+   * 小规模（默认范围 ≤ AUTO_CHECK_LIMIT 个）仍然自动开跑，保持"点开就有结论"的手感；
+   * 超过就要显式按一次「开始体检」，让发起动作回到用户手里。
+   */
+  const AUTO_CHECK_LIMIT = 300
   useEffect(() => {
-    // Auto-start on modal mount
-    void startCheck()
+    if (scoped.length > 0 && scoped.length <= AUTO_CHECK_LIMIT) void startCheck()
     return () => {
       cancelledRef.current = true
       if (timerRef.current) clearInterval(timerRef.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /** 体检结论 → 分组标签。只追加/摘掉我们自己的标签，用户与作者写的分类原样保留。 */
+  const groupingPlans = useMemo(() => {
+    const currentGroups: Record<string, string> = {}
+    for (const source of sources) currentGroups[source.id] = source.group ?? ''
+    return buildGroupingPlan(
+      results.map(item => ({ id: item.id, name: item.name, statusCategory: item.statusCategory, latencyMs: item.latencyMs })),
+      currentGroups,
+    )
+  }, [results, sources])
+
+  const applyTier = async (tier: HealthTier, ids: string[]) => {
+    setBusyAction(`tag:${tier}`)
+    try {
+      const resp = await api.batchSources('tag_group', ids, HEALTH_TAGS[tier])
+      onToast(resp.message || `已为 ${resp.affected} 个书源加上「${HEALTH_TAGS[tier]}」`, 'success')
+      onSourcesChange()
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : '打标签失败', 'error')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const removeTier = async (tier: HealthTier, ids: string[]) => {
+    setBusyAction(`untag:${tier}`)
+    try {
+      const resp = await api.batchSources('untag_group', ids, HEALTH_TAGS[tier])
+      onToast(resp.message || `已摘掉 ${resp.affected} 个书源的「${HEALTH_TAGS[tier]}」`, 'success')
+      onSourcesChange()
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : '撤销标签失败', 'error')
+    } finally {
+      setBusyAction(null)
+    }
+  }
 
   const handleBatchDisableFailed = async () => {
     const failedItems = results.filter(r => isDead(r.statusCategory))
@@ -192,14 +266,40 @@ export function SourceHealthModal({
               <h2>书源连通性与健康体检</h2>
               <small>
                 {running
-                  ? `正在并发探测书源 Host 与入口连通性：已检测 ${progress.checked} / ${progress.total}（${(durationMs / 1000).toFixed(1)}s）...`
-                  : `共检测 ${stats.total} 个书源 · 用时 ${(durationMs / 1000).toFixed(1)}s`}
+                  ? `正在并发探测「${includeDisabled ? '全部' : '启用中'}」的 ${progress.total} 个书源：已检测 ${progress.checked}（${(durationMs / 1000).toFixed(1)}s）…`
+                  : stats.total === 0
+                    ? `还没开始：下面那一次会探测「${includeDisabled ? '全部' : '启用中'}」的 ${scoped.length} 个书源，中途可以停`
+                    : `本轮检测 ${stats.total} 个书源 · 用时 ${(durationMs / 1000).toFixed(1)}s`}
               </small>
             </div>
           </div>
-          <button type="button" className="close-button" onClick={onClose} aria-label="关闭">
-            <Icon name="close" />
-          </button>
+          <div className="health-modal-actions">
+            {running && (
+              // 以前这里只有一个小叉：体检一开就是整库几十分钟，想停只能关窗重开
+              <button type="button" className="subtle-button health-stop-btn" onClick={stopCheck}>
+                停止体检
+              </button>
+            )}
+            {disabledCount > 0 && (
+              <label className="health-scope-toggle" title="停用的书源默认不探：它们不参与搜索，探了只会堆「连不上」">
+                <input
+                  type="checkbox"
+                  checked={includeDisabled}
+                  disabled={running}
+                  onChange={event => {
+                    const next = event.target.checked
+                    setIncludeDisabled(next)
+                    cancelledRef.current = false
+                    void startCheck((next ? sources : sources.filter(source => source.enabled)).map(source => source.id))
+                  }}
+                />
+                连停用的一起体检（{disabledCount}）
+              </label>
+            )}
+            <button type="button" className="close-button" onClick={onClose} aria-label="关闭">
+              <Icon name="close" />
+            </button>
+          </div>
         </header>
 
         {/* Progress bar */}
@@ -232,28 +332,28 @@ export function SourceHealthModal({
               className={`health-tab-btn tab-valid ${activeTab === 'valid' ? 'active' : ''}`}
               onClick={() => setActiveTab('valid')}
             >
-              🟢 正常 ({stats.valid})
+              正常 ({stats.valid})
             </button>
             <button
               type="button"
               className={`health-tab-btn tab-slow ${activeTab === 'slow' ? 'active' : ''}`}
               onClick={() => setActiveTab('slow')}
             >
-              🟡 迟缓 ({stats.slow})
+              迟缓 ({stats.slow})
             </button>
             <button
               type="button"
               className={`health-tab-btn tab-failed ${activeTab === 'pending' ? 'active' : ''}`}
               onClick={() => setActiveTab('pending')}
             >
-              🟠 待确认 ({stats.pending})
+              待确认 ({stats.pending})
             </button>
             <button
               type="button"
               className={`health-tab-btn tab-failed ${activeTab === 'dead' ? 'active' : ''}`}
               onClick={() => setActiveTab('dead')}
             >
-              🔴 连不上 ({stats.dead})
+              连不上 ({stats.dead})
             </button>
           </div>
           <div className="health-search-input">
@@ -267,6 +367,46 @@ export function SourceHealthModal({
           </div>
         </div>
 
+        {/*
+          用户 2026-09-30：「不能根据获得信息正确规划分组」。
+          体检跑完以前只给四个 tab 和两个批量停用按钮就结束了 —— 结论落在屏幕上，
+          但没有一条能变成"分组"，要按体检结果整理还得一个源一个源手动挪。
+          这一段把三档结论直接做成可执行的打标签/撤销，且只追加、不覆盖原分组。
+        */}
+        {!running && groupingPlans.length > 0 && (
+          <section className="health-grouping" aria-label="按体检结果整理分组">
+            <header>
+              <strong>按体检结果整理分组</strong>
+              <small>只追加标签，不动书源自带的分类；「待确认」不等于坏 —— 多半是差登录或要渲染 JS，先别停用。</small>
+            </header>
+            {groupingPlans.map(plan => (
+              <div className="health-grouping-row" key={plan.tier}>
+                <span className={`health-grouping-tag tier-${plan.tier}`}>{plan.tag}</span>
+                <span className="health-grouping-count">
+                  {plan.ids.length} 个{plan.alreadyApplied > 0 ? ` · ${plan.alreadyApplied} 个已打过` : ''}
+                </span>
+                <span className="health-grouping-examples" title={plan.examples.join('、')}>{plan.examples.join('、')}</span>
+                <button
+                  type="button"
+                  className="subtle-button health-grouping-apply"
+                  disabled={busyAction !== null || plan.alreadyApplied === plan.ids.length}
+                  onClick={() => void applyTier(plan.tier, plan.ids)}
+                >
+                  打标签
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button health-grouping-undo"
+                  disabled={busyAction !== null || plan.alreadyApplied === 0}
+                  onClick={() => void removeTier(plan.tier, plan.ids)}
+                >
+                  撤销
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+
         {/* Action Quick Bar */}
         <div className="health-actions-bar">
           <div className="health-actions-left">
@@ -277,7 +417,11 @@ export function SourceHealthModal({
               disabled={running || busyAction !== null}
             >
               <Icon name="refresh" className={running ? 'spin' : ''} />
-              <span>{running ? '体检中...' : '重新全量体检'}</span>
+              <span>
+                {running
+                  ? '体检中…'
+                  : `${results.length > 0 ? '重新体检' : '开始体检'}（${scoped.length} 个${includeDisabled ? '' : '启用中的'}）`}
+              </span>
             </button>
             {stats.dead > 0 && !running && (
               <button

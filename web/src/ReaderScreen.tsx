@@ -2,7 +2,7 @@ import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useDefer
 import { api, BookDetails, Chapter, ReadingProgress, SearchResult } from './api'
 import { Icon } from './icons'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
-import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, TtsEngineType } from './readerSettings'
+import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
 import { toast } from './Toast'
@@ -53,7 +53,24 @@ function ReaderSettingsControls({
   return <div className="drawer-scroll-content">
     <section className="setting-section"><span className="setting-label">主题</span><div className="theme-grid">{themes.map(([theme, label]) => <button key={theme} className={`theme-choice swatch-${theme} ${settings.theme === theme ? 'selected' : ''}`} onClick={() => update({ theme })}><i>{settings.theme === theme && <Icon name="check" />}</i><small>{label}</small></button>)}</div></section>
     <section className="setting-section"><span className="setting-label">字体</span><label className="font-select"><select value={settings.font} onChange={event => update({ font: event.target.value as ReaderSettings['font'] })}><option value="song">思源宋体</option><option value="hei">黑体 / 苹方</option><option value="kai">华文楷体</option><option value="fangsong">华文仿宋</option><option value="system">系统字体</option></select><Icon name="chevronDown" /></label></section>
-    <section className="setting-section compact-settings"><div className="font-stepper"><span>字号</span><button aria-label="减小字号" onClick={() => update({ fontSize: Math.max(15, settings.fontSize - 1) })}>−</button><output>{settings.fontSize}</output><button aria-label="增大字号" onClick={() => update({ fontSize: Math.min(28, settings.fontSize + 1) })}>+</button></div><SettingRange label="字间距" value={settings.letterSpacing} min={-.25} max={1.5} step={.05} display={settings.letterSpacing.toFixed(2)} onChange={letterSpacing => update({ letterSpacing })} /><SettingRange label="行间距" value={settings.lineHeight} min={1.45} max={2.4} step={.05} display={settings.lineHeight.toFixed(2)} onChange={lineHeight => update({ lineHeight })} /><SettingRange label="段间距" value={settings.paragraphSpacing} min={.7} max={2} step={.05} display={settings.paragraphSpacing.toFixed(2)} onChange={paragraphSpacing => update({ paragraphSpacing })} /><SettingRange label="左右边距" value={settings.contentPadding} min={20} max={120} step={2} display={`${settings.contentPadding}`} onChange={contentPadding => update({ contentPadding })} /><SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} /></section>
+    <section className="setting-section compact-settings">
+      <span className="setting-label">排版</span>
+      <div className="font-stepper"><span>字号</span><button aria-label="减小字号" onClick={() => update({ fontSize: Math.max(15, settings.fontSize - 1) })}>−</button><output>{settings.fontSize}</output><button aria-label="增大字号" onClick={() => update({ fontSize: Math.min(28, settings.fontSize + 1) })}>+</button></div>
+      <SettingRange label="字间距" value={settings.letterSpacing} min={-.25} max={1.5} step={.05} display={settings.letterSpacing.toFixed(2)} onChange={letterSpacing => update({ letterSpacing })} />
+      <SettingRange label="行间距" value={settings.lineHeight} min={1.45} max={2.4} step={.05} display={settings.lineHeight.toFixed(2)} onChange={lineHeight => update({ lineHeight })} />
+      <SettingRange label="段间距" value={settings.paragraphSpacing} min={.7} max={2} step={.05} display={settings.paragraphSpacing.toFixed(2)} onChange={paragraphSpacing => update({ paragraphSpacing })} />
+      {/* 首行缩进按"字"给三档，不给滑杆：1.3em 这种中间值在中文排版里没有对应惯例，只会显得没对齐。 */}
+      <div className="text-indent-choice" role="group" aria-label="首行缩进">
+        <span>首行缩进</span>
+        <div className="page-modes indent-modes">
+          {([[0, '不缩进'], [1, '1 字'], [2, '2 字']] as const).map(([value, label]) => (
+            <button key={value} type="button" className={settings.textIndent === value ? 'selected' : ''} onClick={() => update({ textIndent: value })}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <SettingRange label="左右边距" value={settings.contentPadding} min={20} max={120} step={2} display={`${settings.contentPadding}`} onChange={contentPadding => update({ contentPadding })} />
+      <SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} />
+    </section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
     {onOpenReplaceRules && (
@@ -88,6 +105,25 @@ function ReaderSettingsControls({
     )}
     <button className="reset-settings" onClick={() => onChange({ ...defaultReaderSettings, theme: settings.theme })}>恢复默认设置</button>
   </div>
+}
+
+/**
+ * 正文按行切成段落。单独抽出来是因为"屏幕上显示的"与"正在朗读的"两件事在切章过渡期间
+ * 不是一回事：前者可以继续挂着上一章，后者必须等新章到位，否则朗读会一路读进旧章剩下的段落。
+ */
+function splitParagraphs(content: string): string[] {
+  const rawLines = content.split('\n')
+  const result: string[] = []
+  for (let i = 0; i < rawLines.length; i++) {
+    // 这里的 trim 会连源站自带的 U+3000 全角空格缩进一起剥掉，是故意的：
+    // 首行缩进现在由 `--reader-text-indent` 统一控制，留着源站的空格会变成"缩进 + 缩进"，
+    // 而且用户把缩进调到 0 时反而还有一截甩尾。
+    const trimmed = rawLines[i].trim()
+    if (trimmed) {
+      result.push(trimmed)
+    }
+  }
+  return result
 }
 
 function ReaderContentSkeleton() {
@@ -376,10 +412,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [cacheStatus.state, syncCacheStatus])
 
   useEffect(() => {
-    const title = chapter?.title ? `${bookName} - ${chapter.title} | 阅读服务器` : `${bookName} | 阅读服务器`
+    const title = chapter?.title ? `${bookName} - ${chapter.title} | 青阅` : `${bookName} | 青阅`
     document.title = title
     return () => {
-      document.title = '阅读服务器'
+      document.title = '青阅'
     }
   }, [bookName, chapter?.title])
 
@@ -406,19 +442,26 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const chapterProgress = currentBook.chapters.length > 1 ? (shownChapterIndex / (currentBook.chapters.length - 1)) * 100 : 0
 
   const isCurrentChapterLoaded = loadedChapterUrl === chapter?.url && !loading
+  // content 与 loadedChapterUrl 在 applyContent 里成对写入，所以 loadedChapterUrl 就是
+  // "屏幕上这段正文属于哪一章"。切章瞬间它与 chapter 不一致 = 正在过渡：旧正文继续挂着（变暗 +
+  // 顶部一条「正在载入」），而不是被骨架屏挖空。
+  const isStaleContent = loading && !!content && loadedChapterUrl !== (chapter?.url ?? '')
 
-  const paragraphs = useMemo(() => {
-    if (!content || !isCurrentChapterLoaded) return []
-    const rawLines = content.split('\n')
-    const result: string[] = []
-    for (let i = 0; i < rawLines.length; i++) {
-      const trimmed = rawLines[i].trim()
-      if (trimmed) {
-        result.push(trimmed)
-      }
+  const paragraphs = useMemo(() => (content ? splitParagraphs(content) : []), [content])
+  // 朗读管线只认"当前这一章已经到位"的正文，过渡期间给空数组，避免读进上一章剩下的段落。
+  const ttsParagraphs = useMemo(() => (isCurrentChapterLoaded ? paragraphs : []), [isCurrentChapterLoaded, paragraphs])
+  // 过渡期间大标题跟着正文走（挂着上一章的标题），新章名只出现在「正在载入」那条里 ——
+  // 标题是新的、正文是旧的，比两者都旧更容易让人以为串了章。
+  const shownChapterTitle = isStaleContent ? (currentRef.current?.chapter.title || chapter?.title) : chapter?.title
+  const incomingChapterTitle = isStaleContent ? chapter?.title : ''
+  // 章末那条「下一章」提示要写出真实章名，跳过卷分组头与没有地址的条目（与预载走同一套判据）。
+  const nextChapterTitle = useMemo(() => {
+    for (let j = chapterIndex + 1; j < currentBook.chapters.length; j++) {
+      const c = currentBook.chapters[j]
+      if (!c.isVolume && c.url) return c.title
     }
-    return result
-  }, [content, isCurrentChapterLoaded])
+    return ''
+  }, [chapterIndex, currentBook.chapters])
 
   const persist = useCallback(() => {
     const current = currentRef.current
@@ -427,8 +470,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [currentBook.bookUrl, currentBook.details.sourceId])
 
   const ttsData: TtsChapterData = useMemo(() => {
-    return processChapterForTts(chapter?.title || '', paragraphs, settings.ttsFilterSymbols)
-  }, [chapter?.title, paragraphs, settings.ttsFilterSymbols])
+    return processChapterForTts(chapter?.title || '', ttsParagraphs, settings.ttsFilterSymbols)
+  }, [chapter?.title, ttsParagraphs, settings.ttsFilterSymbols])
 
   const currentChunk = ttsData.chunks[currentChunkIndex] ?? null
   const activeParagraphIndex = currentChunk ? currentChunk.paragraphIndex : -1
@@ -520,19 +563,17 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const chunk = ttsData.chunks[idx]
     const engine = getTtsEngine(settings.ttsEngine)
 
+    // 切换引擎或重新开始时必须先停掉所有旧引擎，避免重音
+    // mode='continue' 是同一引擎连续播放，不需要停；其他情况都要先停
+    if (mode !== 'continue') {
+      stopAllEngines()
+    }
+
     engine.speak(
       chunk.text,
       settings,
       () => {
         const nextIdx = idx + 1
-        if (sleepTimer === 'paragraph') {
-          const nextChunk = ttsData.chunks[nextIdx]
-          if (!nextChunk || nextChunk.paragraphIndex !== chunk.paragraphIndex) {
-            toast.info('当前段落已读完，睡眠定时已触发')
-            stopTts()
-            return
-          }
-        }
         playTtsChunkRef.current(nextIdx, 'continue')
       },
       (err) => {
@@ -563,6 +604,22 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [ttsData, sleepTimer, settings, chapterIndex, currentBook.chapters.length, persist, stopTts, getTtsEngine, preloadNextChapter])
 
   playTtsChunkRef.current = playTtsChunk
+
+  // 「朗读引擎在使用中切换会重音，都启动」（用户 2026-09-30）。
+  // 换引擎/音色/语速时旧引擎不会自己停：WebSpeech 的 utterance.onEnd 与 HttpAudio 的分片 onEnd
+  // 都还在推进 currentChunkIndex，新引擎接着出声 → 两条声音叠在一起。这里在"正在播"的当口
+  // 把两套引擎一起停掉，再用新设置重读当前分片（'replace' 分支内部会 resetSession 并清掉旧音色的预取队列）。
+  // 暂停态刻意不动：resume 只续播现有音频，真正出声的是下一分片的 speak()，
+  // 而 HttpAudioTtsEngine.speak 检测到 settings key 变了会自己 resetSession（ttsEngine.ts speak 开头）。
+  const ttsVoiceKey = ttsSessionKey(settings)
+  const prevTtsVoiceKeyRef = useRef(ttsVoiceKey)
+  useEffect(() => {
+    const previous = prevTtsVoiceKeyRef.current
+    prevTtsVoiceKeyRef.current = ttsVoiceKey
+    if (previous === ttsVoiceKey) return
+    if (!ttsActive || ttsPlayState !== 'playing') return
+    playTtsChunkRef.current(currentChunkIndex, 'replace')
+  }, [currentChunkIndex, ttsActive, ttsPlayState, ttsVoiceKey])
 
   const getInitialTtsChunkIndex = useCallback((): number => {
     if (!ttsData.chunks || ttsData.chunks.length === 0) return 0
@@ -766,12 +823,35 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       stopAllEngines()
     }
     targetInitialPageRef.current = targetPage === 'auto' ? null : targetPage
-    setLoadedChapterUrl('')
-    setContent('')
+    // 既不清 content 也不清 loadedChapterUrl：这两个值成对描述"屏幕上挂的是哪一章"。
+    // 历史上这里两者都清，是为了杜绝切章瞬间朗读误读上一章旧正文（AGENTS.md 的跨章竞态守卫）——
+    // 那个目的现在由 ttsParagraphs 承担（过渡期间给朗读管线空数组），视觉侧不必跟着挖空。
+    // 清 content 的代价就是用户 2026-09-30 说的"章节之间过渡没有做好"：整页先白一闪。
     setLoading(true)
     setChapterIndex(nextIndex)
     setActiveDrawer(null)
   }, [chapterIndex, currentBook.chapters.length, persist, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
+
+  // 滚动模式的"滚到底再往下推一下就进下一章"。判据必须是"已经触底 + 继续向下滚"，
+  // 只按位置阈值会在正常阅读途中翻章；1.2 秒冷却挡住一次惯性滚动连跳多章。
+  // 监听挂在 window 上而不是正文元素上：版心两侧那段空白同样会滚轮，挂在正文里等于
+  // "鼠标停在边缘滚就没反应"。
+  const autoNextAtRef = useRef(0)
+  useEffect(() => {
+    if (settings.pageMode !== 'scroll') return
+    const onWindowWheel = (event: WheelEvent) => {
+      if (event.deltaY <= 0 || loading || !content) return
+      if (chapterIndex >= currentBook.chapters.length - 1) return
+      const doc = document.documentElement
+      if (doc.scrollHeight - (window.scrollY + window.innerHeight) > 4) return
+      const now = Date.now()
+      if (now - autoNextAtRef.current < 1200) return
+      autoNextAtRef.current = now
+      changeChapter(chapterIndex + 1, 'first')
+    }
+    window.addEventListener('wheel', onWindowWheel, { passive: true })
+    return () => window.removeEventListener('wheel', onWindowWheel)
+  }, [changeChapter, chapterIndex, content, currentBook.chapters.length, loading, settings.pageMode])
 
   const toggleShelf = async () => {
     if (inShelf) {
@@ -799,19 +879,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     await handleCacheRange('all')
   }
 
-  const handleCacheRange = async (mode: 'next50' | 'next100' | 'all' | 'custom', start?: number, end?: number) => {
+  const handleCacheRange = async (mode: 'all' | 'custom', start?: number, end?: number) => {
     let s = chapterIndex
     let count: number | undefined
     let e: number | undefined
 
-    if (mode === 'next50') {
-      count = 50
-    } else if (mode === 'next100') {
-      count = 100
-    } else if (mode === 'all') {
+    if (mode === 'all') {
       s = 0
       count = undefined
-    } else if (mode === 'custom') {
+    } else {
       s = Math.max(0, (start ?? 1) - 1)
       e = Math.max(s, (end ?? currentBook.chapters.length) - 1)
       count = undefined
@@ -825,15 +901,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         endIndex: e,
         count,
       })
-      toast.success(
-        mode === 'all'
-          ? '已加入全本离线缓存队列'
-          : mode === 'next50'
-          ? '已开始缓存后续 50 章'
-          : mode === 'next100'
-          ? '已开始缓存后续 100 章'
-          : `已开始缓存第 ${s + 1} ~ ${(e ?? 0) + 1} 章`
-      )
+      toast.success(mode === 'all' ? '已加入全本离线缓存队列' : `已开始缓存第 ${s + 1} ~ ${(e ?? 0) + 1} 章`)
       setCacheStatus(prev => ({ ...prev, state: 'caching', error: undefined }))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '发起缓存失败')
@@ -938,12 +1006,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     sessionStorage.setItem('legado-open-book-v1', JSON.stringify({ book: newOpenBook, index: chosen.targetChapterIndex }))
   }
 
-  // Load chapter content
-  useEffect(() => {
+  // Load chapter content.
+  // 用 useLayoutEffect 而不是 useEffect：预载命中时（下一章往往已经在 preloadedContentRef 里）
+  // 正文在浏览器绘制之前就换好了，不会先画一帧骨架屏再画正文；真在飞的场合骨架屏照旧出现。
+  useLayoutEffect(() => {
     let cancelled = false
     setLoading(true)
     setMessage('')
-    setContent('')
     const applyContent = (nextContent: string) => {
       if (cancelled) return
       setContent(nextContent)
@@ -1058,6 +1127,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     settings.lineHeight,
     settings.letterSpacing,
     settings.paragraphSpacing,
+    settings.textIndent,
     settings.contentPadding,
     settings.maxWidth,
     settings.columnMode,
@@ -1070,6 +1140,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     if (pageIndex < pageCount - 1) {
       setPageIndex(p => p + 1)
     } else {
+      // 已到本章最后一页，尝试跳转到下一章
+      // 双栏模式下，如果当前页是本章最后一页且处于右栏位置，
+      // 需要确保下一章内容能正确衔接
       changeChapter(chapterIndex + 1, 'first')
     }
   }, [chapterIndex, changeChapter, pageCount, pageIndex])
@@ -1167,7 +1240,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   // Sleep Timer countdown effect
   useEffect(() => {
-    if (sleepTimer === 'off' || sleepTimer === 'chapter' || sleepTimer === 'paragraph') {
+    if (sleepTimer === 'off' || sleepTimer === 'chapter') {
       setRemainingSeconds(null)
       return
     }
@@ -1306,6 +1379,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     '--reader-line-height': settings.lineHeight,
     '--reader-letter-spacing': `${settings.letterSpacing}px`,
     '--reader-paragraph-spacing': `${settings.paragraphSpacing}em`,
+    '--reader-text-indent': `${settings.textIndent}em`,
     '--reader-content-padding': `${settings.contentPadding}px`,
     '--reader-max-width': `${settings.maxWidth}px`,
     '--reader-font-family': getReaderFontFamily(settings.font),
@@ -1488,22 +1562,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 <button
                   type="button"
                   className="cache-range-btn"
-                  title="缓存当前章节后续 50 章"
-                  onClick={() => void handleCacheRange('next50')}
-                >
-                  后 50 章
-                </button>
-                <button
-                  type="button"
-                  className="cache-range-btn"
-                  title="缓存当前章节后续 100 章"
-                  onClick={() => void handleCacheRange('next100')}
-                >
-                  后 100 章
-                </button>
-                <button
-                  type="button"
-                  className="cache-range-btn"
                   title="缓存全本小说"
                   onClick={() => void handleCacheRange('all')}
                 >
@@ -1612,25 +1670,38 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate}>
           <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}`}>
             <div className="reader-paginated-track" style={{ transform: `translateX(-${pageIndex * stride}px)` }}>
-              <article ref={bodyRef} className={`reader-paginated-column-body font-${settings.font}`} style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
-                <h1>{chapter?.title}</h1>
-                {loading && <ReaderContentSkeleton />}
+              <article ref={bodyRef} key={loadedChapterUrl || 'pending'} className={`reader-paginated-column-body chapter-enter${isStaleContent ? ' is-stale' : ''}`} style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
+                <h1>{shownChapterTitle}</h1>
+                {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
+                {loading && !content && <ReaderContentSkeleton />}
                 {message && <p className="reader-error">{message}</p>}
                 {paragraphs.map(renderContentBlock)}
+                {/* 双栏模式下，在本章末尾插入隐形占位，确保下一章从新的左栏开始 */}
+                {isDoubleColumn && <div className="column-break-placeholder" aria-hidden="true" />}
               </article>
             </div>
           </div>
           <footer className="reader-paginated-footer">
-            <span>{chapter?.title || ''}</span>
+            <span>{shownChapterTitle || ''}</span>
             <span>{pageIndex + 1} / {pageCount}</span>
           </footer>
         </div>
       ) : (
-        <article className={`reading-content font-${settings.font}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
-          <h1>{chapter?.title}</h1>
-          {loading && <ReaderContentSkeleton />}
+        <article className={`reading-content chapter-enter${isStaleContent ? ' is-stale' : ''}`} key={loadedChapterUrl || 'pending'} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+          <h1>{shownChapterTitle}</h1>
+          {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
+          {loading && !content && <ReaderContentSkeleton />}
           {message && <p className="reader-error">{message}</p>}
           {paragraphs.map(renderContentBlock)}
+          {!!content && !loading && !!nextChapterTitle && (
+            <div className="reader-next-hint">
+              <button type="button" onClick={() => changeChapter(chapterIndex + 1, 'first')}>
+                <span>下一章 · {nextChapterTitle}</span>
+                <Icon name="chevronDown" />
+              </button>
+              <small>滚到底再向下滑即进入</small>
+            </div>
+          )}
           {content && <footer className="reader-navigation"><button disabled={chapterIndex === 0 || loading} onClick={() => changeChapter(chapterIndex - 1)}><Icon name="arrowLeft" />上一章</button><div className="chapter-progress"><i style={{ width: `${chapterProgress}%` }} /><input className="chapter-scrub" type="range" min={0} max={Math.max(0, currentBook.chapters.length - 1)} step={1} value={shownChapterIndex} disabled={loading || currentBook.chapters.length < 2} aria-label={`章节进度：第 ${shownChapterIndex + 1} 章，共 ${currentBook.chapters.length} 章`} onChange={event => setScrubIndex(Number(event.target.value))} onPointerUp={() => { if (scrubIndex !== null && scrubIndex !== chapterIndex) changeChapter(scrubIndex); setScrubIndex(null) }} onKeyUp={() => { if (scrubIndex !== null && scrubIndex !== chapterIndex) changeChapter(scrubIndex); setScrubIndex(null) }} /><span>{shownChapterIndex + 1} / {currentBook.chapters.length}</span></div><button disabled={chapterIndex === currentBook.chapters.length - 1 || loading} onClick={() => changeChapter(chapterIndex + 1)}>下一章<Icon name="arrowRight" /></button></footer>}
         </article>
       )}
@@ -1666,7 +1737,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       <TtsPlayerBar
         playState={ttsPlayState}
         currentParagraphIndex={activeParagraphIndex}
-        totalParagraphs={paragraphs.length}
+        totalParagraphs={ttsParagraphs.length}
         currentChunkIndex={currentChunkIndex}
         totalChunks={ttsData.chunks.length}
         activeSentenceText={activeSentenceText}
@@ -1788,7 +1859,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     )}
     {lightboxSrc && (
       <div className="reader-image-lightbox" onClick={() => setLightboxSrc(null)} role="dialog" aria-label="图片预览">
-        <button type="button" className="reader-image-lightbox-close" aria-label="关闭预览" onClick={() => setLightboxSrc(null)}>✕</button>
+        <button type="button" className="reader-image-lightbox-close" aria-label="关闭预览" onClick={() => setLightboxSrc(null)}><Icon name="close" /></button>
         <img src={lightboxSrc} alt="" onClick={event => event.stopPropagation()} />
       </div>
     )}

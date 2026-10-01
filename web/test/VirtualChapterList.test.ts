@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { assertScalesLinearly, assertWithinCeiling } from './perfCriteria.ts'
 
 export type VirtualSliceConfig = {
   totalCount: number
@@ -233,6 +234,8 @@ test('VirtualChapterList - Tier 2: Negative/overscroll scrollTop & NaN defense',
 })
 
 test('VirtualChapterList - Tier 2: Extreme scale benchmark (50,000 chapters)', () => {
+  // 预热一轮：第一次跑付 V8 冷编译的账，直接拿它当分母会让比值假性偏小
+  for (let i = 0; i < 200; i++) computeVirtualSlice({ totalCount: 50000, itemHeight: 36, scrollTop: i * 36, viewportHeight: 600, overscan: 6 })
   const start = performance.now()
   const iterations = 1000
   for (let i = 0; i < iterations; i++) {
@@ -248,5 +251,20 @@ test('VirtualChapterList - Tier 2: Extreme scale benchmark (50,000 chapters)', (
     assert.ok(slice.startIndex >= 0 && slice.endIndex <= 50000)
   }
   const elapsed = performance.now() - start
-  assert.ok(elapsed < 50, `1,000 slice computations on 50,000 items took ${elapsed.toFixed(2)}ms (target < 50ms)`)
+  // 原来钉的是"1,000 次切片 < 50ms"，那测的是这台机器此刻有多闲（见 web/test/perfCriteria.ts）。
+  // 换成量级判据：切片次数 4 倍，时间不许超线性涨；结构性上限（renderedCount <= 32）上面逐次在判。
+  const againStart = performance.now()
+  for (let i = 0; i < iterations * 4; i++) {
+    const scrollTop = (i / (iterations * 4)) * (50000 * 36 - 600)
+    const slice = computeVirtualSlice({
+      totalCount: 50000,
+      itemHeight: 36,
+      scrollTop,
+      viewportHeight: 600,
+      overscan: 6,
+    })
+    assert.ok(slice.renderedCount <= 32, `Rendered count ${slice.renderedCount} must stay bounded`)
+    assert.ok(slice.startIndex >= 0 && slice.endIndex <= 50000)
+  }
+  assertScalesLinearly({ name: '50,000 项虚拟切片 1,000→4,000 次', smallMs: elapsed, bigMs: performance.now() - againStart, dataFactor: 4 })
 })

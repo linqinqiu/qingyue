@@ -175,6 +175,8 @@ export class SearchStore {
   private state: SearchStoreState = { ...initialSearchState }
   private listeners = new Set<() => void>()
   private socket: WebSocket | null = null
+  // openGroup 是逐源 await 的长循环；发起新搜索/重置时递增它，让在途循环回来时判为过期、不再脏覆盖 choices/openBook。
+  private openGroupGen = 0
 
   getSnapshot = (): SearchStoreState => this.state
 
@@ -224,6 +226,7 @@ export class SearchStore {
   }
 
   startSearch = (keyword?: string, sourceId?: string) => {
+    this.openGroupGen++ // 作废任何在途的 openGroup
     const query = (keyword !== undefined ? keyword : this.state.keyword).trim()
     if (!query) return
 
@@ -336,6 +339,7 @@ export class SearchStore {
   }
 
   openGroup = async (group: SearchGroup) => {
+    const gen = ++this.openGroupGen
     this.setState({
       detailLoading: true,
       message: '',
@@ -353,12 +357,14 @@ export class SearchStore {
       }))
       try {
         const book = await loadSourceBook(candidate, group.sources)
+        if (gen !== this.openGroupGen) return // 期间已发起新搜索/重置：丢弃这次在途结果
         this.setState(prev => ({
           choices: prev.choices.map((c, idx) => (idx === i ? { ...c, book, status: 'loaded' } : c)),
         }))
         loadedBook = book
         break
       } catch (err) {
+        if (gen !== this.openGroupGen) return
         const errMsg = err instanceof Error ? err.message : '无法读取此书源'
         this.setState(prev => ({
           choices: prev.choices.map((c, idx) => (idx === i ? { ...c, status: 'error', error: errMsg } : c)),
@@ -366,6 +372,7 @@ export class SearchStore {
       }
     }
 
+    if (gen !== this.openGroupGen) return
     if (loadedBook) {
       this.setState({ openBook: loadedBook, detailLoading: false })
     } else {
@@ -435,6 +442,7 @@ export class SearchStore {
   }
 
   reset = () => {
+    this.openGroupGen++ // 作废任何在途的 openGroup
     if (this.socket) {
       try {
         if (this.socket.readyState === WebSocket.OPEN) {
@@ -471,7 +479,7 @@ export function useSearchStore(): SearchStoreState & {
   const state = useSyncExternalStore(searchStore.subscribe, searchStore.getSnapshot)
   return {
     ...state,
-    setKeyword: searchStore.setKeyword,
+    setKeyword: searchStore.setKeyword,
     setSelectedSourceIds: searchStore.setSelectedSourceIds,
     setSelectedSourceId: searchStore.setSelectedSourceId,
     setFilters: searchStore.setFilters,

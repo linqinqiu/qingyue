@@ -1,5 +1,5 @@
 import { api, TtsSessionChunkRequest } from './api'
-import { ReaderSettings } from './readerSettings'
+import { effectiveTtsVoice, ReaderSettings, ttsSessionKey } from './readerSettings'
 
 export type TtsPlayState = 'idle' | 'buffering' | 'playing' | 'paused'
 export type TtsSpeakMode = 'replace' | 'continue'
@@ -354,11 +354,15 @@ export class HttpAudioTtsEngine implements ITtsEngine {
   }
 
   private getCacheKey(text: string, settings: ReaderSettings): string {
-    return `${settings.ttsEngine}:${settings.ttsVoice}:${settings.ttsSpeed}:${settings.ttsPitch}:${text}`
+    return `${settings.ttsEngine}:${effectiveTtsVoice(settings)}:${settings.ttsSpeed}:${settings.ttsPitch}:${text}`
   }
 
+  /**
+   * 会话身份直接引 readerSettings 的 `ttsSessionKey`：界面（换引擎要不要立刻停旧起新）
+   * 和这里（speak 时要不要 resetSession）必须是同一个判据，两套名字迟早漂移。
+   */
   private getSettingsKey(settings: ReaderSettings): string {
-    return `${settings.ttsEngine}:${settings.ttsVoice}:${settings.ttsSpeed}:${settings.ttsPitch}:${settings.ttsCustomUrl}:${settings.ttsCustomHeader}:${settings.ttsCustomMethod}:${settings.ttsCustomBody}`
+    return ttsSessionKey(settings)
   }
 
   private createItem(text: string, settings: ReaderSettings, context: TtsChunkContext = {}): StreamItem {
@@ -373,17 +377,20 @@ export class HttpAudioTtsEngine implements ITtsEngine {
   private createChunkRequest(id: string, text: string, settings: ReaderSettings, context: TtsChunkContext): TtsSessionChunkRequest {
     const ratePercent = Math.round((settings.ttsSpeed - 1.0) * 100)
     const pitchHz = Math.round((settings.ttsPitch - 1.0) * 50)
+    const header = (settings.ttsCustomHeader ?? '').trim()
     return {
       chunkId: id,
       text,
       chapterIndex: context.chapterIndex ?? -1,
       paragraphIndex: context.paragraphIndex ?? -1,
       engine: settings.ttsEngine,
-      voice: settings.ttsVoice || 'zh-CN-XiaoxiaoNeural',
+      // 自定义引擎拿到的是用户自己填的发音人标识（可以是空）；
+      // 以前这里固定回退到 zh-CN-XiaoxiaoNeural，等于把一个微软音色 id 发给用户自建的 TTS。
+      voice: effectiveTtsVoice(settings),
       rate: ratePercent,
       pitch: pitchHz,
       customUrl: settings.ttsCustomUrl,
-      customHeader: settings.ttsCustomHeader,
+      customHeader: header || undefined,
       customMethod: settings.ttsCustomMethod,
       customBody: settings.ttsCustomBody,
     }

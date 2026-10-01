@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
+import { Icon } from './icons'
 
 interface SourceWebViewModalProps {
   sourceId: string
@@ -339,10 +340,10 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
               disabled={busy || !token}
               onClick={handleCheckLogin}
             >
-              {busy ? '检测中...' : '✓ 登录完成'}
+              {busy ? '检测中...' : '登录完成'}
             </button>
-            <button type="button" className="source-webview-icon-btn" title="关闭" onClick={onClose}>
-              ✕
+            <button type="button" className="source-webview-icon-btn" title="关闭" aria-label="关闭" onClick={onClose}>
+              <Icon name="close" />
             </button>
           </div>
         </div>

@@ -21,6 +21,12 @@ export interface OfflineBookStat {
   name?: string
   chapterCount: number
   totalBytes: number
+  /**
+   * 这本书最近一次写入缓存的时间。没有它就没法做真正的 LRU ——
+   * `stats.books` 原本是 IndexedDB 游标顺序（键是 `sourceId::bookUrl::chapterUrl`，
+   * 等于按书名排序），拿它当"最久未用"来淘汰是假的。
+   */
+  lastCachedAt: number
 }
 
 export interface OfflineStorageStats {
@@ -35,13 +41,12 @@ const STORE_CHAPTERS = 'chapters'
 
 const SNAPSHOT_SHELF_KEY = 'legado_shelf_snapshot'
 const OFFLINE_PROGRESS_QUEUE_KEY = 'legado_offline_progress_queue'
-const LRU_EVICT_KEY = 'legado_lru_evict_enabled'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
-  dbPromise = new Promise((resolve, reject) => {
+  const promise = new Promise<IDBDatabase>((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
       return reject(new Error('IndexedDB not supported in current environment'))
     }
@@ -54,9 +59,18 @@ function openDb(): Promise<IDBDatabase> {
         store.createIndex('by_cached_at', 'cachedAt', { unique: false })
       }
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    request.onblocked = () => reject(new Error('IndexedDB 升级被其它标签页占用，请关闭旧标签后重试'))
+    request.onsuccess = () => {
+      const db = request.result
+      // 另一标签触发版本升级 / 浏览器回收连接时，本连接会失效：关掉并清空缓存，
+      // 下次 openDb 重开新连接，避免后续事务对着 stale 连接全抛 InvalidStateError。
+      db.onversionchange = () => { db.close(); if (dbPromise === promise) dbPromise = null }
+      db.onclose = () => { if (dbPromise === promise) dbPromise = null }
+      resolve(db)
+    }
+    request.onerror = () => { if (dbPromise === promise) dbPromise = null; reject(request.error) }
   })
+  dbPromise = promise
   return dbPromise
 }
 
@@ -95,9 +109,10 @@ export async function putOfflineChapter(
       const req = store.put(record)
       req.onsuccess = () => resolve()
       req.onerror = () => {
-        if (req.error && req.error.name === 'QuotaExceededError' && isLruEvictEnabled()) {
-          // Attempt automatic LRU eviction and retry once
-          void evictLruOfflineBooks(byteSize * 10).then(() => {
+        if (req.error && req.error.name === 'QuotaExceededError') {
+          // 空间不足就先按最久未写淘汰别的书，再重试一次。必须把**当前这本**排除掉：
+          // 否则"清一点空间"会把用户正在下载的书连同它已存好的章节一起删掉。
+          void evictLruOfflineBooks(byteSize * 10, { sourceId, bookUrl }).then(() => {
             const retryTx = db.transaction(STORE_CHAPTERS, 'readwrite')
             const retryReq = retryTx.objectStore(STORE_CHAPTERS).put(record)
             retryReq.onsuccess = () => resolve()
@@ -206,10 +221,12 @@ export async function getOfflineStorageStats(): Promise<OfflineStorageStats> {
             bookUrl: record.bookUrl,
             chapterCount: 0,
             totalBytes: 0,
+            lastCachedAt: 0,
           }
           stat.chapterCount += 1
           const bytes = record.byteSize || (record.content?.length || 0) * 2
           stat.totalBytes += bytes
+          stat.lastCachedAt = Math.max(stat.lastCachedAt, record.cachedAt || 0)
           bookMap.set(bookKey, stat)
 
           totalChapters += 1
@@ -284,14 +301,24 @@ export async function clearAllOffline(): Promise<void> {
 }
 
 /**
- * Automatic LRU Eviction: Removes oldest cached books when storage is tight
+ * 空间不足时的自动淘汰：按**最久未写入**的顺序清掉整本离线书，直到腾出 `targetBytesToFree`。
+ *
+ * `exclude` 是必须的：调用点是"某本书的某一章正要落库时配额爆了"，
+ * 不排除的话这里会把**用户正在下载的那一本**（含它已经存好的章节）一起清掉。
+ * 排序也不能省 —— `stats.books` 是 IndexedDB 游标顺序（按书名），不排就等于随机淘汰。
  */
-export async function evictLruOfflineBooks(targetBytesToFree = 10 * 1024 * 1024): Promise<number> {
+export async function evictLruOfflineBooks(
+  targetBytesToFree = 10 * 1024 * 1024,
+  exclude?: { sourceId: string; bookUrl: string },
+): Promise<number> {
   const stats = await getOfflineStorageStats()
-  if (stats.books.length <= 1) return 0
+  const candidates = stats.books
+    .filter(book => !(exclude && book.sourceId === exclude.sourceId && book.bookUrl === exclude.bookUrl))
+    .sort((a, b) => a.lastCachedAt - b.lastCachedAt)
+  if (candidates.length === 0) return 0
 
   let freed = 0
-  for (const book of stats.books) {
+  for (const book of candidates) {
     if (freed >= targetBytesToFree) break
     const count = await clearOfflineBook(book.sourceId, book.bookUrl)
     if (count > 0) {
@@ -299,22 +326,6 @@ export async function evictLruOfflineBooks(targetBytesToFree = 10 * 1024 * 1024)
     }
   }
   return freed
-}
-
-export function isLruEvictEnabled(): boolean {
-  try {
-    return localStorage.getItem(LRU_EVICT_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-export function setLruEvictEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(LRU_EVICT_KEY, enabled ? 'true' : 'false')
-  } catch {
-    // ignore
-  }
 }
 
 /**

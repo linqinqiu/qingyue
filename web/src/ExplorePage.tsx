@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api, type ExploreTab, type SearchResult, type SourceSummary } from './api'
 import { Icon } from './icons'
+import { Select } from './Select'
 import { sanitizeImageUrl } from './sourceImport'
 
 export interface ExplorePageProps {
@@ -20,7 +21,6 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-
   // 聚合书源常挂 40+ 个分栏，而且大量重名（每个分类都叫「推荐」「完结」）。
   // 重名的补上序号，否则点了之后根本看不出当前选的是哪一个。
   const labelledTabs = useMemo(() => {
@@ -78,12 +78,28 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
     setMessage('')
     setPage(1)
     setHasMore(true)
-    void api.explore(sourceId, tab.url, 1, controller.signal).then(list => {
+    void api.explore(sourceId, tab.url, 1, controller.signal).then(async list => {
       if (cancelled) return
       setBooks(list)
       setStatus('ready')
       setHasMore(list.length > 0)
-      if (!list.length) setMessage('这个分栏没有返回书籍，换一个试试。')
+      if (list.length) return
+      // 「空」有两种完全不同的原因，混成一句"换一个试试"是在骗人：
+      // 番茄的「番茄书架」那一栏打在 fanqienovel.com 的个人书架接口上，匿名访问它就是返回
+      // 空数组（不报错），实测同一时刻同源的公开榜单能出 30 本 —— 所以缺的是凭据，不是栏目坏了。
+      if (!tab.url.startsWith('http')) {
+        setMessage('这个分栏没有返回书籍（它的地址由书源脚本生成，无法判断是否需要登录）。')
+        return
+      }
+      try {
+        const credential = await api.sourceCredential(sourceId, tab.url)
+        if (cancelled) return
+        setMessage(credential.has
+          ? `这一栏返回 0 本：${credential.domain} 上已有凭据，可能是站点自己没内容或该书源规则不匹配。`
+          : `这一栏需要登录：${credential.domain} 上还没有凭据。到书源的「登录」里用真浏览器登录或粘贴 Cookie 后再试。`)
+      } catch {
+        setMessage('这个分栏没有返回书籍，换一个试试。')
+      }
     }).catch(error => {
       if (cancelled) return
       setStatus('failed')
@@ -139,13 +155,24 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
           <h1>发现</h1>
           <p>读取书源自带的发现页分栏（榜单、分类、专题），点书先看详情，再决定读不读。</p>
         </div>
-        <label className="explore-source-picker">
-          <span>书源</span>
-          <select value={sourceId} onChange={event => setSourceId(event.target.value)} disabled={!sources.length}>
-            {sources.length === 0 && <option value="">加载中…</option>}
-            {sources.map(item => <option key={item.id} value={item.id}>{item.name}{item.group ? `（${item.group}）` : ''}</option>)}
-          </select>
-        </label>
+        {/*
+          用户 2026-09-30：「我发现页也用不到这个在这个源里搜书名，需要的是搜对应书源」。
+          上一轮加的"源内直搜"打偏了：发现页缺的是**从两千多个配了发现页的源里挑到一个**，
+          不是把书库搜索在这儿重摆一遍。所以删掉那个表单，把选源本身做成一眼看得懂的搜索口：
+          标签写「搜书源」、过滤框常驻（不等选项变多才自动冒出来）、并报出可发现的总数。
+        */}
+        <div className="explore-source-picker">
+          <span>搜书源</span>
+          <Select
+            ariaLabel="搜索并选择发现页书源"
+            placeholder={sources.length ? '按名称或分组搜书源' : '加载中…'}
+            value={sourceId}
+            onChange={setSourceId}
+            searchable
+            options={sources.map(item => ({ value: item.id, label: item.name, hint: item.group?.trim() || undefined }))}
+          />
+          <small className="explore-source-count">{sources.length} 个书源配了发现页</small>
+        </div>
       </header>
 
       {tabs.length > 0 && (

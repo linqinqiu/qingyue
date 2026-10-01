@@ -93,7 +93,7 @@ async function runBrowserVerification() {
     await page.waitForSelector('.shelf-card', { timeout: 15000 })
     const cardTitle = await page.$eval('.shelf-card-name', (el) => el.textContent?.trim())
     const cardAuthor = await page.$eval('.shelf-card-author', (el) => el.textContent?.trim())
-    const hasLocalTag = await page.$eval('.shelf-card-tag-local', (el) => el.textContent?.trim())
+    const hasLocalTag = await page.$eval('.shelf-card-hover', (el) => el.textContent?.trim())
 
     console.log(`📚 Book card displayed: Title = "${cardTitle}", Author = "${cardAuthor}", Tag = "${hasLocalTag}"`)
     assert.equal(cardTitle, '剑破九天')

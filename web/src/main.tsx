@@ -2000,12 +2000,22 @@ function BookManageModal({
                 <small>{groups.find(group => group.id === (item.groupId ?? 0))?.name ?? '未分组'}</small>
               </div>
             </div>
-            <div className="manage-group-pills">
-              <button type="button" className={(item.groupId ?? 0) === 0 ? 'active' : ''} onClick={() => onAssignGroup(0)}>未分组</button>
-              {groups.map(group => (
-                <button key={group.id} type="button" className={item.groupId === group.id ? 'active' : ''} onClick={() => onAssignGroup(group.id)}>{group.name}</button>
-              ))}
-            </div>
+            {/*
+              这里原来是把**全部**分组摊成一排胶囊：十几个分组时还行，"分组一大堆"（用户 2026-09-30
+              问的就是这个）就变成一堵墙，而且右键菜单那条「更多分组…」正是落到这里，等于把问题搬了个家。
+              换成站内 Select：能按名字过滤、每条带本数，规模再大也只有一个控件的高度。
+            */}
+            <Select
+              className="manage-group-select"
+              ariaLabel="这本书的分组"
+              searchable
+              value={String(item.groupId ?? 0)}
+              onChange={value => onAssignGroup(Number(value))}
+              options={[
+                { value: '0', label: '未分组' },
+                ...groups.map(group => ({ value: String(group.id), label: group.name, hint: `${group.bookCount} 本` })),
+              ]}
+            />
           </div>
 
           {item.sourceId !== 'loc_book' && (
@@ -2038,7 +2048,7 @@ function BookManageModal({
               <div className="action-icon"><Icon name="download" /></div>
               <div className="action-text">
                 <strong>{isReady ? '重新缓存 / 校验全本' : isFailed ? '重试离线缓存' : '离线缓存全本'}</strong>
-                <small>{isReady ? `已离线缓存 ${item.cachedChapters} 章 ✓` : isFailed ? (item.cacheError || '部分章节未缓存，点击重试') : '预先下载全书正文以供离线阅读'}</small>
+                <small>{isReady ? `已离线缓存 ${item.cachedChapters} 章` : isFailed ? (item.cacheError || '部分章节未缓存，点击重试') : '预先下载全书正文以供离线阅读'}</small>
               </div>
               <Icon name="arrowRight" />
             </button>
@@ -2554,24 +2564,19 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
               >
                 标未读
               </button>
-              <select
+              <Select
+                ariaLabel="把选中的书移到分组"
                 className="shelf-batch-group-select"
+                placeholder="移到分组…"
+                searchable
                 disabled={selectedBooks.size === 0}
-                onChange={e => {
-                  const value = e.target.value
-                  if (value === '') return
-                  const groupId = value === 'null' ? null : Number(value)
-                  void handleBatchMoveToGroup(groupId)
-                  e.target.value = ''
-                }}
-                title="移动到指定分组"
-              >
-                <option value="">移到分组...</option>
-                <option value="null">未分组</option>
-                {groups.map(group => (
-                  <option key={group.id} value={group.id}>{group.name}</option>
-                ))}
-              </select>
+                value=""
+                onChange={value => void handleBatchMoveToGroup(value === 'none' ? null : Number(value))}
+                options={[
+                  { value: 'none', label: '未分组' },
+                  ...groups.map(group => ({ value: String(group.id), label: group.name, hint: `${group.bookCount} 本` })),
+                ]}
+              />
             </div>
           )}
           <div className="shelf-sort">
@@ -2784,6 +2789,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
                       <div><dt>进度</dt><dd>{item.completed ? '已读完' : item.chapterIndex === undefined ? '刚加入' : `${item.chapterIndex + 1}${item.totalChapters ? ` / ${item.totalChapters}` : ''} 章${item.totalChapters ? ` · ${Math.min(100, Math.round(((item.chapterIndex + 1) / item.totalChapters) * 100))}%` : ''}`}</dd></div>
                       <div><dt>缓存</dt><dd>{cacheText(item)}</dd></div>
                       <div><dt>上次</dt><dd>{new Date(item.lastReadAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>
+                      {(item.tocUpdatedAt ?? 0) > 0 && <div><dt>更新</dt><dd>{new Date(item.tocUpdatedAt!).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>}
                       {/* 来源：本地书直说；在线书给书源显示名（sources 传入后建 id→name 映射），取不到再退回 host */}
                       <div><dt>来源</dt><dd>{isLocal ? '本地导入' : (sourceNameById.get(item.sourceId) || sourceHostOf(item.sourceId))}</dd></div>
                       {!isLocal && !!item.alternateSources?.length && <div><dt>换源</dt><dd>{item.alternateSources.length} 个源</dd></div>}
@@ -2875,8 +2881,25 @@ function App() {
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings)
   // 系统标题栏/状态栏颜色跟随主题：装成 PWA 或手机全屏时，原来固定成深色的那条边在浅色界面下很突兀。
   useEffect(() => {
-    const canvas = settings.theme === 'dark' ? '#202522' : settings.theme === 'paper' ? '#eef3e7' : '#f8f9f7'
+    // 内置三套的标题栏色；自定义皮肤(其它 id)取不到就走中性回退——皮肤本身仍由 .theme-<id> CSS 生效。
+    const THEME_CANVAS: Record<string, string> = { light: '#f8f9f7', paper: '#eef3e7', dark: '#202522' }
+    const canvas = THEME_CANVAS[settings.theme] ?? '#f8f9f7'
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas)
+  }, [settings.theme])
+  /**
+   * 主题**同时挂到 `<html>`**，不只挂在 `.app-shell` 上。
+   * 起因是用户 2026-10-01：「指定源搜索还没做好，夜读模式下你看看」——
+   * `Select` 的下拉浮层是 `createPortal(…, document.body)`（必须如此：书架/订阅各有自己的
+   * 滚动容器与边框，绝对定位会被祖先裁掉），而 `--surface`/`--ink`/`--line` 这些变量
+   * 只定义在 `.theme-*` 上、`.theme-*` 只在 app shell 那一层 → **portal 出来的浮层一个变量都拿不到**。
+   * 浅色模式下页面底色本来就浅，只是描边和选中态发虚，看不太出来；
+   * 夜读模式下整块菜单就变成"透明板 + 深色字压在深色页上"，也就是用户说的"没做好"。
+   */
+  useEffect(() => {
+    const root = document.documentElement
+    const stale = [...root.classList].filter(name => name.startsWith('theme-'))
+    if (stale.length) root.classList.remove(...stale)
+    root.classList.add(`theme-${settings.theme}`)
   }, [settings.theme])
   const [page, setPage] = useState<Page>(pageFromHash)
   const [readerReturnPage, setReaderReturnPage] = useState<Page>('shelf')

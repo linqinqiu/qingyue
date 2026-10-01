@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, SourceSummary } from './api'
 import { Icon } from './icons'
+
+/** 当前访问来源；导出链接要按它拼绝对地址。 */
+const currentOrigin = () => (typeof location === 'undefined' ? '' : location.origin)
 import { useEscapeClose } from './useEscapeClose'
-import { currentOrigin } from './WebDavSettingsPage'
 
 interface SourceShareModalProps {
   /** 要分享的书源 id；一个就是单源分享，多个打包成数组。 */

@@ -2,7 +2,6 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_LAYOUT,
-  DENSITY_ORDER,
   decodeLayout,
   encodeLayout,
   layoutFromLegacyCode,
@@ -30,61 +29,56 @@ function withStorage(initial: Record<string, string> | undefined, body: (store: 
   }
 }
 
-test('ShelfLayout - 五种状态都能编码再解码回来', () => {
-  for (const mode of ['list', 'compact'] as const) {
-    const layout = { mode, density: 'md' as const }
-    assert.deepEqual(decodeLayout(encodeLayout(layout)), layout)
+test('ShelfLayout - 三种视图都能编码再解码回来', () => {
+  for (const mode of ['grid', 'list', 'compact'] as const) {
+    assert.deepEqual(decodeLayout(encodeLayout({ mode })), { mode }, `${mode} 应能往返`)
   }
-  for (const density of DENSITY_ORDER) {
-    const layout = { mode: 'grid' as const, density }
-    assert.deepEqual(decodeLayout(encodeLayout(layout)), layout, `grid:${density} 应能往返`)
-  }
-  assert.equal(encodeLayout({ mode: 'grid', density: 'sm' }), 'grid:sm')
-  assert.equal(encodeLayout({ mode: 'list', density: 'lg' }), 'list', '列表档不该把密度写进去')
+  // 编码里不再带任何密度后缀（用户判定只留小封面）
+  assert.equal(encodeLayout({ mode: 'grid' }), 'grid')
 })
 
-test('ShelfLayout - 认不出的值返回 null 而不是猜一个', () => {
-  for (const junk of ['', 'grid', 'grid:xl', 'grid:', 'LIST', '7']) {
+test('ShelfLayout - 废弃的密度档读得到但不再产生，认不出的值返回 null', () => {
+  // 老用户 localStorage 里存着 grid:sm|md|lg，必须还能读成"网格"这一件事，不能变成空布局
+  for (const legacy of ['grid:sm', 'grid:md', 'grid:lg', 'grid:']) {
+    assert.deepEqual(decodeLayout(legacy), { mode: 'grid' }, `${legacy} 应回落成网格`)
+  }
+  for (const junk of ['', 'grid:xl', 'LIST', '7', 'compact:sm']) {
     assert.equal(decodeLayout(junk), null, `${JSON.stringify(junk)} 不是合法值`)
   }
 })
 
-test('ShelfLayout - 旧的列数编号搬到密度档', () => {
+test('ShelfLayout - 旧的列数编号搬到三种视图', () => {
   // v1 存的是上游编号：0=列表 1=紧凑 2~6=固定列数 7=自动
-  assert.deepEqual(layoutFromLegacyCode(0), { mode: 'list', density: 'md' })
-  assert.deepEqual(layoutFromLegacyCode(1), { mode: 'compact', density: 'md' })
-  assert.deepEqual(layoutFromLegacyCode(7), { mode: 'grid', density: 'sm' })
-  assert.deepEqual(layoutFromLegacyCode(2), { mode: 'grid', density: 'lg' })
-  assert.deepEqual(layoutFromLegacyCode(3), { mode: 'grid', density: 'lg' })
-  assert.deepEqual(layoutFromLegacyCode(4), { mode: 'grid', density: 'md' })
-  assert.deepEqual(layoutFromLegacyCode(6), { mode: 'grid', density: 'sm' })
-  // 列数越多封面越小，密度档序号越小：搬过去的档位必须单调，否则老用户的书架会突然跳档
-  const ranks = [2, 3, 4, 5, 6, 7].map(code => DENSITY_ORDER.indexOf(layoutFromLegacyCode(code).density))
-  assert.ok(ranks.every((rank, index) => index === 0 || rank <= ranks[index - 1]), `列数↑ 封面应↓，实际 ${ranks.join('>')}`)
+  assert.deepEqual(layoutFromLegacyCode(0), { mode: 'list' })
+  assert.deepEqual(layoutFromLegacyCode(1), { mode: 'compact' })
+  for (const columns of [2, 3, 4, 5, 6, 7]) {
+    assert.deepEqual(layoutFromLegacyCode(columns), { mode: 'grid' }, `${columns} 列搬到网格`)
+  }
 })
 
 test('ShelfLayout - 没有偏好时吃默认值，有旧编号时迁移并清掉旧键', () => {
+  assert.deepEqual(DEFAULT_LAYOUT, { mode: 'grid' })
   withStorage({}, store => {
     assert.deepEqual(readShelfLayout(), DEFAULT_LAYOUT)
     assert.equal(store.size, 0, '只读不该写盘')
   })
 
   withStorage({ 'legado-shelf-layout-v1': '2' }, store => {
-    assert.deepEqual(readShelfLayout(), { mode: 'grid', density: 'lg' })
+    assert.deepEqual(readShelfLayout(), { mode: 'grid' })
     assert.equal(store.get('legado-shelf-layout-v1'), '2', '读取本身不迁移，等用户下次改动再落新键')
-    writeShelfLayout({ mode: 'grid', density: 'sm' })
-    assert.equal(store.get('legado-shelf-layout-v2'), 'grid:sm')
+    writeShelfLayout({ mode: 'list' })
+    assert.equal(store.get('legado-shelf-layout-v2'), 'list')
     assert.equal(store.has('legado-shelf-layout-v1'), false, '写新键时旧键要清掉，避免下次又被搬一遍')
   })
 
   withStorage({ 'legado-shelf-layout-v1': '1', 'legado-shelf-layout-v2': 'compact' }, () => {
-    assert.deepEqual(readShelfLayout(), { mode: 'compact', density: 'md' }, '新键优先于旧键')
+    assert.deepEqual(readShelfLayout(), { mode: 'compact' }, '新键优先于旧键')
   })
 })
 
 test('ShelfLayout - localStorage 不可用时不抛异常', () => {
   withStorage(undefined, () => {
     assert.deepEqual(readShelfLayout(), DEFAULT_LAYOUT)
-    assert.doesNotThrow(() => writeShelfLayout({ mode: 'list', density: 'md' }))
+    assert.doesNotThrow(() => writeShelfLayout({ mode: 'list' }))
   })
 })

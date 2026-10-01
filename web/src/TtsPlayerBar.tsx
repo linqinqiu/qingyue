@@ -44,7 +44,6 @@ export const TtsPlayerBar: React.FC<TtsPlayerBarProps> = ({
   const formatTimerLabel = () => {
     if (sleepTimer === 'off') return null
     if (sleepTimer === 'chapter') return '本章止'
-    if (sleepTimer === 'paragraph') return '本段止'
     if (remainingSeconds !== null && remainingSeconds > 0) {
       const mins = Math.ceil(remainingSeconds / 60)
       return `${mins}m`

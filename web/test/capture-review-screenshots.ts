@@ -140,7 +140,7 @@ async function setupPageMocks(page: Page) {
   await page.setRequestInterception(true)
   page.on('request', req => {
     const url = req.url()
-    if (url.includes('/api/auth/session') || url.includes('/api/auth/status')) {
+    if (url.includes('/healthz') || url.includes('/api/auth/status')) {
       return req.respond({
         status: 200,
         contentType: 'application/json',
@@ -292,8 +292,8 @@ async function runReviewCaptures() {
     await setupPageMocks(page)
 
     await page.goto(`${BASE_URL}/#shelf`, { waitUntil: 'networkidle0' })
-    await page.waitForSelector('.shelf-btn-read', { timeout: 8000 })
-    await page.click('.shelf-btn-read')
+    await page.waitForSelector('.shelf-card-cover', { timeout: 8000 })
+    await page.click('.shelf-card-cover')
 
     await page.waitForSelector('.reading-content', { timeout: 8000 })
     await injectSafeArea(page, 47, 34)

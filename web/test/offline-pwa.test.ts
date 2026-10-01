@@ -11,8 +11,7 @@ import {
   enqueueOfflineProgress,
   flushOfflineProgress,
   getOfflineStorageStats,
-  isLruEvictEnabled,
-  setLruEvictEnabled
+  evictLruOfflineBooks
 } from '../src/offlineStorage.js'
 
 // Mock IndexedDB implementation for test runner
@@ -64,6 +63,9 @@ class MockIDBIndex {
   }
 }
 
+/** 让接下来 N 次 IndexedDB 写入抛 QuotaExceededError，用来测「配额满 → 淘汰 → 重试」。 */
+let quotaFailuresLeft = 0
+
 class MockIDBObjectStore {
   data = new Map<string, any>()
   name: string
@@ -72,8 +74,15 @@ class MockIDBObjectStore {
   }
   put(value: any, key?: any) {
     const actualKey = key ?? value.key ?? `${value.sourceId}_${value.bookUrl}_${value.chapterUrl}`
-    this.data.set(String(actualKey), value)
     const req = new MockIDBRequest()
+    if (quotaFailuresLeft > 0) {
+      // 模拟设备存储配额已满：第一次写失败，逼出「淘汰别的书 → 重试」这条恢复路径
+      quotaFailuresLeft -= 1
+      req.error = { name: 'QuotaExceededError' }
+      setTimeout(() => req.onerror?.({ target: req }), 0)
+      return req
+    }
+    this.data.set(String(actualKey), value)
     req.result = actualKey
     setTimeout(() => req.onsuccess?.({ target: req }), 0)
     return req
@@ -265,13 +274,6 @@ test('OfflineStorage - Storage Stats, LRU Toggle and Eviction', async () => {
   assert.equal(statsBefore.books[0].chapterCount, 1)
   assert.ok(statsBefore.totalBytes > 0)
 
-  // LRU Toggle
-  assert.equal(isLruEvictEnabled(), false)
-  setLruEvictEnabled(true)
-  assert.equal(isLruEvictEnabled(), true)
-  setLruEvictEnabled(false)
-  assert.equal(isLruEvictEnabled(), false)
-
   // Clean data
   await clearAllOffline()
   const statsAfter = await getOfflineStorageStats()
@@ -281,30 +283,77 @@ test('OfflineStorage - Storage Stats, LRU Toggle and Eviction', async () => {
 
 test('Reader Offline Cache Range Math Calculation', () => {
   const totalChapters = 350
-  const curIndex = 120
 
-  // 1. Next 50
-  const next50Start = curIndex
-  const next50End = Math.min(totalChapters - 1, curIndex + 49)
-  const next50Count = next50End - next50Start + 1
-  assert.equal(next50Start, 120)
-  assert.equal(next50End, 169)
-  assert.equal(next50Count, 50)
-
-  // 2. Next 100 near end
-  const nearEndCurIndex = 320
-  const next100Start = nearEndCurIndex
-  const next100End = Math.min(totalChapters - 1, nearEndCurIndex + 99)
-  const next100Count = next100End - next100Start + 1
-  assert.equal(next100Start, 320)
-  assert.equal(next100End, 349)
-  assert.equal(next100Count, 30) // Clamped to remaining
-
-  // 3. Full book
+  // 1. 全本
   const fullStart = 0
   const fullEnd = totalChapters - 1
   const fullCount = totalChapters
   assert.equal(fullStart, 0)
   assert.equal(fullEnd, 349)
   assert.equal(fullCount, 350)
+
+  // 2. 自定义：跨中段与贴到末尾都被夹在 [0, 末章]，且起点不会盖过终点
+  const customStart = Math.max(0, 121 - 1)
+  const customEnd = Math.max(customStart, 171 - 1)
+  assert.equal(customStart, 120)
+  assert.equal(customEnd, 170)
+
+  const reversedStart = Math.max(0, 300 - 1)
+  const reversedEnd = Math.max(reversedStart, 10 - 1)
+  assert.equal(reversedEnd, reversedStart)
+
+  const beyondEnd = Math.min(totalChapters - 1, 340 + 60)
+  assert.equal(beyondEnd, 349)
+})
+
+/**
+ * 淘汰不能碰「正在缓存的那本」：调用点是某章落库时配额爆了，若把它自己也清掉，
+ * 用户会发现下载的书白下了。
+ *
+ * `targetBytesToFree` 故意给到无穷大，逼循环走完所有书 —— 给小目标的话第一本就 break，
+ * exclude 那条断言就成了空判（我第一版就是这么写的，负对照撤掉修复仍全绿）。
+ * 同理不声称这里在验「时间序 vs 游标序」：MockIDB 的游标顺序就是插入顺序，
+ * 与写入时间同序，这个基座区分不了，硬写只会自欺。
+ */
+test('LRU eviction: 绝不淘汰正在写入的那本书', async () => {
+  await clearAllOffline()
+  await putOfflineChapter('src-lru', 'other-old', 'c1', '第一章', '别的书'.repeat(200))
+  await putOfflineChapter('src-lru', 'current-book', 'c1', '第一章', '正在下的这本'.repeat(200))
+  await putOfflineChapter('src-lru', 'other-new', 'c1', '第一章', '又一本'.repeat(200))
+
+  const stats = await getOfflineStorageStats()
+  assert.ok(stats.books.every(b => b.lastCachedAt > 0), 'lastCachedAt 必须被统计出来，否则无从判断新旧')
+
+  await evictLruOfflineBooks(Number.POSITIVE_INFINITY, { sourceId: 'src-lru', bookUrl: 'current-book' })
+  const left = (await getOfflineStorageStats()).books.map(b => b.bookUrl)
+  assert.ok(left.includes('current-book'), '正在写入的书被自动淘汰清掉了')
+  assert.ok(!left.includes('other-old') && !left.includes('other-new'), '其余书没被清 —— 说明测试根本没走到淘汰逻辑')
+
+  // 对照组：同一批数据不给 exclude 时应连本带主一起清光，证明上一条断言真的在判事
+  await evictLruOfflineBooks(Number.POSITIVE_INFINITY)
+  const afterNoExclude = (await getOfflineStorageStats()).books.map(b => b.bookUrl)
+  assert.ok(!afterNoExclude.includes('current-book'), '对照组失效：无 exclude 时它也没被清，那前面的断言不算证据')
+  await clearAllOffline()
+})
+
+/**
+ * 配额爆掉时的恢复路径必须**无条件**生效：以前它挂在一个默认关闭、界面上也几乎
+ * 没人会去开的开关上（`legado_lru_evict_enabled` 不存在即 false），所以这条路径出厂休眠。
+ * 若那个开关还在，这里第一次 put 失败后 promise 会直接 reject，测试当场变红。
+ */
+test('配额满时自动淘汰别的书并重试成功，且不动正在写的这本', async () => {
+  await clearAllOffline()
+  await putOfflineChapter('src-q', 'other-1', 'c1', '第一章', '别的书'.repeat(400))
+  await putOfflineChapter('src-q', 'current', 'c1', '第一章', '正在下的这本'.repeat(400))
+
+  quotaFailuresLeft = 1
+  await putOfflineChapter('src-q', 'current', 'c2', '第二章', '新的一章'.repeat(400))
+  quotaFailuresLeft = 0
+
+  const books = (await getOfflineStorageStats()).books
+  const current = books.find(b => b.bookUrl === 'current')
+  assert.ok(current, '重试后当前这本的章节应写进去')
+  assert.equal(current.chapterCount, 2, '已有的和新写的两章都该在')
+  assert.ok(!books.some(b => b.bookUrl === 'other-1'), '应已淘汰别的书腾出空间')
+  await clearAllOffline()
 })

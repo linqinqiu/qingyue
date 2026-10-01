@@ -1,9 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, setCsrfToken, BatchSourceRequest, BatchSourceResponse, SourceHealthCheckResponse } from '../src/api'
+import { api, BatchSourceRequest, BatchSourceResponse, SourceHealthCheckResponse } from '../src/api'
 
 test('Source Batch Management & Health Check API Test Suite', async (t) => {
-  setCsrfToken('mock-csrf-token')
 
   await t.test('api.batchSources should format enable action request correctly', async () => {
     const originalFetch = globalThis.fetch
@@ -34,7 +33,8 @@ test('Source Batch Management & Health Check API Test Suite', async (t) => {
       const resp = await api.batchSources('enable', ['https://s1.com', 'https://s2.com', 'https://s3.com'])
       assert.strictEqual(capturedUrl, '/api/sources/batch')
       assert.strictEqual(capturedMethod, 'POST')
-      assert.strictEqual(capturedCsrf, 'mock-csrf-token')
+      // 不设身份：客户端不再带任何令牌，写操作由服务端的同源闸门把关
+      assert.strictEqual(capturedCsrf, '')
       const parsedBody = JSON.parse(capturedBody)
       assert.strictEqual(parsedBody.action, 'enable')
       assert.deepStrictEqual(parsedBody.ids, ['https://s1.com', 'https://s2.com', 'https://s3.com'])

@@ -9,19 +9,18 @@ export type SearchGroup = {
   sources: SearchResult[]
 }
 
+/**
+ * 搜索页只有两个真有用的控件：按书名/作者筛一句话、换排序。
+ * 以前的「最少几个书源 / 有简介 / 有封面」在 2026-09-29 被用户判掉 ——
+ * 结果本来就不多时它们只会把列表越勾越空，勾完也看不出差别。
+ */
 export type SearchFilters = {
   query: string
-  minimumSources: 1 | 2 | 3
-  withIntro: boolean
-  withCover: boolean
   sortMode: SortMode
 }
 
 export const defaultSearchFilters: SearchFilters = {
   query: '',
-  minimumSources: 1,
-  withIntro: false,
-  withCover: false,
   sortMode: 'smart',
 }
 
@@ -170,10 +169,7 @@ export function filterSearchGroups(groups: SearchGroup[], filters: SearchFilters
   const query = filters.query.trim().toLocaleLowerCase()
   const filtered = groups.filter(group => {
     const searchable = `${group.name} ${group.author ?? ''}`.toLocaleLowerCase()
-    return (!query || searchable.includes(query))
-      && group.sources.length >= filters.minimumSources
-      && (!filters.withIntro || group.sources.some(source => Boolean(source.intro?.trim())))
-      && (!filters.withCover || group.sources.some(source => Boolean(source.coverUrl)))
+    return !query || searchable.includes(query)
   })
   return sortSearchGroups(filtered, filters.sortMode, keyword)
 }

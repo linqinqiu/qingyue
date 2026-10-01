@@ -10,7 +10,7 @@ test('ReplaceRulesPage - Static Rendering and Component Structure', () => {
   const html = renderToStaticMarkup(element)
 
   // Verify kicker, title, and description
-  assert.ok(html.includes('阅读服务器'), 'Page should contain kicker')
+  assert.ok(html.includes('青阅'), 'Page should contain kicker')
   assert.ok(html.includes('替换净化规则'), 'Page should contain main title')
   assert.ok(html.includes('净化网页抓取正文中的反爬文字对调'), 'Page should contain description')
 

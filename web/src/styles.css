@@ -602,7 +602,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
 /* Shelf */
-.shelf-page { width: min(1240px, 100%); display: grid; gap: 26px; padding: clamp(32px, 6vw, 64px) clamp(18px, 4vw, 48px); margin: 0 auto; }
+.shelf-page { width: min(1240px, 100%); display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; padding: clamp(32px, 6vw, 64px) clamp(18px, 4vw, 48px); margin: 0 auto; }
 .shelf-page .page-title > small { color: var(--muted); font-size: 13px; }
 .shelf-tabs { display: flex; align-items: center; gap: 20px; margin-top: -10px; border-bottom: 1px solid var(--line); }
 .shelf-tabs button { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 39px; padding: 0 2px; color: var(--muted); background: transparent; font-size: 13px; }
@@ -651,7 +651,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .shelf-card-cover { position: relative; width: 100%; aspect-ratio: 3 / 4; cursor: pointer; overflow: hidden; background: var(--accent-soft); display: grid; place-items: center; user-select: none; }
 .shelf-card-cover img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
 .shelf-card-cover:hover img { transform: scale(1.04); }
-.shelf-header-actions { display: flex; align-items: center; gap: 12px; }
+.shelf-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; min-width: 0; }
 
 /* 批量管理按钮 */
 .shelf-batch-btn {
@@ -710,7 +710,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 .shelf-batch-separator { color: var(--muted); font-size: 12px; user-select: none; }
 
-.shelf-batch-group-select {
+/* 批量工具条里的"移到分组"：原生 select 换成站内 Select（分组一多就能过滤、条目带本数） */
+.shelf-batch-group-select { min-width: 148px; }
+.shelf-batch-group-select .ui-select-trigger {
   min-height: 32px;
   padding: 0 10px;
   border-radius: 6px;
@@ -718,9 +720,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   background: var(--surface);
   color: var(--ink);
   font-size: 13px;
-  cursor: pointer;
 }
-.shelf-batch-group-select:disabled { opacity: 0.4; cursor: not-allowed; }
 .shelf-import-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 550; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); transition: all .15s ease; }
 .shelf-import-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .shelf-page.drag-active { outline: 2px dashed var(--accent); outline-offset: -8px; background: color-mix(in srgb, var(--accent) 3%, transparent); }
@@ -922,6 +922,20 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-boundary-message { position: fixed; z-index: 25; top: calc(18px + var(--safe-top)); left: 50%; transform: translateX(-50%); padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 6px 20px rgba(0, 0, 0, .12); color: var(--ink); font-size: 13px; pointer-events: none; }
 .reader-status, .reader-error { color: var(--muted) !important; text-align: center !important; padding: 60px 0; }
 .reader-error { color: var(--danger) !important; }
+
+/* 切章过渡：新章正文整块淡入；过渡期间上一章只是变暗 + 顶部挂一条「正在载入：新章名」，
+   不再用骨架屏把整页挖空（用户 2026-09-30「章节之间的过渡没有做好」指的就是那一帧白闪）。
+   is-stale 期间关掉 pointer-events：旧正文不能点选播放，也不会被误当成新章翻页。 */
+.chapter-enter { animation: reader-chapter-in .22s ease-out both; }
+@keyframes reader-chapter-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.reading-content.is-stale, .reader-paginated-column-body.is-stale { opacity: .45; pointer-events: none; transition: opacity .16s ease-out; }
+.reader-chapter-incoming { width: fit-content; margin: -0.6em 0 1.4em; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: var(--t-sm); text-indent: 0; text-align: left; }
+.reader-next-hint { display: grid; justify-items: center; gap: 6px; margin-top: 34px; font-family: Inter, "PingFang SC", sans-serif; }
+.reader-next-hint button { min-height: 38px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 13px; cursor: pointer; }
+.reader-next-hint button:hover { border-color: var(--accent); color: var(--accent); }
+.reader-next-hint svg { width: 15px; }
+.reader-next-hint small { color: var(--muted); font-size: var(--t-xs); }
+@media (prefers-reduced-motion: reduce) { .chapter-enter { animation: none; } }
 
 /* Reader Loading & Skeleton Animation */
 .reader-loading-container {
@@ -2151,6 +2165,11 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   gap: 8px;
 }
 
+/* 朗读设置里的三个下拉（Edge 音色 / 系统音色 / 自定义请求方式）换成站内 Select，
+   跟全站其余控件同形；原生 select 的弹层字号与滚动条是系统的那一套。 */
+.tts-voice-select { display: flex; width: 100%; }
+.tts-voice-select .ui-select-trigger { background: var(--surface); font: inherit; }
+
 .tts-section-label {
   font-size: 13px;
   font-weight: 600;
@@ -2822,21 +2841,16 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
 }
-.logs-filters label {
+.logs-filters label, .logs-filter {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
   color: var(--muted);
 }
-.logs-filters select {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 13px;
-}
+/* 日志筛选换成站内 Select（与全站下拉同形），这里只把它压回筛选条的高度 */
+.logs-filter .ui-select { min-width: 116px; }
+.logs-filter .ui-select-trigger { min-height: 30px; padding: 4px 9px; background: var(--surface); font-size: 13px; }
 .logs-count {
   margin-left: auto;
   font-size: 12px;
@@ -4532,8 +4546,11 @@ input[type=range] { min-height: 24px; }
     inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent),
     inset 5px 0 0 color-mix(in srgb, var(--ink) 10%, transparent);
 }
-.cover-fallback-title { display: -webkit-box; overflow: hidden; font-size: max(14px, min(19px, 1.1vw + 9px)); line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
-.cover-fallback-author { color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: var(--t-sm); font-weight: 500; letter-spacing: .02em; }
+/* 390px 档实测：封面只有 ~95px 宽，"镜夜思（未修改）"这种作者串会把字挤出去 3px，
+   表现为整页横向滚动（source-scale-check 三条 FAIL 同一个根因）。作者单行 + 省略号，
+   标题多行但也不许撑破容器。 */
+.cover-fallback-title { max-width: 100%; min-width: 0; display: -webkit-box; overflow: hidden; font-size: max(14px, min(19px, 1.1vw + 9px)); line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
+.cover-fallback-author { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: max(10px, min(var(--t-sm), 2.6vw)); font-weight: 500; letter-spacing: .02em; }
 /* 46px 以下的小封面放不下字，且旁边就写着书名作者：退回两字，也不要书脊/渐变 */
 .cover-fallback-compact { gap: 0; padding: 0; box-shadow: none; background: var(--surface-muted); color: var(--muted); font-size: 15px; letter-spacing: .04em; }
 .cover-fallback-compact span { display: block; -webkit-line-clamp: 1; }
@@ -4691,12 +4708,15 @@ input[type=range] { min-height: 24px; }
 }
 
 /* —— 书架分组（book_group）—— */
-.shelf-group-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+/* 分组栏一行装不下时以前是整条往下堆：二十个分组能把书架正文推到首屏之外。
+   改成单行横向滚动，「新建/删除分组」钉在右端不会随着滚走。 */
+.shelf-group-bar { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); overflow-x: auto; scrollbar-width: thin; }
+.shelf-group-bar > * { flex: none; }
 .shelf-group-bar button { display: inline-flex; align-items: center; gap: 6px; min-height: var(--ctl-sm); padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--muted); font-size: var(--t-md); }
 .shelf-group-bar button:hover { border-color: var(--accent); color: var(--accent-ink); }
 .shelf-group-bar button.active { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); font-weight: 600; }
 .shelf-group-bar small { color: inherit; font-size: var(--t-xs); }
-.shelf-group-bar .shelf-group-new, .shelf-group-bar .shelf-group-remove { margin-left: auto; border-style: dashed; }
+.shelf-group-bar .shelf-group-new, .shelf-group-bar .shelf-group-remove { margin-left: auto; border-style: dashed; position: sticky; right: 0; background: var(--surface); }
 /* 分组接口失败时的"没载入 + 重试"，别让它长得像另一个分组档 */
 .shelf-group-failed { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-size: var(--t-sm); }
 .shelf-group-failed button { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: var(--t-sm); text-decoration: underline; }
@@ -4707,9 +4727,8 @@ input[type=range] { min-height: 24px; }
 .manage-group-box-head { display: flex; align-items: center; gap: var(--s-3); }
 .manage-group-box-head strong { font-size: var(--t-lg); font-weight: 600; }
 .manage-group-box-head small { display: block; color: var(--muted); font-size: var(--t-sm); }
-.manage-group-pills { display: flex; flex-wrap: wrap; gap: var(--s-2); }
-.manage-group-pills button { min-height: var(--ctl-sm); padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--muted); font-size: var(--t-md); }
-.manage-group-pills button.active { background: var(--accent-solid); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+.manage-group-select { width: 100%; }
+.manage-group-select .ui-select-trigger { background: var(--surface); font: inherit; }
 
 /* ============================================================
    搜索结果 · 封面网格（与书架/发现页同一套语言）
@@ -4754,6 +4773,8 @@ input[type=range] { min-height: 24px; }
 .ui-select { position: relative; display: inline-flex; min-width: 0; }
 .ui-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); width: 100%; min-height: var(--ctl-md, 38px); padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface-muted); color: var(--ink); font-size: var(--t-md); text-align: left; }
 .ui-select-trigger:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.ui-select-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.ui-select-trigger:disabled:hover { border-color: var(--line); }
 .ui-select-trigger svg { width: 15px; height: 15px; color: var(--muted); transition: transform .14s ease; }
 .ui-select[data-open] .ui-select-trigger svg { transform: rotate(180deg); }
 .ui-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4810,8 +4831,14 @@ input[type=range] { min-height: 24px; }
 }
 
 /* 书架排序：与布局选择器同一高度档，避免换成站内控件后行高跳一下 */
-.shelf-sort { display: inline-flex; align-items: center; }
+.shelf-sort { display: inline-flex; align-items: center; flex-wrap: wrap; min-width: 0; max-width: 100%; }
 .shelf-sort .ui-select-trigger { min-height: 36px; padding: 6px 10px; background: var(--surface); font-size: var(--t-sm); }
+/* ≤640px 那条 `.ui-select { width: 100% }` 在书架工具条里会把行撑到 393px（窄屏实测 3px 横向溢出）：
+   这里让排序下拉按内容收缩，整条工具条靠上面的 wrap 换行。 */
+@media (max-width: 640px) {
+  .shelf-sort .ui-select { width: auto; min-width: 0; }
+  .shelf-header-actions { gap: 8px; }
+}
 
 /* ============================================================
    备份恢复页（WebDAV 文件服务删除后，这一页只剩"选包即恢复"）
