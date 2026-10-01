@@ -211,8 +211,8 @@ export function PwaManager() {
               <Logo size={28} />
             </div>
             <div className="pwa-banner-info">
-              <strong>安装「阅读」到桌面 / 主屏幕</strong>
-              <p>享受无浏览器工具栏的沉浸式全屏与离线阅读体验</p>
+              <strong>安装到桌面</strong>
+              <p>独立窗口打开，不占浏览器标签栏；应用本体离线也能打开（书要读哪本仍需联网）</p>
             </div>
           </div>
           <div className="pwa-banner-actions">

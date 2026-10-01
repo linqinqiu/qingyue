@@ -36,7 +36,7 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "id": "bookSourceUrl",
     "title": "源域名",
     "type": "String",
-    "hint": "通常填写网站主页,例: https://www.qidian.com",
+    "hint": "通常填写网站主页，例: https://www.qidian.com",
     "required": true
    },
    {
@@ -62,7 +62,7 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "id": "loginUrl",
     "title": "登录地址",
     "type": "String",
-    "hint": "填写网站登录网址,仅在需要登录的源有用"
+    "hint": "填写网站登录网址，仅在需要登录的源有用"
    },
    {
     "id": "loginUi",
@@ -104,13 +104,13 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "id": "concurrentRate",
     "title": "并发率",
     "type": "String",
-    "hint": "并发率，如1000(访问间隔1000ms)或者1/1000(1000ms内访问1次)"
+    "hint": "并发率，如1000（访问间隔1000ms）或者1/1000（1000ms内访问1次）"
    },
    {
     "id": "jsLib",
     "title": "js库",
     "type": "String",
-    "hint": "js库, 可填写js或者key-value object获取在线js文件"
+    "hint": "js库，可填写js或者key-value object获取在线js文件"
    }
   ]
  },
@@ -136,63 +136,63 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "title": "列表规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择书籍节点 (规则结果为List<Element>)"
+    "hint": "选择书籍节点（规则结果为List<Element>）"
    },
    {
     "id": "name",
     "title": "书名规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点书名 (规则结果为String)"
+    "hint": "选择节点书名（规则结果为String）"
    },
    {
     "id": "author",
     "title": "作者规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点作者 (规则结果为String)"
+    "hint": "选择节点作者（规则结果为String）"
    },
    {
     "id": "kind",
     "title": "分类规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点分类信息 (规则结果为String)"
+    "hint": "选择节点分类信息（规则结果为String）"
    },
    {
     "id": "wordCount",
     "title": "字数规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点字数信息 (规则结果为String)"
+    "hint": "选择节点字数信息（规则结果为String）"
    },
    {
     "id": "lastChapter",
     "title": "最新章节",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点最新章节 (规则结果为String)"
+    "hint": "选择节点最新章节（规则结果为String）"
    },
    {
     "id": "intro",
     "title": "简介规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点书籍简介 (规则结果为String)"
+    "hint": "选择节点书籍简介（规则结果为String）"
    },
    {
     "id": "coverUrl",
     "title": "封面规则",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择节点书籍封面 (规则结果为String类型的url)"
+    "hint": "选择节点书籍封面（规则结果为String类型的url）"
    },
    {
     "id": "bookUrl",
     "title": "详情地址",
     "type": "String",
     "ns": "ruleSearch",
-    "hint": "选择书籍详情页网址 (规则结果为String类型的url)"
+    "hint": "选择书籍详情页网址（规则结果为String类型的url）"
    }
   ]
  },
@@ -204,70 +204,70 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "id": "exploreUrl",
     "title": "发现地址",
     "type": "String",
-    "hint": "单个发现格式<name>::<url>或者{url:<url>,title:<name>,style:...}；前者用换行符或者&&连接，后者放在数组内；可用js动态生成"
+    "hint": "单个发现格式<name>::<url>或者{url:<url>,title:<name>,style:…}；前者用换行符或者&&连接，后者放在数组内；可用js动态生成"
    },
    {
     "id": "bookList",
     "title": "列表规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择书籍节点 (规则结果为List<Element>)"
+    "hint": "选择书籍节点（规则结果为List<Element>）"
    },
    {
     "id": "name",
     "title": "书名规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点书名 (规则结果为String)"
+    "hint": "选择节点书名（规则结果为String）"
    },
    {
     "id": "author",
     "title": "作者规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点作者 (规则结果为String)"
+    "hint": "选择节点作者（规则结果为String）"
    },
    {
     "id": "kind",
     "title": "分类规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点分类信息 (规则结果为String)"
+    "hint": "选择节点分类信息（规则结果为String）"
    },
    {
     "id": "wordCount",
     "title": "字数规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点字数信息 (规则结果为String)"
+    "hint": "选择节点字数信息（规则结果为String）"
    },
    {
     "id": "lastChapter",
     "title": "最新章节",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点最新章节 (规则结果为String)"
+    "hint": "选择节点最新章节（规则结果为String）"
    },
    {
     "id": "intro",
     "title": "简介规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点书籍简介 (规则结果为String)"
+    "hint": "选择节点书籍简介（规则结果为String）"
    },
    {
     "id": "coverUrl",
     "title": "封面规则",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择节点书籍封面 (规则结果为String类型的url)"
+    "hint": "选择节点书籍封面（规则结果为String类型的url）"
    },
    {
     "id": "bookUrl",
     "title": "详情地址",
     "type": "String",
     "ns": "ruleExplore",
-    "hint": "选择书籍详情页网址 (规则结果为String类型的url)"
+    "hint": "选择书籍详情页网址（规则结果为String类型的url）"
    }
   ]
  },
@@ -287,70 +287,70 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "title": "书名规则",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点书名 (规则结果为String)"
+    "hint": "选择节点书名（规则结果为String）"
    },
    {
     "id": "author",
     "title": "作者规则",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点作者 (规则结果为String)"
+    "hint": "选择节点作者（规则结果为String）"
    },
    {
     "id": "kind",
     "title": "分类规则",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点分类信息 (规则结果为String)"
+    "hint": "选择节点分类信息（规则结果为String）"
    },
    {
     "id": "wordCount",
     "title": "字数规则",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点字数信息 (规则结果为String)"
+    "hint": "选择节点字数信息（规则结果为String）"
    },
    {
     "id": "lastChapter",
     "title": "最新章节",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点最新章节 (规则结果为String)"
+    "hint": "选择节点最新章节（规则结果为String）"
    },
    {
     "id": "intro",
     "title": "简介规则",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点书籍简介 (规则结果为String)"
+    "hint": "选择节点书籍简介（规则结果为String）"
    },
    {
     "id": "coverUrl",
     "title": "封面规则",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择节点书籍封面 (规则结果为String类型的url)"
+    "hint": "选择节点书籍封面（规则结果为String类型的url）"
    },
    {
     "id": "tocUrl",
     "title": "目录地址",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "选择书籍详情页网址 (规则结果为String类型的url, 与详情页相同时可省略)"
+    "hint": "选择书籍详情页网址（规则结果为String类型的url, 与详情页相同时可省略）"
    },
    {
     "id": "canReName",
     "title": "修改书籍",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "允许修改书名作者(规则结果为String类型, 默认不允许)"
+    "hint": "允许修改书名作者（规则结果为String类型，默认不允许）"
    },
    {
     "id": "downloadUrls",
     "title": "下载URL",
     "type": "String",
     "ns": "ruleBookInfo",
-    "hint": "文件类书源下载地址 (规则结果为String类型的url, 多个链接返回数组)"
+    "hint": "文件类书源下载地址（规则结果为String类型的url, 多个链接返回数组）"
    }
   ]
  },
@@ -370,63 +370,63 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "title": "列表规则",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "选择目录列表的章节节点 (规则结果为List<Element>)"
+    "hint": "选择目录列表的章节节点（规则结果为List<Element>）"
    },
    {
     "id": "chapterName",
     "title": "章节名称",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "选择章节名称 (规则结果为String)"
+    "hint": "选择章节名称（规则结果为String）"
    },
    {
     "id": "chapterUrl",
     "title": "章节地址",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "选择章节链接 (规则结果为String类型的Url)"
+    "hint": "选择章节链接（规则结果为String类型的Url）"
    },
    {
     "id": "formatJs",
     "title": "标题处理",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "遍历去重后的章节列表的回调，提供index(章节序号从1开始)、title(章节标题)变量，额外提供gInt(初始值0)，返回值作为新的标题"
+    "hint": "遍历去重后的章节列表的回调，提供index（章节序号从1开始）、title（章节标题）变量，额外提供gInt（初始值0），返回值作为新的标题"
    },
    {
     "id": "isVolume",
     "title": "卷名标识",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "章节名称是否是卷名 (规则结果为Bool)"
+    "hint": "章节名称是否是卷名（规则结果为Bool）"
    },
    {
     "id": "updateTime",
     "title": "章节信息",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "选择章节信息（如更新时间） (规则结果为String)"
+    "hint": "选择章节信息（如更新时间）（规则结果为String）"
    },
    {
     "id": "isVip",
     "title": "收费标识",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "章节是否为VIP章节 (规则结果为Bool)"
+    "hint": "章节是否为VIP章节（规则结果为Bool）"
    },
    {
     "id": "isPay",
     "title": "购买标识",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "章节是否为已购买 (规则结果为Bool)"
+    "hint": "章节是否为已购买（规则结果为Bool）"
    },
    {
     "id": "nextTocUrl",
     "title": "翻页规则",
     "type": "String",
     "ns": "ruleToc",
-    "hint": "选择目录下一页链接 (规则结果为List<String>或String)"
+    "hint": "选择目录下一页链接（规则结果为List<String>或String）"
    }
   ]
  },
@@ -439,28 +439,28 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "title": "正文规则",
     "type": "String",
     "ns": "ruleContent",
-    "hint": "选择正文内容 (规则结果为String)"
+    "hint": "选择正文内容（规则结果为String）"
    },
    {
     "id": "subContent",
     "title": "副文规则",
     "type": "String",
     "ns": "ruleContent",
-    "hint": "选择副文内容 (规则结果为String)"
+    "hint": "选择副文内容（规则结果为String）"
    },
    {
     "id": "title",
     "title": "标题规则",
     "type": "String",
     "ns": "ruleContent",
-    "hint": "获取结果将会覆盖章节标题 (规则结果为String)"
+    "hint": "获取结果将会覆盖章节标题（规则结果为String）"
    },
    {
     "id": "nextContentUrl",
     "title": "翻页规则",
     "type": "String",
     "ns": "ruleContent",
-    "hint": "选择下一分页(不是下一章)链接 (规则结果为String类型的Url)"
+    "hint": "选择下一分页（不是下一章）链接（规则结果为String类型的Url）"
    },
    {
     "id": "webJs",
@@ -488,7 +488,7 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
     "title": "图片样式",
     "type": "String",
     "ns": "ruleContent",
-    "hint": "FULL:铺满 不填:默认样式"
+    "hint": "FULL:铺满 不填：默认样式"
    },
    {
     "id": "imageDecode",

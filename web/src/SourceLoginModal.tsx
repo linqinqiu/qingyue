@@ -192,7 +192,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
   const bookmarkletCode = useMemo(() => {
     const serverOrigin = window.location.origin
     const targetSourceId = encodeURIComponent(sourceId)
-    return `javascript:(function(){var c=document.cookie;var u=location.href;if(!c){alert('⚠️ 当前页面未检测到任何 Cookie！');return;}fetch('${serverOrigin}/api/sources/${targetSourceId}/login-cookie',{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:c,url:u})}).then(function(r){return r.json()}).then(function(d){alert('✅ 成功将当前站点的 Cookie 同步至青阅！')}).catch(function(e){alert('❌ 同步失败: '+e)});})();`
+    return `javascript:(function(){var c=document.cookie;var u=location.href;if(!c){alert('当前页面没有可读到的 Cookie');return;}fetch('${serverOrigin}/api/sources/${targetSourceId}/login-cookie',{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:c,url:u})}).then(function(r){return r.json()}).then(function(d){alert('已把当前站点的 Cookie 同步进青阅')}).catch(function(e){alert('同步失败：'+e)});})();`
   }, [sourceId])
 
   const handleInputChange = (key: string, val: string) => {
@@ -568,7 +568,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
 
         <div className="source-login-body">
           {loading ? (
-            <div className="login-ui-loading">正在加载登录界面...</div>
+            <div className="login-ui-loading">正在加载登录界面…</div>
           ) : (() => {
             const hasForm = (uiResponse?.loginUi?.length ?? 0) > 0
             const hasInput = hasFillableControl(uiResponse?.loginUi ?? [])
@@ -599,10 +599,10 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
 
                 <div className={`source-login-status ${status?.verified ? 'is-verified' : jar?.count || uiResponse?.loginHeader ? 'is-credential' : 'is-empty'}`}>
                   {status?.verified
-                    ? '● 登录态已验证（书源 loginCheckJs 判定通过）'
+                    ? '登录态已验证（书源自带的校验判定通过）'
                     : jar?.count || uiResponse?.loginHeader
-                      ? '● 已存凭据，未自动验证（此书源没配 loginCheckJs，只能靠实际读一次确认）'
-                      : '○ 还没有任何凭据'}
+                      ? '已存凭据，未自动验证（这个源没写校验规则，只能靠实际读一次确认）'
+                      : '还没有任何凭据'}
                 </div>
 
                 {(jar?.count ?? 0) === 0 && (
@@ -677,7 +677,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
                     {hasInput && (
                       <div style={{ flex: '1 1 100%', width: '100%', marginTop: 6 }}>
                         <button type="submit" className="primary-button" style={{ width: '100%' }} disabled={executing}>
-                          {executing ? '登录中...' : '保存并登录'}
+                          {executing ? '登录中…' : '保存并登录'}
                         </button>
                       </div>
                     )}
@@ -719,8 +719,8 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
                     </p>
                     <div className={`source-login-status ${external?.opened ? 'is-credential' : 'is-empty'}`}>
                       {external?.opened
-                        ? `● 已打开 ${external.browser || '浏览器'}（进程 ${external.pid}），等你在窗口里登录`
-                        : '○ 还没打开浏览器'}
+                        ? `已打开 ${external.browser || '浏览器'}（进程 ${external.pid}），等你在窗口里登录`
+                        : '还没打开浏览器'}
                       {(external?.seen.length ?? 0) > 0 && ` · 已见到凭据：${external!.seen.join('、')}`}
                       {externalStored.length > 0 && ` · 本轮入库：${externalStored.join('、')}`}
                     </div>
@@ -769,7 +769,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
                         className="source-login-textarea"
                         rows={5}
                         value={cookieInputText}
-                        placeholder={'直接粘贴 Cookie 字符串（k1=v1; k2=v2）或 Cookie-Editor 导出的 JSON 数组：\n[{"name":"sessionid","value":"..."},{"name":"token","value":"..."}]'}
+                        placeholder={'直接粘贴 Cookie 字符串（k1=v1; k2=v2）或 Cookie-Editor 导出的 JSON 数组：\n[{"name":"sessionid","value":"…"},{"name":"token","value":"…"}]'}
                         onChange={e => setCookieInputText(e.target.value)}
                       />
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -777,7 +777,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
                           <button type="button" className="subtle-button danger-text" onClick={handleDeleteLoginHeader}>删除登录头</button>
                         )}
                         <button type="button" className="primary-button" disabled={executing || !cookieInputText.trim()} onClick={handleSaveCookie}>
-                          {executing ? '保存中...' : '保存 Cookie'}
+                          {executing ? '保存中…' : '保存 Cookie'}
                         </button>
                       </div>
                     </div>

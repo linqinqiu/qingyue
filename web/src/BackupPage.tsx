@@ -28,10 +28,10 @@ const RESTORED_SECTIONS: [string, string][] = [
 const KEPT_SECTIONS: [string, string][] = [
   ['阅读样式', '可套用到本机阅读设置（下面「包里收下的条目」里一键套用）'],
   ['朗读引擎', '可套用到本机朗读设置'],
-  ['书签', '原样存在服务器数据目录，界面上暂未提供浏览'],
-  ['字典规则', '这台服务还没有取词入口，先原样存着'],
-  ['TXT 分章规则', '导入本地书时按包里的规则名匹配，未匹配到的原样存着'],
-  ['其余条目', '搜索历史、书籍笔记、RSS 收藏、阅读记录 —— 原样存着，界面上暂未提供入口'],
+  ['书签', '原样收在下面「包里收下的条目」里，可逐条下载；没有专门的书签浏览页'],
+  ['字典规则', '这台服务没有取词功能，先原样存着，可下载'],
+  ['TXT 分章规则', '原样存着，可下载。导入本地书用的是内置分章规则，不读包里的这一份'],
+  ['其余条目', '搜索历史、书籍笔记、RSS 收藏、阅读记录 —— 原样存着，在下面「包里收下的条目」里可下载'],
 ]
 
 export function reportImportSummary(summary: BackupImportSummary) {
@@ -117,7 +117,7 @@ export function BackupPage() {
         <div>
           <span className="section-kicker">导入导出</span>
           <h1>备份包</h1>
-          <p>选一个 Legado 导出的 zip 就能恢复。全程只在本机与这台服务之间传输，不经过任何网盘或网络服务。</p>
+          <p>选一个 Legado 导出的 zip 就能恢复。全程只在这台电脑与它自己的服务之间传输，不经过任何网盘或网络服务。</p>
         </div>
       </header>
 
@@ -154,7 +154,7 @@ export function BackupPage() {
               aria-label="凭据解密密码"
             />
             <p className="backup-hint">
-              只有 <code>cookies.json</code> 需要它 —— 上游把整份凭据做了 AES 加密。
+              只有 <code>cookies.json</code> 需要它 —— 备份包里的凭据是整份 AES 加密的。
               不填也照样导入其余全部内容，凭据那一节会单独告诉你没解开。密码只在本次请求内存里用一次，不写日志。
             </p>
           </div>

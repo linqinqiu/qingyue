@@ -360,7 +360,7 @@ export function SourceHealthModal({
             <Icon name="search" />
             <input
               type="text"
-              placeholder="搜索检测结果..."
+              placeholder="搜索检测结果…"
               value={filterQuery}
               onChange={e => setFilterQuery(e.target.value)}
             />
@@ -460,7 +460,7 @@ export function SourceHealthModal({
         <div className="health-results-list">
           {filteredResults.length === 0 ? (
             <div className="health-empty-state">
-              <p>{running ? '正在努力探测中...' : '无符合筛选条件的结果'}</p>
+              <p>{running ? '体检进行中…' : '无符合筛选条件的结果'}</p>
             </div>
           ) : (
             filteredResults.map(item => {

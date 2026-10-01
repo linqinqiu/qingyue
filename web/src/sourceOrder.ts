@@ -20,3 +20,21 @@ export function sourcePickerOptions(sources: PickableSource[], includeDisabled =
     hint: source.enabled ? (source.group?.trim() || undefined) : '已停用，搜不到',
   }))
 }
+
+/**
+ * 手上只有书源 id（一个域名串）、拿不到书源表时给人看的写法。
+ *
+ * `sourceId` 直接上屏是 6 处的老毛病：换源弹窗的候选行、"当前："那一行、
+ * 封面来源提示、离线缓存列表的第三段……用户看到的是
+ * `https://00xiaoshuo.net` 这种带协议的地址串，而不是「00小说网」。
+ * 能拿到书源表的地方一律用表里的名字；这里只负责退而求其次——至少让它像个网站名。
+ */
+export const sourceLabel = (id?: string | null, name?: string | null) => {
+  const trimmed = name?.trim()
+  if (trimmed) return trimmed
+  const raw = id?.trim()
+  if (!raw) return '未知书源'
+  const withoutScheme = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^@:/, '')
+  const host = withoutScheme.split(/[/?#]/)[0]
+  return host || raw
+}

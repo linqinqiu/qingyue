@@ -14,11 +14,13 @@ export type IconName =
   | 'download'
   | 'edit'
   | 'expand'
+  | 'external'
   | 'eye'
   | 'eyeOff'
   | 'file'
   | 'folder'
   | 'globe'
+  | 'home'
   | 'image'
   | 'importFile'
   | 'list'
@@ -95,6 +97,9 @@ const paths: Record<IconName, ReactNode> = {
   skipForward: <><polygon points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" /></>,
   stop: <rect x="5" y="5" width="14" height="14" rx="2" />,
   clock: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
+  /** 内置浏览器工具栏新增的两个动作：那边原本直接拿字形当图标，一并换成 SVG。 */
+  external: <><path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 13.5V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H11" /></>,
+  home: <><path d="M3.5 10.5 12 3.5l8.5 7" /><path d="M5.5 9.5V20h13V9.5" /><path d="M10 20v-5.5h4V20" /></>,
 }
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {

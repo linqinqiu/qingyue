@@ -48,7 +48,7 @@ const TOC_INITIAL = 16
 const TOC_STEP = 1000
 
 /**
- * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效,音乐` 表示同时属于两个分组。
+ * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效，音乐` 表示同时属于两个分组。
  * 整串当一个分组的话，4876 个源只数得出 20 个"分组"，选任何分组都只剩几条，且 91% 的源永远归不进去。
  */
 const splitSourceGroups = (raw?: string) =>
@@ -196,7 +196,7 @@ function SourceChoiceList({
           className="subtle-button source-recheck-btn"
           onClick={onRecheck}
           disabled={checking}
-          title="重新抽检每个源的后期章节与付费拦截"
+          title="重新复检每个源的后期章节与付费拦截"
         >
           <Icon name="refresh" className={checking ? 'spin' : ''} />
           <span>{checking ? '校验中' : '重新校验'}</span>
@@ -217,7 +217,7 @@ function SourceChoiceList({
             // 徽章只写结论，不再混 ✓ / ⚠ / ✕ 这类字形：颜色与文字已经表达了，符号在窄列表里只是噪声。
             if (inspection.status === 'checking') {
               badge = <span className="source-health-badge health-checking">校验中</span>
-              statusText = '正在抽检后期章节'
+              statusText = '正在复检后期章节'
             } else if (inspection.status === 'valid') {
               badge = <span className="source-health-badge health-valid">可读</span>
               statusText = inspection.summaryText
@@ -241,7 +241,7 @@ function SourceChoiceList({
           // 用户看不出"可读"是全本可读还是只抽检了 3 章。
           const detail = inspection && inspection.status !== 'checking' && inspection.status !== 'idle'
             ? [
-                inspection.checkedChaptersCount ? `抽检 ${inspection.checkedChaptersCount} 章` : '',
+                inspection.checkedChaptersCount ? `已复检 ${inspection.checkedChaptersCount} 章` : '',
                 inspection.validChaptersCount && inspection.validChaptersCount !== inspection.checkedChaptersCount
                   ? `${inspection.validChaptersCount} 章有正文` : '',
                 inspection.latestChapterTitle ? `最新：${inspection.latestChapterTitle}` : '',
@@ -746,7 +746,7 @@ function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
           <p>放的是<b>返回书源 JSON 的直链</b>（Legado「书源管理 · 订阅」里那种链接），不是网页地址。每 6 小时自动同步一次，同一地址的书源会整体覆盖更新。</p>
         </div>
         <button className="subtle-button" onClick={() => void updateAll()} disabled={busy !== null || items.length === 0}>
-          {busy === 'all' ? '同步中...' : '全部同步'}
+          {busy === 'all' ? '同步中…' : '全部同步'}
         </button>
       </header>
       <form onSubmit={add}>
@@ -796,7 +796,7 @@ function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
                   onClick={() => void update(item.id)}
                   disabled={busy !== null}
                 >
-                  {busy === item.id ? '同步中...' : '立即同步'}
+                  {busy === item.id ? '同步中…' : '立即同步'}
                 </button>
                 <button className="shelf-remove" aria-label="删除订阅" onClick={() => void remove(item)} disabled={busy !== null}><Icon name="close" /></button>
               </div>
@@ -1202,7 +1202,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
 
         <label className={`import-button ${importing ? 'disabled' : ''}`}>
           <Icon name="upload" />
-          {importing ? '导入中...' : '导入 JSON'}
+          {importing ? '导入中…' : '导入 JSON'}
           <input
             type="file"
             accept="application/json,.json,text/plain,.txt,*"
@@ -1972,7 +1972,7 @@ function BookInfoEditModal({
               取消
             </button>
             <button type="submit" className="primary-button" disabled={saving}>
-              {saving ? '保存中...' : '保存修改'}
+              {saving ? '保存中…' : '保存修改'}
             </button>
           </footer>
         </form>
@@ -2286,7 +2286,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
       return
     }
     setUploading(true)
-    toast.info(`正在解析并导入 ${list.length} 本本地书籍...`)
+    toast.info(`正在解析并导入 ${list.length} 本本地书籍…`)
     try {
       const resp = await api.importLocalBooks(list)
       if (resp.imported > 0) {
@@ -2298,7 +2298,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
       }
       if (resp.failed > 0) {
         const errorMsg = resp.results.filter(r => !r.success).map(r => `${r.filename}: ${r.error}`).join('; ')
-        toast.error(`部分书籍导入失败 (${resp.failed} 本): ${errorMsg}`)
+        toast.error(`部分书籍导入失败（${resp.failed} 本）: ${errorMsg}`)
       }
       await load()
     } catch (e) {
@@ -2331,7 +2331,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
       await api.cacheBookshelfBook(item.sourceId, item.bookUrl)
       setItems(values => values.map(value => value.sourceId === item.sourceId && value.bookUrl === item.bookUrl ? { ...value, cacheState: 'caching', cacheError: undefined } : value))
       previousStateRef.current.set(`${item.sourceId}\u0000${item.bookUrl}`, 'caching')
-      toast.info(`已加入离线缓存队列，正在下载《${item.name}》...`)
+      toast.info(`已加入离线缓存队列，正在下载《${item.name}》…`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '无法开始缓存')
     }
@@ -2516,7 +2516,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
             title="导入本地 TXT 或 EPUB 小说"
           >
             <Icon name="upload" />
-            <span>{uploading ? '导入中...' : '导入本地'}</span>
+            <span>{uploading ? '导入中…' : '导入本地'}</span>
           </button>
           <div className="shelf-layout-picker" role="group" aria-label="书架布局">
             <button
@@ -2726,7 +2726,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
             onClick={() => fileInputRef.current?.click()}
           >
             <Icon name="upload" />
-            <span>{uploading ? '正在解析导入...' : '导入本地 TXT / EPUB'}</span>
+            <span>{uploading ? '正在解析导入…' : '导入本地 TXT / EPUB'}</span>
           </button>
         </section>
       ) : visibleItems.length === 0 ? (
@@ -2748,7 +2748,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
                 key={`${item.sourceId}-${item.bookUrl}`}
                 className={`shelf-card ${batchMode && isBookSelected(item.sourceId, item.bookUrl) ? 'selected' : ''}`}
                 onContextMenu={event => {
-                  // 分组超过 8 个时，右键菜单里只放前 7 个 + "更多分组..."，避免菜单过长
+                  // 分组超过 8 个时，右键菜单里只放前 7 个 + "更多分组…"，避免菜单过长
                   const availableGroups = groups.filter(group => group.id !== 0 && group.id !== (item.groupId ?? 0))
                   const showAllGroups = availableGroups.length <= 8
                   const visibleGroups = showAllGroups ? availableGroups : availableGroups.slice(0, 7)
@@ -2762,7 +2762,7 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
                     { label: item.completed ? '标记未读完' : '标记已读完', icon: 'check', onSelect: () => void setCompleted(item, !item.completed) },
                     { label: '复制书名', icon: 'copy', onSelect: () => void navigator.clipboard?.writeText(`${item.name}${item.author ? ` — ${item.author}` : ''}`) },
                     ...visibleGroups.map(group => ({ label: `移到「${group.name}」`, icon: 'bookmark' as const, onSelect: () => void assignGroup(item, group.id, group.name) })),
-                    ...(hasMore ? [{ label: `更多分组（还有 ${availableGroups.length - 7} 个）...`, icon: 'folder' as const, onSelect: () => setManagingItem(item) }] : []),
+                    ...(hasMore ? [{ label: `更多分组（还有 ${availableGroups.length - 7} 个）…`, icon: 'folder' as const, onSelect: () => setManagingItem(item) }] : []),
                     ...(item.groupId ?? 0) !== 0 ? [{ label: '移到「未分组」', icon: 'folder' as const, onSelect: () => void assignGroup(item, 0, '未分组') }] : [],
                     { label: '移出书架', icon: 'trash', danger: true, onSelect: () => void remove(item) },
                   ])
@@ -3105,7 +3105,7 @@ function App() {
     }
   }
 
-  if (!ready) return <main className={`app-loading ${skinClasses}`}><span>正在打开阅读空间...</span></main>
+  if (!ready) return <main className={`app-loading ${skinClasses}`}><span>正在打开阅读空间…</span></main>
   if (serviceUnreachable) {
     return (
       <main className={`app-shell ${skinClasses}`}>

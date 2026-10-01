@@ -38,6 +38,7 @@ import './ReaderTypography.test.ts'
 import './SourceGrouping.test.ts'
 import './BackupPreferences.test.ts'
 import './PerfCriteria.test.ts'
+import './CopyStyle.test.ts'
 import './TtsEngineSwitch.test.ts'
 /*
   下面几份曾经**存在但没被 import**（`run-all.ts` 是逐个 import 的，不是 glob 扫描）：

@@ -131,7 +131,7 @@ function ReaderContentSkeleton() {
     <div className="reader-loading-container" aria-label="正在加载正文">
       <div className="reader-loading-badge">
         <span className="reader-loading-spinner-ring" />
-        <span>正在从书源拉取正文...</span>
+        <span>正在从书源拉取正文…</span>
       </div>
       <div className="reader-skeleton-paragraphs">
         <div className="skeleton-line" style={{ width: '100%' }} />
@@ -262,7 +262,7 @@ export function VirtualChapterList({
             style={{ height: itemHeight }}
             className={`reader-chapter-item ${chapter.index === activeChapterIndex ? 'current' : ''} ${isCached ? 'cached' : ''}`}
             onClick={() => onSelect(chapter.index)}
-            title={`${chapter.title}${isCached ? ' (已离线缓存)' : ''}`}
+            title={`${chapter.title}${isCached ? '（已离线缓存）' : ''}`}
           >
             <i />
             <span className="reader-chapter-title">{chapter.title}</span>
@@ -1545,7 +1545,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           ) : localSyncing ? (
             <div className="drawer-cache-progress">
               <div className="cache-progress-text">
-                <span>正在下载到本设备 (PWA)</span>
+                <span>正在下载到这台电脑</span>
                 <strong>{localSyncProgress.current} / {localSyncProgress.total} 章</strong>
               </div>
               <div className="cache-progress-bar-track">
@@ -1562,10 +1562,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 <button
                   type="button"
                   className="cache-range-btn"
-                  title="缓存全本小说"
+                  title="缓存全本"
                   onClick={() => void handleCacheRange('all')}
                 >
-                  全本缓存
+                  缓存全本
                 </button>
                 <button
                   type="button"
@@ -1573,7 +1573,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   title="自定义章节范围"
                   onClick={() => setCustomRangeOpen(prev => !prev)}
                 >
-                  自定义...
+                  自定义…
                 </button>
               </div>
 
@@ -1616,10 +1616,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   type="button"
                   className="cache-sync-btn"
                   onClick={() => void handleSyncToLocal()}
-                  title="将已缓存章节下载到手机或电脑本地，断网脱机可读"
+                  title="把已缓存的章节下载到这台电脑的浏览器里，断网也能读"
                 >
                   <Icon name="download" />
-                  <span>下载到本设备 (离线脱机)</span>
+                  <span>下载到本设备</span>
                 </button>
                 <button
                   type="button"
@@ -1714,7 +1714,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       <button onClick={() => setShowSourceSwitch(true)}><Icon name="sliders" /><span>换源</span></button>
       <button onClick={toggleTts}><Icon name={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'} /><span>{ttsActive ? (ttsPlayState === 'playing' ? '暂停' : '继续') : '朗读'}</span></button>
       <button onClick={() => setActiveDrawer('settings')}><span className="aa">Aa</span><span>设置</span></button>
-      <button onClick={() => onSettingsChange({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' })}><Icon name="moon" /><span>夜间</span></button>
+      <button onClick={() => onSettingsChange({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' })}><Icon name="moon" /><span>夜读</span></button>
     </nav>
 
     {/* In-reader Source Switch Modal */}

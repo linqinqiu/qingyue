@@ -258,12 +258,12 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
 
   const statusPill =
     loginStatus === 'verified'
-      ? { cls: 'is-verified', text: '● 已登录（已验证）' }
+      ? { cls: 'is-verified', text: '已登录（已验证）' }
       : loginStatus === 'credential'
-        ? { cls: 'is-credential', text: `◐ 已捕获 ${cookieCount ?? 0} 域 · 待验证` }
+        ? { cls: 'is-credential', text: `已捕获 ${cookieCount ?? 0} 域 · 待验证` }
         : loginStatus === 'none'
-          ? { cls: 'is-none', text: '○ 未检测到登录凭据' }
-          : { cls: 'is-unknown', text: cookieCount !== null ? `◌ 已捕获 ${cookieCount} 域` : '◌ 检测中' }
+          ? { cls: 'is-none', text: '未检测到登录凭据' }
+          : { cls: 'is-unknown', text: cookieCount !== null ? `已捕获 ${cookieCount} 域` : '检测中' }
 
   return (
     <div className="modal-backdrop modal-backdrop--webview" onClick={onClose}>
@@ -274,40 +274,44 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
               type="button"
               className="source-webview-icon-btn"
               title="后退"
+              aria-label="后退"
               disabled={!canGoBack}
               onClick={() => canGoBack && navigate(nav.list[nav.index - 1])}
             >
-              ‹
+              <Icon name="arrowLeft" />
             </button>
             <button
               type="button"
               className="source-webview-icon-btn"
               title="前进"
+              aria-label="前进"
               disabled={!canGoForward}
               onClick={() => canGoForward && navigate(nav.list[nav.index + 1])}
             >
-              ›
+              <Icon name="arrowRight" />
             </button>
             <button
               type="button"
               className="source-webview-icon-btn"
               title="刷新"
+              aria-label="刷新"
               disabled={!token}
               onClick={() => {
                 setLoading(true)
                 setNavSeq(seq => seq + 1)
               }}
             >
-              ⟳
+              <Icon name="refresh" />
             </button>
             <button
               type="button"
               className="source-webview-icon-btn"
               title="回到登录页"
+              aria-label="回到登录页"
               disabled={!startUrl}
               onClick={() => navigate(startUrl)}
             >
-              ⌂
+              <Icon name="home" />
             </button>
           </div>
 
@@ -329,10 +333,11 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
               type="button"
               className="source-webview-icon-btn"
               title="在新标签页打开"
+              aria-label="在新标签页打开"
               disabled={!pageSrc}
               onClick={() => pageSrc && window.open(pageSrc, '_blank', 'noopener,noreferrer')}
             >
-              ⧉
+              <Icon name="external" />
             </button>
             <button
               type="button"
@@ -340,7 +345,7 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
               disabled={busy || !token}
               onClick={handleCheckLogin}
             >
-              {busy ? '检测中...' : '登录完成'}
+              {busy ? '检测中…' : '登录完成'}
             </button>
             <button type="button" className="source-webview-icon-btn" title="关闭" aria-label="关闭" onClick={onClose}>
               <Icon name="close" />
@@ -354,7 +359,7 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
               <div className="source-webview-placeholder-title">无法打开内置浏览器</div>
               <div className="source-webview-placeholder-text">{error}</div>
               <div className="source-webview-placeholder-text">
-                可在书源中补全 <code>loginUrl</code> 后重试，或改用「快捷填入 Cookie / 一键同步书签」方式。
+                可在书源中补全 <code>loginUrl</code> 后重试，或改用「快捷填入 Cookie」「同步书签」两种方式。
               </div>
             </div>
           ) : (

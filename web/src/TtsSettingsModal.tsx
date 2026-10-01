@@ -18,19 +18,19 @@ export interface TtsSettingsModalProps {
 const SPEED_PRESETS = [0.8, 1.0, 1.25, 1.5, 2.0]
 
 const DEFAULT_EDGE_VOICES: TtsVoice[] = [
-  { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 (女声·温暖自然·推荐)', lang: 'zh-CN', gender: 'Female', localeName: '中文普通话', engine: 'edge', description: '适合小说叙述与日常对话' },
-  { id: 'zh-CN-YunxiNeural', name: '云希 (男声·沉稳磁性·推荐)', lang: 'zh-CN', gender: 'Male', localeName: '中文普通话', engine: 'edge', description: '适合玄幻、都市小说旁白与对话' },
-  { id: 'zh-CN-YunjianNeural', name: '云健 (男声·激情影视解说)', lang: 'zh-CN', gender: 'Male', localeName: '中文普通话', engine: 'edge', description: '影视解说、热血玄幻音色' },
-  { id: 'zh-CN-XiaoyiNeural', name: '晓伊 (女声·柔和抒情)', lang: 'zh-CN', gender: 'Female', localeName: '中文普通话', engine: 'edge', description: '抒情、言情、文艺小说' },
-  { id: 'zh-CN-YunyangNeural', name: '云扬 (男声·专业新闻播报)', lang: 'zh-CN', gender: 'Male', localeName: '中文普通话', engine: 'edge', description: '专业稳重播音员音色' },
-  { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北 (东北话·风趣女声)', lang: 'zh-CN-liaoning', gender: 'Female', localeName: '东北话', engine: 'edge', description: '风趣幽默的东北口音' },
-  { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮 (陕西话·特色女声)', lang: 'zh-CN-shaanxi', gender: 'Female', localeName: '陕西话', engine: 'edge', description: '地道西北陕西口音' },
-  { id: 'zh-TW-HsiaoChenNeural', name: '晓臻 (台湾腔·温柔女声)', lang: 'zh-TW', gender: 'Female', localeName: '台湾国语', engine: 'edge', description: '台湾国语自然女声' },
-  { id: 'zh-TW-YunJheNeural', name: '云哲 (台湾腔·清澈男声)', lang: 'zh-TW', gender: 'Male', localeName: '台湾国语', engine: 'edge', description: '台湾国语阳光男声' },
-  { id: 'zh-HK-HiuMaanNeural', name: '晓曼 (粤语·自然女声)', lang: 'zh-HK', gender: 'Female', localeName: '粤语', engine: 'edge', description: '标准粤语自然女声' },
-  { id: 'zh-HK-WanLungNeural', name: '云龙 (粤语·磁性男声)', lang: 'zh-HK', gender: 'Male', localeName: '粤语', engine: 'edge', description: '标准粤语磁性男声' },
-  { id: 'en-US-JennyNeural', name: 'Jenny (英文·自然女声)', lang: 'en-US', gender: 'Female', localeName: 'English (US)', engine: 'edge', description: 'Natural American English Female' },
-  { id: 'en-US-GuyNeural', name: 'Guy (英文·自然男声)', lang: 'en-US', gender: 'Male', localeName: 'English (US)', engine: 'edge', description: 'Natural American English Male' },
+  { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓（女声·温暖自然·推荐）', lang: 'zh-CN', gender: 'Female', localeName: '中文普通话', engine: 'edge', description: '适合小说叙述与日常对话' },
+  { id: 'zh-CN-YunxiNeural', name: '云希（男声·沉稳磁性·推荐）', lang: 'zh-CN', gender: 'Male', localeName: '中文普通话', engine: 'edge', description: '适合玄幻、都市小说旁白与对话' },
+  { id: 'zh-CN-YunjianNeural', name: '云健（男声·激情影视解说）', lang: 'zh-CN', gender: 'Male', localeName: '中文普通话', engine: 'edge', description: '影视解说、热血玄幻音色' },
+  { id: 'zh-CN-XiaoyiNeural', name: '晓伊（女声·柔和抒情）', lang: 'zh-CN', gender: 'Female', localeName: '中文普通话', engine: 'edge', description: '抒情、言情、文艺小说' },
+  { id: 'zh-CN-YunyangNeural', name: '云扬（男声·专业新闻播报）', lang: 'zh-CN', gender: 'Male', localeName: '中文普通话', engine: 'edge', description: '专业稳重播音员音色' },
+  { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北（东北话·风趣女声）', lang: 'zh-CN-liaoning', gender: 'Female', localeName: '东北话', engine: 'edge', description: '风趣幽默的东北口音' },
+  { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮（陕西话·特色女声）', lang: 'zh-CN-shaanxi', gender: 'Female', localeName: '陕西话', engine: 'edge', description: '地道西北陕西口音' },
+  { id: 'zh-TW-HsiaoChenNeural', name: '晓臻（台湾腔·温柔女声）', lang: 'zh-TW', gender: 'Female', localeName: '台湾国语', engine: 'edge', description: '台湾国语自然女声' },
+  { id: 'zh-TW-YunJheNeural', name: '云哲（台湾腔·清澈男声）', lang: 'zh-TW', gender: 'Male', localeName: '台湾国语', engine: 'edge', description: '台湾国语阳光男声' },
+  { id: 'zh-HK-HiuMaanNeural', name: '晓曼（粤语·自然女声）', lang: 'zh-HK', gender: 'Female', localeName: '粤语', engine: 'edge', description: '标准粤语自然女声' },
+  { id: 'zh-HK-WanLungNeural', name: '云龙（粤语·磁性男声）', lang: 'zh-HK', gender: 'Male', localeName: '粤语', engine: 'edge', description: '标准粤语磁性男声' },
+  { id: 'en-US-JennyNeural', name: 'Jenny（英文·自然女声）', lang: 'en-US', gender: 'Female', localeName: 'English (US)', engine: 'edge', description: 'Natural American English Female' },
+  { id: 'en-US-GuyNeural', name: 'Guy（英文·自然男声）', lang: 'en-US', gender: 'Male', localeName: 'English (US)', engine: 'edge', description: 'Natural American English Male' },
 ]
 
 export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
@@ -104,7 +104,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
                 onClick={() => handleEngineChange('edge')}
               >
                 <strong>微软 Edge-TTS</strong>
-                <span>高拟真 AI 神经网络音色 (推荐)</span>
+                <span>高拟真 AI 神经网络音色（推荐）</span>
               </button>
               <button
                 type="button"
@@ -112,7 +112,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
                 onClick={() => handleEngineChange('webSpeech')}
               >
                 <strong>浏览器 Web Speech</strong>
-                <span>系统本地音色·零流量秒开</span>
+                <span>用系统装好的音色，不联网、即刻出声</span>
               </button>
               <button
                 type="button"
@@ -128,7 +128,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
           {/* Voice Selection */}
           {settings.ttsEngine === 'edge' && (
             <div className="tts-setting-section">
-              <label className="tts-section-label">发音人 (音色)</label>
+              <label className="tts-section-label">发音人（音色）</label>
               <Select
                 className="tts-voice-select"
                 ariaLabel="Edge 发音人"
@@ -193,7 +193,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
           {/* Pitch */}
           <div className="tts-setting-section">
             <div className="tts-slider-header">
-              <label className="tts-section-label">语调 (Pitch)</label>
+              <label className="tts-section-label">语调（Pitch）</label>
               <span className="tts-value-badge">{settings.ttsPitch.toFixed(2)}</span>
             </div>
             <input
@@ -210,7 +210,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
           {/* Sleep Timer */}
           <div className="tts-setting-section">
             <div className="tts-slider-header">
-              <label className="tts-section-label">睡眠定时器 (定时关闭)</label>
+              <label className="tts-section-label">睡眠定时器（定时关闭）</label>
               {remainingSeconds !== null && remainingSeconds > 0 && (
                 <span className="tts-countdown-badge">倒计时 {formatTimerRemaining(remainingSeconds)}</span>
               )}
@@ -313,7 +313,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
                 />
               </div>
               <div className="login-ui-item-field">
-                <label className="login-ui-field-label">请求方式 (GET / POST)</label>
+                <label className="login-ui-field-label">请求方式（GET / POST）</label>
                 <Select
                   className="tts-voice-select"
                   ariaLabel="自定义 TTS 请求方式"

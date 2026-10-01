@@ -75,7 +75,7 @@ export function SourceGroupModal({
                 <input
                   id="groupNameInput"
                   type="text"
-                  placeholder="输入新分组名称或点选下方已有标签..."
+                  placeholder="输入新分组名称或点选下方已有标签…"
                   value={groupName}
                   onChange={e => setGroupName(e.target.value)}
                   autoFocus
@@ -107,7 +107,7 @@ export function SourceGroupModal({
               取消
             </button>
             <button type="submit" className="primary-button" disabled={busy || (!isClear && !groupName.trim())}>
-              {busy ? '正在保存...' : '确认修改'}
+              {busy ? '正在保存…' : '确认修改'}
             </button>
           </div>
         </form>

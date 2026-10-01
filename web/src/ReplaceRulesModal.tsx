@@ -284,7 +284,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
             <Icon name="search" />
             <input
               type="text"
-              placeholder="搜索规则名、正则、替换词..."
+              placeholder="搜索规则名、正则、替换词…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="rules-search-input"
@@ -332,7 +332,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
         {/* Rule List */}
         <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '260px' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)', fontSize: '13px' }}>正在加载替换规则...</div>
+            <div style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)', fontSize: '13px' }}>正在加载替换规则…</div>
           ) : filteredRules.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)', fontSize: '13px' }}>
               <div>暂无匹配的替换规则</div>
@@ -354,7 +354,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                       {rule.group && <span className="rule-tag">{rule.group}</span>}
                       {rule.isRegex && <span className="rule-tag tag-regex">正则</span>}
                       {rule.replacement.startsWith('@js:') && <span className="rule-tag tag-js">JS</span>}
-                      {rule.scope && <span className="rule-tag tag-scope" title={`范围: ${rule.scope}`}>🎯 {rule.scope}</span>}
+                      {rule.scope && <span className="rule-tag tag-scope" title={`生效范围：${rule.scope}`}>{rule.scope}</span>}
                     </div>
                   </div>
 
@@ -398,7 +398,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                   </div>
                   <div className="rules-code-box" style={{ padding: '6px 8px' }}>
                     <span className="rules-code-label">替换:</span>
-                    <span className="rules-code-val replacement-val" style={{ fontSize: '11px', maxHeight: '40px' }}>{rule.replacement || '(清空)'}</span>
+                    <span className="rules-code-val replacement-val" style={{ fontSize: '11px', maxHeight: '40px' }}>{rule.replacement || '（清空）'}</span>
                   </div>
                 </div>
               </div>
@@ -409,7 +409,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
         {/* Footer */}
         <footer style={{ padding: '10px 16px max(10px, var(--safe-bottom))', borderTop: '1px solid var(--line)', background: 'var(--surface-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <small style={{ color: 'var(--muted)', fontSize: '11px' }}>
-            💡 规则在抓取、离线下载与 TTS 朗读时自动生效
+            规则在抓取、离线下载与朗读时自动生效
           </small>
           <button
             type="button"
@@ -469,7 +469,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                 <textarea
                   rows={2}
                   required
-                  placeholder="要替换的文本或正则表达式，如：(大丑|魔男|少萝茜|阁上)"
+                  placeholder="要替换的文本或正则表达式，如：（大丑|魔男|少萝茜|阁上）"
                   value={editingRule.pattern || ''}
                   onChange={e => setEditingRule({ ...editingRule, pattern: e.target.value })}
                   className="rule-form-textarea code-font"
@@ -489,7 +489,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
 
               <div className="rule-form-grid-2">
                 <div className="rule-form-group">
-                  <label>作用范围 (Scope，空则全局生效)</label>
+                  <label>作用范围（Scope，空则全局生效）</label>
                   <input
                     type="text"
                     placeholder="指定书名、书源URL，以逗号分隔"
@@ -541,7 +541,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
               {/* Test Sandbox */}
               <div className="rules-code-box" style={{ marginTop: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span className="rules-code-label">🧪 实时效果调试</span>
+                  <span className="rules-code-label">实时效果调试</span>
                   <button
                     type="button"
                     onClick={handleRunTest}
@@ -549,12 +549,12 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                     className="subtle-button"
                     style={{ padding: '0 8px', fontSize: '11px' }}
                   >
-                    {testing ? '测试中...' : '运行测试'}
+                    {testing ? '测试中…' : '运行测试'}
                   </button>
                 </div>
                 <textarea
                   rows={2}
-                  placeholder="在此输入待调试的句子..."
+                  placeholder="在此输入待调试的句子…"
                   value={testText}
                   onChange={e => setTestText(e.target.value)}
                   className="rule-form-textarea code-font"
@@ -566,7 +566,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                       清洗结果：{testResult.cleanedText}
                     </div>
                     <small style={{ color: 'var(--muted)' }}>
-                      {testResult.changed ? '✅ 已命中并发生替换' : '⚪ 未产生改动'}
+                      {testResult.changed ? '已命中并发生替换' : '未产生改动'}
                     </small>
                   </div>
                 )}
@@ -645,7 +645,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                   <label>规则 JSON 内容</label>
                   <textarea
                     rows={6}
-                    placeholder="粘贴 [...] 或 { data: [...] } 格式的 JSON"
+                    placeholder="粘贴 […] 或 { data: […] } 格式的 JSON"
                     value={importInput}
                     onChange={e => setImportInput(e.target.value)}
                     className="rule-form-textarea code-font"
@@ -667,7 +667,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
                   disabled={importing}
                   className="primary-button"
                 >
-                  {importing ? '导入中...' : '开始导入'}
+                  {importing ? '导入中…' : '开始导入'}
                 </button>
               </div>
             </div>

@@ -201,7 +201,7 @@ export async function inspectSingleSource(
     checkedChaptersCount: 0,
     validChaptersCount: 0,
     vipBlocked: false,
-    summaryText: '正在探测目录与正文...',
+    summaryText: '正在探测目录与正文…',
   }
   if (isCancelled?.() || signal?.aborted) {
     return { ...base, status: 'idle', summaryText: '待校验' }
@@ -323,12 +323,12 @@ export async function inspectSingleSource(
 
     let status: SourceHealthStatus = 'valid'
     let score = 12000 + (totalChapters * 3) + Math.min(3000, avgLateLength)
-    let summaryText = `共 ${totalChapters} 章 · 全本可读 (后段字数充足 均${avgLateLength}字)`
+    let summaryText = `共 ${totalChapters} 章 · 全本可读（后段字数充足 均${avgLateLength}字）`
 
     if (vipHit) {
       status = 'vip_restricted'
       score = 2000 + totalChapters + Math.min(500, avgLateLength)
-      summaryText = `共 ${totalChapters} 章 · 后期章节较短/疑似VIP截断 (抽检均${avgLateLength}字)`
+      summaryText = `共 ${totalChapters} 章 · 后期章节较短/疑似VIP截断（复检均${avgLateLength}字）`
     } else if (validLateCount === 0 && totalChapters > 5) {
       status = 'error'
       score = 100

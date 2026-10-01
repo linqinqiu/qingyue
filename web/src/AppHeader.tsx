@@ -115,7 +115,7 @@ export function AppHeader({
           {searching && (
             <span
               className="nav-search-indicator"
-              title="后台正在搜索..."
+              title="后台正在搜索…"
               aria-label="后台正在搜索"
             />
           )}
@@ -237,7 +237,7 @@ export function AppHeader({
                     onClick={() => void handlePwaInstall()}
                   >
                     <Icon name="download" />
-                    <span>安装到桌面 / 主屏幕</span>
+                    <span>安装到桌面</span>
                   </button>
                 )}
                 {onOpenOfflineCache && (

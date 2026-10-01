@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Icon } from './icons'
+import { sourceLabel } from './sourceOrder'
 import {
   clearAllOffline,
   clearOfflineBook,
@@ -72,14 +73,14 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="离线缓存与存储管理"
+        aria-label="离线缓存"
       >
         <header className="source-login-header">
           <div className="source-login-title">
             <span className="source-login-icon"><Icon name="book" /></span>
             <div className="source-login-heading">
-              <h2>本地离线缓存管理</h2>
-              <small>PWA 客户端本地存储 (IndexedDB)</small>
+              <h2>离线缓存</h2>
+              <small>存在这台电脑的浏览器里，断网也能读已下载的部分</small>
             </div>
           </div>
           <button type="button" className="subtle-button close-btn" onClick={onClose} aria-label="关闭">
@@ -91,7 +92,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
           {loading ? (
             <div className="source-login-loading">
               <span className="source-login-spinner" />
-              <span>正在统计设备存储占用...</span>
+              <span>正在统计设备存储占用…</span>
             </div>
           ) : (
             <div className="offline-cache-content">
@@ -115,17 +116,17 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
               <div className="offline-books-section">
                 <div className="offline-books-header">
                   <span>已离线书籍列表</span>
-                  <small>断网时可脱机阅读</small>
+                  <small>断网时可继续读</small>
                 </div>
                 {(!stats?.books || stats.books.length === 0) ? (
-                  <p className="empty-notice">当前设备暂无本地离线书籍。在阅读器设置中选择“缓存并下载到本设备”即可脱机阅读。</p>
+                  <p className="empty-notice">这台电脑上还没有已下载的章节。在阅读器底部点「下载到本设备」，之后断网也能继续读。</p>
                 ) : (
                   <div className="offline-books-list">
                     {stats.books.map(book => (
                       <div key={`${book.sourceId}::${book.bookUrl}`} className="offline-book-row">
                         <div className="offline-book-meta">
                           <strong>{book.name || book.bookUrl}</strong>
-                          <small>{book.chapterCount} 章 · {formatBytes(book.totalBytes)} · {book.sourceId}</small>
+                          <small>{book.chapterCount} 章 · {formatBytes(book.totalBytes)} · {sourceLabel(book.sourceId)}</small>
                         </div>
                         <button
                           type="button"
@@ -150,7 +151,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
             disabled={clearing || !stats?.books.length}
             onClick={() => void handleClearAll()}
           >
-            {clearing ? '清空中...' : '清空全部本地缓存'}
+            {clearing ? '清空中…' : '清空全部本地缓存'}
           </button>
           <button type="button" className="primary-button" onClick={onClose}>
             完成

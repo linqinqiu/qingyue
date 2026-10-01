@@ -65,7 +65,7 @@ export const TtsPlayerBar: React.FC<TtsPlayerBarProps> = ({
             <span className="tts-bar-badge">
               {currentParagraphIndex >= 0 ? `第 ${currentParagraphIndex + 1}/${totalParagraphs} 段` : '章节标题'}
             </span>
-            {isBuffering && <span className="tts-bar-loading">加载音频中...</span>}
+            {isBuffering && <span className="tts-bar-loading">加载音频中…</span>}
             {timerLabel && (
               <span className="tts-bar-timer-tag">
                 <Icon name="clock" style={{ width: 12, height: 12 }} />
@@ -74,7 +74,7 @@ export const TtsPlayerBar: React.FC<TtsPlayerBarProps> = ({
             )}
           </div>
           <div className="tts-bar-snippet" title={activeSentenceText}>
-            {activeSentenceText || '准备朗读...'}
+            {activeSentenceText || '准备朗读…'}
           </div>
         </div>
       </div>

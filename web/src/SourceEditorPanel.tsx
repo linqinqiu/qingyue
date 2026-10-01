@@ -271,7 +271,7 @@ export const SourceEditor: React.FC<{
             校验
           </button>
           <button type="button" className="primary-button" disabled={saving || !json} onClick={() => void save()}>
-            {saving ? '保存中...' : '保存'}
+            {saving ? '保存中…' : '保存'}
           </button>
         </div>
       </header>

@@ -293,7 +293,7 @@ export function ReplaceRulesPage() {
 
         {/* 规则列表 */}
         <nav className="rules-list">
-          {loading && <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>载入中...</div>}
+          {loading && <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>加载中…</div>}
           {!loading && filteredRules.length === 0 && (
             <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
               暂无匹配的替换规则
@@ -334,8 +334,8 @@ export function ReplaceRulesPage() {
                     {rule.isRegex && <span className="rule-tag tag-regex">Regex</span>}
                     {rule.replacement.startsWith('@js:') && <span className="rule-tag tag-js">JS</span>}
                     {rule.scope && (
-                      <span className="rule-tag tag-scope" title={`生效范围: ${rule.scope}`}>
-                        🎯 {rule.scope}
+                      <span className="rule-tag tag-scope" title={`生效范围：${rule.scope}`}>
+                        {rule.scope}
                       </span>
                     )}
                   </div>
@@ -353,14 +353,14 @@ export function ReplaceRulesPage() {
                         <div className="rules-code-box">
                           <span className="rules-code-label">替换内容 (Replacement)</span>
                           <span className="rules-code-val replacement-val">
-                            {rule.replacement || '(空 / 剔除)'}
+                            {rule.replacement || '（空 / 剔除）'}
                           </span>
                         </div>
                       </div>
 
                       {rule.scope && (
                         <div className="rules-scope-info">
-                          <span>🎯 生效范围:</span>
+                          <span>生效范围</span>
                           <span className="rules-scope-val">{rule.scope}</span>
                         </div>
                       )}
@@ -411,7 +411,7 @@ export function ReplaceRulesPage() {
             <textarea
               className="rules-sandbox-textarea"
               rows={3}
-              placeholder="输入测试小说混淆文本..."
+              placeholder="输入测试小说混淆文本…"
               value={testText}
               onChange={e => setTestText(e.target.value)}
             />
@@ -421,7 +421,7 @@ export function ReplaceRulesPage() {
               disabled={testing}
               onClick={() => handleRunTest(selectedRule || undefined)}
             >
-              {testing ? '测试中...' : '运行沙箱测试'}
+              {testing ? '测试中…' : '运行沙箱测试'}
             </button>
             {testResult && (
               <div className={`rules-sandbox-result ${testResult.changed ? 'changed' : 'unchanged'}`}>
@@ -508,21 +508,21 @@ export function ReplaceRulesPage() {
               <div className="rules-code-box">
                 <span className="rules-code-label">替换内容 (Replacement)</span>
                 <span className="rules-code-val replacement-val">
-                  {selectedRule.replacement || '(空 / 剔除)'}
+                  {selectedRule.replacement || '（空 / 剔除）'}
                 </span>
               </div>
             </div>
 
             {selectedRule.scope && (
               <div className="rules-scope-info">
-                <span>🎯 生效范围:</span>
+                <span>生效范围</span>
                 <span className="rules-scope-val">{selectedRule.scope}</span>
               </div>
             )}
           </div>
         ) : (
           <div className="source-detail-card" style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
-            👈 在左侧选择一条规则查看详情，或点击「新建规则」配置错字反爬清洗
+            在左侧选择一条规则查看详情，或点击「新建规则」配置错字与反爬清洗
           </div>
         )}
 
@@ -539,7 +539,7 @@ export function ReplaceRulesPage() {
               <textarea
                 className="rules-sandbox-textarea"
                 rows={4}
-                placeholder="例如：大丑阁上，少萝茜心外无点刺痛，魔男们是是会把强大的魔男同族当做仆从军..."
+                placeholder="例如：大丑阁上，少萝茜心外无点刺痛，魔男们是是会把强大的魔男同族当做仆从军…"
                 value={testText}
                 onChange={e => setTestText(e.target.value)}
               />
@@ -550,7 +550,7 @@ export function ReplaceRulesPage() {
                   disabled={testing}
                   onClick={() => handleRunTest(selectedRule || undefined)}
                 >
-                  {testing ? '测试中...' : '运行沙箱测试'}
+                  {testing ? '测试中…' : '运行沙箱测试'}
                 </button>
               </div>
             </div>
@@ -613,14 +613,14 @@ export function ReplaceRulesPage() {
                 <label>匹配正则 / 关键词 (Pattern)</label>
                 <input
                   className="rule-form-input code-font"
-                  placeholder="如：(大丑|魔男|少萝茜|阁上)"
+                  placeholder="如：（大丑|魔男|少萝茜|阁上）"
                   value={editingRule.pattern || ''}
                   onChange={e => setEditingRule({ ...editingRule, pattern: e.target.value })}
                 />
               </div>
 
               <div className="rule-form-group">
-                <label>替换内容 (可为文本、正则组 $1 或 @js: 字典翻转脚本)</label>
+                <label>替换内容（可为文本、正则组 $1 或 @js: 字典翻转脚本）</label>
                 <textarea
                   className="rule-form-textarea code-font"
                   rows={4}
@@ -632,10 +632,10 @@ export function ReplaceRulesPage() {
 
               <div className="rule-form-grid-2">
                 <div className="rule-form-group">
-                  <label>生效书名 / 作用域 (留空则全局生效)</label>
+                  <label>生效书名 / 作用域（留空则全局生效）</label>
                   <input
                     className="rule-form-input"
-                    placeholder="如：宅魔女,诡秘之主 (逗号分隔)"
+                    placeholder="如：宅魔女，诡秘之主（逗号分隔）"
                     value={editingRule.scope || ''}
                     onChange={e => setEditingRule({ ...editingRule, scope: e.target.value || undefined })}
                   />
@@ -746,7 +746,7 @@ export function ReplaceRulesPage() {
                   <textarea
                     className="rule-form-textarea code-font"
                     rows={6}
-                    placeholder="粘贴 Legado 标准替换规则 JSON 数组..."
+                    placeholder="粘贴 Legado 标准替换规则 JSON 数组…"
                     value={importInput}
                     onChange={e => setImportInput(e.target.value)}
                   />
@@ -759,7 +759,7 @@ export function ReplaceRulesPage() {
                 取消
               </button>
               <button type="button" className="primary-button" disabled={importing} onClick={handleImport}>
-                {importing ? '导入中...' : '开始导入'}
+                {importing ? '导入中…' : '开始导入'}
               </button>
             </footer>
           </div>

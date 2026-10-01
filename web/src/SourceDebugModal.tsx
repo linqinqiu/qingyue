@@ -117,7 +117,7 @@ export function SourceDebugModal({ sourceId, sourceName, onClose }: SourceDebugM
                     {step.traces.map((trace, traceIndex) => (
                       <tr key={traceIndex} className={trace.value ? '' : 'empty'}>
                         <td>{trace.field}</td>
-                        <td><code>{trace.rule || '‹未配置›'}</code></td>
+                        <td><code>{trace.rule || '未配置'}</code></td>
                         <td>{trace.value ? trace.value.replace(/\s+/g, ' ').slice(0, 90) : <em>{trace.failure || '空'}</em>}</td>
                       </tr>
                     ))}

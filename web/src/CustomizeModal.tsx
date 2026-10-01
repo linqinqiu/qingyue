@@ -106,7 +106,7 @@ export function CustomizeModal({
                 onChange={event => setSkinId(event.target.value)}
               />
               {skinId && sanitized !== skinId.trim() && (
-                <small className="customize-note">清洗后是 <code>{sanitized || '(空)'}</code></small>
+                <small className="customize-note">清洗后是 <code>{sanitized || '（空）'}</code></small>
               )}
             </label>
             <label className="customize-field">

@@ -174,6 +174,13 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
   `--surface/--ink/--line` 全部落空 → 界面变成"字和底一个颜色"。注入的 `<style>` 追加在 `<head>` 末尾，
   同特异性下后者胜，所以覆盖仍然成立。**判据带反向对照**：摘掉基类后 `--surface` 必须立刻取不到，
   否则"叠加"那几条是恒真的。皮肤 id 走 `parseSkinId` 白名单（只留 `[a-z0-9-_]`，因为它被拼进类名）。
+- **[测试/判据] 判据的"禁单"不许有空项，而且每一项都要当场自证一次**：`web/test/CopyStyle.test.ts` 第一版的
+  禁字形清单是字面量数组，链路上有五个字形被吞成了 `''`。`BANNED_GLYPHS.find(mark => text.includes(mark))`
+  拿到空串返回的是 **falsy** —— 判据既不报错也不拦任何东西，套件连着绿，💡 与 👈 就留在界面上。
+  同一份判据的第二处盲区是"JSX 文本必须含中文才算界面文案"，于是 `<button>›</button>` 这种**只有一个字形**
+  的图标按钮整块从判据里消失（内置浏览器工具栏那五个就是这么留下的）。
+  规则：**清单按码位写、由 `String.fromCodePoint` 组装**（空项根本组装不出来），加一条"清单无空项 / 无重复"的自检，
+  再把清单里**每一项**注入样本反扫一遍；写任何一条判据时先问一句"如果违规了，它会红吗"。
 - **[测试/注册] `web/test/run-all.ts` 是一个一个 `import` 的，不扫目录 —— 没注册的测试等于没跑**：
   本轮发现两份文件存在、名字像测试、套件全绿，其实一条都没执行（`HeaderMenu.test.ts` 被删 AppHeader 时
   顺带从 runner 摘掉；`LocalBookImport.test.ts` 从来没被引过）。已在 `CustomizeSkin.test.ts` 里把
@@ -309,6 +316,9 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | 2026-10-01 | Test | 新门禁 `ui-layout-check.mjs`(38/38)：默认外壳是旧顶栏、两套外壳**入口集合相等**（切布局不许少功能，按能力关键字比而不比 label 文本）、切换不重新加载页面（`window` 上的标记活着才算）、更新日志的结构与「当前版本」高亮、自定义皮肤生效 + **反向对照**（摘掉基类后 `--surface` 必须立刻取不到，否则"叠加"那几条是恒真）、皮肤与布局存得住、收尾清探针。顺带把两套外壳的入口对齐（侧栏补「全屏显示」「安装到桌面」，移动端菜单里那两份重复的删掉），并把侧栏小圆点的 9px 规则收进 `.rail-theme` 作用域（写成全局会把顶栏菜单的 22px 色片一起压小） | `tools/verify/ui-layout-check.mjs` · `web/src/AppRail.tsx` | Tested & Deployed（本机，未推送） |
 | 2026-10-01 | Test | **找回两份"存在但从未运行"的测试**：`run-all.ts` 是一个个 `import` 的、不扫目录，`HeaderMenu.test.ts`（随 AppHeader 被删时摘掉）与 `LocalBookImport.test.ts`（一直没被引过）都是"绿得没跑过"。现在补 `Changelog.test.ts`(8) + `CustomizeSkin.test.ts`(11)，并把"test 目录下每个 `*.test.ts` 都必须在 run-all.ts 里注册"本身做成判据；删掉两条自己调自己的同义反复用例。撞出两件配套事实：被 `renderToStaticMarkup` 渲染的组件必须 `import React`（测试走 classic JSX，构建不走），标题栏颜色改取算出来的 `--canvas`（写死的三档色表对自定义皮肤一律失真） | `web/test/run-all.ts` · `web/test/CustomizeSkin.test.ts` · `web/src/PageBar.tsx` | Tested（前端 234/234，`tsc -b` 干净） |
 | 2026-10-01 | Fix | 「结论里说清了原因」这条红是产品的：服务端把 JDK 的 `Connection reset` 原样写进 `lastError`，前端 `describeSyncError` 没这一档签名 → 界面上糊的是英文。补「连不上：连接被对方中途断开」（连 Windows 那句"远程主机强迫关闭了一个现有的连接"一起认）。同轮另一条红是探针的：上一轮崩在中途没跑收尾，库里留的 `probe-sub-list-<旧戳>` 被这一轮的 `find('probe-sub-list')` 先捞走，于是读出"已停用 → 已启用"这种自相矛盾的假红 → runner 启动先清扫历史探针，界面按**本轮 STAMP** 找行 | `web/src/syncErrors.ts` · `tools/verify/subscription-check.mjs`(48/48) · AGENTS §3 ⑤⑥ | Tested & Deployed（本机，未推送） |
+
+| 2026-10-02 | Fix | **运行日志改造**（用户：「优化日志」）。一次 4,000 行采样里 3,039 行 ERROR、2,112 行空行、1,093 行同一句话，日志已经不能用来定位问题。四条一起修：一条日志一行（`oneLine` 折行 + 截断）、级别说真话（网络默认警告、上游 4xx 警告 / 5xx 错误、重试成功只算抖动）、同类 60 秒窗口并成一行带 `count`（`log_entry.repeat_count`）、每条带上 `host` 让界面说得出哪个站在失败。另两处"收集了却看不见"同病同治：`LooseJson` 的 `System.getLogger` 旁路、`/api/book/image` 只写 Ktor debug 档 | `server/src/main/kotlin/io/legado/server/LogService.kt` · `Database.kt` · `RuleRunner.kt` · `Routes.kt` · 能力波 v36 | Tested & Deployed（本机，未推送） |
+| 2026-10-02 | Test | **文案与判据的两次自证**。界面文案全量清理（装饰字形、说谎的能力描述、裸 `sourceId`、术语与标点 114 处）钉成 `web/test/CopyStyle.test.ts`；第二遍审这条判据自己，抓出两处让它形同虚设的盲区 —— 清单里有五个字面量被吞成 `''`（`find` 拿到空串是 falsy，于是既不报错也不拦），以及"JSX 文本必须含中文才算界面文案"（`<button>›</button>` 这种只有字形的按钮整个看不见）。改成清单按码位组装 + 无空项自检 + **逐字形注入反扫**，并补一条 31 项的界面门禁 `tools/verify/logs-ui-check.mjs`（探针自己造数据：跨站写请求验合并、`.invalid` 取图验域名芯片与级别、把 `/api/logs` 打成 503 与 `[]` 验"取失败 ≠ 确实没有"） | `web/test/CopyStyle.test.ts` · `tools/verify/logs-ui-check.mjs` · `server/src/test/kotlin/io/legado/server/LogServiceTest.kt` · AGENTS §5 | Tested & Deployed（前端 281/281，`logs-ui-check` 31/31，`version-check` 16/16） |
 
 ---
 

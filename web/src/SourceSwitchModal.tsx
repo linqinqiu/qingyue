@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, Chapter, SearchResult, SearchStreamEvent, streamSearch } from './api'
 import { cleanTitle } from './searchFilters'
+import { sourceLabel } from './sourceOrder'
 import { Icon } from './icons'
 import { toast } from './Toast'
 
@@ -264,10 +265,10 @@ export function SourceSwitchModal({
       })
 
       const targetTitle = chapters[targetIndex]?.title || `第 ${targetIndex + 1} 章`
-      toast.success(`已切换至【${candidate.result.sourceId}】，定位至：${targetTitle}`)
+      toast.success(`已换到「${sourceLabel(candidate.result.sourceId)}」，定位到：${targetTitle}`)
       onClose()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '切换书源失败')
+      toast.error(err instanceof Error ? err.message : '换源失败')
     } finally {
       setSwitchingSourceId(null)
     }
@@ -306,10 +307,10 @@ export function SourceSwitchModal({
           <div>
             <div className="source-switch-kicker">
               <Icon name="sliders" />
-              <span>切换书源</span>
+              <span>换源</span>
             </div>
             <h2>{bookName}</h2>
-            <small>{author ? `作者: ${author}` : '未知作者'} · 当前：{currentSourceId}</small>
+            <small>{author ? `作者：${author}` : '未知作者'} · 当前：{sourceLabel(currentSourceId)}</small>
           </div>
           <button className="subtle-button close-btn" onClick={onClose} aria-label="关闭">
             <Icon name="close" />
@@ -321,15 +322,15 @@ export function SourceSwitchModal({
           <div className="search-banner-text">
             <span>
               {searching ? (
-                <>正在全源检索《{bookName}》...</>
+                <>正在全源检索《{bookName}》…</>
               ) : (
-                <>全源检索完成，共找到 {candidates.length} 个书源</>
+                <>全源检索完成，共找到 {candidates.length} 本（一个书源可能出好几本）</>
               )}
             </span>
             <small>
               {searchProgress
                 ? `已扫描 ${searchProgress.completedSources} / ${searchProgress.totalSources} 个书源`
-                : '准备检索...'}
+                : '准备检索…'}
             </small>
           </div>
           {searching && (
@@ -354,7 +355,7 @@ export function SourceSwitchModal({
             if (isCurrent) {
               metaText = '当前正在阅读的书源'
             } else if (isLoading) {
-              metaText = '正在提取目录与章节...'
+              metaText = '正在提取目录与章节…'
             } else if (isError) {
               metaText = c.error || '获取目录失败'
             } else if (c.status === 'loaded') {
@@ -368,7 +369,7 @@ export function SourceSwitchModal({
               >
                 <div className="candidate-main">
                   <div className="candidate-title-row">
-                    <strong>{c.result.sourceId}</strong>
+                    <strong title={c.result.sourceId}>{sourceLabel(c.result.sourceId)}</strong>
                     {isCurrent && <span className="source-badge current">当前书源</span>}
                     {c.isKnownAlternate && !isCurrent && (
                       <span className="source-badge alternate">已收录候选</span>
@@ -391,7 +392,7 @@ export function SourceSwitchModal({
                       disabled={isSwitching}
                       onClick={() => void handleSelect(c)}
                     >
-                      {isSwitching ? '切换中...' : '切换'}
+                      {isSwitching ? '切换中…' : '切换'}
                     </button>
                   )}
                 </div>

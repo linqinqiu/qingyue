@@ -61,7 +61,7 @@ export function SourceShareModal({ sourceIds, sources, onClose, onToast }: Sourc
     try {
       await navigator.clipboard.writeText(text)
       setCopied(which)
-      onToast(which === 'json' ? '书源 JSON 已复制，手机上用「从剪贴板导入」即可' : '分享链接已复制', 'success')
+      onToast(which === 'json' ? '书源 JSON 已复制，到目标设备的 Legado「书源管理 · 本地导入 · 剪贴板导入」里粘贴即可' : '分享链接已复制', 'success')
       window.setTimeout(() => setCopied(null), 2000)
     } catch {
       onToast('浏览器拒绝了剪贴板写入，请手动选中框内内容复制', 'error')
@@ -98,9 +98,10 @@ export function SourceShareModal({ sourceIds, sources, onClose, onToast }: Sourc
 
         <div className="source-share-body">
           <p className="source-share-tip">
-            最稳的路子是<strong>剪贴板</strong>：手机 Legado「我的 → 书源管理 → ⋮ → 本地导入/剪贴板导入」直接粘进去，
-            不需要手机能访问这台电脑。下面的 <code>legado://</code> 链接要能打开，前提是手机真的访问得到
-            <code>{currentOrigin().replace(/^https?:\/\//, '')}</code> —— 服务当前只绑在 127.0.0.1 时，这个链接在手机上打不开。
+            复制下面这份 JSON，粘贴到另一台设备 Legado 的「书源管理 · 本地导入 · 剪贴板导入」里即可，
+            <strong>不需要那台设备能访问这台电脑</strong>。下面的 <code>legado://</code> 深链要能打开，
+            前提是那台设备访问得到 <code>{currentOrigin().replace(/^https?:\/\//, '')}</code>
+            —— 服务默认只绑 127.0.0.1，这种情况下深链打不开，剪贴板那条仍然可用。
           </p>
           {error && <p className="form-error">{error}</p>}
           <textarea className="source-share-text" readOnly value={payload} onFocus={event => event.currentTarget.select()} />

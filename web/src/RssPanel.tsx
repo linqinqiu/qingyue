@@ -137,7 +137,7 @@ export function RssPanel({ onChanged, onNavigate }: { onChanged: () => void; onN
             ref={importRef}
             value={importText}
             onChange={event => setImportText(event.target.value)}
-            placeholder={'[{"sourceUrl":"https://example.com","sourceName":"示例","ruleArticles":"...","ruleTitle":"..."}]'}
+            placeholder={'[{"sourceUrl":"https://example.com","sourceName":"示例","ruleArticles":"…","ruleTitle":"…"}]'}
             rows={6}
           />
           <button type="button" className="primary-button" disabled={busy === 'import'} onClick={event => void submitImport(event)}>
