@@ -5,11 +5,9 @@ import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import type { ReaderSettings } from './readerSettings'
 import { BUILTIN_SKINS } from './readerSettings'
 
-/**
- * 一级页面的唯一清单。两套外壳（侧栏 / 旧顶栏）与 `main.tsx` 的路由都引这一个类型 ——
- * 之前是三处各写一遍联合类型，加一页（changelog）就出现"页面存在但外壳不认"的编译错。
- */
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog'
+// 外壳认得的页面。 的路由联合类型必须是它的超集（onNavigate 的入参更宽会不兼容）；
+// 加新页面时两边一起加，changelog 那一页由另一会话连同 ChangelogPage.tsx 一起落地时补进来。
+export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup'
 
 export interface AppRailProps {
   page: AppPage
@@ -159,20 +157,20 @@ export function AppRail({
 
   const themeButtons = (
     <div className="rail-themes" role="radiogroup" aria-label="全站主题选择">
-      {APP_THEMES.map(theme => {
-        const selected = settings.theme === theme.id
+      {availableSkins(settings).map(skin => {
+        const selected = settings.theme === skin.id
         return (
           <button
-            key={theme.id}
+            key={skin.id}
             type="button"
-            className={`rail-theme theme-option-${theme.id} ${selected ? 'selected' : ''}`}
+            className={`rail-theme theme-option-${skin.builtin ? skin.id : 'custom'} ${selected ? 'selected' : ''}`}
             role="radio"
             aria-checked={selected}
-            title={theme.name}
-            onClick={() => onSettingsChange({ ...settings, theme: theme.id })}
+            title={skin.name}
+            onClick={() => onSettingsChange({ ...settings, theme: skin.id })}
           >
-            <span className={`theme-swatch theme-swatch-${theme.id}`} />
-            <span className="theme-name">{theme.name}</span>
+            <span className={`theme-swatch theme-swatch-${skin.builtin ? skin.id : 'custom'}`} />
+            <span className="theme-name">{skin.name}</span>
           </button>
         )
       })}
