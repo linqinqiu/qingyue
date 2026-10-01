@@ -10,6 +10,11 @@ jacoco {
 }
 
 test {
+    // 测试工作进程的堆上限。不写就按物理内存的一档去要（本机 24GB → 要 6GB 提交空间），
+    // 而这台机器同时跑着服务本体 + 门禁的 headless Chrome，提交内存常常只剩几百 MB，
+    // 表现是 `insufficient memory for the Java Runtime Environment … mmap failed to map 400556032 bytes`
+    // —— 红的是 JVM 起不来，不是任何一条用例失败（实测过一次，崩溃日志落在 server/ 下）。
+    maxHeapSize = '768m'
     finalizedBy jacocoTestReport
 }
 

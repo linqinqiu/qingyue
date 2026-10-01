@@ -1268,14 +1268,36 @@ class Database(private val path: String) : Closeable, AutoCloseable {
     /** 日志保留上限：只留最近这么多条，超出即从最旧的一头裁掉，防止表无限增长。 */
     private val LOG_RETENTION = 5000
 
-    /** 写一条日志入库；context 以 JSON 存，读回时再还原成 Map。裁剪在同一次写事务里做，避免额外一趟。 */
-    fun insertLog(entry: LogEntry, ts: Long) = write { db ->
+    /**
+     * 写一条日志入库；context 以 JSON 存，读回时再还原成 Map。裁剪在同一次写事务里做，避免额外一趟。
+     *
+     * 返回 rowid，给 [bumpLogRepeat] 用 —— 同类日志在合并窗口里不再插新行，
+     * 而是把这一行的 `repeat_count` 加上去。没有 id 就没法合并，只能要么刷屏要么丢信息。
+     */
+    fun insertLog(entry: LogEntry, ts: Long): Long = write { db ->
         val ctx = if (entry.context.isEmpty()) null else runCatching { Json.encodeToString(entry.context) }.getOrNull()
-        db.prepareStatement("insert into log_entry(ts,category,level,message,context,stack_trace) values(?,?,?,?,?,?)").use {
-            it.setLong(1, ts); it.setString(2, entry.category); it.setString(3, entry.level); it.setString(4, entry.message); it.setString(5, ctx); it.setString(6, entry.stackTrace); it.executeUpdate()
+        db.prepareStatement(
+            "insert into log_entry(ts,category,level,message,context,stack_trace,repeat_count) values(?,?,?,?,?,?,?)",
+            java.sql.Statement.RETURN_GENERATED_KEYS,
+        ).use {
+            it.setLong(1, ts); it.setString(2, entry.category); it.setString(3, entry.level); it.setString(4, entry.message)
+            it.setString(5, ctx); it.setString(6, entry.stackTrace); it.setInt(7, entry.count.coerceAtLeast(1))
+            it.executeUpdate()
+            it.generatedKeys.use { keys -> if (keys.next()) keys.getLong(1) else 0L }
+        }.also {
+            db.prepareStatement("delete from log_entry where id <= (select max(id)-? from log_entry)").use { drop ->
+                drop.setInt(1, LOG_RETENTION); drop.executeUpdate()
+            }
         }
-        db.prepareStatement("delete from log_entry where id <= (select max(id)-? from log_entry)").use { it.setInt(1, LOG_RETENTION); it.executeUpdate() }
     }
+
+    /** 同类日志再来一条：不插新行，把计数抬上去（界面上那行会自己变成「×N」）。 */
+    fun bumpLogRepeat(id: Long, count: Int) = write { db ->
+        db.prepareStatement("update log_entry set repeat_count=? where id=?").use {
+            it.setInt(1, count); it.setLong(2, id); it.executeUpdate()
+        }
+    }
+
 
     /** 按类别/等级过滤，倒序取最近 limit 条。category/level 传 null 表示不限。 */
     fun queryLogs(category: String?, level: String?, limit: Int): List<LogEntry> = connect { db ->
@@ -1283,7 +1305,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         if (category != null) clauses.add("category=?")
         if (level != null) clauses.add("level=?")
         val where = if (clauses.isEmpty()) "" else " where " + clauses.joinToString(" and ")
-        val sql = "select id,ts,category,level,message,context,stack_trace from log_entry$where order by id desc limit ?"
+        val sql = "select id,ts,category,level,message,context,stack_trace,repeat_count from log_entry$where order by id desc limit ?"
         db.prepareStatement(sql).use { stmt ->
             var i = 1
             if (category != null) stmt.setString(i++, category)
@@ -1298,7 +1320,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                         val stamp = java.time.Instant.ofEpochMilli(rs.getLong(2))
                             .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
                             .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                        add(LogEntry(id = rs.getLong(1), timestamp = stamp, category = rs.getString(3), level = rs.getString(4), message = rs.getString(5), context = ctx, stackTrace = rs.getString(7)))
+                        add(LogEntry(id = rs.getLong(1), timestamp = stamp, category = rs.getString(3), level = rs.getString(4), message = rs.getString(5), context = ctx, stackTrace = rs.getString(7), count = rs.getInt(8).coerceAtLeast(1)))
                     }
                 }
             }
@@ -1317,11 +1339,13 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             it.executeUpdate("""create table if not exists log_entry (
                   id integer primary key autoincrement, ts integer not null,
                   category text not null, level text not null, message text not null,
-                  context text, stack_trace text
+                  context text, stack_trace text, repeat_count integer not null default 1
                 )""")
             it.executeUpdate("create index if not exists idx_log_entry_ts on log_entry(ts desc)")
             it.executeUpdate("create index if not exists idx_log_entry_category on log_entry(category)")
         }
+        // 老库（这一列之前不存在）补列。SQLite 的 ADD COLUMN 不幂等，撞 "duplicate column name" 就是已经有了。
+        runCatching { db.createStatement().use { it.executeUpdate("alter table log_entry add column repeat_count integer not null default 1") } }
     }
 
     fun exportSources(ids: List<String>?): List<String> = connect { db ->

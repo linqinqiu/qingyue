@@ -1304,7 +1304,17 @@ fun Route.apiRoutes(
                 call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 7 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
                 call.respond(LocalFileContent(file.toFile(), ContentType.parse(cached.contentType)))
             } catch (error: Exception) {
-                call.application.log.debug("正文图片代理失败 {}: {}", url, error.message)
+                // 走 LogService，不走 Ktor 的 debug 档：图挂了就只在控制台留一行 debug，
+                // 「运行日志」里什么都没有 —— 与这一轮修掉的"收集了却看不见"是同一个病。
+                // 级别是警告不是错误：一张图取不到，阅读器会退化成占位图，不算事故。
+                Unit.logNetwork(
+                    "正文图片代理失败",
+                    mapOf(
+                        "host" to (runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "未知"),
+                        "原因" to (error.message ?: error.javaClass.simpleName),
+                        "url" to url.take(120),
+                    ),
+                )
                 call.respond(HttpStatusCode.BadGateway, ApiError("image_failed", error.message ?: "图片抓取失败"))
             }
         }

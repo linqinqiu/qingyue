@@ -290,13 +290,16 @@ export type ChangelogRelease = {
   groups: Array<{ title: string; items: string[] }>
 }
 
-export type LogEntry = {  id: number
+export type LogEntry = {
+  id: number
   timestamp: string
   category: string
   level: string
   message: string
   context?: Record<string, string>
   stackTrace?: string | null
+  /** 同类日志在合并窗口里的条数；1 表示就这一条。界面念成「×N」。 */
+  count?: number
 }
 
 export const api = {

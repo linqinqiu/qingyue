@@ -347,7 +347,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
 
         // init 常写成「JS + 后置取值路径」的规则链（如 <js>…</js>$.data）：必须求值，不能当路径用。
         // 纯路径（如 $.data）仍走原有 at() 语义，避免把 JSON 对象退化成字符串。
-        traces?.add(DebugTrace("‹响应›", bookUrl.take(160), "${body.length} 字节", ""))
+        traces?.add(DebugTrace("「响应」", bookUrl.take(160), "${body.length} 字节", ""))
         val root = when {
             initRule.isNullOrBlank() -> baseDoc
             initRule.contains("<js>") || initRule.trimStart().startsWith("@js:") || initRule.trimStart().startsWith("js:") ->
@@ -816,9 +816,13 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         if (tail == null) return value to null
         val strict = jsonOption(tail)
         val options = strict ?: jsonOption(LooseJson.toStrict(tail) ?: return urlPart to null) ?: return urlPart to null
-        if (strict == null) System.getLogger("RuleRunner").log(
-            System.Logger.Level.INFO,
-            "书源链接参数 JSON 格式不规范，已按宽松模式解析: {0}", tail.take(160)
+        if (strict == null) logParsing(
+            "书源链接参数 JSON 写法不规范，已按宽松模式解析",
+            // 以前这里是 `System.getLogger(...).log(INFO, "…: {0}", tail.take(160))`：
+            // 走的是另一条输出通道（不进库、不进「运行日志」），而且 tail 里带裸换行，
+            // 一次采样里 4000 行中有 2112 行是它冲出来的空行与 `'method': 'POST',` 碎片。
+            // 现在交给 LogService 折成一行、按"同一种写法"合并计数。
+            mapOf("rule" to tail.take(40), "片段" to tail),
         )
 
         val method = (options.string("method") ?: "GET").trim().uppercase()
@@ -903,11 +907,14 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val response = try {
                 client.send(request, HttpResponse.BodyHandlers.ofInputStream())
             } catch (error: java.io.IOException) {
-                logNetwork("网络请求 IO 异常", mapOf("url" to url.take(120), "sourceId" to (sourceId ?: ""), "attempt" to transientAttempt.toString()), error)
+                // 第一次失败是要重试的信号，不是事故；重试还失败才是。以前两次都记 ERROR，
+                // 于是一个偶发抖动在日志里和"这本书源彻底读不了"长得一模一样。
                 if (transientAttempt == 0) {
                     transientAttempt++
+                    logNetwork("首次连接失败，重试一次", networkContext(url, sourceId) + mapOf("原因" to (error.message ?: error.javaClass.simpleName)), error, LogLevel.WARN)
                     client.send(request, HttpResponse.BodyHandlers.ofInputStream())
                 } else {
+                    logNetwork("网络请求 IO 异常（已重试）", networkContext(url, sourceId) + mapOf("尝试" to (transientAttempt + 1).toString()), error, LogLevel.ERROR)
                     throw error
                 }
             }
@@ -923,12 +930,19 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             if (response.statusCode() !in 300..399) {
                 if (response.statusCode() !in 200..299) {
                     runCatching { response.body().close() }
-                    logNetwork("上游返回错误状态码", mapOf("url" to url.take(120), "statusCode" to response.statusCode().toString(), "sourceId" to (sourceId ?: "")))
-                    throw RuleExecutionException("上游返回 HTTP ${response.statusCode()}")
+                    val status = response.statusCode()
+                    logNetwork(
+                        "上游返回错误状态码",
+                        networkContext(url, sourceId) + mapOf("statusCode" to status.toString()),
+                        // 4xx 是"这个源/这个地址不给看"，5xx 才是"对面坏了"。
+                        // 两者以前都记 ERROR：5,574 个源里一堆 403/404 是常态，ERROR 因此失去意义。
+                        level = if (status in 400..499) LogLevel.WARN else LogLevel.ERROR,
+                    )
+                    throw RuleExecutionException("上游返回 HTTP $status")
                 }
                 val bytes = response.body().use { readLimited(it) }
                 if (bytes.size > MAX_BODY_BYTES) {
-                    logNetwork("响应体过大", mapOf("url" to url.take(120), "size" to bytes.size.toString()))
+                    logNetwork("响应体过大", networkContext(url, sourceId) + mapOf("size" to bytes.size.toString()))
                     throw RuleExecutionException("上游响应超过 2 MiB 限制")
                 }
                 val charset = (options?.charset) ?: Charsets.UTF_8
@@ -936,15 +950,28 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             }
             runCatching { response.body().close() }
             val location = response.headers().firstValue("location").orElseThrow { 
-                logNetwork("重定向缺少 Location", mapOf("url" to url.take(120)))
+                logNetwork("重定向缺少 Location", networkContext(url, sourceId))
                 RuleExecutionException("重定向缺少 Location") 
             }
             val redirect = request.uri().resolve(location); validateTarget(redirect)
             request = buildRequest(redirect, options, keyword, sourceId, db)
         }
-        logNetwork("重定向次数超限", mapOf("initialUrl" to url.take(120)))
+        logNetwork("重定向次数超限", networkContext(url, sourceId))
         throw RuleExecutionException("重定向次数超过限制")
     }
+
+    /**
+     * 网络日志的统一上下文：**域名放在最前**。
+     *
+     * 原来只有 `url` 截前 120 字符，一行里既看不出是哪个源、也看不出是哪台机器 ——
+     * `sourceId` 是裸域名串，用户在界面上看到的是「00小说网」这种名字。
+     * 这里给 `host`（合并键与肉眼定位都靠它）并保留截断后的 url。
+     */
+    private fun networkContext(url: String, sourceId: String?): Map<String, String> = mapOf(
+        "host" to (runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "未知"),
+        "sourceId" to (sourceId ?: ""),
+        "url" to url.take(120),
+    )
 
     private fun buildRequest(
         initial: URI,
@@ -1066,7 +1093,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         try {
             NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "站点")
         } catch (e: IllegalArgumentException) {
-            logNetwork("拒绝访问不安全地址", mapOf("uri" to uri.toString(), "reason" to (e.message ?: "内网或本机地址")))
+            logNetwork("拒绝访问不安全地址", networkContext(uri.toString(), null) + mapOf("原因" to (e.message ?: "内网或本机地址")))
             throw RuleExecutionException(e.message ?: "拒绝访问内网或本机地址")
         }
     }
