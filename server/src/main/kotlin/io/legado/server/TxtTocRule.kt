@@ -163,6 +163,34 @@ object TocRules {
         return mapOf("matched" to matched, "flipped" to flipped, "added" to added, "unusable" to unusable, "total" to all.size)
     }
 
+    /**
+     * 界面上可以手动选的：**编得出来就可选**，不看 `enable`。
+     * `enable` 只决定"自动"那条路走不走它 —— 让手动选择也受它管，
+     * 等于把 26 条里的 12 条（章回体「第N回」这类都在里面）变成既看不见也选不了。
+     */
+    val selectable: List<TxtTocRule> get() = all.filter { compiles(it.id) }
+
+    /** 正则编不出来的条目（备份里带来的坏规则）。界面上要数得出来，不能悄悄不出现。 */
+    val brokenCount: Int get() = all.count { !compiles(it.id) }
+
+    /**
+     * 单独开关一条规则（只影响它是否参与"自动"打分）。
+     * 写的是整张表 —— 与 `applyBackup` 同一个文件同一个形状，别把本机改动分成两种格式。
+     */
+    fun setEnable(id: Int, enable: Boolean): TxtTocRule? {
+        val file = storeFile ?: return null
+        val current = all
+        if (current.none { it.id == id }) return null
+        java.nio.file.Files.createDirectories(file.parent)
+        java.nio.file.Files.writeString(
+            file,
+            json.encodeToString(current.map { if (it.id == id) it.copy(enable = enable) else it }),
+            Charsets.UTF_8,
+        )
+        reload()
+        return byId(id)
+    }
+
     private fun nextCustomId(existing: List<TxtTocRule>): Int =
         generateSequence(10_000) { it + 1 }.first { id -> existing.none { it.id == id } }
 
@@ -178,6 +206,17 @@ object TocRules {
         BUILTIN -> "内置规则"
         else -> byId(key.toIntOrNull() ?: Int.MIN_VALUE)?.name ?: "未知规则（$key）"
     }
+
+    /**
+     * 随包那张表里，"内置逐行匹配"自己占一条（id -100，`rule` 是空的 —— 它没有正则，
+     * 分章走 `LocalBookParser` 里那段手写逐行匹配）。它**不是坏规则**：
+     * `compile` 返回 null 只是因为没东西可编译。它也不进 `candidates` ——
+     * 自动打分要的是"哪条正则切得最好"，这条没有正则。
+     */
+    const val PACKAGED_BUILTIN_ID = -100
+
+    /** 给界面用：这条能不能拿来用（内置那条没有正则但可用；备份里带来的坏正则不算）。 */
+    fun compiles(id: Int): Boolean = id == PACKAGED_BUILTIN_ID || compile(id) != null
 
     /** 上游用 `Pattern.MULTILINE` + `find()` 全文找标题，这里保持同一语义。 */
     private fun compile(id: Int): Regex? {

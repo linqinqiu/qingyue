@@ -403,7 +403,25 @@ data class CachedBookRequest(
  * `key` 直接就是服务端认的值（`auto` / `builtin` / 规则 id），
  * 前端不需要知道那两个特殊值怎么来的 —— 否则两边各写一份哨兵字符串迟早漂移。
  */
-@Serializable data class TocRuleOption(val key: String, val label: String, val example: String = "", val builtIn: Boolean = false)
+/**
+ * 一条可选的分章规则。
+ *
+ * `selectable`（出现在选择清单里）与 `enable`（参与"自动"打分）**是两件事**：
+ * 曾经 options 只发 `enable` 的那 12 条，于是另外 12 条既看不见也选不了，
+ * 而解析层 `byId` 走的是全表 —— 一个旗标兼两职就是把功能做没的那类分配错误。
+ */
+@Serializable data class TocRuleOption(
+    val key: String,
+    val label: String,
+    val example: String = "",
+    val builtIn: Boolean = false,
+    /** 这条规则的正则原文：不写出来，用户没法判断它适不适合自己的书。 */
+    val rule: String = "",
+    /** 参与"自动"打分。关掉它不等于不能手动选。 */
+    val enable: Boolean = true,
+    /** 正则编不出来（备份里带来的坏规则）：界面上要标出来，而不是悄悄不出现。 */
+    val broken: Boolean = false,
+)
 @Serializable data class TocRuleList(
     val options: List<TocRuleOption>,
     /** 界面上要能说出"本机启用几条、其中几条是从手机备份收下来的"，不然"套用过没有"只能靠猜。 */
@@ -413,6 +431,8 @@ data class CachedBookRequest(
     /** 本机改动还在不在（套用过备份就是"在"）——界面上「恢复随包那份」按它出现。 */
     val overridden: Boolean = false,
 )
+@Serializable data class TocRuleToggleRequest(val key: String, val enable: Boolean)
+@Serializable data class TocRuleToggleResult(val id: Int, val name: String, val enable: Boolean)
 
 /** 撤掉本机改动的回报（这里不许回 `Map<String, Any>`：Ktor 的序列化直接 500，第一版就栽在这一点上）。 */
 @Serializable data class TocRuleResetResult(val cleared: Boolean, val total: Int)

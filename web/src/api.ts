@@ -53,7 +53,11 @@ export type DebugStep = { stage: string; label: string; detail: string; ok: bool
 export type LocalBookImportItem = { filename: string; success: boolean; bookUrl?: string; name?: string; author?: string; totalChapters: number; error?: string }
 export type LocalBookImportResponse = { total: number; imported: number; failed: number; results: LocalBookImportItem[] }
 /** 「阅读设置 → 本地书目录」下拉的一项（服务端把 auto / builtin / 规则 id 统一成同一形状）。 */
-export type TocRuleOption = { key: string; label: string; example?: string; builtIn?: boolean }
+/**
+ * 一条可选的分章规则。`enable` 只表示"参与自动打分"，**不表示能不能手动选** ——
+ * 曾经服务端只发启用的 12 条，另外 12 条（章回体「第N回」这类）于是既看不见也选不了。
+ */
+export type TocRuleOption = { key: string; label: string; example?: string; builtIn?: boolean; rule?: string; enable?: boolean; broken?: boolean }
 export type TocRuleList = {
   options: TocRuleOption[]
   /** 本机启用几条 / 表里共几条 / 其中几条是从手机备份收下来的。界面上要报得出，不能只给下拉。 */
@@ -551,6 +555,9 @@ export const api = {
   applyTocRulesFromBackup: () => request<TocRuleApplyResult>('/api/books/toc-rules/apply-backup', { method: 'POST' }),
   /** 撤掉本机改动（套用过备份之后想反悔，或门禁跑完要还原用户的规则表）。 */
   resetTocRules: () => request<{ cleared: boolean; total: number }>('/api/books/toc-rules/reset', { method: 'POST' }),
+  /** 开关一条规则是否参与「自动」打分（手动选不受它限制）。 */
+  toggleTocRule: (key: string, enable: boolean) =>
+    request<{ id: number; name: string; enable: boolean }>('/api/books/toc-rules/toggle', { method: 'POST', body: JSON.stringify({ key, enable }) }),
   /** 换规则重切一本本地书的目录。失败时服务端会说清是"这条切不出第二章"还是"原文件不在了"。 */
   reparseLocalBook: (sourceId: string, bookUrl: string, ruleKey: string) =>
     request<LocalBookReparseResult>('/api/books/reparse-local', {

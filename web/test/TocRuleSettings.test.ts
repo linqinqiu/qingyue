@@ -57,3 +57,38 @@ test('设置面板与导入都接上了（不只是一个能改的 localStorage 
   const main = read('../src/main.tsx')
   assert.match(main, /api\.importLocalBooks\(list, loadReaderSettings\(\)\.txtTocRule\)/, '导入时带上当前选择')
 })
+
+/**
+ * 「txt目录规则没有做好」（用户 2026-10-03）。根因不是规则不够，是一个旗标兼了两件事：
+ * 选择清单只发"启用的"那 12 条，于是另外 12 条（章回体「第N回」这类都在里面）
+ * 既看不见也选不了，而界面上根本没有启用开关。
+ */
+test('手动可选 与 参与自动打分 是两件事，界面和服务端都按两件事做', () => {
+  const routes = read('../../server/src/main/kotlin/io/legado/server/Routes.kt')
+  assert.match(routes, /TocRules\.all\.map/, '清单发的是全表，不再是 candidates')
+  assert.doesNotMatch(routes, /options = listOf\([\s\S]{0,220}\+ TocRules\.candidates\.map/,
+    'candidates 只能用于自动打分，拿它当选择清单就是把 12 条规则藏起来')
+  assert.match(routes, /post\("\/books\/toc-rules\/toggle"\)/, '有开关这条规则的入口')
+  const model = read('../../server/src/main/kotlin/io/legado/server/TxtTocRule.kt')
+  assert.match(model, /val selectable: List<TxtTocRule> get\(\) = all\.filter \{ compiles\(it\.id\) \}/,
+    '可选只看用不用得了，不看 enable')
+  assert.match(model, /fun compiles\(id: Int\): Boolean = id == PACKAGED_BUILTIN_ID \|\| compile\(id\) != null/,
+    '内置那条（id -100）没有正则但不算坏规则')
+  assert.match(model, /fun setEnable\(id: Int, enable: Boolean\)/)
+
+  const api = read('../src/api.ts')
+  assert.match(api, /toggleTocRule: \(key: string, enable: boolean\)/)
+  assert.match(api, /enable\?: boolean; broken\?: boolean/, '选项要带得上"参不参与自动"和"正则坏没坏"')
+
+  const modal = read('../src/CustomizeModal.tsx')
+  assert.match(modal, /tocPickable = \(tocRules\?\.options \?\? \[\]\)\.filter\(option => !option\.broken\)/,
+    '默认规则选择器列的是全部能用的规则')
+  assert.match(modal, /tocRuleRows/, '另有一张规则清单（开关在那儿，不在选择器里）')
+  assert.match(modal, /aria-label=\{`\$\{rule\.label\} 参与自动选择`\}/, '开关说的是它真正管的那件事')
+  assert.match(modal, /<code title=\{rule\.rule\}>/, '正则原文要露出来，否则没人判断得了它适不适合自己的书')
+  assert.match(modal, /手动选一条不需要先"启用"它/, '界面文案把这两件事分开讲')
+
+  const reader = read('../src/ReaderScreen.tsx')
+  assert.match(reader, /\.filter\(option => !option\.broken\)/, '阅读设置里那颗选择器同样排除坏正则')
+  assert.match(reader, /（不参与自动）/, '选得到但不打分的那几条要标出来，别让人以为勾了就等于生效')
+})

@@ -43,6 +43,18 @@ export function CustomizeModal({
     void api.tocRules().then(list => { if (!cancelled) setTocRules(list) }).catch(() => undefined)
     return () => { cancelled = true }
   }, [])
+  /**
+   * 「参与自动打分」和「能不能手动选」是两件事，界面上就得分成两处表达：
+   * 上面那颗选择器列全部（编得出正则的），下面的清单只管开关自动候选。
+   */
+  const tocPickable = (tocRules?.options ?? []).filter(option => !option.broken)
+  const tocRuleRows = (tocRules?.options ?? []).filter(option => !option.builtIn && option.key !== 'auto')
+  const toggleTocRule = (key: string, enable: boolean) => {
+    void api.toggleTocRule(key, enable)
+      .then(() => api.tocRules())
+      .then(setTocRules)
+      .catch(error => toast.error(error instanceof Error ? error.message : '这条规则没开关成功'))
+  }
   const cssLooksLikeRules = /(^|\})\s*[.#a-zA-Z][^{}]*\{[^{}]*\}/.test(skinCss)
 
   const applySkin = () => {
@@ -179,16 +191,43 @@ export function CustomizeModal({
                 <Select
                   ariaLabel="TXT 目录规则（默认）"
                   value={settings.txtTocRule}
-                  options={tocRules!.options.map(option => ({ value: option.key, label: option.label, hint: option.example || undefined }))}
+                  options={tocPickable.map(option => ({
+                    value: option.key,
+                    label: option.enable || option.builtIn || option.key === 'auto' ? option.label : `${option.label}（不参与自动）`,
+                    hint: option.example || undefined,
+                  }))}
                   onChange={value => onChange({ ...settings, txtTocRule: value })}
                 />
               </div>
               <p className="customize-note">
-                本机启用 {tocRules!.enabled ?? 0} / {tocRules!.total ?? 0} 条规则
-                {tocRules!.fromBackup ? `，其中 ${tocRules!.fromBackup} 条是从手机备份收下来的` : ''}。
-                「自动」是按正文打分挑一条；已经在读的那本用它当初切好的规则，在那本书的「阅读设置 → 本地书目录」里单独换。
+                上面那颗列全部 {tocPickable.length} 条 —— 手动选一条不需要先"启用"它。
+                下面这些勾只管一件事：<strong>「自动」打分时允许考虑哪几条</strong>
+                （当前 {tocRules!.enabled ?? 0} / {tocRules!.total ?? 0} 条参与）。
+                已经在读的那本用它当初切好的规则，在那本书的「阅读设置 → 本地书目录」里单独换。
                 手机上改过启用勾选的话，到「备份包」把包导进来，在「包里收下的条目」里对 TXT 分章规则点「套用」。
               </p>
+              <div className="customize-toc-rules">
+                {tocRuleRows.map(rule => (
+                  <div key={rule.key} className={`customize-toc-rule${rule.broken ? ' is-broken' : ''}`}>
+                    <label className="customize-toc-rule-switch">
+                      <input
+                        type="checkbox"
+                        checked={rule.enable !== false}
+                        disabled={rule.broken}
+                        aria-label={`${rule.label} 参与自动选择`}
+                        onChange={event => toggleTocRule(rule.key, event.target.checked)}
+                      />
+                      <span>自动</span>
+                    </label>
+                    <div className="customize-toc-rule-main">
+                      <strong>{rule.label}</strong>
+                      <code title={rule.rule}>{rule.rule || '内置逐行匹配'}</code>
+                      {rule.example && <small>例：{rule.example}</small>}
+                      {rule.broken && <small className="customize-toc-rule-broken">正则在本机编译不出来，选了也切不出章</small>}
+                    </div>
+                  </div>
+                ))}
+              </div>
               {tocRules!.overridden && (
                 <div className="customize-actions">
                   <button

@@ -185,4 +185,59 @@ class TxtTocRuleTest {
         assertTrue(TocRules.isAuto(TocRules.AUTO))
         assertFalse(TocRules.isAuto(real.id.toString()))
     }
+
+    /**
+     * 「txt目录规则没有做好」（用户 2026-10-03）。根因是一个旗标兼两职：
+     * 选择清单只发 `candidates`（启用 ∩ 可编译）= 26 条里的 14 条，另外 12 条
+     * 既看不见也选不了 —— 而 `byId` 走的是全表，解析层其实一直支持它们。
+     * 拆成两件事：**能不能手动选**看编不编得出来，**是否参与自动打分**才看 enable。
+     */
+    @Test
+    fun `停用的规则仍然可以手动选，只是不参与自动打分`() {
+        val disabled = TocRules.all.filter { !it.enable }
+        assertTrue("随包 26 条里默认停用 14 条（实际 ${disabled.size}），这个用例才有东西可判", disabled.size >= 10)
+        val compilable = disabled.filter { TocRules.compiles(it.id) }
+        assertTrue("停用的那些里得有能编译的，否则下面无从断言", compilable.isNotEmpty())
+        val pool = TocRules.candidates.map { it.id }.toSet()
+        compilable.forEach { rule ->
+            assertFalse("「自动」的候选池里不许有停用的规则（${rule.name}）", pool.contains(rule.id))
+            assertNotNull("手动按 id 查得到停用的规则（${rule.name}）", TocRules.byId(rule.id))
+            assertTrue("可选手册必须包含它，否则用户根本选不到（${rule.name}）", TocRules.selectable.any { it.id == rule.id })
+        }
+        assertEquals("可选 = 全表减掉编不出正则的", TocRules.all.count { TocRules.compiles(it.id) }, TocRules.selectable.size)
+        assertTrue("随包这份里没有坏正则", TocRules.brokenCount == 0)
+        // id -100 是随包表里的"内置逐行匹配"：它没有正则，`compile` 返回 null 只是因为没东西可编译。
+        // 把它算成"坏规则"会让界面上出现一条写着「正则在本机编译不出来」的内置项 —— 那是谎话。
+        assertTrue("内置那条没有正则，但不许被算成坏规则", TocRules.compiles(TocRules.PACKAGED_BUILTIN_ID))
+        assertTrue("内置那条也要在可选手册里", TocRules.selectable.any { it.id == TocRules.PACKAGED_BUILTIN_ID })
+        assertFalse("它不参与自动打分（没有正则可打分）", TocRules.candidates.any { it.id == TocRules.PACKAGED_BUILTIN_ID })
+    }
+
+    @Test
+    fun `开关一条规则只改它是否参与自动，且落在文件里`() {
+        val dir = java.nio.file.Files.createTempDirectory("legado-toc-toggle")
+        val store = dir.resolve("txt_toc_rules.json")
+        val target = TocRules.packaged.first { it.enable }
+        try {
+            TocRules.useStore(store)
+            assertNotNull("关掉之后还在表里（关掉 ≠ 删掉）", TocRules.setEnable(target.id, false))
+            assertFalse("启用位改了", TocRules.byId(target.id)!!.enable)
+            assertFalse("它退出了自动候选池", TocRules.candidates.any { it.id == target.id })
+            assertTrue("手动仍然选得到", TocRules.selectable.any { it.id == target.id })
+            // 换一个 store 再读回来 = 重启进程：改动必须在文件里，不能只在内存
+            TocRules.useStore(store)
+            assertFalse("重新装载后停用还在", TocRules.byId(target.id)!!.enable)
+            assertTrue("写的是整张表，不是只有改动那几条",
+                java.nio.file.Files.readString(store).length > 200)
+            TocRules.setEnable(target.id, true)
+            TocRules.useStore(store)
+            assertTrue("再开回来", TocRules.byId(target.id)!!.enable)
+            assertNull("不存在的 id 要说没有，不能默默成功", TocRules.setEnable(424242, true))
+        } finally {
+            TocRules.useStore(dir.resolve("nothing-here.json"))
+            java.nio.file.Files.deleteIfExists(store)
+            java.nio.file.Files.deleteIfExists(dir)
+        }
+        assertTrue("倒回之后又回到随包那份", TocRules.byId(target.id)!!.enable)
+    }
 }

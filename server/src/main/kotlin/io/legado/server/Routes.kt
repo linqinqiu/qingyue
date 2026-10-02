@@ -1138,18 +1138,39 @@ fun Route.apiRoutes(
          * 坏正则在这里就已经被滤掉了（`TocRules.candidates`），界面上不会摆一个用了就报错的选项。
          */
         get("/books/toc-rules") {
+            // 清单发**全部能编译的规则**，不是只发启用的那几条：手动选与参与自动打分是两件事
             call.respond(TocRuleList(
                 options = listOf(
                     TocRuleOption(TocRules.AUTO, TocRules.label(TocRules.AUTO)),
                     TocRuleOption(TocRules.BUILTIN, TocRules.label(TocRules.BUILTIN), builtIn = true),
-                ) + TocRules.candidates.map { rule ->
-                    TocRuleOption(rule.id.toString(), rule.name, rule.example.orEmpty())
+                ) + TocRules.all.map { rule ->
+                    TocRuleOption(
+                        key = rule.id.toString(),
+                        label = rule.name,
+                        example = rule.example.orEmpty(),
+                        rule = rule.rule,
+                        enable = rule.enable,
+                        // 随包那张表里 id -100 就是"内置逐行匹配"：没有正则不等于坏，别标成编译失败
+                        builtIn = rule.id == TocRules.PACKAGED_BUILTIN_ID,
+                        broken = !TocRules.compiles(rule.id),
+                    )
                 },
                 enabled = TocRules.all.count { it.enable },
                 total = TocRules.all.size,
                 fromBackup = TocRules.customCount,
                 overridden = TocRules.hasOverrides,
             ))
+        }
+        post("/books/toc-rules/toggle") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = runCatching { call.receive<TocRuleToggleRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
+            }
+            val id = request.key.toIntOrNull()
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_rule", "只有具体规则能开关，auto 与内置不行"))
+            val updated = TocRules.setEnable(id, request.enable)
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("rule_missing", "没有这条规则"))
+            call.respond(TocRuleToggleResult(updated.id, updated.name, updated.enable))
         }
         /*
          * 撤掉本机改动，回到随包那 26 条（套用过之后要能反悔，门禁也要能还原用户的规则表）。

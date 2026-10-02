@@ -5195,6 +5195,18 @@ input[type=range] { min-height: 24px; }
 .customize-error { margin: 0; color: var(--danger); font-size: 13px; }
 .customize-note { margin: 0; color: var(--muted); font-size: 12px; }
 .customize-note code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+/* 分章规则清单：一条一行，正则原文必须露出来 —— 不写出来没人判断得了它适不适合自己的书 */
+.customize-toc-rules { display: grid; gap: 1px; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); }
+.customize-toc-rule { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 10px; background: var(--surface); }
+.customize-toc-rule-switch { display: flex; align-items: center; gap: 5px; padding-top: 2px; color: var(--muted); font-size: var(--t-xs); cursor: pointer; }
+.customize-toc-rule-switch input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
+.customize-toc-rule.is-broken { opacity: .62; }
+.customize-toc-rule.is-broken .customize-toc-rule-switch { cursor: not-allowed; }
+.customize-toc-rule-main { display: grid; gap: 3px; min-width: 0; }
+.customize-toc-rule-main strong { font-size: var(--t-sm); font-weight: 600; }
+.customize-toc-rule-main code { overflow: hidden; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.customize-toc-rule-main small { color: var(--muted); font-size: var(--t-xs); overflow-wrap: anywhere; }
+.customize-toc-rule-broken { color: var(--danger); }
 .customize-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .customize-saved { color: var(--muted); font-size: 12px; }
 

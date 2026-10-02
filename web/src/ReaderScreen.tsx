@@ -111,7 +111,13 @@ function ReaderSettingsControls({
         <Select
           ariaLabel="TXT 目录规则"
           value={settings.txtTocRule}
-          options={tocRuleOptions!.map(option => ({ value: option.key, label: option.label, hint: option.example || undefined }))}
+          options={tocRuleOptions!
+            .filter(option => !option.broken)
+            .map(option => ({
+              value: option.key,
+              label: option.enable || option.builtIn || option.key === 'auto' ? option.label : `${option.label}（不参与自动）`,
+              hint: option.example || undefined,
+            }))}
           onChange={value => update({ txtTocRule: value })}
         />
         <small className="setting-hint">
