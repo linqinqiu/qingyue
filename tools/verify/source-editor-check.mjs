@@ -50,6 +50,65 @@ check('必填字段带标记', requiredBadges >= 3, `${requiredBadges} 个`)
 const codes = await p.$$eval('.source-field-label code', els => els.slice(0, 3).map(e => e.innerText))
 say(`ℹ 字段同时标出 JSON 路径：${codes.join('、')}`)
 
+// ---------- 2b. 分组折叠与跨组搜索（用户 2026-10-03：「字段太多太乱，要分组/折叠/搜索」）----------
+const groupHeads = await p.$$eval('.source-field-group-head', els => els.map(e => ({
+  label: e.innerText.replace(/\s+/g, ' ').trim(),
+  open: e.getAttribute('aria-expanded') === 'true',
+})))
+check('八段分组都作为可折叠段挂在同一页上（不再一屏只给一组）', groupHeads.length === 8, `${groupHeads.length} 段`)
+check('默认只展开第一段，其余收起', groupHeads.filter(head => head.open).length === 1,
+  groupHeads.map(head => `${head.label}${head.open ? '*' : ''}`).join(' '))
+check('收起的那一段也报"几条有值"，不展开也知道这组填没填',
+  groupHeads.every(head => /\d+ \/ \d+ 条有值/.test(head.label)), groupHeads[3]?.label ?? '')
+
+await p.evaluate(() => {
+  const head = [...document.querySelectorAll('.source-field-group-head')].find(node => node.innerText.includes('目录'))
+  head?.click()
+})
+await wait(400)
+const afterToggle = await p.evaluate(() => ({
+  tocOpen: [...document.querySelectorAll('.source-field-group-head')]
+    .find(node => node.innerText.includes('目录'))?.getAttribute('aria-expanded') === 'true',
+  tocFields: document.querySelectorAll('#source-group-directory .source-field-label').length,
+  baseStill: document.querySelectorAll('#source-group-base .source-field-label').length,
+}))
+check('点一段的标题就展开它（目录组 8 条字段出来）', afterToggle.tocOpen && afterToggle.tocFields >= 5,
+  JSON.stringify(afterToggle))
+check('展开新的那段不会把正在填的基础组挤掉', afterToggle.baseStill === 14, `基础 ${afterToggle.baseStill} 条`)
+
+const searchBox = await p.$('.source-field-search input')
+check('编辑器上有跨分组的字段搜索框', !!searchBox)
+await searchBox.type('规则')
+await wait(500)
+const searched = await p.evaluate(() => ({
+  groups: [...document.querySelectorAll('.source-field-group.is-matched > header span:first-child')].map(e => e.innerText.trim()),
+  fields: document.querySelectorAll('.source-field-group.is-matched .source-field-label').length,
+  heads: document.querySelectorAll('.source-field-group-head').length,
+}))
+check('搜一个词能把散在多个分组里的同类字段一次捞出来',
+  searched.groups.length >= 4 && searched.fields >= 10 && searched.heads === 0,
+  JSON.stringify(searched))
+await p.evaluate(() => {
+  const input = document.querySelector('.source-field-search input')
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+  setter.call(input, '绝不存在的字段名')
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await wait(400)
+const noMatch = await p.evaluate(() => document.querySelector('.source-field-no-match')?.innerText.trim() ?? '')
+check('搜不到时说实话，并指一条退路（不是留一片空白）', noMatch.includes('没有名字') && noMatch.includes('JSON'), noMatch)
+await p.evaluate(() => {
+  const button = [...document.querySelectorAll('.source-field-search button')].find(node => node.innerText.includes('清除'))
+  button?.click()
+})
+await wait(400)
+const restored = await p.evaluate(() => ({
+  groups: document.querySelectorAll('.source-field-group').length,
+  query: document.querySelector('.source-field-search input')?.value ?? '',
+}))
+check('清除搜索就回到折叠视图（八段都在，输入框清空）',
+  restored.groups === 8 && restored.query === '', JSON.stringify(restored))
+
 // ---------- 3. 填表并保存 ----------
 await p.type('#source-field-root-bookSourceUrl', TEST_URL)
 await p.type('#source-field-root-bookSourceName', TEST_NAME)

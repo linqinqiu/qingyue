@@ -115,6 +115,24 @@ const SourceFieldRow: React.FC<{
 }
 
 const JSON_TAB = '__json__'
+
+const TOTAL_FIELDS = SOURCE_FIELD_GROUPS.reduce((sum, group) => sum + group.fields.length, 0)
+
+/** 字段算不算"填了"：布尔看真值，其余看非空。折叠标题上那句「N / M 条有值」用它。 */
+function fieldHasValue(json: Json, field: SourceField): boolean {
+  const raw = fieldValue(json, field)
+  if (field.type === 'Boolean') return raw === true
+  return !isEmpty(raw)
+}
+
+/** 搜字段：标题、`ns.id` 路径、说明文字都算命中 —— 人记不住 `bookSourceGroup`，但记得住"分组"。 */
+function matchFields(fields: SourceField[], needle: string): SourceField[] {
+  const query = needle.trim().toLowerCase()
+  if (!query) return fields
+  return fields.filter(field => field.title.toLowerCase().includes(query)
+    || `${field.ns ? `${field.ns}.` : ''}${field.id}`.toLowerCase().includes(query)
+    || (field.hint ?? '').toLowerCase().includes(query))
+}
 const TABS = [...SOURCE_FIELD_GROUPS.map(group => ({ key: group.key, name: group.name })), { key: JSON_TAB, name: 'JSON' }]
 
 export const SourceEditor: React.FC<{
@@ -132,6 +150,9 @@ export const SourceEditor: React.FC<{
   const [text, setText] = useState('')
   const [status, setStatus] = useState('')
   const [tab, setTab] = useState(SOURCE_FIELD_GROUPS[0].key)
+  /** 跨分组搜字段（用户 2026-10-03：「字段太多太乱，要分组/折叠/搜索」）。95 条按 8 栏摆开，找一条要翻半天。 */
+  const [fieldQuery, setFieldQuery] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([SOURCE_FIELD_GROUPS[0].key]))
   const [saving, setSaving] = useState(false)
   const loadedKey = useRef<string | null>(null)
   const skipNextLoad = useRef(false)
@@ -144,6 +165,8 @@ export const SourceEditor: React.FC<{
     skipNextLoad.current = false
     loadedKey.current = key
     setTab(SOURCE_FIELD_GROUPS[0].key)
+    setFieldQuery('')
+    setExpanded(new Set([SOURCE_FIELD_GROUPS[0].key]))
     // 保存后父组件把新建的书源回选给我们，内容就是刚写回去的那份；重读会顺手抹掉「已保存」。
     if (justCreated) return
     setStatus('')
@@ -177,6 +200,12 @@ export const SourceEditor: React.FC<{
   }
 
   const urlChanged = !creating && !!selected && !!json && declaredSourceId(json) !== selected.id
+  const searching = fieldQuery.trim().length > 0
+  const matched = useMemo(() => searching
+    ? SOURCE_FIELD_GROUPS
+      .map(group => ({ group, fields: matchFields(group.fields, fieldQuery) }))
+      .filter(item => item.fields.length > 0)
+    : [], [searching, fieldQuery])
 
   const save = async () => {
     const targetId = creating ? declaredSourceId(json) : selected?.id ?? ''
@@ -284,28 +313,98 @@ export const SourceEditor: React.FC<{
         </div>
       )}
 
-      <div className="source-form-tabs" role="tablist">
-        {TABS.map(item => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.key}
-            className={tab === item.key ? 'active' : ''}
-            onClick={() => setTab(item.key)}
-          >
-            {item.name}
-          </button>
-        ))}
+      {/*
+        分组现在是一页里的折叠段，不再是"一栏只显示一组"（用户 2026-10-03：「字段太多太乱，
+        要分组/折叠/搜索」）。上面那排标签还在，但它退成锚点：点一下展开那一组并滚过去，
+        于是"对比搜索栏和目录栏的同类字段"不用来回切。搜索是跨全部分组的 —— 95 条字段里
+        找一个的名字，按栏翻比输入名字慢得多。
+      */}
+      <div className="source-form-toolbar">
+        <div className="source-form-tabs" role="tablist">
+          {TABS.map(item => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.key}
+              className={tab === item.key ? 'active' : ''}
+              onClick={() => {
+                if (item.key === JSON_TAB) { setTab(JSON_TAB); return }
+                setTab(item.key)
+                setFieldQuery('')
+                setExpanded(current => new Set(current).add(item.key))
+                document.getElementById(`source-group-${item.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+        {tab !== JSON_TAB && json && (
+          <label className="source-field-search">
+            <Icon name="search" />
+            <input
+              value={fieldQuery}
+              placeholder={`搜字段（共 ${TOTAL_FIELDS} 条，跨分组）`}
+              aria-label="搜索书源字段"
+              onChange={e => setFieldQuery(e.target.value)}
+            />
+            {fieldQuery && (
+              <button type="button" className="subtle-button" onClick={() => setFieldQuery('')}>清除</button>
+            )}
+          </label>
+        )}
       </div>
 
       {tab === JSON_TAB || !json ? (
         <textarea className="source-editor-raw" aria-label="书源 JSON 编辑器" value={text} onChange={e => setText(e.target.value)} spellCheck={false} />
+      ) : searching ? (
+        matched.length === 0 ? (
+          <p className="source-field-no-match">
+            没有名字或路径里带「{fieldQuery}」的字段。要看全部原文请切到 JSON 那一栏。
+          </p>
+        ) : (
+          <div className="source-form-fields">
+            {matched.map(({ group, fields }) => (
+              <section key={group.key} className="source-field-group is-matched">
+                <header>
+                  <span>{group.name}</span>
+                  <small>匹配 {fields.length} 条</small>
+                </header>
+                {fields.map(field => (
+                  <SourceFieldRow key={`${field.ns ?? 'root'}/${field.id}`} json={json} field={field} onChange={setField} />
+                ))}
+              </section>
+            ))}
+          </div>
+        )
       ) : (
         <div className="source-form-fields">
-          {SOURCE_FIELD_GROUPS.find(group => group.key === tab)!.fields.map(field => (
-            <SourceFieldRow key={`${field.ns ?? 'root'}/${field.id}`} json={json} field={field} onChange={setField} />
-          ))}
+          {SOURCE_FIELD_GROUPS.map(group => {
+            const open = expanded.has(group.key)
+            const filled = group.fields.filter(field => fieldHasValue(json, field)).length
+            return (
+              <section key={group.key} id={`source-group-${group.key}`} className={`source-field-group${open ? ' is-open' : ''}`}>
+                <button
+                  type="button"
+                  className="source-field-group-head"
+                  aria-expanded={open}
+                  onClick={() => setExpanded(current => {
+                    const next = new Set(current)
+                    if (next.has(group.key)) next.delete(group.key); else next.add(group.key)
+                    return next
+                  })}
+                >
+                  <Icon name={open ? 'chevronDown' : 'chevronRight'} />
+                  <span>{group.name}</span>
+                  <small>{filled} / {group.fields.length} 条有值</small>
+                </button>
+                {open && group.fields.map(field => (
+                  <SourceFieldRow key={`${field.ns ?? 'root'}/${field.id}`} json={json} field={field} onChange={setField} />
+                ))}
+              </section>
+            )
+          })}
         </div>
       )}
       {status && <footer className={status.includes('失败') || status.includes('错误') ? 'form-error' : ''}>{status}</footer>}

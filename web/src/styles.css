@@ -4746,16 +4746,39 @@ input[type=range] { min-height: 24px; }
 .source-form-tabs button.active { color: var(--accent-ink); font-weight: 650; }
 .source-form-tabs button.active::after { position: absolute; right: 10px; bottom: 0; left: 10px; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent-solid); content: ''; }
 
+/* 分组改成"一页里的折叠段"：外层还是那两栏密度，只是每一组的标题横跨整行。
+   折叠不等于隐藏能力 —— 收起时标题上照旧写着「N / M 条有值」，不用展开也知道这组填没填。 */
+.source-form-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.source-field-search { display: inline-flex; align-items: center; gap: 7px; min-width: 240px; margin: 0 var(--s-5) 0 0; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface-muted); color: var(--muted); }
+.source-field-search input { min-width: 0; flex: 1; padding: 7px 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--t-sm); outline: 0; }
+.source-field-search .subtle-button { flex: none; font-size: var(--t-xs); }
+.source-field-no-match { padding: var(--s-6) var(--s-5); color: var(--muted); font-size: var(--t-sm); line-height: 1.8; }
 .source-form-fields {
   flex: 1 1 auto;
-  display: grid;
-  align-content: start;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: var(--s-5) var(--s-6);
+  display: block;
   min-height: 0;
   padding: var(--s-5) var(--s-6);
   overflow-y: auto;
 }
+.source-field-group {
+  display: grid; align-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: var(--s-5) var(--s-6);
+  padding: 0 0 var(--s-5);
+  border-bottom: 1px solid var(--line);
+}
+.source-field-group + .source-field-group { padding-top: var(--s-5); }
+.source-field-group-head, .source-field-group > header {
+  display: flex; align-items: center; gap: 8px; grid-column: 1 / -1;
+  width: 100%; padding: 7px 0; color: var(--ink); text-align: left;
+  background: none; border: 0; font: inherit; cursor: pointer;
+}
+.source-field-group > header { cursor: default; }
+.source-field-group-head > span, .source-field-group > header > span { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-lg); font-weight: 600; }
+.source-field-group-head > small, .source-field-group > header > small { margin-left: auto; color: var(--muted); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.source-field-group-head:hover > span { color: var(--accent-ink); }
+.source-field-group.is-matched { border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+@media (max-width: 900px) { .source-field-group { grid-template-columns: minmax(0, 1fr); } }
 .source-field { display: grid; gap: 5px; min-width: 0; }
 .source-field-label { display: flex; align-items: baseline; gap: 8px; color: var(--ink); font-size: var(--t-lg); font-weight: 600; }
 .source-field-label code { overflow: hidden; color: var(--muted); font-size: var(--t-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
