@@ -95,6 +95,22 @@ object TocRules {
     fun isAuto(key: String?): Boolean = key.isNullOrBlank() || key == AUTO
 
     /**
+     * 这条规则有没有**把文件开头那一章漏掉**。
+     *
+     * 上游的打分只比命中条数，且"多不出 [OVER_RULE_COUNT] 条就不换规则"：几百章的书没问题，
+     * 五章的书正好踩中 —— 像「目录(去空白)」这种 `\n` 起头的规则，第一条标题前面没有换行，
+     * 于是**第一章永远不命中**，整章变成「前言」（实测这本 5 章的探针书切出 4 章 + 一个 2985px 的前言）。
+     *
+     * 判据不靠"间隔比例"那种碰运气的阈值，直接看事实：开头空出来的那一段，它的第一行
+     * 本身就是一条章节标题（内置那条识别得出来）—— 那就是漏了边界，不是"这本书真有前言"。
+     */
+    private fun missesFirstHeading(head: String, regex: Regex): Boolean {
+        val firstLine = head.substringBefore('\n').trim()
+        if (firstLine.isBlank() || !LocalBookParser.CHAPTER_TITLE_REGEX.matches(firstLine)) return false
+        return (regex.findAll(head).firstOrNull()?.range?.first ?: 0) > 0
+    }
+
+    /**
      * 按上游口径给一条规则打分：返回（有效标题数, 伪命中数）。
      * 单独暴露出来是为了判据能直接断言"宽松规则的分不会赢过精确规则"。
      */
@@ -121,6 +137,8 @@ object TocRules {
         var best: TxtTocRule? = null
         var maxNum = -1
         for (rule in candidates) {
+            val regex = compile(rule.id) ?: continue
+            if (missesFirstHeading(head, regex)) continue
             val (titles, volumes) = score(head, rule.id) ?: continue
             if (titles >= volumes * 3 && titles > maxNum + OVER_RULE_COUNT) {
                 maxNum = titles

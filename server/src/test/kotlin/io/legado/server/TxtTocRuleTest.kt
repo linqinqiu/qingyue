@@ -61,6 +61,29 @@ class TxtTocRuleTest {
     }
 
     @Test
+    fun `auto selection never eats the very first chapter`() {
+        val text = buildString {
+            for (index in 1..8) {
+                append("第").append(chinese(index)).append("章 第").append(index).append("回标题\n")
+                // 正文里刻意不出现"第X章"这种字样，也不给开头的散稿 —— 这本书的第一行就是第一章
+                repeat(50) { append("这是${index}号船员的正文内容，讲一些情节推进与人物对话。\n") }
+            }
+        }
+        // 反向对照：随包里确实有条规则"开头没有换行就命不中"。它不存在的话这条用例就是空判。
+        val misses = TocRules.candidates.filter { rule ->
+            val regex = TocRules.regexFor(rule.id.toString()) ?: return@filter false
+            (regex.findAll(text).firstOrNull()?.range?.first ?: 0) > 0
+        }
+        assertTrue("随包规则里没有漏掉第一条标题的样本，判据失去意义", misses.isNotEmpty())
+
+        val picked = TocRules.suggest(text)
+        assertNotNull("规规矩矩的书不该选不出规则", picked)
+        val chapters = TocRules.split(text, TocRules.regexFor(picked!!.id.toString())!!)
+        assertEquals("第一章整章被吞成了「前言」（选中的规则是「${picked.name}」）", "第一章 第1回标题", chapters.first().title)
+        assertEquals("八章就该切出八章（实际 ${chapters.size}）", 8, chapters.size)
+    }
+
+    @Test
     fun `split keeps the prologue and the tail instead of eating text`() {
         val text = wellMarkedBook()
         val picked = TocRules.suggest(text)!!

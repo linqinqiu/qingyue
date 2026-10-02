@@ -55,7 +55,8 @@ object LocalBookParser {
     //    `ExceptionInInitializerError`，整个对象此后全是 `NoClassDefFoundError`：
     //    表现不是"分章不准"，而是**本地书导入整条功能是死的**。所以这一组的用例
     //    （LocalBookParserTest）必须先能跑起来再谈别的。
-    private val CHAPTER_TITLE_REGEX = Regex(
+    // 「自动选规则」要用它判断"开头那一行本身就是一条标题"（见 `TocRules.suggest`），所以不能是 private。
+    internal val CHAPTER_TITLE_REGEX = Regex(
         """^(?:(?:第\s*[0-9零一二三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[章回节卷集篇部幕计])|(?:Chapter|Vol\.?)\s+[0-9]+|(?:[0-9]{1,4}[.\s、]|[零一二三四五六七八九十百千万]{1,4}[、.]\s*)|(?:引子|序(?:言|章)?|楔子|尾(?:声|章)|后记|番外|终章|前言|附(?:录|记)|跋)|(?:上部|下部|中部|前传|后传|外传|特别篇))(?:\s*[-—·:：]?\s*.+)?$""",
         RegexOption.IGNORE_CASE
     )
