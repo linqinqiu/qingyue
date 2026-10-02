@@ -1,5 +1,8 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { api, type TocRuleList } from './api'
 import { Icon } from './icons'
+import { Select } from './Select'
+import { toast } from './Toast'
 import { useEscapeClose } from './useEscapeClose'
 import { availableSkins, BUILTIN_SKINS, parseSkinId, type ReaderSettings } from './readerSettings'
 
@@ -29,6 +32,17 @@ export function CustomizeModal({
   const [skinError, setSkinError] = useState('')
 
   const sanitized = parseSkinId(skinId)
+  /**
+   * 本地书的分章规则表（用户 2026-10-02：「txt目录规则你也没有做啊」）。
+   * 原来这一档只在"正在读一本本地书"时才出现，于是没在读本地书的人根本不知道有这件事 ——
+   * 它是导入下一本时生效的默认值，跟皮肤一样属于"这台机器的设置"，所以放在这里一份。
+   */
+  const [tocRules, setTocRules] = useState<TocRuleList | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void api.tocRules().then(list => { if (!cancelled) setTocRules(list) }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [])
   const cssLooksLikeRules = /(^|\})\s*[.#a-zA-Z][^{}]*\{[^{}]*\}/.test(skinCss)
 
   const applySkin = () => {
@@ -157,6 +171,46 @@ export function CustomizeModal({
               </p>
             )}
           </section>
+          {(tocRules?.options.length ?? 0) > 1 && (
+            <section className="customize-section">
+              <h3>本地书分章规则</h3>
+              <div className="customize-field">
+                <span>导入下一本 TXT 时按哪条切目录</span>
+                <Select
+                  ariaLabel="TXT 目录规则（默认）"
+                  value={settings.txtTocRule}
+                  options={tocRules!.options.map(option => ({ value: option.key, label: option.label, hint: option.example || undefined }))}
+                  onChange={value => onChange({ ...settings, txtTocRule: value })}
+                />
+              </div>
+              <p className="customize-note">
+                本机启用 {tocRules!.enabled ?? 0} / {tocRules!.total ?? 0} 条规则
+                {tocRules!.fromBackup ? `，其中 ${tocRules!.fromBackup} 条是从手机备份收下来的` : ''}。
+                「自动」是按正文打分挑一条；已经在读的那本用它当初切好的规则，在那本书的「阅读设置 → 本地书目录」里单独换。
+                手机上改过启用勾选的话，到「备份包」把包导进来，在「包里收下的条目」里对 TXT 分章规则点「套用」。
+              </p>
+              {tocRules!.overridden && (
+                <div className="customize-actions">
+                  <button
+                    type="button"
+                    className="subtle-button"
+                    onClick={() => {
+                      // 套用是一次显式动作，就得能显式反悔：这条清掉本机那份覆盖，回到随包的 26 条
+                      void api.resetTocRules()
+                        .then(result => {
+                          toast.success(`已恢复随包那份规则表（${result.total} 条）`)
+                          return api.tocRules()
+                        })
+                        .then(list => setTocRules(list))
+                        .catch(() => toast.error('恢复失败'))
+                    }}
+                  >
+                    恢复成随包那份规则表
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>

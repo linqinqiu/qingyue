@@ -75,9 +75,12 @@ class BackupImporter(private val database: Database, private val keep: BackupSto
         val shelf = readSection(zip, entries, SHELF_NAMES)?.let(::parseShelf).orEmpty()
         val groups = readSection(zip, entries, GROUP_NAMES)?.let(::parseBookGroups).orEmpty()
         val rss = readSection(zip, entries, RSS_NAMES)?.let(::parseRssSources).orEmpty()
-        require(sources.isNotEmpty() || rules.isNotEmpty() || shelf.isNotEmpty()) {
+        // 手机上只勾了个性化条目（书签 / 搜索历史 / TXT 分章规则…）导出的包也是合法备份：
+        // 以前这类包会被判"不是可识别的 Legado 备份"整包拒收，用户看到的是"我明明导出来了"。
+        val keepable = present.intersect(BackupStore.KEEP_NAMES.map { it.lowercase() }.toSet())
+        require(sources.isNotEmpty() || rules.isNotEmpty() || shelf.isNotEmpty() || keepable.isNotEmpty()) {
             "不是可识别的 Legado 备份：找过 ${SOURCE_NAMES.joinToString()} / ${RULE_NAMES.joinToString()} / " +
-                "${SHELF_NAMES.joinToString()}，包内实际有 ${present.size} 个条目"
+                "${SHELF_NAMES.joinToString()}，也没有能收下的个性化条目，包内实际有 ${present.size} 个条目"
         }
 
         val sourceResult = database.importSources(sources)

@@ -53,10 +53,122 @@ object TocRules {
     private val compiled = java.util.concurrent.ConcurrentHashMap<Int, Regex>()
     private val rejected = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
-    val all: List<TxtTocRule> by lazy { load() }
+    /**
+     * 本机对规则表的改动（手机备份里那份 `txtTocRule.json` 套进来的启用选择、以及包里
+     * 自带的自定义规则）。存文件不建表：这张表只在解析目录时被读一次，没有查询需求。
+     */
+    @Volatile private var storeFile: java.nio.file.Path? = null
+    @Volatile private var snapshot: List<TxtTocRule>? = null
+    /** 收下但本机用不了的条目（正则编不出来），界面上要报数，不能悄悄丢。 */
+    @Volatile var lastApplyUnusable = 0
+        private set
+
+    /** 指到 data/ 下那个文件；启动时调一次，之后 `all` 就是"随包 ∪ 本机改动"。 */
+    fun useStore(path: java.nio.file.Path) {
+        storeFile = path
+        reload()
+    }
+
+    /** 套用备份之后必须让正在跑的进程用新表 —— 缓存不清就是"点了套用但没生效"。 */
+    fun reload() {
+        snapshot = null
+        compiled.clear()
+        rejected.clear()
+    }
+
+    /** 随包那 26 条（不含本机改动）。判据用它确认"表没被本机改动污染"。 */
+    val packaged: List<TxtTocRule> by lazy { loadPackaged() }
+
+    /** 从备份收下来的、随包没有的那几条 —— 界面上要能报这个数。 */
+    val customCount: Int get() = (all.size - packaged.size).coerceAtLeast(0)
+
+    val all: List<TxtTocRule>
+        get() = snapshot ?: synchronized(this) { snapshot ?: buildTable().also { snapshot = it } }
+
+    private fun buildTable(): List<TxtTocRule> {
+        val overrides = loadOverrides()
+        if (overrides.isEmpty()) return packaged
+        val packagedIds = packaged.map { it.id }.toSet()
+        val merged = packaged.map { rule ->
+            overrides.firstOrNull { it.id == rule.id }?.let { rule.copy(enable = it.enable, serialNumber = it.serialNumber) } ?: rule
+        }
+        // 备份里带来的、随包没有的那几条（用户在手机上自己写的规则）：收下，能选能用
+        return merged + overrides.filter { it.id !in packagedIds && it.rule.isNotBlank() }
+    }
+
+    private fun loadOverrides(): List<TxtTocRule> {
+        val file = storeFile ?: return emptyList()
+        val text = runCatching { java.nio.file.Files.readString(file, Charsets.UTF_8) }.getOrNull()
+        if (text.isNullOrBlank()) return emptyList()
+        return runCatching { json.decodeFromString<List<TxtTocRule>>(text) }
+            .onFailure { Unit.logSystem("TXT 目录规则的本机改动读不出来，按随包那份继续", mapOf("原因" to (it.message ?: ""))) }
+            .getOrDefault(emptyList())
+    }
+
+    /** 本机改动是否还在（文件在不在）—— 界面上「恢复随包那份」这颗按钮按它出现。 */
+    val hasOverrides: Boolean get() = storeFile?.let { java.nio.file.Files.exists(it) } ?: false
+
+    /**
+     * 撤掉本机改动，回到随包那 26 条。
+     * 套用是一次显式动作，就得配一条显式的撤销 —— 门禁跑完也要靠它把用户的规则表还原。
+     */
+    fun clearOverrides(): Boolean {
+        val file = storeFile ?: return false
+        val existed = java.nio.file.Files.deleteIfExists(file)
+        reload()
+        return existed
+    }
+
+    /**
+     * 套用备份包里那份规则表。
+     *
+     * 上游的 `txtTocRule.json` 是整张表（含用户在手机上勾的启用/停用与自己加的规则），
+     * 但 id 是手机端分配的，与本机随包那份对不上号 —— 所以**按 `rule` 字面匹配**，
+     * 匹配上就采纳它的启用与顺序，匹配不上就当作一条新规则收下。
+     * 正则编不出来的条目不入库（入库会让"这条规则切不出章"变成随机现象），只报数。
+     */
+    fun applyBackup(text: String): Map<String, Int> {
+        val incoming = runCatching { json.decodeFromString<List<TxtTocRule>>(text) }.getOrDefault(emptyList())
+            .filter { it.rule.isNotBlank() }
+        val current = all
+        // ArrayList(容量) 造出来的是**空表**，这里要的是当前这张表的副本 ——
+        // 写成 `ArrayList(current.size + incoming.size)` 时"匹配上的那条"根本找不到位置去改，
+        // 计数照报 flipped=1，文件里却只剩新收的规则（门禁抓到过一次，红得很安静）。
+        val merged = ArrayList(current)
+        var matched = 0
+        var flipped = 0
+        var added = 0
+        var unusable = 0
+        for (rule in incoming) {
+            if (runCatching { Regex(rule.rule, RegexOption.MULTILINE) }.isFailure) {
+                unusable += 1
+                continue
+            }
+            val same = current.firstOrNull { it.rule == rule.rule }
+            if (same != null) {
+                matched += 1
+                if (same.enable != rule.enable) flipped += 1
+                val at = merged.indexOfFirst { it.id == same.id }
+                if (at >= 0) merged[at] = same.copy(enable = rule.enable, serialNumber = rule.serialNumber)
+            } else {
+                added += 1
+                merged += rule.copy(id = nextCustomId(merged))
+            }
+        }
+        val file = storeFile ?: return emptyMap()
+        java.nio.file.Files.createDirectories(file.parent)
+        java.nio.file.Files.writeString(file, json.encodeToString(merged), Charsets.UTF_8)
+        lastApplyUnusable = unusable
+        reload()
+        return mapOf("matched" to matched, "flipped" to flipped, "added" to added, "unusable" to unusable, "total" to all.size)
+    }
+
+    private fun nextCustomId(existing: List<TxtTocRule>): Int =
+        generateSequence(10_000) { it + 1 }.first { id -> existing.none { it.id == id } }
+
 
     /** 能参与打分/选用的：启用、规则非空、且真的编译得出来（坏正则跳过，不是崩）。 */
-    val candidates: List<TxtTocRule> by lazy { all.filter { it.enable && compile(it.id) != null } }
+    val candidates: List<TxtTocRule> get() = all.filter { it.enable && compile(it.id) != null }
 
     fun byId(id: Int): TxtTocRule? = all.firstOrNull { it.id == id }
 
@@ -177,7 +289,7 @@ object TocRules {
         return chapters.filter { it.title.isNotBlank() }
     }
 
-    private fun load(): List<TxtTocRule> {
+    private fun loadPackaged(): List<TxtTocRule> {
         val text = runCatching {
             TocRules::class.java.classLoader.getResourceAsStream("assets/txtTocRule.json")
                 ?.readBytes()?.toString(Charsets.UTF_8)

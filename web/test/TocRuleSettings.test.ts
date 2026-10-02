@@ -29,6 +29,24 @@ test('目录规则不参与朗读会话身份（换规则不该打断正在读�
     'txtTocRule 进了 ttsSessionKey 的话，改目录规则会把正在播的朗读打断')
 })
 
+test('这一组不只在读本地书时才出现（用户：「txt目录规则你也没有做啊」）', () => {
+  const reader = read('../src/ReaderScreen.tsx')
+  assert.ok(!reader.includes('!!localBook && (tocRuleOptions'), '整组的门槛不许是"正在读本地书"')
+  assert.ok(reader.includes('{(tocRuleOptions?.length ?? 0) > 0 && ('), '只看规则清单取到没有，与是不是本地书无关')
+  assert.match(reader, /\{!!localBook && onReparseLocal/, '"重切"这个动作仍然只对着正在读的那本本地书')
+  // 不打开任何书也要能设默认值：自定义弹窗里有一份
+  const customize = read('../src/CustomizeModal.tsx')
+  assert.match(customize, /本地书分章规则/, '「自定义」里有这一组')
+  assert.match(customize, /api\.tocRules\(\)/, '它自己去服务端取规则清单')
+  assert.match(customize, /txtTocRule/, '写的就是同一个设置项，不是又造一份状态')
+  // 备份里那份要真的能套用到服务端规则表（不是只"收下"）
+  const backup = read('../src/BackupPage.tsx')
+  assert.match(backup, /api\.applyTocRulesFromBackup\(\)/, '备份页对这条有真的套用动作')
+  assert.match(backup, /TXT 分章规则/, '「这个包会恢复什么」清单里说得出它能套用')
+  const store = read('../../server/src/main/kotlin/io/legado/server/BackupStore.kt')
+  assert.match(store, /APPLYABLE_NAMES = listOf\([^)]*"txtTocRule\.json"/, '服务端也把这条标成可套用（界面上的按钮按它出现）')
+})
+
 test('设置面板与导入都接上了（不只是一个能改的 localStorage 值）', () => {
   const reader = read('../src/ReaderScreen.tsx')
   assert.match(reader, /setting-label">本地书目录/, '面板里有这一组')

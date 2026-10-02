@@ -84,6 +84,53 @@ class TxtTocRuleTest {
     }
 
     @Test
+    fun `applying a backup table adopts enable choices by rule text and keeps unknown rules`() {
+        val dir = java.nio.file.Files.createTempDirectory("toc-rule-merge")
+        val json = kotlinx.serialization.json.Json
+        val payloadOf = { rules: List<TxtTocRule> -> json.encodeToString(kotlinx.serialization.builtins.ListSerializer(TxtTocRule.serializer()), rules) }
+        val enabled = TocRules.packaged.filter { it.enable }
+        val target = enabled.first()
+        val payload = payloadOf(listOf(
+            // 同一条规则、手机上取消了勾选：按 `rule` 字面匹配，不看 id（手机端 id 与本机对不上）
+            target.copy(id = 777, enable = false),
+            // 用户在手机上自己加的一条：随包没有，收下为新规则
+            TxtTocRule(id = 778, name = "我自己加的规则", rule = "^第[0-9]+[章节].*$", serialNumber = 99, enable = true),
+            // 编不出来的正则不该入库（入库会让"这条切不出章"变成随机现象）
+            TxtTocRule(id = 779, name = "坏正则", rule = "([unclosed", serialNumber = 98, enable = true),
+        ))
+        try {
+            TocRules.useStore(dir.resolve("txt_toc_rules.json"))
+            val report = TocRules.applyBackup(payload)
+            assertEquals("匹配上的只有一条", 1, report["matched"])
+            assertEquals("启用状态被改动一条", 1, report["flipped"])
+            assertEquals("收下 1 条新规则（实际 ${report["added"]}）", 1, report["added"])
+            assertEquals("坏正则 1 条被跳过", 1, report["unusable"])
+            assertFalse("手机上取消勾选的那条在本机应变为停用", TocRules.byId(target.id)!!.enable)
+            assertTrue("新规则要能被查到", TocRules.all.any { it.name == "我自己加的规则" })
+            assertNull("坏正则不入库", TocRules.all.firstOrNull { it.name == "坏正则" })
+            // 覆盖文件写的是**整张表**：只写"改动的那几条"时，重新装载会把停用冲掉
+            // （第一版就是这里露馅的：`ArrayList(容量)` 造出来是空表，匹配到的那条根本没被改到）
+            val rows = json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(TxtTocRule.serializer()),
+                java.nio.file.Files.readString(dir.resolve("txt_toc_rules.json")))
+            assertTrue("覆盖文件里应有整张表（实际 ${rows.size} 条，随包 ${TocRules.packaged.size} 条）",
+                rows.size >= TocRules.packaged.size + 1)
+            assertFalse("文件里那一条也记着停用", rows.first { it.id == target.id }.enable)
+            assertEquals("来自备份的条数要说得出来", 1, TocRules.customCount)
+            assertTrue("随包那份不许被写坏（改动只在覆盖层）", TocRules.packaged.first { it.id == target.id }.enable)
+            // 换一个 store 再读回来，等价于重启进程：改动必须落在文件里而不是只在内存
+            TocRules.useStore(dir.resolve("txt_toc_rules.json"))
+            assertFalse("重新装载后停用状态还在", TocRules.byId(target.id)!!.enable)
+        } finally {
+            // 收尾必须把全局表倒回去，否则同一 JVM 里后面的用例会读到这份测试的启用改动
+            TocRules.useStore(dir.resolve("nothing-here.json"))
+            java.nio.file.Files.deleteIfExists(dir.resolve("txt_toc_rules.json"))
+            java.nio.file.Files.deleteIfExists(dir)
+        }
+        assertEquals("倒回之后随包多少条就是多少条", TocRules.packaged.size, TocRules.all.size)
+        assertTrue("倒回之后那条又启用着", TocRules.byId(target.id)!!.enable)
+    }
+
+    @Test
     fun `split keeps the prologue and the tail instead of eating text`() {
         val text = wellMarkedBook()
         val picked = TocRules.suggest(text)!!

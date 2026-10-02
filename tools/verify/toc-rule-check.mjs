@@ -9,7 +9,8 @@
 // 跑法：node tools/verify/toc-rule-check.mjs
 import fs from 'node:fs'
 import path from 'node:path'
-import { OUT, BASE } from './env.mjs'
+import { OUT, BASE, ROOT } from './env.mjs'
+import { makeZip } from './zip-make.mjs'
 
 const STAMP = new Date().toISOString().replace(/[-:]/g, '').slice(0, 13)
 const results = []
@@ -137,6 +138,64 @@ try {
   } else {
     note('④在线书这一路（本机书架上暂时没有在线书）', '跳过')
   }
+  // ─────────── 手机备份里那份 txtTocRule.json 要真的能套用 ───────────
+  // 上游备份包带的是整张表（含手机上勾的启用/停用与自己加的规则）。
+  // 之前我们只是"原样收下"，界面上看得见、用不上 —— 用户说的就是这件事。
+  const packagedRules = JSON.parse(fs.readFileSync(
+    path.join(ROOT, 'server/src/main/resources/assets/txtTocRule.json'), 'utf8'))
+  const target = packagedRules.find(rule => rule.enable && rule.rule && rule.name)
+  const backupPayload = JSON.stringify([
+    // 同一条规则、手机上取消勾选：服务端要按 rule 字面匹配（备份里的 id 与本机对不上号）
+    { ...target, id: 9001, enable: false },
+    // 用户在手机上自己加的一条：随包没有，应当作为新规则收下并能选
+    { id: 9002, name: `门禁自造规则${STAMP}`, rule: '^第[0-9]+[章节].*$', replacement: '', example: null, serialNumber: 9002, enable: true },
+    // 编不出来的正则：不许入库，但要报数
+    { id: 9003, name: '门禁坏正则', rule: '([unclosed', replacement: '', example: null, serialNumber: 9003, enable: true },
+  ])
+  const keptFile = path.join(ROOT, 'data', 'backup_kept', 'txtTocRule.json')
+  // 这一节会往**真数据目录**里写一份收下条目，所以先把用户原来那份记下来，收尾原样放回去
+  const keptBefore = fs.existsSync(keptFile) ? fs.readFileSync(keptFile) : null
+  const zip = makeZip([{ name: 'txtTocRule.json', data: Buffer.from(backupPayload, 'utf8') }])
+  // 导入接口收的是 multipart 里的一个文件字段，直接把 zip 当请求体发进去是没用的
+  const zipForm = new FormData()
+  zipForm.append('file', new Blob([zip], { type: 'application/zip' }), `门禁备份包-${STAMP}.zip`)
+  const zipImported = await fetch(`${BASE}/api/backup/import`, { method: 'POST', body: zipForm })
+  check('⑤带 txtTocRule.json 的备份包能导入', zipImported.status < 400, `HTTP ${zipImported.status}`)
+  const kept = (await api('/api/backup/kept')).body ?? []
+  const keptEntry = kept.find(item => item.name.toLowerCase() === 'txttocrule.json')
+  check('⑤收下条目里能看到这条，并且标成"可套用"（界面上的按钮按它出现）',
+    !!keptEntry && keptEntry.appliable === true && keptEntry.items === 3,
+    keptEntry ? `${keptEntry.items} 条 · appliable=${keptEntry.appliable}` : '没有这条')
+  const applied = await api('/api/books/toc-rules/apply-backup', { method: 'POST' })
+  const report = applied.body ?? {}
+  check('⑤套用回报说得清：匹配 / 改动 / 新收 / 坏正则各几条',
+    applied.status < 400 && report.matched === 1 && report.flipped === 1 && report.added === 1 && report.unusable === 1,
+    JSON.stringify(report))
+  const afterApply = (await api('/api/books/toc-rules')).body ?? {}
+  const keysAfter = (afterApply.options ?? []).map(option => option.key)
+  check('⑤手机上取消勾选的那条，本机就不再出现在可选清单里',
+    afterApply.overridden === true && !keysAfter.includes(String(target.id)),
+    `overridden=${afterApply.overridden} · 「${target.name}」还在清单里=${keysAfter.includes(String(target.id))}`)
+  const customKey = (afterApply.options ?? []).find(option => option.label === `门禁自造规则${STAMP}`)?.key ?? ''
+  check('⑤备份里自带的自定义规则被收下并且能选', !!customKey && afterApply.fromBackup === 1,
+    `key=${customKey} · fromBackup=${afterApply.fromBackup}`)
+  const reapplied = await api('/api/books/toc-rules/apply-backup', { method: 'POST' })
+  const afterReapply = (await api('/api/books/toc-rules')).body ?? {}
+  check('⑥重复套用不会把同一条规则收两遍（按规则字面匹配，不看 id）',
+    reapplied.status < 400 && afterReapply.fromBackup === 1 && afterReapply.total === afterApply.total,
+    `第二次套用 ${JSON.stringify(reapplied.body)} · fromBackup=${afterReapply.fromBackup} · 共 ${afterReapply.total} 条`)
+  const restored = await api('/api/books/toc-rules/reset', { method: 'POST' })
+  const afterReset = (await api('/api/books/toc-rules')).body ?? {}
+  const keysRestored = (afterReset.options ?? []).map(option => option.key)
+  check('⑥「恢复随包那份」把规则表还原（用户的表不能被门禁留在改过的状态）',
+    restored.status < 400 && afterReset.overridden === false
+      && keysRestored.includes(String(target.id)) && !keysRestored.includes(customKey),
+    `overridden=${afterReset.overridden} · 原规则回来了=${keysRestored.includes(String(target.id))} · 自造规则已清=${!keysRestored.includes(customKey)}`)
+  if (keptBefore) fs.writeFileSync(keptFile, keptBefore)
+  else fs.rmSync(keptFile, { force: true })
+  check('收尾把 data/backup_kept 恢复原样（探针不在用户数据目录里留文件）',
+    keptBefore ? fs.existsSync(keptFile) && fs.readFileSync(keptFile).equals(keptBefore) : !fs.existsSync(keptFile),
+    keptBefore ? `放回 ${keptBefore.length} 字节` : '删掉探针那份（用户原本没有这条）')
 } catch (error) {
   check('探针自身异常', false, error.message)
 } finally {

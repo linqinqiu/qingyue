@@ -28,6 +28,7 @@ const RESTORED_SECTIONS: [string, string][] = [
 const KEPT_SECTIONS: [string, string][] = [
   ['阅读样式', '可套用到本机阅读设置（下面「包里收下的条目」里一键套用）'],
   ['朗读引擎', '可套用到本机朗读设置'],
+  ['TXT 分章规则', '可套用到本机规则表：按规则字面匹配采纳你在手机上勾的启用/停用，包里自己加的规则作为新规则收下'],
   ['书签', '原样收在下面「包里收下的条目」里，可逐条下载；没有专门的书签浏览页'],
   ['字典规则', '这台服务没有取词功能，先原样存着，可下载'],
   ['TXT 分章规则', '原样存着，可下载。导入本地书用的是内置分章规则，不读包里的这一份'],
@@ -96,6 +97,22 @@ export function BackupPage() {
   }
 
   const applyKept = async (entry: KeptBackupEntry) => {
+    // TXT 分章规则不在前端设置里，它是服务端切目录时读的那张表 —— 所以这一条走服务端接口。
+    if (entry.name.toLowerCase().startsWith('txttocrule')) {
+      setBusy(true)
+      try {
+        const result = await api.applyTocRulesFromBackup()
+        const parts = [`采纳 ${result.matched} 条的启用选择（改动 ${result.flipped} 条）`, `收下新规则 ${result.added} 条`]
+        if (result.unusable) parts.push(`${result.unusable} 条正则在本机编不出来，已跳过`)
+        toast.success(`目录规则已套用：${parts.join('，')} · 现在共 ${result.total} 条`)
+        void loadKept()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '套用失败')
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
     let raw = ''
     try { raw = await api.keptBackupEntry(entry.name) }
     catch (error) { toast.error(error instanceof Error ? error.message : '读不出来'); return }

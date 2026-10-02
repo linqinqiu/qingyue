@@ -400,7 +400,27 @@ data class CachedBookRequest(
  * 前端不需要知道那两个特殊值怎么来的 —— 否则两边各写一份哨兵字符串迟早漂移。
  */
 @Serializable data class TocRuleOption(val key: String, val label: String, val example: String = "", val builtIn: Boolean = false)
-@Serializable data class TocRuleList(val options: List<TocRuleOption>)
+@Serializable data class TocRuleList(
+    val options: List<TocRuleOption>,
+    /** 界面上要能说出"本机启用几条、其中几条是从手机备份收下来的"，不然"套用过没有"只能靠猜。 */
+    val enabled: Int = 0,
+    val total: Int = 0,
+    val fromBackup: Int = 0,
+    /** 本机改动还在不在（套用过备份就是"在"）——界面上「恢复随包那份」按它出现。 */
+    val overridden: Boolean = false,
+)
+
+/** 撤掉本机改动的回报（这里不许回 `Map<String, Any>`：Ktor 的序列化直接 500，第一版就栽在这一点上）。 */
+@Serializable data class TocRuleResetResult(val cleared: Boolean, val total: Int)
+
+/** 套用备份里那份规则表的结果（计数都是条目数，界面上直接说人话）。 */
+@Serializable data class TocRuleApplyResult(
+    val matched: Int = 0,
+    val flipped: Int = 0,
+    val added: Int = 0,
+    val unusable: Int = 0,
+    val total: Int = 0,
+)
 @Serializable data class LocalBookReparseRequest(val sourceId: String, val bookUrl: String, val ruleKey: String)
 /** 重切目录的结果。`tocRuleUsed` 是**实际生效**的那条，可能与请求里选的不同。 */
 @Serializable data class LocalBookReparseResult(

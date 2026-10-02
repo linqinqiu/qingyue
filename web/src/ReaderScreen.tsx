@@ -97,12 +97,13 @@ function ReaderSettingsControls({
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
     {/*
-      本地书的目录规则（用户 2026-10-02：「txt目录规则，这个可以放到阅读设置里」）。
-      只对导入到本机的书出现 —— 在线书的目录来自书源的 ruleToc，在这里改它只会误导。
-      下面那句报的是**这本书当前实际用的规则**，不是设置框里高亮的那条：
-      选了 A 但 A 在这本书上切不出第二个章节时，服务端会回落，界面不能装作 A 生效了。
+      本地书的目录规则（用户 2026-10-02：「txt目录规则…你也没有做啊」—— 原来这一组只在读本地书时
+      才出现，于是读完一本在线书的人根本不知道有这件事）。选择器**始终出现**：它写的是"下一本导入的
+      本地书用哪条"。只有真正在读本地书时，才多出示一行"这本现在实际用的是哪条"和重切按钮 ——
+      那句报的是**实际生效**的那条，不是框里高亮的那条：选了 A 而 A 在这本书上切不出第二个章节时
+      服务端会回落，界面不能装作 A 生效了。
     */}
-    {!!localBook && (tocRuleOptions?.length ?? 0) > 0 && (
+    {(tocRuleOptions?.length ?? 0) > 0 && (
       <section className="setting-section">
         <span className="setting-label">本地书目录</span>
         <Select
@@ -112,9 +113,11 @@ function ReaderSettingsControls({
           onChange={value => update({ txtTocRule: value })}
         />
         <small className="setting-hint">
-          这本《{localBook.name}》现在用的是「{ruleLabelOf(localBook.tocRule)}」。换规则会重切目录并清掉正文缓存，阅读进度按新章数夹住。
+          {localBook
+            ? `这本《${localBook.name}》现在用的是「${ruleLabelOf(localBook.tocRule)}」。换规则会重切目录并清掉正文缓存，阅读进度按新章数夹住。`
+            : '这一条用于**下一本导入的本地书**；已经在读的那本用自己当初切好的规则，在下面那本书的阅读设置里单独换。'}
         </small>
-        {onReparseLocal && (
+        {!!localBook && onReparseLocal && (
           <button type="button" className="rules-setting-btn" disabled={reparseBusy} onClick={() => void runReparse()}>
             {reparseBusy ? '正在重切目录…' : '按这条规则重新识别目录'}
           </button>

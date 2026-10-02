@@ -69,8 +69,8 @@ class BackupStore(private val directory: Path) {
             "themeConfig.json", "style.json", "theme.json", "readRecord.json",
         )
 
-        /** 前端能真的映射到自己设置上的那两类，界面上才给「套用」按钮。 */
-        val APPLYABLE_NAMES = listOf("readconfig.json", "httpTTS.json", "httptts.json")
+        /** 前端能真的映射到自己设置上的那几类，界面上才给「套用」按钮。 */
+        val APPLYABLE_NAMES = listOf("readconfig.json", "httpTTS.json", "httptts.json", "txtTocRule.json")
 
         val KEEP_LABELS = mapOf(
             "bookmark.json" to "书签",

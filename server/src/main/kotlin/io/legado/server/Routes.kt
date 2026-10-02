@@ -68,6 +68,9 @@ fun Route.apiRoutes(
     val webView = WebViewProxy(database)
     // 备份包里没有原生归宿的个性化条目，原样收在数据目录下的一个文件夹里（见 BackupStore 的取舍说明）。
     val backupKeep = BackupStore(localBooksDirectory.resolveSibling("backup_kept"))
+    // 规则表的本机改动（手机备份套进来的启用选择与自定义规则）落在 data 下一个文件里，不建表：
+    // 这张表只在切目录时被读一次，建表反而让"改了没生效"变成要查数据库的事。
+    TocRules.useStore(localBooksDirectory.resolveSibling("txt_toc_rules.json"))
     // 真浏览器登录：profile 放在数据目录下（与 local_books 同级），登录态跨次启动保留。
     val externalLogin = ExternalBrowserLogin(database, localBooksDirectory.resolveSibling("external-browser-profile"))
     val debugger = SourceDebugger(runner)
@@ -1119,6 +1122,37 @@ fun Route.apiRoutes(
                 ) + TocRules.candidates.map { rule ->
                     TocRuleOption(rule.id.toString(), rule.name, rule.example.orEmpty())
                 },
+                enabled = TocRules.all.count { it.enable },
+                total = TocRules.all.size,
+                fromBackup = TocRules.customCount,
+                overridden = TocRules.hasOverrides,
+            ))
+        }
+        /*
+         * 撤掉本机改动，回到随包那 26 条（套用过之后要能反悔，门禁也要能还原用户的规则表）。
+         */
+        post("/books/toc-rules/reset") {
+            if (!call.requireSameOriginWrite()) return@post
+            call.respond(TocRuleResetResult(cleared = TocRules.clearOverrides(), total = TocRules.all.size))
+        }
+        /*
+         * 套用「手机备份里那份 txtTocRule.json」（用户 2026-10-02：「手机导入的备份里面会有这个相关的」）。
+         * 只读服务器上已经收下的那条，不接受请求体里现编的表 —— 否则这条写接口就成了"任意改规则表"。
+         */
+        post("/books/toc-rules/apply-backup") {
+            if (!call.requireSameOriginWrite()) return@post
+            val text = backupKeep.read("txtTocRule.json")
+                ?: return@post call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiError("no_backup_entry", "服务器上还没有手机备份里的 TXT 分章规则；先在「备份包」导入一个带这条目的包"),
+                )
+            val report = TocRules.applyBackup(text)
+            call.respond(TocRuleApplyResult(
+                matched = report["matched"] ?: 0,
+                flipped = report["flipped"] ?: 0,
+                added = report["added"] ?: 0,
+                unusable = report["unusable"] ?: 0,
+                total = report["total"] ?: 0,
             ))
         }
         /**

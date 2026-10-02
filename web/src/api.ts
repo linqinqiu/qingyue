@@ -24,7 +24,17 @@ export type LocalBookImportItem = { filename: string; success: boolean; bookUrl?
 export type LocalBookImportResponse = { total: number; imported: number; failed: number; results: LocalBookImportItem[] }
 /** 「阅读设置 → 本地书目录」下拉的一项（服务端把 auto / builtin / 规则 id 统一成同一形状）。 */
 export type TocRuleOption = { key: string; label: string; example?: string; builtIn?: boolean }
-export type TocRuleList = { options: TocRuleOption[] }
+export type TocRuleList = {
+  options: TocRuleOption[]
+  /** 本机启用几条 / 表里共几条 / 其中几条是从手机备份收下来的。界面上要报得出，不能只给下拉。 */
+  enabled?: number
+  total?: number
+  fromBackup?: number
+  /** 本机改动还在不在（套用过备份就是"在"），界面上「恢复随包那份」按它出现。 */
+  overridden?: boolean
+}
+/** 套用备份里那份规则表的回报：匹配上几条、其中改动了启用几条、新收下几条、坏正则几条。 */
+export type TocRuleApplyResult = { matched: number; flipped: number; added: number; unusable: number; total: number }
 /** 重切目录的回报。`tocRuleUsed` 是**实际生效**的那条，可能与请求里选的不同（`fellBack` 会说清）。 */
 export type LocalBookReparseResult = { success: boolean; name: string; totalChapters: number; tocRuleUsed: string; ruleLabel: string; fellBack?: boolean; error?: string }
 export type SourceSubscription = { id: number; url: string; enabled: boolean; createdAt: number; updatedAt: number; lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string; lastImported: number; contentHash?: string }
@@ -490,6 +500,10 @@ export const api = {
   },
   /** 本地书可选的目录规则（auto / builtin / 上游那 26 条里编译得出来的）。 */
   tocRules: () => request<TocRuleList>('/api/books/toc-rules'),
+  /** 套用「手机备份里那份 txtTocRule.json」：按规则字面匹配采纳启用与顺序，匹配不上的收下为新规则。 */
+  applyTocRulesFromBackup: () => request<TocRuleApplyResult>('/api/books/toc-rules/apply-backup', { method: 'POST' }),
+  /** 撤掉本机改动（套用过备份之后想反悔，或门禁跑完要还原用户的规则表）。 */
+  resetTocRules: () => request<{ cleared: boolean; total: number }>('/api/books/toc-rules/reset', { method: 'POST' }),
   /** 换规则重切一本本地书的目录。失败时服务端会说清是"这条切不出第二章"还是"原文件不在了"。 */
   reparseLocalBook: (sourceId: string, bookUrl: string, ruleKey: string) =>
     request<LocalBookReparseResult>('/api/books/reparse-local', {

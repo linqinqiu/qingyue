@@ -359,6 +359,29 @@ class BackupImportTest {
         }
     }
 
+    @Test
+    fun `只装个性化条目的备份包也算合法备份（手机上只勾了 TXT 分章规则导出的那种）`() {
+        val directory = Files.createTempDirectory("legado-backup-kept-only")
+        val database = Database(directory.resolve("legado.sqlite").toString())
+        try {
+            database.initialize()
+            val archive = directory.resolve("backup.zip")
+            writeArchive(
+                archive,
+                mapOf(
+                    "txtTocRule.json" to """[{"id":9002,"name":"手机上自己加的规则","rule":"^第[0-9]+[章节].*$","replacement":"","serialNumber":1,"enable":true}]""",
+                    "searchhistory.json" to """["三体","白毛"]""",
+                ),
+            )
+            // 以前这种包会被 require 判成"不是可识别的 Legado 备份"整包拒收
+            val summary = BackupImporter(database).import(archive)
+            assertNotNull("只含收下条目的包应当能导入", summary)
+        } finally {
+            database.close()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     private fun writeArchive(target: Path, sections: Map<String, String>) {
         ZipOutputStream(Files.newOutputStream(target)).use { zip ->
             sections.forEach { (name, body) ->
