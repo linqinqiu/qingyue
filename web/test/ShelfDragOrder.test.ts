@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { compareCustomSort, dropIndexAt, moveWithin, sameOrder } from '../src/shelfOrder'
+import { compareCustomSort, dropIndexAt, moveWithin } from '../src/shelfOrder'
 import type { BookshelfItem } from '../src/api'
 
 /**
@@ -63,9 +63,9 @@ test('书架确实接上了拖动排序（不只是一个没人调用的模块�
   assert.match(server, /put\("\/bookshelf\/order"\)/, '服务端有这条路由')
 })
 
-test('顺序比较 - 只有真的换了位置才发请求', () => {
-  const a = [book('甲'), book('乙')]
-  assert.ok(sameOrder(a, [...a]))
-  assert.ok(!sameOrder(a, [a[1], a[0]]))
-  assert.ok(!sameOrder(a, a.slice(0, 1)), '少一本也算变了（筛选条件换了会走这条）')
+test('没动过就不写库 - moveWithin 用"返回同一个数组"说这件事', () => {
+  const list = [book('甲'), book('乙'), book('丙')]
+  assert.equal(moveWithin(list, 1, 1), list, '原地 = 同一个引用')
+  assert.equal(moveWithin(list, 1, 2), list, '落到"第 2 格之前"就是原地，不该被当成挪了一次')
+  assert.notEqual(moveWithin(list, 0, 2), list, '真挪了才是新数组，调用方据此决定要不要发请求')
 })

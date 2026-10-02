@@ -241,11 +241,16 @@ class Database(private val path: String) : Closeable, AutoCloseable {
 
 
 
+    /**
+     * 列表顺序：排过序的在前，没排过的按名称跟在后面。
+     * 全库都没编号时 `sort_order is null` 恒为 1、`sort_order` 全 NULL，等价于原来那条按名称排 ——
+     * 所以这条改动对没用过自定义排序的人是零影响的，不会因为一次拖动就把整库顺序钉死。
+     */
     fun listSources(query: String?): List<SourceSummary> = connect { db ->
         val sql = if (query.isNullOrBlank()) {
-            "select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login from source order by name collate nocase"
+            "select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login, sort_order from source order by sort_order is null, sort_order, name collate nocase"
         } else {
-            "select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login from source where name like ? or source_url like ? order by name collate nocase"
+            "select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login, sort_order from source where name like ? or source_url like ? order by sort_order is null, sort_order, name collate nocase"
         }
         db.prepareStatement(sql).use { statement ->
             if (!query.isNullOrBlank()) { statement.setString(1, "%$query%"); statement.setString(2, "%$query%") }
@@ -263,12 +268,40 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                                 hasLogin = rs.getInt(9) == 1,
                                 updatedAt = rs.getLong(7),
                                 version = rs.getLong(8),
+                                // 第 10 列：null = 没参与过自定义排序（不是 0，也不是"排在最前"）
+                                sortOrder = rs.getObject(10) as? Int,
                             )
                         )
                     }
                 }
             }
         }
+    }
+
+    /** 自定义排序：按给定的顺序写 `sort_order`（1 起），只写点到的那些；不在库里的 id 跳过。 */
+    fun reorderSources(ids: List<String>): Int = write { db ->
+        db.autoCommit = false
+        try {
+            var written = 0
+            db.prepareStatement("update source set sort_order=? where id=?").use { statement ->
+                ids.forEachIndexed { index, id ->
+                    statement.setInt(1, index + 1)
+                    statement.setString(2, id)
+                    written += statement.executeUpdate()
+                }
+            }
+            db.commit()
+            written
+        } catch (error: Exception) {
+            runCatching { db.rollback() }
+            throw error
+        } finally {
+            db.autoCommit = true
+        }
+    }
+
+    fun clearSourceOrder(): Int = write { db ->
+        db.prepareStatement("update source set sort_order=null where sort_order is not null").use { it.executeUpdate() }
     }
 
     fun getSource(id: String): SourceRecord? = connect { db -> db.prepareStatement("select id, payload, version, updated_at from source where id = ?").use {
@@ -2124,6 +2157,11 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             db.createStatement().use {
                 it.executeUpdate("alter table source add column has_login integer not null default 0")
             }
+        }
+        // 自定义排序位，**可空**：只给拖过的那一列编号。全库 5,574 个源如果被一次拖动全编号，
+        // 之后"按名称"就再也排不动了 —— 没参与过的必须保持没参与。
+        if ("sort_order" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table source add column sort_order integer") }
         }
         db.createStatement().use {
             it.executeUpdate("update source set has_login = 1 where (payload like '%\"loginUi\"%' or payload like '%\"loginUrl\"%' or payload like '%\"loginCheckJs\"%') and (has_login is null or has_login = 0)")

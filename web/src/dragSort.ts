@@ -1,40 +1,42 @@
 import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
-import type { BookshelfItem } from './api'
-import { dropIndexAt, moveWithin, sameOrder, type Rect } from './shelfOrder'
+import { dropIndexAt, moveWithin, type Rect } from './shelfOrder'
 
 /** 按住多久算"我要拖动"而不是"我要点开"。250ms 是各家长按的常见档位，再长就手感发木。 */
 const HOLD_MS = 250
 /** 按住之前先动了这么多像素，说明用户是在滚动页面，不是在拖动。 */
 const MOVE_SLOP = 9
-/** 拖到上下边缘这么多像素内时自动滚动，否则长书架永远拖不到末尾。 */
+/** 拖到上下边缘这么多像素内时自动滚动，否则长列表永远拖不到末尾。 */
 const EDGE_SCROLL = 56
 
-export type ShelfDragState = { from: number; at: number } | null
+export type DragSortState = { from: number; at: number } | null
 
 /**
- * 书架长按拖动排序。只负责"手势 → 落点下标"，顺序怎么落库、乐观更新都交给调用方，
- * 因为可拖的清单是**筛选后**的那一列，服务端要的是这一列的新顺序而不是全架。
+ * 长按拖动排序。只负责"手势 → 落点下标"，顺序怎么落库、乐观更新都交给调用方，
+ * 因为可拖的清单是**筛选后**的那一列，服务端要的是这一列的新顺序而不是全库。
+ * 书架与书源列表共用这一份：各写一遍手势，只会一个修了另一个忘修。
  */
-export function useShelfDragSort(options: {
+export function useDragSort<T>(options: {
   enabled: () => boolean
   gridRef: RefObject<HTMLElement | null>
-  items: BookshelfItem[]
-  onReorder: (ordered: BookshelfItem[]) => void
+  /** 参与拖动的子元素选择器（书架是 `.shelf-card`，书源列表是 `.source-list-item`） */
+  itemSelector: string
+  items: T[]
+  onReorder: (ordered: T[]) => void
 }) {
-  const { enabled, gridRef, items, onReorder } = options
-  const [drag, setDrag] = useState<ShelfDragState>(null)
-  const dragRef = useRef<ShelfDragState>(null)
+  const { enabled, gridRef, itemSelector, items, onReorder } = options
+  const [drag, setDrag] = useState<DragSortState>(null)
+  const dragRef = useRef<DragSortState>(null)
   const suppressClickRef = useRef(false)
 
   const measure = useCallback((): Rect[] => {
     const grid = gridRef.current
     if (!grid) return []
     const offset = window.scrollY
-    return [...grid.querySelectorAll<HTMLElement>('.shelf-card')].map(node => {
+    return [...grid.querySelectorAll<HTMLElement>(itemSelector)].map(node => {
       const box = node.getBoundingClientRect()
       return { left: box.left, top: box.top + offset, width: box.width, height: box.height }
     })
-  }, [gridRef])
+  }, [gridRef, itemSelector])
 
   const beginDrag = useCallback((from: number, rects: Rect[]) => {
     dragRef.current = { from, at: from }
@@ -59,7 +61,8 @@ export function useShelfDragSort(options: {
       setDrag(null)
       if (!current) return
       const ordered = moveWithin(items, current.from, current.at)
-      if (!sameOrder(ordered, items)) onReorder(ordered)
+      // moveWithin 原地不动时返回同一个数组，靠引用相等挡住什么都没变的写库
+      if (ordered !== items) onReorder(ordered)
       // 拖完这一下不能再被当成"点开这本书"，否则一松手就跳进阅读器
       suppressClickRef.current = true
       window.setTimeout(() => { suppressClickRef.current = false }, 0)

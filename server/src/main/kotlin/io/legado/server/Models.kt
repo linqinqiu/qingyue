@@ -18,6 +18,8 @@ data class HealthStatus(val title: String, val version: String, val status: Stri
     val hasLogin: Boolean = false,
     val updatedAt: Long,
     val version: Long,
+    /** 自定义排序位（1 起）；null = 没拖过，按名称排在有序段之后。 */
+    val sortOrder: Int? = null,
 )
 
 @Serializable
@@ -445,6 +447,8 @@ data class CachedBookRequest(
 /** 自定义排序：整段可见清单按新顺序回传，服务端按位置写 `book_shelf.sort_order`。 */
 @Serializable data class ShelfOrderRequest(val books: List<BookIdentifier>)
 @Serializable data class ShelfOrderResult(val updated: Int)
+/** 书源自定义排序：屏幕上这一列按新顺序回传，服务端按位置写 `source.sort_order`。 */
+@Serializable data class SourceOrderRequest(val ids: List<String>)
 
 /**
  * 书签。`bookKey` 是「书名 + 作者」的归一化串而不是 `sourceId + bookUrl` ——

@@ -7,7 +7,7 @@ import {
   flushOfflineProgress,
 } from './offlineStorage'
 
-export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number }
+export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number; /** 自定义排序位；null = 没拖过，按名称排在有序段之后 */ sortOrder?: number | null }
 export type SourceRecord = { id: string; json: string; version: number; updatedAt: number }
 /**
  * 书签。归拢键是「书名 + 作者」（服务端算），不是 sourceId + bookUrl ——
@@ -356,6 +356,9 @@ export const api = {
     request<BatchSourceResponse>('/api/sources/batch', { method: 'POST', body: JSON.stringify({ action, ids, group }) }),
   healthCheckSources: (ids?: string[], timeoutMs = 5000) =>
     request<SourceHealthCheckResponse>('/api/sources/health-check', { method: 'POST', body: JSON.stringify({ ids, timeoutMs }) }),
+  /** 书源自定义排序：屏幕上这一列按新顺序整段回传。 */
+  reorderSources: (ids: string[]) => request<{ updated: number }>('/api/sources/order', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  clearSourceOrder: () => request<{ updated: number }>('/api/sources/order', { method: 'DELETE' }),
   exportSources: (ids?: string[]) =>
     request<string[]>(`/api/sources/export${ids && ids.length > 0 ? `?${ids.map(id => `id=${encodeURIComponent(id)}`).join('&')}` : ''}`),
   validate: (id: string, draftJson?: string) => request<{ valid: boolean; errors: string[]; warnings: string[] }>(`/api/sources/${encodeURIComponent(id)}/validate`, { method: 'POST', body: JSON.stringify(draftJson ? { json: draftJson } : {}) }),

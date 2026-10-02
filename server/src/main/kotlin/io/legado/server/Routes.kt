@@ -205,6 +205,22 @@ fun Route.apiRoutes(
             call.application.log.info("source import completed: imported={}, updated={}, skipped={}", response.imported, response.updated, response.skipped)
             call.respond(response)
         }
+        // 注册在 `/sources/{id}` 之前：字面段本来就优先于参数段，但顺序摆在这儿，
+        // 读代码的人不用去查路由树的优先级就能确定 `PUT /sources/order` 打的是哪一个。
+        put("/sources/order") {
+            if (!call.requireSameOriginWrite()) return@put
+            val request = runCatching { call.receive<SourceOrderRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@put
+            }
+            if (request.ids.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("empty_order", "没有要排序的书源")); return@put
+            }
+            call.respond(ShelfOrderResult(database.reorderSources(request.ids)))
+        }
+        delete("/sources/order") {
+            if (!call.requireSameOriginWrite()) return@delete
+            call.respond(ShelfOrderResult(database.clearSourceOrder()))
+        }
         route("/sources/{id}") {
             get {
                 val source = database.getSource(call.parameters["id"]!!)

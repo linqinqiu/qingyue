@@ -6,7 +6,7 @@ import { useEscapeClose } from './useEscapeClose'
 import { ContextMenuLayer, showContextMenu } from './ContextMenu'
 import { readSearchLayout, readShelfLayout, readShelfSort, ShelfLayout, ShelfSort, writeSearchLayout, writeShelfLayout, writeShelfSort } from './shelfLayout'
 import { compareCustomSort } from './shelfOrder'
-import { useShelfDragSort } from './shelfDrag'
+import { useDragSort } from './dragSort'
 import { Logo } from './Logo'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
 import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
@@ -959,6 +959,43 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
     () => filteredSources.slice(0, visibleSourceCount),
     [filteredSources, visibleSourceCount],
   )
+
+  /*
+    自定义书源排序（用户 2026-10-02：「自定义书源排序，优化书源编辑功能」）。
+    服务端返回的就是「排过序的在前，没编号的按名称跟在后面」，所以这里只负责拖完写回去 ——
+    客户端再排一遍就会有第二个事实来源，两边一漂，界面顺序和刷新后的顺序就不一样。
+  */
+  const sourceListRef = useRef<HTMLElement | null>(null)
+  const applySourceOrder = useCallback((ordered: SourceSummary[]) => {
+    const rank = new Map(ordered.map((item, index) => [item.id, index + 1]))
+    // 就地回填：可见那几条按新顺序换回来，没在这一列里的保持原位。
+    // 这里**不写比较器** —— 顺序是服务端排的（`sort_order is null, sort_order, name`），
+    // 客户端再排一遍就有两套规则，中文书名上 SQLite 的 nocase 与 localeCompare 本来就会分歧。
+    setSources(current => {
+      const queue = [...ordered]
+      return current.map(item => {
+        if (!rank.has(item.id)) return item
+        const next = queue.shift()
+        return next ? { ...next, sortOrder: rank.get(next.id) ?? null } : item
+      })
+    })
+    void api.reorderSources(ordered.map(item => item.id)).catch(() => {
+      setNotice('书源顺序没能保存，刷新后会回到原来的顺序')
+      void load()
+    })
+  }, [load])
+  const { drag: sourceDrag, onPointerDown: onSourcePointerDown, onClickCapture: onSourceClickCapture } = useDragSort({
+    enabled: () => !isBatchMode,
+    gridRef: sourceListRef,
+    itemSelector: '.source-list-item',
+    items: visibleSources,
+    onReorder: applySourceOrder,
+  })
+  const orderedCount = useMemo(() => sources.filter(item => item.sortOrder != null).length, [sources])
+  const clearSourceOrder = () => {
+    setSources(current => current.map(item => ({ ...item, sortOrder: null })))
+    void api.clearSourceOrder().catch(() => { setNotice('自定义顺序没能清掉，刷新后会回到原样'); void load() })
+  }
   const sourceStats = useMemo(() => ({
     total: sources.length,
     enabled: sources.filter(s => s.enabled).length,
@@ -1202,6 +1239,16 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
           <input placeholder="筛选书源" value={query} onChange={event => setQuery(event.target.value)} />
         </div>
 
+        {orderedCount > 0 && (
+          <div className="source-order-bar">
+            <small>{orderedCount} 个书源有自定义位置；其余按名称排在后面</small>
+            <button type="button" className="subtle-button" onClick={clearSourceOrder}
+              title="清掉全部自定义位置，回到只按名称排（切分组、筛选都不会清）">
+              清除自定义顺序
+            </button>
+          </div>
+        )}
+
         <button
           type="button"
           className="primary-button source-create-btn"
@@ -1228,8 +1275,8 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
 
         {notice && <p className="sidebar-notice">{notice}</p>}
 
-        <nav className="source-list" aria-label="书源列表">
-          {visibleSources.map(source => {
+        <nav ref={sourceListRef} className={`source-list ${isBatchMode ? '' : 'source-list-sortable'}`} aria-label="书源列表">
+          {visibleSources.map((source, index) => {
             const isChecked = selectedIds.has(source.id)
             const isCurrent = selected?.id === source.id
 
@@ -1261,9 +1308,11 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
 
             return (
               <button
-                className={`source-list-item${isCurrent ? ' selected' : ''}`}
+                className={`source-list-item${isCurrent ? ' selected' : ''}${sourceDrag?.from === index ? ' source-item-dragging' : ''}${sourceDrag && sourceDrag.at === index && sourceDrag.from !== index ? ' source-item-drop-before' : ''}`}
                 key={source.id}
                 type="button"
+                onPointerDown={onSourcePointerDown(index)}
+                onClickCapture={onSourceClickCapture}
                 onClick={() => { setCreating(false); onSelect(source) }}
                 onContextMenu={event => showContextMenu(event, [
                   { label: '编辑此书源', icon: 'edit', onSelect: () => { setCreating(false); onSelect(source) } },
@@ -2493,7 +2542,9 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
     setItems(current => current.map(item => ({ ...item, sortOrder: null })))
     try { await api.clearShelfOrder() } catch { setMessage('自定义顺序没能清掉，刷新后会回到原样'); void load() }
   }
-  const { drag, onPointerDown, onClickCapture } = useShelfDragSort({    enabled: () => sort === 'custom' && !batchMode,
+  const { drag, onPointerDown, onClickCapture } = useDragSort({
+    itemSelector: '.shelf-card',
+    enabled: () => sort === 'custom' && !batchMode,
     gridRef,
     items: visibleItems,
     onReorder: applyOrder,

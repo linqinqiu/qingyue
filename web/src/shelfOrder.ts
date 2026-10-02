@@ -36,7 +36,7 @@ export function dropIndexAt(rects: Rect[], x: number, y: number): number {
   return nearest < 0 ? -1 : nearest
 }
 
-/** 把下标 `from` 那一项挪到"原数组的第 insertAt 格之前"。越界与原地都原样返回。 */
+/** 把下标 `from` 那一项挪到"原数组的第 insertAt 格之前"。越界与原地都**返回同一个数组** —— 调用方靠这个引用相等判断"没动过"。 */
 export function moveWithin<T>(list: T[], from: number, insertAt: number): T[] {
   if (from < 0 || from >= list.length) return list
   const target = Math.max(0, Math.min(list.length - 1, insertAt > from ? insertAt - 1 : insertAt))
@@ -46,6 +46,3 @@ export function moveWithin<T>(list: T[], from: number, insertAt: number): T[] {
   next.splice(target, 0, moved)
   return next
 }
-
-export const sameOrder = (a: { sourceId: string; bookUrl: string }[], b: { sourceId: string; bookUrl: string }[]) =>
-  a.length === b.length && a.every((item, index) => item.sourceId === b[index].sourceId && item.bookUrl === b[index].bookUrl)
