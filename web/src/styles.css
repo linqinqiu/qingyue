@@ -944,6 +944,16 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reading-content { width: min(var(--reader-max-width, 860px), calc(100% - var(--reader-pad) * 2)); padding: calc(clamp(64px, 8vw, 88px) + var(--safe-top)) max(0px, var(--safe-right)) calc(48px + var(--safe-bottom)) max(0px, var(--safe-left)); margin: 0 auto; font-family: var(--reader-font-family, serif) !important; font-size: var(--reader-font-size); line-height: var(--reader-line-height); letter-spacing: var(--reader-letter-spacing); }
 .reading-content *, .reader-paginated-column-body * { font-family: inherit !important; }
 .reading-content h1, .reader-paginated-column-body h1 { margin-bottom: 1.55em; font-size: 1.22em; font-weight: 650; line-height: 1.45; break-before: column; page-break-before: always; }
+/*
+  连续滚动的章节边界（滚动模式一次渲染"锚点章 + 续接的两章"）：
+  章与章之间一条细分隔线 —— 用户要的是"一体的"，这条线只是标出"这里换章了"，
+  不该做成翻页那种大间距或粗线。
+*/
+/* 每一节的盒子内边距必须一致（第一节的那条上边框是透明的）：跨章时"这一节变成了第一节"，
+   如果它自己的 padding-top/边框随之变化，锚点的内容就会在它自己的盒子里往上蹿 ——
+   按节的外框校正滚动位置是量不到这一段的（外框没动），实测每跨一章差 42px。 */
+.reader-flow-chapter { padding-top: 2.2em; border-top: 1px solid transparent; }
+.reader-flow-chapter + .reader-flow-chapter { margin-top: 3.2em; border-top-color: color-mix(in srgb, var(--line) 65%, transparent); }
 /* 首行缩进由「阅读设置 · 排版」的 --reader-text-indent 控制（正文段落的 trim 会先剥掉源站自带的
    全角空格，缩进只能有一个主人）；标题 h1 与配图不跟着缩。 */
 .reading-content p, .reader-paginated-column-body p { margin-bottom: var(--reader-paragraph-spacing); color: var(--ink); text-align: justify; text-wrap: pretty; text-indent: var(--reader-text-indent, 2em); }

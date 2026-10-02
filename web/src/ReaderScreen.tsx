@@ -4,6 +4,7 @@ import { Icon } from './icons'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
+import { flowAdvance, holdScroll, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
 import { toast } from './Toast'
@@ -329,7 +330,26 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [tocRuleOptions, setTocRuleOptions] = useState<TocRuleOption[]>([])
   /** 这本本地书**实际**用的规则，来自书架记录（设置里那条只是下一本的默认值）。 */
   const [shelfTocRule, setShelfTocRule] = useState<string | null>(null)
+  /**
+   * 滚动模式的续接窗口（用户 2026-10-02：「章节间的连接还是不对，怎么能跳转呢，不是一体的吗」）。
+   * 锚点章之后已经取到正文的章节，渲染在同一个滚动容器里 —— 读完一章是"顶上来"，不是"跳过去"。
+   */
+  const [flowTail, setFlowTail] = useState<{ chapter: Chapter; content: string }[]>([])
+  /** 跨过章边界摘掉顶部那几章时，新锚点该停在屏幕上哪（null = 这一帧不需要校正）。 */
+  const pendingKeepRef = useRef<number | null>(null)
+  /** 正在"续接推进"（不是用户主动跳章）：这一帧不许 scrollTo，也不许重放进场动画。 */
+  const flowAdvanceRef = useRef(false)
+  /** 容器 key：只有主动跳章/换源/换书才换；续接推进不换，否则每跨一章白闪一次。 */
+  const [flowKey, setFlowKey] = useState(() => openBook.chapters[startIndex]?.url || openBook.bookUrl)
+  /** 朗读按段落索引找节点必须限定在锚点那一章里，否则会挑到续接进来的下一章。 */
+  const anchorSectionRef = useRef<HTMLElement | null>(null)
+  // 滚动回调是长期存在的闭包，读续接窗口要经 ref（与 currentChapterUrlRef 同一手法）
+  const flowTailRef = useRef<{ chapter: Chapter; content: string }[]>([])
+  flowTailRef.current = flowTail
   const [chapterIndex, setChapterIndex] = useState(startIndex)
+  /** 同一个手法：判断"只能往前顶"要读当前的那一个，不能闭包里那个早就过期的数字。 */
+  const chapterIndexRef = useRef(chapterIndex)
+  chapterIndexRef.current = chapterIndex
   const [content, setContent] = useState('')
   const [loadedChapterUrl, setLoadedChapterUrl] = useState('')
   const [message, setMessage] = useState('')
@@ -743,11 +763,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
 
     // 2. Query all paragraph elements with data-paragraph-index
+    //    滚动模式要限定在**锚点那一章**里：连续流里续接进来的下一章也带 data-paragraph-index，
+    //    从 0 重新编号，全局查会挑到别的章（朗读起始句与高亮跟读都会错段）。
     const paragraphEls = Array.from(
       document.querySelectorAll<HTMLElement>(
         settings.pageMode === 'paginate'
           ? '.reader-paginated-column-body [data-paragraph-index]'
-          : '.reading-content [data-paragraph-index]'
+          : '.reading-content .reader-flow-chapter:first-of-type [data-paragraph-index]'
       )
     )
 
@@ -840,11 +862,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }
 
   /** 正文块渲染：`![图片](url)` 占位行还原成走代理的 `<img>`，其余仍是段落。 */
-  const renderContentBlock = (line: string, index: number) => {
+  const renderContentBlock = (line: string, index: number, owner?: Chapter) => {
     const image = contentImageUrl(line)
     if (image) {
       // 本地 EPUB 的插图本来就是站内地址，再过一道图片代理是错的（那一层只收 http(s)）
-      const src = isSameSiteAsset(image) ? image : api.bookImage(image, chapter?.url)
+      // Referer 用**这一段属于哪一章**：续接进来的下一章的图，不能拿锚点章的地址当来源
+      const referer = (owner ?? chapter)?.url
+      const src = isSameSiteAsset(image) ? image : api.bookImage(image, referer)
       return (
         <figure key={index} className="reader-paragraph-image">
           <img
@@ -915,6 +939,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setLoading(true)
     setChapterIndex(nextIndex)
     setActiveDrawer(null)
+    // 主动跳章与"顶上来"是两回事：这里要换容器 key（重挂 + 重放一次进场动画），
+    // 并把续接推进的状态清干净，否则上一次跨章的补偿会被用错地方。
+    flowAdvanceRef.current = false
+    pendingKeepRef.current = null
+    // 续接窗口跟着跳：留着旧位置后面那几章的话，这一帧会在新的锚点下面挂出毫不相干的章节。
+    setFlowTail([])
+    setFlowKey(currentBook.chapters[nextIndex]?.url ?? `jump-${nextIndex}`)
   }, [chapterIndex, currentBook.chapters.length, persist, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
 
   // 滚动模式的"滚到底再往下推一下就进下一章"。判据必须是"已经触底 + 继续向下滚"，
@@ -927,6 +958,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const onWindowWheel = (event: WheelEvent) => {
       if (event.deltaY <= 0 || loading || !content) return
       if (chapterIndex >= currentBook.chapters.length - 1) return
+      // 连续流里"下一章"本来就挂在下面，跨章由滚动回调顶窗口；这里再翻一次就是重复跳章
+      if (flowTailRef.current.length > 0) return
       const doc = document.documentElement
       if (doc.scrollHeight - (window.scrollY + window.innerHeight) > 4) return
       const now = Date.now()
@@ -1102,9 +1135,14 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       if (cancelled) return
       setContent(nextContent)
       setLoadedChapterUrl(chapter.url)
-      const position = !restoredRef.current && chapter.index === startIndex ? currentBook.progress?.scrollPosition ?? 0 : 0
+      // 续接推进时 position 给 null：下面那个定位 effect 见到 null 就直接返回，
+      // 于是"跨章"不再伴随任何 scrollTo —— 这正是"不是一体的吗"要的答案。
+      const advancing = flowAdvanceRef.current
+      flowAdvanceRef.current = false
+      const position = advancing ? null
+        : (!restoredRef.current && chapter.index === startIndex ? currentBook.progress?.scrollPosition ?? 0 : 0)
       restoredRef.current = true
-      currentRef.current = { chapter, position }
+      currentRef.current = { chapter, position: position ?? 0 }
       initialPagePositionRef.current = position
       setLoading(false)
     }
@@ -1126,9 +1164,59 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
   }, [chapter, currentBook.bookUrl, currentBook.details.sourceId, currentBook.progress?.scrollPosition, startIndex])
 
+  /**
+   * 续接窗口：把锚点章之后的 1~2 章挂到下面（只在滚动模式）。
+   * 优先吃预载缓存 —— `preloadNextChapter` 在本章读到 70% 时就把下一章取回来了，
+   * 所以正常情况下这一趟零请求。
+   */
+  useEffect(() => {
+    if (settings.pageMode !== 'scroll' || !content) return
+    // 锚点还没换上这一章的正文时不许重排窗口：那会在"上一章的字还挂着"的那一两帧里
+    // 把已经续接进来的那一章从 DOM 中摘走，画面凭空少一章 —— 正是要消灭的"跳"。
+    // 宁可让那一章短暂地出现两次（重复的那份在视口下方，看不见），也不许它消失。
+    if (chapter && loadedChapterUrl !== chapter.url) return
+    let cancelled = false
+    void (async () => {
+      const wanted: Chapter[] = []
+      for (let i = chapterIndex + 1; i < currentBook.chapters.length && wanted.length < 2; i += 1) {
+        const candidate = currentBook.chapters[i]
+        if (!candidate || candidate.isVolume || !candidate.url) continue
+        wanted.push(candidate)
+      }
+      const filled: { chapter: Chapter; content: string }[] = []
+      for (const candidate of wanted) {
+        const cached = preloadedContentRef.current.get(candidate.url)
+        if (cached) {
+          filled.push({ chapter: candidate, content: cached })
+          continue
+        }
+        const result = await api.content(currentBook.details.sourceId, candidate.url, currentBook.bookUrl).catch(() => null)
+        if (!result || cancelled) break
+        preloadedContentRef.current.set(candidate.url, result.content)
+        filled.push({ chapter: candidate, content: result.content })
+      }
+      if (!cancelled) setFlowTail(filled)
+    })()
+    return () => { cancelled = true }
+  }, [settings.pageMode, chapterIndex, chapter?.url, content, loadedChapterUrl, currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
+
   // Scroll mode layout effect to restore position or jump to start/end
   useLayoutEffect(() => {
     if (settings.pageMode !== 'scroll' || loading || !content) return
+    // 续接推进：摘掉了顶部那几章，滚动位置要按"新锚点现在量出来的偏移"校正回去。
+    // 放在这个 layout effect 里是因为它在浏览器绘制之前 —— 校正必须和摘除同一帧完成，
+    // 否则用户看到的就是画面往上跳一截（那正是要消灭的症状，只是换了个触发点）。
+    if (pendingKeepRef.current !== null) {
+      const keep = pendingKeepRef.current
+      pendingKeepRef.current = null
+      const first = document.querySelector<HTMLElement>('.reading-content .reader-flow-chapter')
+      if (first) {
+        const next = holdScroll(window.scrollY, first.getBoundingClientRect().top, keep)
+        lastScrollYRef.current = next
+        window.scrollTo({ top: next, behavior: 'auto' })
+      }
+      return
+    }
     const targetMode = targetInitialPageRef.current
     const initialPos = initialPagePositionRef.current
     targetInitialPageRef.current = null
@@ -1260,7 +1348,31 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         lastScrollYRef.current = currentY
         const scrollHeight = document.documentElement.scrollHeight
         const clientHeight = window.innerHeight
-        current.position = scrollPosition(currentY, scrollHeight, clientHeight)
+        if (settings.pageMode === 'scroll') {
+          // 进度仍然按"这一章读了多少"算（契约不变，分母从整篇换成锚点那一节），
+          // 顺便判断该不该把窗口往前顶一格 —— 顶格是摘掉顶部那些章 + 补偿滚动，不是 scrollTo。
+          const nodes = [...document.querySelectorAll<HTMLElement>('.reading-content .reader-flow-chapter')]
+          if (nodes.length > 0) {
+            const boxes = nodes.map(node => ({ top: currentY + node.getBoundingClientRect().top, height: node.offsetHeight }))
+            current.position = clampScrollPosition(sectionProgress(boxes[0], currentY, clientHeight))
+            // 一帧之内可能跨过多章（拖滚动条、程序化跳转），所以是一次顶过去若干节而不是逐节数。
+            const advance = nodes.length > 1 ? flowAdvance(boxes, currentY) : null
+            const target = advance ? flowTailRef.current[advance.lead - 1] : undefined
+            if (advance && target) {
+              const targetIndex = currentBook.chapters.findIndex(item => item.url === target.chapter.url)
+              if (targetIndex > chapterIndexRef.current) {
+                pendingKeepRef.current = advance.keepTop
+                flowAdvanceRef.current = true
+                persist()
+                setChapterIndex(targetIndex)
+              }
+            }
+          } else {
+            current.position = scrollPosition(currentY, scrollHeight, clientHeight)
+          }
+        } else {
+          current.position = scrollPosition(currentY, scrollHeight, clientHeight)
+        }
         if (current.position >= 0.7) {
           preloadNextChapter(current.chapter.index)
         } else if (current.position <= 0.3) {
@@ -1286,7 +1398,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       if (timerRef.current !== null) window.clearTimeout(timerRef.current)
       persist()
     }
-  }, [persist, preloadNextChapter, preloadPrevChapter, settings.pageMode])
+  }, [persist, preloadNextChapter, preloadPrevChapter, settings.pageMode, currentBook.chapters])
 
   useEffect(() => {
     if (settings.pageMode !== 'paginate') return
@@ -1388,7 +1500,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     if (!ttsActive || activeParagraphIndex < 0) return
 
     if (settings.pageMode === 'scroll') {
-      const el = document.querySelector(`[data-paragraph-index="${activeParagraphIndex}"]`)
+      // 同上：高亮跟读只在锚点那一章里找，不然会滚到续接进来的下一章的同名段落
+      const el = anchorSectionRef.current?.querySelector(`[data-paragraph-index="${activeParagraphIndex}"]`)
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
@@ -1763,7 +1876,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
                 {loading && !content && <ReaderContentSkeleton />}
                 {message && <p className="reader-error">{message}</p>}
-                {paragraphs.map(renderContentBlock)}
+                {paragraphs.map((line, index) => renderContentBlock(line, index))}
                 {/* 双栏模式下，在本章末尾插入隐形占位，确保下一章从新的左栏开始 */}
                 {isDoubleColumn && <div className="column-break-placeholder" aria-hidden="true" />}
               </article>
@@ -1775,19 +1888,32 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           </footer>
         </div>
       ) : (
-        <article className={`reading-content chapter-enter${isStaleContent ? ' is-stale' : ''}`} key={loadedChapterUrl || 'pending'} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
-          <h1>{shownChapterTitle}</h1>
-          {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
-          {loading && !content && <ReaderContentSkeleton />}
-          {message && <p className="reader-error">{message}</p>}
-          {paragraphs.map(renderContentBlock)}
-          {!!content && !loading && !!nextChapterTitle && (
+        <article className={`reading-content chapter-enter${isStaleContent ? ' is-stale' : ''}`} key={flowKey} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+          {/*
+            滚动模式是一篇连续文档（用户 2026-10-02：「怎么能跳转呢，不是一体的吗」）：
+            锚点章之后把后续章节续接在同一棵容器里，读完一章是"顶上来"，不是"跳过去"。
+            每章一个 <section>，标题与正文成组；章与章之间是一条分隔线，不是"翻页"。
+          */}
+          <section ref={anchorSectionRef} className="reader-flow-chapter" data-chapter-index={chapter?.index ?? 0}>
+            <h1>{shownChapterTitle}</h1>
+            {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
+            {loading && !content && <ReaderContentSkeleton />}
+            {message && <p className="reader-error">{message}</p>}
+            {paragraphs.map((line, index) => renderContentBlock(line, index))}
+          </section>
+          {flowTail.map(item => (
+            <section key={item.chapter.url} className="reader-flow-chapter reader-flow-tail" data-chapter-index={item.chapter.index}>
+              <h1>{item.chapter.title}</h1>
+              {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+            </section>
+          ))}
+          {!!content && !loading && loadedChapterUrl === chapter?.url && !!nextChapterTitle && flowTail.length === 0 && (
             <div className="reader-next-hint">
               <button type="button" onClick={() => changeChapter(chapterIndex + 1, 'first')}>
                 <span>下一章 · {nextChapterTitle}</span>
                 <Icon name="chevronDown" />
               </button>
-              <small>滚到底再向下滑即进入</small>
+              <small>这是最后一章之前唯一没有续接上的位置：滚到底再向下滑即进入</small>
             </div>
           )}
           {content && <footer className="reader-navigation"><button disabled={chapterIndex === 0 || loading} onClick={() => changeChapter(chapterIndex - 1)}><Icon name="arrowLeft" />上一章</button><div className="chapter-progress"><i style={{ width: `${chapterProgress}%` }} /><input className="chapter-scrub" type="range" min={0} max={Math.max(0, currentBook.chapters.length - 1)} step={1} value={shownChapterIndex} disabled={loading || currentBook.chapters.length < 2} aria-label={`章节进度：第 ${shownChapterIndex + 1} 章，共 ${currentBook.chapters.length} 章`} onChange={event => setScrubIndex(Number(event.target.value))} onPointerUp={() => { if (scrubIndex !== null && scrubIndex !== chapterIndex) changeChapter(scrubIndex); setScrubIndex(null) }} onKeyUp={() => { if (scrubIndex !== null && scrubIndex !== chapterIndex) changeChapter(scrubIndex); setScrubIndex(null) }} /><span>{shownChapterIndex + 1} / {currentBook.chapters.length}</span></div><button disabled={chapterIndex === currentBook.chapters.length - 1 || loading} onClick={() => changeChapter(chapterIndex + 1)}>下一章<Icon name="arrowRight" /></button></footer>}
