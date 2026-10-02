@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { api, SourceHealthCheckItem, SourceHealthCheckResponse, SourceSummary } from './api'
+import { api, type SourceSummary } from './api'
 import { buildGroupingPlan, HEALTH_TAGS, type HealthTier } from './sourceGrouping'
+import { dropHealthResults, getHealthRun, startHealthRun, stopHealthRun, useHealthRun } from './sourceHealthRun'
 import { Icon } from './icons'
 
 interface SourceHealthModalProps {
@@ -26,25 +27,26 @@ const isPending = (state: string) => PENDING_STATES.includes(state)
 
 type TabFilter = 'all' | 'valid' | 'slow' | 'pending' | 'dead'
 
-/** 服务端每请求并发 16：一批 128 正好 8 轮，既能让前端逐批显示进度，又不会把请求数炸开。 */
-const HEALTH_CHUNK = 128
-
 export function SourceHealthModal({
   sources,
   onClose,
   onSourcesChange,
   onToast,
 }: SourceHealthModalProps) {
-  const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<{ total: number; checked: number }>({ total: sources.length, checked: 0 })
-  const [results, setResults] = useState<SourceHealthCheckItem[]>([])
+  /**
+   * 运行状态住在 `sourceHealthRun.ts`，这里只是订阅者（用户 2026-10-02：
+   * 「除非点击了关闭，其他情况都后台持续体检一直到结束」）。
+   * 原来这个循环挂在组件里：关窗、换页、开别的对话框都会卸载组件并把 `cancelledRef` 置位，
+   * 于是几十分钟的整库体检只要点一下别的地方就静默作废。
+   */
+  const run = useHealthRun()
+  const running = run.running
+  const progress = { total: run.total, checked: run.checked }
+  const durationMs = run.durationMs
+  const results = run.results
   const [activeTab, setActiveTab] = useState<TabFilter>('all')
   const [filterQuery, setFilterQuery] = useState('')
-  const [durationMs, setDurationMs] = useState(0)
   const [busyAction, setBusyAction] = useState<string | null>(null)
-  const timerRef = useRef<number | null>(null)
-  const cancelledRef = useRef(false)
-  const startTimeRef = useRef<number>(0)
 
   /**
    * 体检范围。默认只圈启用中的源：这台库 5,574 个全启用时一次整库体检要几十分钟，
@@ -86,62 +88,31 @@ export function SourceHealthModal({
     })
   }, [results, activeTab, filterQuery])
 
-  const startCheck = async (targetIds?: string[]) => {
+  const startCheck = (targetIds?: string[]) => {
     const idsToCheck = targetIds ?? scoped.map(source => source.id)
     if (idsToCheck.length === 0) {
       onToast('没有可检测的书源', 'info')
       return
     }
-    setRunning(true)
-    setProgress({ total: idsToCheck.length, checked: 0 })
-    startTimeRef.current = Date.now()
-    if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = window.setInterval(() => {
-      setDurationMs(Date.now() - startTimeRef.current)
-    }, 100)
-    cancelledRef.current = false
-
     // 一次 POST 打整库时，服务端要全部探完才回，进度条只能作假；
-    // 按批发送就能每批落地一次：条子是真走完的，结果也是一条条冒出来的。
-    const merged = new Map(results.map(item => [item.id, item]))
-    let tallied = { ok: 0, slow: 0, failed: 0 }
-    try {
-      for (let offset = 0; offset < idsToCheck.length; offset += HEALTH_CHUNK) {
-        if (cancelledRef.current) return
-        const chunk = idsToCheck.slice(offset, offset + HEALTH_CHUNK)
-        const resp = await api.healthCheckSources(chunk, 5000)
-        for (const item of resp.results) merged.set(item.id, item)
-        tallied = { ok: tallied.ok + resp.successCount, slow: tallied.slow + resp.slowCount, failed: tallied.failed + resp.failedCount }
-        setResults(Array.from(merged.values()))
-        setProgress({ total: idsToCheck.length, checked: Math.min(idsToCheck.length, offset + chunk.length) })
-      }
-      if (cancelledRef.current) return
-      setDurationMs(Date.now() - startTimeRef.current)
-      setProgress({ total: idsToCheck.length, checked: idsToCheck.length })
-      onToast(`体检完成：${tallied.ok + tallied.slow} 个能搜到书（${tallied.slow} 个迟缓），${tallied.failed} 个有问题（其中待确认的要先看原因，别急着停用）`, 'info')
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : '体检请求失败', 'error')
-    } finally {
-      setRunning(false)
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-      }
-    }
+    // 按批发送就能每批落地一次：条子是真走完的，结果也是一条条冒出来的，
+    // 分组标签也就能在**过程中**跟着打上，而不是跑完再让用户去点按钮。
+    startHealthRun({
+      ids: idsToCheck,
+      previous: run.results,
+      groupsOf: () => Object.fromEntries(sources.map(source => [source.id, source.group ?? ''])),
+      onSourcesChange,
+      onToast,
+    })
   }
 
   /**
-   * 手动中止。以前这个弹窗**没有停止键**：一开就自动体检整库，
-   * 唯一的退出方式是关窗（`cancelledRef` 只在卸载时置位），
-   * 于是"体检很慢"变成"想停都停不下来"—— 用户说的「管理功能异常」有一半是这个。
+   * 显式停止 —— 这是唯一能提前结束一轮体检的入口。
+   * 收起窗口、切到别的页面都**不**算停止：一轮整库体检几十分钟，
+   * 以前顺手点一下别的地方就静默作废，那是用户说的「后台持续体检一直到结束」（2026-10-02）。
    */
   const stopCheck = () => {
-    cancelledRef.current = true
-    setRunning(false)
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
+    stopHealthRun()
     onToast(`已停止体检：完成 ${progress.checked} / ${progress.total}，已出的结论都留着了`, 'info')
   }
 
@@ -153,14 +124,11 @@ export function SourceHealthModal({
    * 而且用户只是点开想看上次体检的结果，就被迫发起了一轮新扫描（「过慢」的一半成因）。
    * 小规模（默认范围 ≤ AUTO_CHECK_LIMIT 个）仍然自动开跑，保持"点开就有结论"的手感；
    * 超过就要显式按一次「开始体检」，让发起动作回到用户手里。
+   * 卸载时**不**再取消：那一轮如果还在跑，它继续在后台跑完。
    */
   const AUTO_CHECK_LIMIT = 300
   useEffect(() => {
-    if (scoped.length > 0 && scoped.length <= AUTO_CHECK_LIMIT) void startCheck()
-    return () => {
-      cancelledRef.current = true
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
+    if (!getHealthRun().running && scoped.length > 0 && scoped.length <= AUTO_CHECK_LIMIT) startCheck()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -232,7 +200,7 @@ export function SourceHealthModal({
     try {
       const resp = await api.batchSources('delete', failedItems.map(i => i.id))
       onToast(resp.message || `已删除 ${resp.affected} 个失效书源`, 'success')
-      setResults(prev => prev.filter(r => !isDead(r.statusCategory)))
+      dropHealthResults(failedItems.map(item => item.id))
       onSourcesChange()
     } catch (err) {
       onToast(err instanceof Error ? err.message : '删除失败', 'error')
@@ -266,7 +234,9 @@ export function SourceHealthModal({
               <h2>书源连通性与健康体检</h2>
               <small>
                 {running
-                  ? `正在并发探测「${includeDisabled ? '全部' : '启用中'}」的 ${progress.total} 个书源：已检测 ${progress.checked}（${(durationMs / 1000).toFixed(1)}s）…`
+                  ? `正在并发探测「${includeDisabled ? '全部' : '启用中'}」的 ${progress.total} 个书源：已检测 ${progress.checked}（${(durationMs / 1000).toFixed(1)}s）`
+                    + (run.autoTagged > 0 ? ` · 过程中已给 ${run.autoTagged} 个不能正常使用的打上体检标签` : '')
+                    + ' · 收起窗口不会打断，只有「停止体检」会'
                   : stats.total === 0
                     ? `还没开始：下面那一次会探测「${includeDisabled ? '全部' : '启用中'}」的 ${scoped.length} 个书源，中途可以停`
                     : `本轮检测 ${stats.total} 个书源 · 用时 ${(durationMs / 1000).toFixed(1)}s`}
@@ -289,14 +259,15 @@ export function SourceHealthModal({
                   onChange={event => {
                     const next = event.target.checked
                     setIncludeDisabled(next)
-                    cancelledRef.current = false
-                    void startCheck((next ? sources : sources.filter(source => source.enabled)).map(source => source.id))
+                    startCheck((next ? sources : sources.filter(source => source.enabled)).map(source => source.id))
                   }}
                 />
                 连停用的一起体检（{disabledCount}）
               </label>
             )}
-            <button type="button" className="close-button" onClick={onClose} aria-label="关闭">
+            {/* 收起 ≠ 停止：一轮整库体检几十分钟，顺手点叉就作废是用户明确要改掉的（2026-10-02） */}
+            <button type="button" className="close-button" onClick={onClose}
+              aria-label={running ? '收起窗口（体检继续在后台跑）' : '关闭'}>
               <Icon name="close" />
             </button>
           </div>

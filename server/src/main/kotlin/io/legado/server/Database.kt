@@ -560,6 +560,41 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         getBookshelf(db, sourceId, bookUrl)
     }
 
+    /**
+     * 自定义排序：按给定的顺序写 `sort_order`（1 起）。只写点到的那些 ——
+     * 没被拖过的书保持 null，界面上它们落在有序段之后、按最后阅读排。
+     * 不在书架上的键跳过（前端拿的是上一次渲染的清单，中间可能已经移架）。
+     */
+    fun reorderBookshelf(keys: List<BookIdentifier>): Int = write { db ->
+        db.autoCommit = false
+        try {
+            var written = 0
+            db.prepareStatement("update book_shelf set sort_order=? where source_id=? and book_url=?").use { statement ->
+                keys.forEachIndexed { index, key ->
+                    statement.setInt(1, index + 1)
+                    statement.setString(2, key.sourceId)
+                    statement.setString(3, key.bookUrl)
+                    written += statement.executeUpdate()
+                }
+            }
+            db.commit()
+            written
+        } catch (error: Exception) {
+            runCatching { db.rollback() }
+            throw error
+        } finally {
+            db.autoCommit = true
+        }
+    }
+
+    /**
+     * 清掉全架的自定义顺序。切回「按最后阅读」不需要它 —— 那一档本来就无视 sort_order；
+     * 这个动作是给"我把架子排乱了，想回到没拖过的状态"用的。
+     */
+    fun clearBookshelfOrder(): Int = write { db ->
+        db.prepareStatement("update book_shelf set sort_order=null where sort_order is not null").use { it.executeUpdate() }
+    }
+
     private fun bookGroupExists(db: Connection, groupId: Long): Boolean =
         db.prepareStatement("select 1 from book_group where group_id=?").use { it.setLong(1, groupId); it.executeQuery().next() }
 
@@ -1761,6 +1796,8 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             groupId = getLong(16),
             // 第 18 列：这本本地书实际是用哪条目录规则切的（`builtin` 或规则 id；在线书为 null）
             tocRule = getString(18),
+            // 第 19 列：自定义排序位，null = 没参与过自定义排序
+            sortOrder = getObject(19) as? Int,
         )
     }
     private fun java.sql.ResultSet.toReplaceRule(): ReplaceRule = ReplaceRule(
@@ -1999,6 +2036,10 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         // 本地书记住"这本书是用哪条目录规则切的"：换规则重切之后界面要能说实话，
         // 而不是显示一个全局设置值假装每本书都按它来。
         if ("toc_rule" !in columns) db.createStatement().use { it.executeUpdate("alter table book_shelf add column toc_rule text") }
+        // 自定义排序位。**可空**，且空就是"没参与过自定义排序"：书架 24 本里拖动一本，
+        // 不该顺手把另外 23 本钉死在拖动那一刻的界面上（那之后按最后阅读排就永远排不动了）。
+        // 没参与的那些按 `last_read_at` 落在同一分组内的有序段之后（见前端 shelfOrder.ts）。
+        if ("sort_order" !in columns) db.createStatement().use { it.executeUpdate("alter table book_shelf add column sort_order integer") }
     }
     private fun migrateSourceTable(db: Connection) {
         val columns = db.createStatement().use { statement ->
@@ -2021,7 +2062,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         private val HOST_IN_URL = Regex("""https?://([^/\s"'<>\\:?#]+)""", RegexOption.IGNORE_CASE)
 
         /** 书架列表与单本查询共用同一份 SELECT：两处各写一遍迟早会漂移成不同字段。 */
-        private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)),s.toc_rule from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url"
+        private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)),s.toc_rule,s.sort_order from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url"
     }
 }
 

@@ -50,6 +50,31 @@ export function tagPlan(currentGroup: string | null | undefined, add: HealthTier
   return joinTags([...kept, ...appended])
 }
 
+/**
+ * 体检**过程中**的自动分组：一批结论落地后，哪些源还缺标签、该补哪一档。
+ *
+ * 与 `buildGroupingPlan` 的区别是它服务于"边跑边分"，所以只出需要写的，且拿 `alreadyTagged`
+ * 挡住本轮已经写过的（客户端的 sources 要等刷新才是新的，不自己记账会每批重复打同一批源）。
+ * 两条红线和整页一样：`good` 不在这里自动打（"可用"是一次完整体检的结论，不该在跑了一半时就盖下去），
+ * 且这里只产标签，永远不产启停动作。
+ */
+export function autoTagBatches(
+  rows: Array<{ id: string; statusCategory: string }>,
+  currentGroups: Record<string, string>,
+  alreadyTagged: ReadonlySet<string>,
+): Array<{ tier: HealthTier; ids: string[] }> {
+  const buckets = new Map<HealthTier, string[]>()
+  for (const row of rows) {
+    const tier = tierOf(row.statusCategory)
+    if (tier === 'good') continue
+    if (alreadyTagged.has(row.id) || currentTiers(currentGroups[row.id] ?? '').includes(tier)) continue
+    const ids = buckets.get(tier) ?? []
+    ids.push(row.id)
+    buckets.set(tier, ids)
+  }
+  return [...buckets.entries()].map(([tier, ids]) => ({ tier, ids }))
+}
+
 /** 某源当前带着哪几档我们的标签。 */
 export function currentTiers(currentGroup: string | null | undefined): HealthTier[] {
   const tags = new Set(splitTags(currentGroup))

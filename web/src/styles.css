@@ -4608,6 +4608,22 @@ input[type=range] { min-height: 24px; }
 .shelf-bar h1 { display: inline-flex; align-items: baseline; gap: 9px; font-family: Georgia, "Noto Serif SC", serif; font-size: 23px; font-weight: 600; line-height: 1.3; }
 .shelf-bar h1 small { color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: var(--t-sm); font-weight: 500; font-variant-numeric: tabular-nums; }
 
+/* —— 自定义排序（长按 250ms 后拖动，用户 2026-10-02）——
+   只有「自定义」这一档挂 .shelf-sortable：另外四档是按时间/名字算出来的，
+   拖得动但刷新就弹回去，比拖不动更让人困惑。落点线画在目标格的左/右缘内侧 ——
+   .shelf-card 是 overflow: hidden 的，画到外侧会被裁掉。 */
+.shelf-card { position: relative; }
+.shelf-sortable .shelf-card-cover { cursor: grab; touch-action: pan-y; }
+/* `<img>` 自带原生拖拽：不关掉的话从封面上起手会走 HTML5 拖图，长按排序的手势直接被浏览器抢走 */
+.shelf-sortable .shelf-card-cover img { -webkit-user-drag: none; }
+.shelf-card-dragging { opacity: .45; transform: none !important; }
+.shelf-card-dragging .shelf-card-cover { cursor: grabbing; }
+.shelf-card-drop-before::before, .shelf-card-drop-after::after {
+  content: ''; position: absolute; top: 10%; bottom: 10%; width: 3px; border-radius: 2px; background: var(--accent-solid);
+}
+.shelf-card-drop-before::before { left: 0; }
+.shelf-card-drop-after::after { right: 0; }
+
 /* —— 继续阅读条 —— */
 .shelf-resume { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 11px 14px; border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface); box-shadow: var(--elev-1); }
 .shelf-resume-cover { width: 44px; height: 59px; border-radius: 5px; overflow: hidden; background: var(--surface-muted); cursor: pointer; display: block; }
@@ -5044,8 +5060,10 @@ input[type=range] { min-height: 24px; }
 .library-scope .ui-select-trigger { min-width: 230px; max-width: 420px; background: var(--surface); }
 @media (max-width: 640px) { .library-scope .ui-select-trigger { min-width: 0; width: 100%; } }
 
-/* ③ 发现页：选源本身就是一个搜索口（用户：「需要的是搜对应书源」，不是在这儿再搜一遍书名） */
+/* ③ 发现页：选源本身就是一个搜索口（用户：「需要的是搜对应书源」，不是在这儿再搜一遍书名）。
+   分组那一档排在前面、只占窄窄一条：它是"先圈定范围"，名字那一档才是"在里面挑一个"。 */
 .explore-source-picker .ui-select { min-width: 260px; max-width: 360px; }
+.explore-source-picker .explore-group-select { min-width: 148px; max-width: 208px; }
 .explore-source-count { color: var(--muted); font-size: var(--t-xs); white-space: nowrap; }
 @media (max-width: 640px) {
   .explore-source-picker { width: 100%; }
@@ -5142,6 +5160,31 @@ input[type=range] { min-height: 24px; }
 .customize-note code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 .customize-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .customize-saved { color: var(--muted); font-size: 12px; }
+
+/* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
+.about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+.about-hero { display: grid; gap: 12px; }
+.about-hero h1 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 30px; font-weight: 600; }
+.about-hero > p { margin: 0; max-width: 62ch; color: var(--muted); font-size: var(--t-md); line-height: 1.75; }
+.about-facts { display: flex; flex-wrap: wrap; gap: 6px 26px; margin: 6px 0 0; }
+.about-facts > div { display: flex; gap: 7px; align-items: baseline; }
+.about-facts dt { color: var(--muted); font-size: var(--t-sm); }
+.about-facts dd { margin: 0; font-size: var(--t-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.about-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 4px; }
+.about-actions .ghost-button { text-decoration: none; }
+.about-check { margin: 2px 0 0; padding: 9px 12px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.7; }
+.about-check.is-available, .about-check.is-latest { background: var(--surface-muted); color: var(--ink); }
+.about-check.is-not_found, .about-check.is-unreachable { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--ink); }
+.about-section { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line); }
+.about-section h2 { margin: 0 0 10px; font-family: Georgia, "Noto Serif SC", serif; font-size: 19px; font-weight: 600; }
+.about-section h3 { margin: 20px 0 8px; font-size: var(--t-md); font-weight: 600; }
+.about-section-body { display: grid; gap: 12px; }
+.about-section-body p { margin: 0; max-width: 74ch; color: var(--ink); font-size: var(--t-sm); line-height: 1.85; }
+.about-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.about-table th { padding: 6px 10px 6px 0; color: var(--muted); font-weight: 500; text-align: left; border-bottom: 1px solid var(--line); }
+.about-table td { padding: 7px 10px 7px 0; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.about-table td:last-child { width: 88px; color: var(--muted); white-space: nowrap; }
+@media (max-width: 640px) { .about-page { padding: 32px 18px 44px; } }
 
 /* —— 「更新日志」页 —— */
 .changelog-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }

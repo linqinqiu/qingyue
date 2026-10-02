@@ -9,12 +9,22 @@ import {
 
 export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number }
 export type SourceRecord = { id: string; json: string; version: number; updatedAt: number }
+export type AboutInfo = { title: string; version: string; repository: string }
+export type UpdateCheckResult = {
+  current: string
+  latest?: string | null
+  url?: string | null
+  publishedAt?: string | null
+  repository: string
+  status: 'latest' | 'available' | 'not_found' | 'unreachable' | string
+  message?: string | null
+}
 export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string; kind?: string; wordCount?: string; lastChapter?: string }
 export type ExploreTab = { title: string; url: string }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[] }
 export type Chapter = { index: number; title: string; url: string; isVolume?: boolean }
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
-export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null }
+export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null; /** 自定义排序位（1 起）；null/缺省 = 没参与过自定义排序 */ sortOrder?: number | null }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
 export type ImportResponse = { imported: number; updated: number; skipped: number; errors: string[] }
@@ -355,9 +365,17 @@ export const api = {
     return res.text()
   },
   shelfGroups: () => request<BookGroup[]>('/api/bookshelf/groups'),
+  /** 「关于」页顶部的名字/版本/仓库：版本只有一个来源（jar 清单），界面不许写死。 */
+  about: () => request<AboutInfo>('/api/about'),
+  checkUpdate: () => request<UpdateCheckResult>('/api/about/update-check', { method: 'POST' }),
   createShelfGroup: (name: string) => request<BookGroup>('/api/bookshelf/groups', { method: 'POST', body: JSON.stringify({ name }) }),
   removeShelfGroup: (id: number) => request<void>(`/api/bookshelf/groups/${id}`, { method: 'DELETE' }),
   setBookGroup: (sourceId: string, bookUrl: string, groupId: number) => request<BookshelfItem>('/api/bookshelf/group', { method: 'PUT', body: JSON.stringify({ sourceId, bookUrl, groupId }) }),
+  /** 自定义排序：把屏幕上这一列（筛选后的可见清单）按新顺序整段回传。 */
+  reorderShelf: (books: Array<{ sourceId: string; bookUrl: string }>) =>
+    request<{ updated: number }>('/api/bookshelf/order', { method: 'PUT', body: JSON.stringify({ books }) }),
+  /** 回到"从没拖过"的状态：把全架的自定义位置清空（不是切排序档）。 */
+  clearShelfOrder: () => request<{ updated: number }>('/api/bookshelf/order', { method: 'DELETE' }),
   // RSS 订阅（手机「订阅」页那一栏）；上面 subscriptions 是「书源订阅地址」，两者不是一回事
   rssSources: (query?: string) => request<RssSourceSummary[]>(`/api/rss/sources${query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`),
   addRssSources: (sources: string[]) => request<ImportResponse>('/api/rss/sources', { method: 'POST', body: JSON.stringify({ sources }) }),

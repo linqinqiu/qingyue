@@ -5,11 +5,14 @@ import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import { ContextMenuLayer, showContextMenu } from './ContextMenu'
 import { readSearchLayout, readShelfLayout, readShelfSort, ShelfLayout, ShelfSort, writeSearchLayout, writeShelfLayout, writeShelfSort } from './shelfLayout'
+import { compareCustomSort } from './shelfOrder'
+import { useShelfDragSort } from './shelfDrag'
 import { Logo } from './Logo'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
 import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
 import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
+import { AboutPage } from './AboutPage'
 import { CustomizeModal } from './CustomizeModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
@@ -32,6 +35,7 @@ import { LogsModal } from './LogsModal'
 import { ShortcutHelp } from './ShortcutHelp'
 import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, shortcutFor } from './shortcuts'
 import { SourceHealthModal } from './SourceHealthModal'
+import { useHealthRun } from './sourceHealthRun'
 import { SourceEditor } from './SourceEditorPanel'
 import { SourceGroupModal } from './SourceGroupModal'
 import { PwaManager } from './PwaManager'
@@ -59,9 +63,9 @@ const splitSourceGroups = (raw?: string) =>
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 
-type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog'
+type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about'
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : 'library'
+const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : 'library'
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -868,6 +872,8 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showHealthModal, setShowHealthModal] = useState(false)
+  // 体检跑在组件之外（见 sourceHealthRun.ts）：这一栏只是订阅者，窗口关了也继续显示进度
+  const healthRun = useHealthRun()
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [busyBatch, setBusyBatch] = useState(false)
   const [debugModalSource, setDebugModalSource] = useState<SourceSummary | null>(null)
@@ -1152,12 +1158,14 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
           <div className="source-sidebar-top-actions">
             <button
               type="button"
-              className="subtle-button icon-button health-probe-btn"
-              title="批量联网体检：每个源拿关键词试搜一次，只看能不能出条目。想先确认 JSON 写没写坏用编辑器里的「校验」（不联网），要看搜索→详情→目录→正文每一步用「调试」。"
+              className={`subtle-button icon-button health-probe-btn ${healthRun.running ? 'is-running' : ''}`}
+              title={healthRun.running
+                ? `体检正在后台跑：已检测 ${healthRun.checked} / ${healthRun.total}，途中已给 ${healthRun.autoTagged} 个不能正常使用的打上标签。点开看进度，收起不会停。`
+                : '批量联网体检：每个源拿关键词试搜一次，只看能不能出条目。想先确认 JSON 写没写坏用编辑器里的「校验」（不联网），要看搜索→详情→目录→正文每一步用「调试」。'}
               onClick={() => setShowHealthModal(true)}
             >
               <Icon name="activity" />
-              <span>体检</span>
+              <span>{healthRun.running ? `体检中 ${healthRun.checked} / ${healthRun.total}` : '体检'}</span>
             </button>
             <button
               type="button"
@@ -2458,11 +2466,37 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
       case 'name': sorted.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')); break
       case 'author': sorted.sort((a, b) => (a.author || '').localeCompare(b.author || '', 'zh-CN')); break
       case 'progress': sorted.sort((a, b) => progressOf(b) - progressOf(a)); break
+      case 'custom': sorted.sort(compareCustomSort); break
       default: sorted.sort((a, b) => b.lastReadAt - a.lastReadAt)
     }
     return sorted
   }, [items, view, sort, groupFilter])
   const counts = { reading: items.filter(item => !item.completed).length, completed: items.filter(item => item.completed).length, all: items.length }
+
+  /*
+    长按拖动排序（用户 2026-10-02：「批量管理功能在，长按书籍可移动能排顺序（自定义）」）。
+    只在「自定义」这一档生效：其它四档是按时间/名字排的，拖完下一次刷新就打回去了，
+    那种"能拖但拖不住"比不能拖更糟。发送的是**当前这一列**（分组与状态筛过之后的）新顺序。
+  */
+  const gridRef = useRef<HTMLElement | null>(null)
+  const applyOrder = useCallback((ordered: BookshelfItem[]) => {
+    const rank = new Map(ordered.map((item, index) => [`${item.sourceId}\u0000${item.bookUrl}`, index + 1]))
+    setItems(current => current.map(item => {
+      const next = rank.get(`${item.sourceId}\u0000${item.bookUrl}`)
+      return next === undefined ? item : { ...item, sortOrder: next }
+    }))
+    void api.reorderShelf(ordered.map(item => ({ sourceId: item.sourceId, bookUrl: item.bookUrl })))
+      .catch(() => { setMessage('排序没能保存，刷新后会回到原来的顺序'); void load() })
+  }, [load])
+  const clearOrder = async () => {
+    setItems(current => current.map(item => ({ ...item, sortOrder: null })))
+    try { await api.clearShelfOrder() } catch { setMessage('自定义顺序没能清掉，刷新后会回到原样'); void load() }
+  }
+  const { drag, onPointerDown, onClickCapture } = useShelfDragSort({    enabled: () => sort === 'custom' && !batchMode,
+    gridRef,
+    items: visibleItems,
+    onReorder: applyOrder,
+  })
   const chooseLayout = (next: ShelfLayout) => { setLayout(next); writeShelfLayout(next) }
   const [addingGroup, setAddingGroup] = useState(false)
   const [groupName, setGroupName] = useState('')
@@ -2679,8 +2713,19 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
                 { value: 'name', label: '按书名' },
                 { value: 'author', label: '按作者' },
                 { value: 'progress', label: '按阅读进度' },
+                { value: 'custom', label: '自定义（长按拖动）' },
               ]}
             />
+            {sort === 'custom' && items.some(item => item.sortOrder != null) && (
+              <button
+                type="button"
+                className="subtle-button shelf-order-clear"
+                title="把全架的自定义位置清空，回到「从没拖过」的状态（切到别的排序档不会清，那一档只是不看它）"
+                onClick={() => void clearOrder()}
+              >
+                清除自定义顺序
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -2781,19 +2826,26 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
         </section>
       ) : (
         <section
-          className={`shelf-grid shelf-mode-${layout.mode}`}
+          ref={gridRef}
+          className={`shelf-grid shelf-mode-${layout.mode} ${sort === 'custom' ? 'shelf-sortable' : ''}`}
         >
-          {visibleItems.map(item => {
+          {visibleItems.map((item, index) => {
             const isCaching = item.cacheState === 'caching'
             const isLocal = item.sourceId === 'loc_book'
             const percent = Math.min(100, Math.round((item.cachedChapters / Math.max(1, item.totalChapters || 1)) * 100))
             // 读到 1/1000 章也算"开过"，但封面下沿那颗 5px 绿点看起来就是脏了一块 —— 2% 以下不画。
             const readPercent = Math.min(100, Math.round((((item.chapterIndex ?? 0) + 1) / Math.max(1, item.totalChapters)) * 100))
 
+            // 落点线：拖到哪两格之间，就在那一格的左/右缘亮一条竖线（最后一格之后画右缘）
+            const dropBefore = drag !== null && drag.at === index && drag.from !== index
+            const dropAfter = drag !== null && drag.at === index + 1 && index === visibleItems.length - 1
+
             return (
               <article
                 key={`${item.sourceId}-${item.bookUrl}`}
-                className={`shelf-card ${batchMode && isBookSelected(item.sourceId, item.bookUrl) ? 'selected' : ''}`}
+                className={`shelf-card ${batchMode && isBookSelected(item.sourceId, item.bookUrl) ? 'selected' : ''}${drag?.from === index ? ' shelf-card-dragging' : ''}${dropBefore ? ' shelf-card-drop-before' : ''}${dropAfter ? ' shelf-card-drop-after' : ''}`}
+                onPointerDown={onPointerDown(index)}
+                onClickCapture={onClickCapture}
                 onContextMenu={event => {
                   // 分组超过 8 个时，右键菜单里只放前 7 个 + "更多分组…"，避免菜单过长
                   const availableGroups = groups.filter(group => group.id !== 0 && group.id !== (item.groupId ?? 0))
@@ -3250,6 +3302,8 @@ function App() {
         <BackupPage />
       ) : page === 'changelog' ? (
         <ChangelogPage serverVersion={serverVersion} />
+      ) : page === 'about' ? (
+        <AboutPage onOpenChangelog={() => navigate('changelog')} />
       ) : page === 'shelf' ? (
         <ShelfPage sources={sources} onOpen={item => void openShelfItem(item)} />
       ) : page === 'explore' ? (

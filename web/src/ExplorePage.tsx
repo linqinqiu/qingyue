@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { api, type ExploreTab, type SearchResult, type SourceSummary } from './api'
 import { Icon } from './icons'
 import { Select } from './Select'
+import { filterByGroup, sourceGroups, UNGROUPED } from './exploreGroups'
 import { sanitizeImageUrl } from './sourceImport'
 
 export interface ExplorePageProps {
@@ -21,6 +22,16 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [group, setGroup] = useState('')
+  // 「发现页书源也能按照分组搜索」（用户 2026-10-02）：配了发现页的源有两千多个，
+  // 光靠名字搜不出来 —— 分组才是人挑源用的那把尺，和「书源」页同一套词汇与同一个「未分组」约定。
+  const groupStats = useMemo(() => sourceGroups(sources), [sources])
+  const pickable = useMemo(() => filterByGroup(sources, group), [sources, group])
+  const chooseGroup = (next: string) => {
+    setGroup(next)
+    const list = filterByGroup(sources, next)
+    if (!list.some(item => item.id === sourceId)) setSourceId(list[0]?.id ?? '')
+  }
   // 聚合书源常挂 40+ 个分栏，而且大量重名（每个分类都叫「推荐」「完结」）。
   // 重名的补上序号，否则点了之后根本看不出当前选的是哪一个。
   const labelledTabs = useMemo(() => {
@@ -163,15 +174,30 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
         */}
         <div className="explore-source-picker">
           <span>搜书源</span>
+          {groupStats.groups.length > 0 && (
+            <Select
+              className="explore-group-select"
+              ariaLabel="按分组筛选发现页书源"
+              value={group}
+              onChange={chooseGroup}
+              options={[
+                { value: '', label: `全部分组 (${sources.length})` },
+                ...groupStats.groups.map(([name, count]) => ({ value: name, label: `${name} (${count})` })),
+                { value: UNGROUPED, label: `未分组 (${groupStats.ungrouped})` },
+              ]}
+            />
+          )}
           <Select
             ariaLabel="搜索并选择发现页书源"
-            placeholder={sources.length ? '按名称或分组搜书源' : '加载中…'}
+            placeholder={sources.length ? (pickable.length ? '按名称或分组搜书源' : '这个分组里没有书源') : '加载中…'}
             value={sourceId}
             onChange={setSourceId}
             searchable
-            options={sources.map(item => ({ value: item.id, label: item.name, hint: item.group?.trim() || undefined }))}
+            options={pickable.map(item => ({ value: item.id, label: item.name, hint: item.group?.trim() || undefined }))}
           />
-          <small className="explore-source-count">{sources.length} 个书源配了发现页</small>
+          <small className="explore-source-count">
+            {group ? `${pickable.length} / ${sources.length}` : sources.length} 个书源配了发现页
+          </small>
         </div>
       </header>
 

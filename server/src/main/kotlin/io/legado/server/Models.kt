@@ -389,6 +389,8 @@ data class CachedBookRequest(
      * 界面必须能说清现在是 B。
      */
     val tocRule: String? = null,
+    /** 自定义排序位（1 起）；null = 这本书没参与过自定义排序，界面上排在有序段之后、按最后阅读排。 */
+    val sortOrder: Int? = null,
 )
 
 /** 书架分组（上游 `data/entities/BookGroup.kt`）。`bookCount` 由查询侧带出，不落库。 */
@@ -440,6 +442,23 @@ data class CachedBookRequest(
 @Serializable data class BatchMoveGroupRequest(val books: List<BookIdentifier>, val groupId: Long?)
 @Serializable data class BatchMarkReadRequest(val books: List<BookIdentifier>, val isRead: Boolean)
 @Serializable data class BookIdentifier(val sourceId: String, val bookUrl: String)
+/** 自定义排序：整段可见清单按新顺序回传，服务端按位置写 `book_shelf.sort_order`。 */
+@Serializable data class ShelfOrderRequest(val books: List<BookIdentifier>)
+@Serializable data class ShelfOrderResult(val updated: Int)
+
+/** 「关于」页顶部那三样：名字、版本、发布仓库。版本只有一个来源（清单），界面不许写死。 */
+@Serializable data class AboutInfo(val title: String, val version: String, val repository: String)
+
+/** 「关于 → 检查更新」的结果。`status`：`latest` / `available` / `not_found` / `unreachable`。 */
+@Serializable data class UpdateCheckResult(
+    val current: String,
+    val latest: String? = null,
+    val url: String? = null,
+    val publishedAt: String? = null,
+    val repository: String,
+    val status: String,
+    val message: String? = null,
+)
 
 @Serializable
 data class TtsVoice(

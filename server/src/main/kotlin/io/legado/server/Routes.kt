@@ -701,6 +701,13 @@ fun Route.apiRoutes(
          * ② 拿不到就 404 + 说明，**不返回 200 空串** —— 空串会被界面渲染成"这个版本没有任何改动"，
          *    那是把打包环节的问题说成产品事实。
          */
+        get("/about") {
+            call.respond(AboutInfo(BuildInfo.title, BuildInfo.version, UpdateCheck.repository))
+        }
+        post("/about/update-check") {
+            if (!call.requireSameOriginWrite()) return@post
+            call.respond(UpdateCheck.check(BuildInfo.version))
+        }
         get("/changelog") {
             val text = runCatching {
                 BuildInfo::class.java.classLoader.getResourceAsStream("meta/changelog.md")
@@ -1233,6 +1240,20 @@ fun Route.apiRoutes(
             val updated = database.assignBookGroup(request.sourceId, request.bookUrl, request.groupId)
                 ?: return@put call.respond(HttpStatusCode.NotFound, ApiError("not_found", "分组不存在或这本书不在书架上"))
             call.respond(updated)
+        }
+        put("/bookshelf/order") {
+            if (!call.requireSameOriginWrite()) return@put
+            val request = runCatching { call.receive<ShelfOrderRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@put
+            }
+            if (request.books.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("empty_order", "没有要排序的书")); return@put
+            }
+            call.respond(ShelfOrderResult(database.reorderBookshelf(request.books)))
+        }
+        delete("/bookshelf/order") {
+            if (!call.requireSameOriginWrite()) return@delete
+            call.respond(ShelfOrderResult(database.clearBookshelfOrder()))
         }
         delete("/bookshelf") {
             if (!call.requireSameOriginWrite()) return@delete
