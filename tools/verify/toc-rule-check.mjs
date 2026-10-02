@@ -173,9 +173,25 @@ try {
     JSON.stringify(report))
   const afterApply = (await api('/api/books/toc-rules')).body ?? {}
   const keysAfter = (afterApply.options ?? []).map(option => option.key)
-  check('⑤手机上取消勾选的那条，本机就不再出现在可选清单里',
-    afterApply.overridden === true && !keysAfter.includes(String(target.id)),
-    `overridden=${afterApply.overridden} · 「${target.name}」还在清单里=${keysAfter.includes(String(target.id))}`)
+  const optionsAfter = afterApply.options ?? []
+  const targetOption = optionsAfter.find(option => option.key === String(target.id))
+  // 这条以前判的是"取消勾选的那条从清单里消失"—— 那正是用户 2026-10-03 报的 bug 本身：
+  // 26 条规则里有 12 条因为默认停用而在界面上根本选不到，而解析层一直支持它们。
+  // 门禁把错误行为当成契约钉住了，所以它一直没被发现。现在的契约是两件事分开。
+  check('⑤手机上取消勾选的那条：退出「自动」打分，但仍然手动选得到',
+    afterApply.overridden === true && !!targetOption && targetOption.enable === false
+      && optionsAfter.length >= (afterApply.total ?? 0) + 2,
+    `overridden=${afterApply.overridden} · 「${target.name}」enable=${targetOption?.enable} · 清单 ${optionsAfter.length} 条 / 全表 ${afterApply.total} 条`)
+  check('⑤每条规则都带回正则原文（不写出来没人判断得了它适不适合这本书）',
+    optionsAfter.filter(option => option.key !== 'auto' && !option.builtIn).every(option => (option.rule ?? '').length > 0 || option.broken === true),
+    `带原文 ${optionsAfter.filter(option => (option.rule ?? '').length > 0).length} / ${optionsAfter.length}`)
+  const toggled = await api('/api/books/toc-rules/toggle', { method: 'POST', body: JSON.stringify({ key: String(target.id), enable: true }) })
+  const afterToggle = (await api('/api/books/toc-rules')).body ?? {}
+  check('⑤界面上的开关能把这条放回「自动」候选（POST /books/toc-rules/toggle）',
+    toggled.status === 200 && toggled.body?.enable === true
+      && (afterToggle.options ?? []).find(option => option.key === String(target.id))?.enable === true
+      && afterToggle.enabled === (afterApply.enabled ?? 0) + 1,
+    `${toggled.status} · 参与自动 ${afterApply.enabled} → ${afterToggle.enabled}`)
   const customKey = (afterApply.options ?? []).find(option => option.label === `门禁自造规则${STAMP}`)?.key ?? ''
   check('⑤备份里自带的自定义规则被收下并且能选', !!customKey && afterApply.fromBackup === 1,
     `key=${customKey} · fromBackup=${afterApply.fromBackup}`)
