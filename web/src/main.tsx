@@ -13,6 +13,7 @@ import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, th
 import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
 import { AboutPage } from './AboutPage'
+import { BookmarksPage } from './BookmarksPage'
 import { CustomizeModal } from './CustomizeModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
@@ -63,9 +64,9 @@ const splitSourceGroups = (raw?: string) =>
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 
-type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about'
+type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'bookmarks'
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : 'library'
+const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : location.hash === '#bookmarks' ? 'bookmarks' : 'library'
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -3304,6 +3305,8 @@ function App() {
         <ChangelogPage serverVersion={serverVersion} />
       ) : page === 'about' ? (
         <AboutPage onOpenChangelog={() => navigate('changelog')} />
+      ) : page === 'bookmarks' ? (
+        <BookmarksPage onOpen={item => void openShelfItem(item)} />
       ) : page === 'shelf' ? (
         <ShelfPage sources={sources} onOpen={item => void openShelfItem(item)} />
       ) : page === 'explore' ? (

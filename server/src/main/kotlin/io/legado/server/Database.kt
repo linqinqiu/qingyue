@@ -129,6 +129,18 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                   primary key (source_id, book_url)
                 );
                 create index if not exists book_shelf_last_read_idx on book_shelf(last_read_at desc);
+                -- 书签（用户 2026-10-02：「可以段落（多段落），章节书签…该书签可以自定义评论，
+                -- 支持在同书不同书源中使用」）。键是 **书名 + 作者**，不是 sourceId + bookUrl：
+                -- 换源之后章节号常常整个错位，只有"这本书"是稳的，所以按书归拢、章节标题优先定位。
+                create table if not exists book_mark (
+                  id integer primary key autoincrement,
+                  book_key text not null, source_id text not null, book_url text not null,
+                  book_name text not null, book_author text,
+                  chapter_index integer not null, chapter_title text not null,
+                  paragraph_from integer not null, paragraph_to integer not null,
+                  quote text not null, note text not null default '', created_at integer not null
+                );
+                create index if not exists book_mark_key_idx on book_mark(book_key, created_at desc);
                 -- 书架分组（上游 data/entities/BookGroup.kt：主键 groupId、groupName、order）。
                 -- 上游另有一批负数虚拟组（IdAll=-1 全部、IdLocal=-2 本地），我们不照抄：
                 -- 虚拟组在界面上和真组混在一起会分不清"能不能改名/删除"，所以只做真组 + 未分组(0)。
@@ -594,6 +606,67 @@ class Database(private val path: String) : Closeable, AutoCloseable {
     fun clearBookshelfOrder(): Int = write { db ->
         db.prepareStatement("update book_shelf set sort_order=null where sort_order is not null").use { it.executeUpdate() }
     }
+
+    /**
+     * 书签的归拢键：书名 + 作者，去首尾空白、压内部空白、忽略大小写。
+     * 不用 `sourceId + bookUrl` —— 换源之后那两者都变，而用户要的正是"同一本书换源也看得到这些书签"。
+     */
+    fun bookKeyOf(name: String, author: String?): String = "${markKeyPart(name)}\u0000${markKeyPart(author ?: "")}"
+
+    private fun markKeyPart(value: String): String = value.trim().lowercase().replace(MARK_SPACE, " ")
+
+    fun listMarks(bookKey: String? = null): List<BookMark> = connect { db ->
+        val sql = MARK_SELECT + if (bookKey == null) "" else " where book_key=?" + MARK_ORDER
+        db.prepareStatement(if (bookKey == null) MARK_SELECT + MARK_ORDER else sql).use { statement ->
+            if (bookKey != null) statement.setString(1, bookKey)
+            statement.executeQuery().use { result -> buildList { while (result.next()) add(result.toMark()) } }
+        }
+    }
+
+    fun createMark(request: BookMarkCreateRequest): BookMark = write { db ->
+        val now = System.currentTimeMillis()
+        val key = bookKeyOf(request.bookName, request.bookAuthor)
+        val from = request.paragraphFrom.coerceAtMost(request.paragraphTo)
+        val to = request.paragraphTo.coerceAtLeast(request.paragraphFrom)
+        db.prepareStatement(
+            "insert into book_mark(book_key,source_id,book_url,book_name,book_author,chapter_index,chapter_title," +
+                "paragraph_from,paragraph_to,quote,note,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?)",
+        ).use {
+            it.setString(1, key); it.setString(2, request.sourceId); it.setString(3, request.bookUrl)
+            it.setString(4, request.bookName); it.setString(5, request.bookAuthor)
+            it.setInt(6, request.chapterIndex); it.setString(7, request.chapterTitle)
+            it.setInt(8, from); it.setInt(9, to)
+            it.setString(10, request.quote); it.setString(11, request.note); it.setLong(12, now)
+            it.executeUpdate()
+        }
+        db.prepareStatement("select last_insert_rowid()").use { statement ->
+            statement.executeQuery().use { result ->
+                result.next()
+                BookMark(result.getLong(1), request.sourceId, request.bookUrl, request.bookName, request.bookAuthor,
+                    request.chapterIndex, request.chapterTitle, from, to, request.quote, request.note, now)
+            }
+        }
+    }
+
+    fun updateMarkNote(id: Long, note: String): BookMark? = write { db ->
+        db.prepareStatement("update book_mark set note=? where id=?").use {
+            it.setString(1, note); it.setLong(2, id); it.executeUpdate()
+        }
+        db.prepareStatement(MARK_SELECT + " where id=?").use {
+            it.setLong(1, id); it.executeQuery().use { result -> if (result.next()) result.toMark() else null }
+        }
+    }
+
+    fun deleteMark(id: Long): Boolean = write { db ->
+        db.prepareStatement("delete from book_mark where id=?").use { it.setLong(1, id); it.executeUpdate() } == 1
+    }
+
+    private fun java.sql.ResultSet.toMark(): BookMark = BookMark(
+        id = getLong(1), sourceId = getString(2), bookUrl = getString(3), bookName = getString(4),
+        bookAuthor = getString(5), chapterIndex = getInt(6), chapterTitle = getString(7),
+        paragraphFrom = getInt(8), paragraphTo = getInt(9), quote = getString(10),
+        note = getString(11), createdAt = getLong(12),
+    )
 
     private fun bookGroupExists(db: Connection, groupId: Long): Boolean =
         db.prepareStatement("select 1 from book_group where group_id=?").use { it.setLong(1, groupId); it.executeQuery().next() }
@@ -2063,6 +2136,9 @@ class Database(private val path: String) : Closeable, AutoCloseable {
 
         /** 书架列表与单本查询共用同一份 SELECT：两处各写一遍迟早会漂移成不同字段。 */
         private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)),s.toc_rule,s.sort_order from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url"
+        private const val MARK_SELECT = "select id,source_id,book_url,book_name,book_author,chapter_index,chapter_title,paragraph_from,paragraph_to,quote,note,created_at from book_mark"
+        private const val MARK_ORDER = " order by created_at desc"
+        private val MARK_SPACE = Regex("\\s+")
     }
 }
 

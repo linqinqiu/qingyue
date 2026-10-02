@@ -1,5 +1,7 @@
 import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, BookDetails, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
+import { api, BookDetails, BookMark, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
+import { BookmarkDrawer } from './BookmarkDrawer'
+import { MarkSelection, readSelection, resolveChapter, WHOLE_CHAPTER } from './bookmarks'
 import { Icon } from './icons'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
@@ -363,7 +365,91 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [loading, setLoading] = useState(true)
   const [chapterQuery, setChapterQuery] = useState('')
   const deferredQuery = useDeferredValue(chapterQuery)
-  const [activeDrawer, setActiveDrawer] = useState<'toc' | 'settings' | null>(null)
+  const [activeDrawer, setActiveDrawer] = useState<'toc' | 'marks' | 'settings' | null>(null)
+  /*
+    书签（用户 2026-10-02：「加入书签功能，可以段落（多段落），章节书签…该书签可以自定义评论，
+    支持在同书不同书源中使用」）。列表按**书名 + 作者**取，不按 sourceId ——
+    同一本书换个源，第 37 章往往不是同一章，所以跳转时先认章节标题。
+  */
+  const [marks, setMarks] = useState<BookMark[]>([])
+  const [marksLoading, setMarksLoading] = useState(false)
+  const [markMessage, setMarkMessage] = useState('')
+  const [selection, setSelection] = useState<MarkSelection | null>(null)
+  const selectionChapterRef = useRef<number>(startIndex)
+
+  const reloadMarks = useCallback(() => {
+    setMarksLoading(true)
+    return api.marks(currentBook.details.name, currentBook.details.author ?? '')
+      .then(setMarks)
+      .catch(() => { setMarkMessage('书签没读到，本地这一份先照旧') })
+      .finally(() => setMarksLoading(false))
+  }, [currentBook.details.name, currentBook.details.author])
+
+  useEffect(() => {
+    let cancelled = false
+    setMarksLoading(true)
+    void api.marks(currentBook.details.name, currentBook.details.author ?? '')
+      .then(list => { if (!cancelled) setMarks(list) })
+      .catch(() => { if (!cancelled) setMarkMessage('书签没读到，本地这一份先照旧') })
+      .finally(() => { if (!cancelled) setMarksLoading(false) })
+    return () => { cancelled = true }
+  }, [currentBook.details.name, currentBook.details.author])
+
+  /** 选区只在正文容器里才算数；顺带记下它当时落在哪一章，续接窗口里那是下一章的段落。 */
+  useEffect(() => {
+    const onUpdate = () => {
+      const container = document.querySelector<HTMLElement>('.reading-content')
+      const found = readSelection(container)
+      setSelection(found)
+      if (found) {
+        const node = container?.querySelector<HTMLElement>(`[data-paragraph-index="${found.from}"]`)
+        const section = node?.closest<HTMLElement>('[data-chapter-index]')
+        selectionChapterRef.current = Number(section?.dataset.chapterIndex ?? chapterIndexRef.current)
+      }
+    }
+    document.addEventListener('selectionchange', onUpdate)
+    return () => document.removeEventListener('selectionchange', onUpdate)
+  }, [])
+
+  const submitMark = (paragraphFrom: number, paragraphTo: number, quote: string, note: string) => {
+    const chapter = currentBook.chapters[chapterIndexRef.current]
+    void api.createMark({
+      sourceId: currentBook.details.sourceId,
+      bookUrl: currentBook.bookUrl,
+      bookName: currentBook.details.name,
+      bookAuthor: currentBook.details.author || null,
+      chapterIndex: chapter?.index ?? chapterIndexRef.current,
+      chapterTitle: chapter?.title ?? '',
+      paragraphFrom,
+      paragraphTo,
+      quote: quote.slice(0, 600),
+      note,
+    }).then(created => {
+      setMarks(current => [created, ...current.filter(item => item.id !== created.id)])
+      setMarkMessage('')
+    }).catch(error => setMarkMessage(error instanceof Error ? error.message : '书签没存上'))
+  }
+
+  const jumpToMark = (mark: BookMark) => {
+    const target = resolveChapter(mark, currentBook.chapters.map(item => ({ index: item.index, title: item.title })))
+    if (target === null) {
+      setMarkMessage(`当前源里没有「${mark.chapterTitle}」这一章，换回原来那个源才跳得过去。`)
+      return
+    }
+    setMarkMessage('')
+    const sameChapter = target === chapterIndexRef.current
+    if (!sameChapter) setChapterIndex(target)
+    // 换章要等新正文挂上来，同一章里 60ms 就够（连续流里那一节本来就在 DOM 上）
+    window.setTimeout(() => {
+      const section = document.querySelector<HTMLElement>(`.reading-content [data-chapter-index="${target}"]`)
+      const node = mark.paragraphFrom >= 0
+        ? section?.querySelector<HTMLElement>(`[data-paragraph-index="${mark.paragraphFrom}"]`)
+        : null
+      const destination = node ?? section
+      if (destination) destination.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, sameChapter ? 60 : 420)
+  }
+
   const [toolbarsVisible, setToolbarsVisible] = useState(false)
   const [boundaryMessage, setBoundaryMessage] = useState('')
   const [inShelf, setInShelf] = useState(true)
@@ -1649,6 +1735,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           event.preventDefault()
           setActiveDrawer(drawer => drawer === 'toc' ? null : 'toc')
           break
+        case 'marks':
+          event.preventDefault()
+          // 有选中就直接加一条并打开这一栏让人补批注；没有选中才只是开合抽屉。
+          if (selection && selectionChapterRef.current === (currentBook.chapters[chapterIndex]?.index ?? -1)) {
+            submitMark(selection.from, selection.to, selection.text, '')
+            setActiveDrawer('marks')
+          } else {
+            setActiveDrawer(drawer => drawer === 'marks' ? null : 'marks')
+          }
+          break
         case 'settings':
           event.preventDefault()
           setActiveDrawer(drawer => drawer === 'settings' ? null : 'settings')
@@ -1785,6 +1881,31 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         />
       </div>
     </header>
+
+    {/* 书签抽屉（左）：与目录同一个位置，同一时刻只开一个 */}
+    <aside className={`reader-drawer reader-drawer-left reader-drawer-marks ${activeDrawer === 'marks' ? 'open' : ''}`} aria-label="书签抽屉">
+      <BookmarkDrawer
+        open={activeDrawer === 'marks'}
+        onClose={() => setActiveDrawer(null)}
+        marks={marks}
+        loading={marksLoading}
+        selection={selection}
+        chapterTitle={currentBook.chapters[chapterIndex]?.title ?? ''}
+        canBookmarkSelection={selectionChapterRef.current === (currentBook.chapters[chapterIndex]?.index ?? -1)}
+        onAddSelection={note => { if (selection) submitMark(selection.from, selection.to, selection.text, note) }}
+        onAddChapter={note => submitMark(WHOLE_CHAPTER, WHOLE_CHAPTER, '', note)}
+        onJump={jumpToMark}
+        onNote={(id, note) => {
+          setMarks(current => current.map(item => (item.id === id ? { ...item, note } : item)))
+          void api.setMarkNote(id, note).catch(() => { setMarkMessage('批注没存上'); void reloadMarks() })
+        }}
+        onDelete={id => {
+          setMarks(current => current.filter(item => item.id !== id))
+          void api.removeMark(id).catch(() => { setMarkMessage('删除没生效'); void reloadMarks() })
+        }}
+      />
+      {markMessage && <p className="bookmark-message" role="status">{markMessage}</p>}
+    </aside>
 
     {/* TOC Drawer (Left) */}
     <aside className={`reader-drawer reader-drawer-left ${activeDrawer === 'toc' ? 'open' : ''} ${settings.sidebarPinned ? 'pinned' : ''}`} aria-label="目录抽屉">
@@ -2045,6 +2166,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     {/* Floating Mobile Bottom Nav */}
     <nav className="mobile-reader-nav">
       <button onClick={() => setActiveDrawer('toc')}><Icon name="list" /><span>目录</span></button>
+      <button onClick={() => setActiveDrawer(drawer => drawer === 'marks' ? null : 'marks')}><Icon name="bookmark" /><span>书签{marks.length > 0 ? ` ${marks.length}` : ''}</span></button>
       <button onClick={() => setShowSourceSwitch(true)}><Icon name="sliders" /><span>换源</span></button>
       <button onClick={toggleTts}><Icon name={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'} /><span>{ttsActive ? (ttsPlayState === 'playing' ? '暂停' : '继续') : '朗读'}</span></button>
       <button onClick={() => setActiveDrawer('settings')}><span className="aa">Aa</span><span>设置</span></button>

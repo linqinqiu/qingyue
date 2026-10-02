@@ -446,6 +446,42 @@ data class CachedBookRequest(
 @Serializable data class ShelfOrderRequest(val books: List<BookIdentifier>)
 @Serializable data class ShelfOrderResult(val updated: Int)
 
+/**
+ * 书签。`bookKey` 是「书名 + 作者」的归一化串而不是 `sourceId + bookUrl` ——
+ * 同一本书换源之后章节号常常整体错位，只有"这本书"是稳的，所以书签按书归拢、
+ * 定位时**先认章节标题、标题找不到才退回章节号**。
+ * `paragraphFrom..paragraphTo` 支持一次框住多段；整章书签用 -1 表示"整章"。
+ */
+@Serializable data class BookMark(
+    val id: Long,
+    val sourceId: String,
+    val bookUrl: String,
+    val bookName: String,
+    val bookAuthor: String? = null,
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val paragraphFrom: Int,
+    val paragraphTo: Int,
+    val quote: String,
+    val note: String = "",
+    val createdAt: Long,
+)
+
+@Serializable data class BookMarkCreateRequest(
+    val sourceId: String,
+    val bookUrl: String,
+    val bookName: String,
+    val bookAuthor: String? = null,
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val paragraphFrom: Int = 0,
+    val paragraphTo: Int = 0,
+    val quote: String,
+    val note: String = "",
+)
+
+@Serializable data class BookMarkNoteRequest(val note: String)
+
 /** 「关于」页顶部那三样：名字、版本、发布仓库。版本只有一个来源（清单），界面不许写死。 */
 @Serializable data class AboutInfo(val title: String, val version: String, val repository: String)
 

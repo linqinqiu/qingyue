@@ -5161,6 +5161,53 @@ input[type=range] { min-height: 24px; }
 .customize-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .customize-saved { color: var(--muted); font-size: 12px; }
 
+/* —— 书签：阅读器左栏那一叠 + 「我的 → 书签」那一页 —— */
+.reader-drawer-marks .bookmark-drawer-body { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.bookmark-drawer-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 8px; padding: 14px 14px 10px; border-bottom: 1px solid var(--line); }
+.bookmark-drawer-head h3 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 16px; font-weight: 600; }
+.bookmark-drawer-head small { grid-column: 1 / -1; color: var(--muted); font-size: var(--t-xs); }
+.bookmark-drawer-head .close-button { grid-row: 1; }
+.bookmark-add { display: grid; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.bookmark-quote, .bookmark-hint { margin: 0; color: var(--muted); font-size: var(--t-xs); line-height: 1.65; }
+.bookmark-quote span { display: block; margin-top: 3px; color: var(--ink); }
+.bookmark-note-input { min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-sm); }
+.bookmark-add-actions { display: flex; gap: 8px; }
+.bookmark-add-actions .primary-button, .bookmark-add-actions .ghost-button { flex: 1 1 auto; min-height: 32px; font-size: var(--t-sm); }
+.bookmark-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: 6px 0 16px; list-style: none; }
+.bookmark-list > li { padding: 8px 14px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.bookmark-jump { display: grid; gap: 4px; width: 100%; padding: 0; color: inherit; text-align: left; background: none; border: 0; font: inherit; cursor: pointer; }
+.bookmark-meta { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.bookmark-meta strong { overflow: hidden; font-size: var(--t-sm); text-overflow: ellipsis; white-space: nowrap; }
+.bookmark-meta small { flex: none; color: var(--muted); font-size: var(--t-xs); }
+.bookmark-text { display: -webkit-box; overflow: hidden; color: var(--ink); font-size: var(--t-sm); line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.bookmark-note { color: var(--accent-ink); font-size: var(--t-xs); }
+.bookmark-row-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.bookmark-edit { display: flex; gap: 6px; margin-top: 6px; }
+.bookmark-edit input { flex: 1 1 auto; min-width: 0; }
+.bookmark-message { margin: 0; padding: 8px 14px; color: var(--danger); font-size: var(--t-xs); }
+
+.bookmarks-page { width: min(920px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: 44px 32px 64px; }
+.bookmarks-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.bookmarks-head h1 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 26px; font-weight: 600; }
+.bookmarks-head p { margin: 5px 0 0; color: var(--muted); font-size: var(--t-sm); }
+.bookmarks-search { display: inline-flex; align-items: center; gap: 7px; min-width: 240px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); color: var(--muted); }
+.bookmarks-search input { min-width: 0; flex: 1; padding: 8px 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--t-sm); }
+.bookmarks-notice, .bookmarks-empty { color: var(--muted); font-size: var(--t-sm); line-height: 1.8; }
+.bookmarks-book { margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--line); }
+.bookmarks-book > header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bookmarks-book h2 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 18px; font-weight: 600; }
+.bookmarks-book > header small { color: var(--muted); font-size: var(--t-xs); }
+.bookmarks-book ul { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.bookmarks-book li { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
+.bookmarks-row-main { display: grid; gap: 3px; min-width: 0; }
+.bookmarks-row-main strong { font-size: var(--t-sm); }
+.bookmarks-row-main small { color: var(--muted); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.bookmarks-quote { margin: 2px 0 0; color: var(--ink); font-size: var(--t-sm); line-height: 1.7; overflow-wrap: anywhere; }
+.bookmarks-note { margin: 2px 0 0; color: var(--accent-ink); font-size: var(--t-sm); line-height: 1.7; }
+.bookmarks-row-actions { display: flex; flex: none; gap: 6px; align-items: center; }
+.bookmarks-noop { color: var(--muted); font-size: var(--t-xs); }
+@media (max-width: 640px) { .bookmarks-page { padding: 28px 18px 44px; } .bookmarks-book li { flex-direction: column; } }
+
 /* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
 .about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
 .about-hero { display: grid; gap: 12px; }

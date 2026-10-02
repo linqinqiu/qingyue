@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from './readerSettings'
 
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about'
+export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'bookmarks'
 
 export interface AppHeaderProps {
   page: AppPage
@@ -349,6 +349,20 @@ export function AppHeader({
                     <span>更新日志</span>
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="menu-logout-btn"
+                  style={{ color: 'var(--ink)' }}
+                  role="menuitem"
+                  aria-current={page === 'bookmarks' ? 'page' : undefined}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onNavigate('bookmarks')
+                  }}
+                >
+                  <Icon name="bookmark" />
+                  <span>书签</span>
+                </button>
                 <button
                   type="button"
                   className="menu-logout-btn"
