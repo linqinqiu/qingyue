@@ -17,6 +17,8 @@ export interface AppHeaderProps {
   onOpenLogs?: () => void
   /** 「更新日志」页与「自定义」弹窗（皮肤）。 */
   onOpenChangelog?: () => void
+  /** 「快捷键」那张表；表的内容与真正生效的键都来自 web/src/shortcuts.ts。 */
+  onOpenShortcuts?: () => void
   onOpenCustomize?: () => void
   /** 服务端 /healthz 报回来的版本号；空串表示还没问到（离线或启动中）。 */
   version?: string
@@ -35,6 +37,7 @@ export function AppHeader({
   onOpenOfflineCache,
   onOpenLogs,
   onOpenChangelog,
+  onOpenShortcuts,
   onOpenCustomize,
   version = '',
 }: AppHeaderProps) {
@@ -300,6 +303,21 @@ export function AppHeader({
                   >
                     <Icon name="activity" />
                     <span>运行日志</span>
+                  </button>
+                )}
+                {onOpenShortcuts && (
+                  <button
+                    type="button"
+                    className="menu-logout-btn"
+                    style={{ color: 'var(--ink)' }}
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onOpenShortcuts()
+                    }}
+                  >
+                    <Icon name="keyboard" />
+                    <span>快捷键</span>
                   </button>
                 )}
                 <button

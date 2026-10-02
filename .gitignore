@@ -66,6 +66,7 @@ local-patches.diff
 !/tools/verify/reader-flow-check.mjs
 !/tools/verify/reader-transition-check.mjs
 !/tools/verify/reader-typography-check.mjs
+!/tools/verify/shortcut-check.mjs
 !/tools/verify/replace-regex-census.mjs
 !/tools/verify/replace-regex-e2e.mjs
 !/tools/verify/rss-census.mjs

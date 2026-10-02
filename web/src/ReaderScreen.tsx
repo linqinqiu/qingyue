@@ -12,6 +12,7 @@ import { processChapterForTts, TtsChapterData } from './ttsTextProcessor'
 import { ITtsEngine, WebSpeechEngine, HttpAudioTtsEngine, TtsPlayState, TtsSpeakMode, isPlayInterruptedError } from './ttsEngine'
 import { TtsSettingsModal, SleepTimerOption } from './TtsSettingsModal'
 import { TtsPlayerBar } from './TtsPlayerBar'
+import { isTypingTarget, normalizeKey, READER_SHORTCUTS, shortcutFor } from './shortcuts'
 import { ReplaceRulesModal } from './ReplaceRulesModal'
 import { OfflineCacheModal } from './OfflineCacheModal'
 import {
@@ -1516,49 +1517,96 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   useEffect(() => () => { if (boundaryTimerRef.current !== null) window.clearTimeout(boundaryTimerRef.current) }, [])
 
-  // Keyboard navigation
+  // 快捷键：动作与界面上那张「快捷键」表都取自 web/src/shortcuts.ts 同一份定义。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.closest('input, textarea, select, button')) return
-      if (event.key === 'Escape') {
-        if (activeDrawer) {
-          setActiveDrawer(null)
-          return
-        }
+      const key = normalizeKey(event)
+      if (!key || isTypingTarget(event.target, key)) return
+      const hit = shortcutFor(READER_SHORTCUTS, key)
+      if (!hit) return
+      const jumpWithinChapter = (end: boolean) => {
+        const section = anchorSectionRef.current
+        if (!section) return
+        const top = window.scrollY + section.getBoundingClientRect().top
+        window.scrollTo({
+          top: Math.max(0, end ? top + section.offsetHeight - window.innerHeight + 24 : top - 24),
+          behavior: 'smooth',
+        })
       }
-      if (settings.pageMode === 'paginate') {
-        if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      const stepFontSize = (delta: number) => onSettingsChange({
+        ...settings,
+        fontSize: Math.min(28, Math.max(15, settings.fontSize + delta)),
+      })
+      switch (hit.action) {
+        case 'close':
+          if (!activeDrawer) return
+          setActiveDrawer(null)
+          break
+        case 'page-up':
           event.preventDefault()
-          goPrevPage()
-        } else if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+          if (settings.pageMode === 'paginate') goPrevPage()
+          else if (isAtTopBoundary(window.scrollY)) changeChapter(chapterIndex - 1, 'last')
+          else window.scrollBy({ top: -window.innerHeight * 0.85, behavior: 'smooth' })
+          break
+        case 'page-down':
           event.preventDefault()
-          goNextPage()
+          if (settings.pageMode === 'paginate') goNextPage()
+          else if (isAtBottomBoundary(window.scrollY, document.documentElement.scrollHeight, window.innerHeight)) changeChapter(chapterIndex + 1, 'first')
+          else window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' })
+          break
+        case 'chapter-prev':
+          event.preventDefault()
+          if (settings.pageMode === 'paginate') goPrevPage()
+          else changeChapter(chapterIndex - 1, 'last')
+          break
+        case 'chapter-next':
+          event.preventDefault()
+          if (settings.pageMode === 'paginate') goNextPage()
+          else changeChapter(chapterIndex + 1, 'first')
+          break
+        case 'chapter-start':
+          event.preventDefault()
+          jumpWithinChapter(false)
+          break
+        case 'chapter-end':
+          event.preventDefault()
+          jumpWithinChapter(true)
+          break
+        case 'font-increase':
+          event.preventDefault()
+          stepFontSize(1)
+          break
+        case 'font-decrease':
+          event.preventDefault()
+          stepFontSize(-1)
+          break
+        case 'theme-next': {
+          event.preventDefault()
+          const next = themes[(themes.findIndex(entry => entry[0] === settings.theme) + 1) % themes.length]
+          onSettingsChange({ ...settings, theme: next[0] })
+          break
         }
-      } else {
-        if (event.key === 'ArrowLeft') { event.preventDefault(); changeChapter(chapterIndex - 1, 'last') }
-        if (event.key === 'ArrowRight') { event.preventDefault(); changeChapter(chapterIndex + 1, 'first') }
-        if (event.key === 'PageDown' || event.key === ' ') {
+        case 'toc':
           event.preventDefault()
-          if (isAtBottomBoundary(window.scrollY, document.documentElement.scrollHeight, window.innerHeight)) {
-            changeChapter(chapterIndex + 1, 'first')
-          } else {
-            window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' })
-          }
-        }
-        if (event.key === 'PageUp') {
+          setActiveDrawer(drawer => drawer === 'toc' ? null : 'toc')
+          break
+        case 'settings':
           event.preventDefault()
-          if (isAtTopBoundary(window.scrollY)) {
-            changeChapter(chapterIndex - 1, 'last')
-          } else {
-            window.scrollBy({ top: -window.innerHeight * 0.85, behavior: 'smooth' })
-          }
-        }
+          setActiveDrawer(drawer => drawer === 'settings' ? null : 'settings')
+          break
+        case 'tts':
+          event.preventDefault()
+          toggleTts()
+          break
+        case 'fullscreen':
+          event.preventDefault()
+          toggleFullscreen()
+          break
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activeDrawer, chapterIndex, changeChapter, goNextPage, goPrevPage, settings.pageMode])
+  }, [activeDrawer, changeChapter, chapterIndex, goNextPage, goPrevPage, onSettingsChange, settings, toggleTts])
 
   // Ctrl/⌘ + 滚轮直接调字号：不用先开设置抽屉再拖滑杆。必须 passive:false，否则拦不住浏览器的页面缩放。
   useEffect(() => {

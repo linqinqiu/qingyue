@@ -29,6 +29,8 @@ import { sourcePickerOptions } from './sourceOrder'
 import { BackupPage } from './BackupPage'
 import { OfflineCacheModal } from './OfflineCacheModal'
 import { LogsModal } from './LogsModal'
+import { ShortcutHelp } from './ShortcutHelp'
+import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, shortcutFor } from './shortcuts'
 import { SourceHealthModal } from './SourceHealthModal'
 import { SourceEditor } from './SourceEditorPanel'
 import { SourceGroupModal } from './SourceGroupModal'
@@ -3011,6 +3013,7 @@ function App() {
   const [showReplaceRules, setShowReplaceRules] = useState(false)
   const [showOfflineCache, setShowOfflineCache] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   /** 「自定义」弹窗：只有皮肤那一档（界面布局随 v2 一起撤掉了）。 */
   const [showCustomize, setShowCustomize] = useState(false)
   /** 发现页点中的书：先进详情弹窗（与搜索页同一套），点「开始阅读」才进阅读器。 */
@@ -3057,10 +3060,21 @@ function App() {
     setPage(next)
   }
 
-  // 桌面手感（借鉴悦读）：Alt+←/→ 沿一级导航切页；Ctrl/⌘+F 聚焦当前页的搜索/筛选框。
+  // 桌面手感（借鉴悦读）+ 全局快捷键（表在 web/src/shortcuts.ts，「快捷键」那张表渲染同一份）。
   // 阅读器里不抢 Ctrl+F —— 在长正文里找字，浏览器原生查找更好用。
   useEffect(() => {
     const NAV: Page[] = ['library', 'shelf', 'explore', 'sources', 'subscriptions', 'rules', 'backup']
+    const focusSearch = () => {
+      // 这一页上的"搜索框"措辞不统一（输入书名或作者 / 筛选书名或作者 / 筛选书源），
+      // 只按"搜索"两个字找会一条都找不到 —— Ctrl+F 原来就是这么哑着的。
+      const input = document.querySelector<HTMLInputElement>(
+        'main input[type="search"], .source-filter input, '
+        + 'main input[placeholder*="搜索"], main input[placeholder*="筛选"], main input[placeholder*="输入"]')
+      if (!input) return false
+      input.focus()
+      input.select()
+      return true
+    }
     const handler = (event: KeyboardEvent) => {
       if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         const current = NAV.indexOf(page)
@@ -3070,16 +3084,33 @@ function App() {
         return
       }
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f' && page !== 'reader') {
-        const input = document.querySelector<HTMLInputElement>('main input[type="search"], .source-filter input, main input[placeholder*="搜索"]')
-        if (!input) return
+        if (focusSearch()) event.preventDefault()
+        return
+      }
+      const key = normalizeKey(event)
+      if (!key || isTypingTarget(event.target, key)) return
+      const hit = shortcutFor(GLOBAL_SHORTCUTS, key)
+      if (!hit) return
+      // 阅读器里那些单字母键归阅读器自己（D/S/T/F/M…）；只有这张表在哪都要能开
+      if (page === 'reader' && hit.action !== 'help' && hit.action !== 'close-help') return
+      if (hit.action === 'search') {
+        if (focusSearch()) event.preventDefault()
+      } else if (hit.action === 'help') {
         event.preventDefault()
-        input.focus()
-        input.select()
+        setShowShortcuts(value => !value)
+      } else if (hit.action === 'close-help') {
+        setShowShortcuts(value => (value ? false : value))
+      } else if (hit.action === 'logs') {
+        event.preventDefault()
+        setShowLogs(true)
+      } else if (hit.page) {
+        event.preventDefault()
+        navigate(hit.page as Page)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [page])
+  }, [page, showShortcuts])
 
   const openReader = (book: OpenBook, index: number, origin: Page = 'library') => {
     const fallbackCover = book.details.coverUrl || book.details.alternateSources?.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
@@ -3202,6 +3233,7 @@ function App() {
         onOpenReplaceRules={() => setShowReplaceRules(true)}
         onOpenOfflineCache={() => setShowOfflineCache(true)}
         onOpenLogs={() => setShowLogs(true)}
+        onOpenShortcuts={() => setShowShortcuts(true)}
         onOpenChangelog={() => navigate('changelog')}
         onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
@@ -3248,6 +3280,9 @@ function App() {
       )}
       {showLogs && (
         <LogsModal onClose={() => setShowLogs(false)} />
+      )}
+      {showShortcuts && (
+        <ShortcutHelp onClose={() => setShowShortcuts(false)} />
       )}
       {showCustomize && (
         <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setShowCustomize(false)} />

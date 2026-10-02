@@ -23,6 +23,7 @@ export type IconName =
   | 'home'
   | 'image'
   | 'importFile'
+  | 'keyboard'
   | 'list'
   | 'logOut'
   | 'menu'
@@ -72,6 +73,7 @@ const paths: Record<IconName, ReactNode> = {
   globe: <><circle cx="12" cy="12" r="10" /><path d="M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20" /><path d="M2 12h20" /></>,
   image: <><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></>,
   importFile: <><path d="M12 3v10" /><path d="m8 9 4 4 4-4" /><path d="M4 15v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3" /></>,
+  keyboard: <><rect width="20" height="16" x="2" y="4" rx="2" /><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" /></>,
   list: <><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
   logOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,

@@ -116,6 +116,10 @@ try {
     check('能打开缓存好的那本书', await openBook(page), picked.name)
     const first = await snapshot(page)
     check('初始正文不是空的', first.paragraphs > 0, `${first.paragraphs} 段`)
+    // 「预载命中」这一档得先把续接窗口等出来：下一章挂上来了，才说明它的正文真的已经在缓存里。
+    // 不等就点，量的其实是"正文在飞"（那是下面 ② 的事），标题没变会被误判成回归。
+    await page.waitForFunction(() => !!document.querySelector('.reader-flow-chapter.reader-flow-tail'),
+      { timeout: 25000 }).catch(() => undefined)
 
     // —— ③ 跨章过渡：预载到位时点「下一章」当场就该是新正文，不许有骨架屏 ——
     // （滚动模式中途不再有"章末提示条"：下一章本来就挂在同一棵容器下面，那是连续文档改造的本意，
