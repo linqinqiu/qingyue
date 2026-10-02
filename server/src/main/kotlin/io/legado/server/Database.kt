@@ -688,29 +688,6 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         updatedCount
     }
     
-    /** 标记书籍为已读/未读（通过阅读进度实现） */
-    fun markBookReadStatus(sourceId: String, bookUrl: String, isRead: Boolean) = write { db ->
-        if (isRead) {
-            // 已读：将进度设为最后一章最后一段
-            val chapters = getTocCache(sourceId, bookUrl)
-            if (!chapters.isNullOrEmpty()) {
-                val lastChapter = chapters.last()
-                saveProgress(ReadingProgress(
-                    sourceId = sourceId,
-                    bookUrl = bookUrl,
-                    chapterUrl = lastChapter.url,
-                    chapterIndex = lastChapter.index,
-                    scrollPosition = 1.0,
-                    updatedAt = System.currentTimeMillis()
-                ))
-            }
-        } else {
-            // 未读：清除阅读进度
-            db.prepareStatement("delete from reading_progress where source_id=? and book_url=?").use { 
-                it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() 
-            }
-        }
-    }
     fun switchBookshelf(oldSourceId: String, oldBookUrl: String, request: BookshelfWriteRequest, cover: CachedCover?, alternateSources: List<SearchResult>? = null): Pair<BookshelfItem, String?> = write { db ->
         val now = System.currentTimeMillis()
         db.autoCommit = false

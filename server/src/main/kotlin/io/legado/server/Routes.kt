@@ -1373,7 +1373,11 @@ fun Route.apiRoutes(
             call.respond(mapOf("moved" to movedCount, "total" to request.books.size))
         }
         
-        // 批量操作：标记多本书籍为已读/未读
+        // 批量操作：把多本书标成「已读完 / 正在阅读」。
+        // 必须走与单本右键**同一个**写入口（书架的 completed 标记）：这里原来改的是阅读进度
+        // （已读=把进度推到最后一章、未读=直接删掉 reading_progress），于是界面上什么都不变
+        // （用户 2026-10-02：「批量管理中标注已读完没有任何显示，右击标注已读完正常」），
+        // 而"未读"那一支还会把用户读到哪儿抹掉 —— 那是比不显示更糟的后果。
         post("/bookshelf/batch-mark-read") {
             if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<BatchMarkReadRequest>()
@@ -1383,10 +1387,8 @@ fun Route.apiRoutes(
             }
             var markedCount = 0
             for (book in request.books) {
-                if (book.sourceId.isNotBlank() && book.bookUrl.isNotBlank()) {
-                    database.markBookReadStatus(book.sourceId, book.bookUrl, request.isRead)
-                    markedCount++
-                }
+                if (book.sourceId.isNotBlank() && book.bookUrl.isNotBlank()
+                    && database.setBookshelfCompleted(book.sourceId, book.bookUrl, request.isRead) != null) markedCount++
             }
             call.respond(mapOf("marked" to markedCount, "total" to request.books.size))
         }

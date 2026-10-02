@@ -676,7 +676,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .shelf-card-checkbox[aria-checked="true"] { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
 .shelf-card-checkbox svg { width: 16px; height: 16px; }
 
-.shelf-card-cover { position: relative; width: 100%; aspect-ratio: 3 / 4; cursor: pointer; overflow: hidden; background: var(--accent-soft); display: grid; place-items: center; user-select: none; }
+.shelf-card-cover { position: relative; width: 100%; aspect-ratio: 3 / 4; cursor: pointer; overflow: hidden; background: var(--surface-muted); display: grid; place-items: center; user-select: none; }
 .shelf-card-cover img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
 .shelf-card-cover:hover img { transform: scale(1.04); }
 .shelf-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; min-width: 0; }
@@ -4619,32 +4619,44 @@ input[type=range] { min-height: 24px; }
 .shelf-resume-track i { display: block; height: 100%; border-radius: 2px; background: var(--accent-solid); transition: width .2s ease; }
 .shelf-resume .primary-button { flex: none; }
 
-/* —— 网格卡封面底部的阅读进度（上游 BookshelfReadProgress 的位置）—— */
-.shelf-card-read-track { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: color-mix(in srgb, var(--ink) 18%, transparent); }
-.shelf-card-read-fill { height: 100%; background: var(--accent-solid); }
+/* —— 网格卡封面底部的阅读进度（上游 BookshelfReadProgress 的位置）。
+   原来轨道是 18% 墨色铺满封面下沿，填充还带 `min-width: 5px`：每张卡底下一条灰带，
+   刚开读的卡左下角多一枚 5px 绿方块，有真封面的又被图压住 —— 就是用户 2026-10-02 说的
+   「封面下面或左下角有一片绿，有点有，有点没有」。现在轨道淡成一条刻痕，填充读到 2% 以上
+   才渲染（门槛在 main.tsx），并且不再有最小可见长度：读到 1/1000 章就该看不见。 —— */
+.shelf-card-read-track { position: absolute; right: 0; bottom: 0; left: 0; height: 3px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.shelf-card-read-fill { height: 100%; border-radius: 0 2px 2px 0; background: var(--accent-solid); }
 
 /* —— 占位封面：文字版书封。
    之前有三处互相覆盖的 .cover-fallback，最终算出来是近白的 surface-muted 空板，
-   看上去像"图没加载出来"（用户 2026-10-01：默认封面有漏洞）。这里收口成唯一定义，
-   并让它真像一本书：一点底色渐变 + 内框 + 左侧书脊线，标题给足字号。 —— */
+   看上去像"图没加载出来"（用户 2026-10-01：默认封面有漏洞）。这里收口成唯一定义。
+   底色只走纸色（surface → surface-muted 竖向），强调色一处都不用：原来是一条 160deg 的
+   --accent-soft 斜渐变加左侧 4px 书脊，而晓白 / 护眼那两档里 accent-soft 就是浅绿，
+   于是每张占位封面染出一个绿角、有真封面的卡却没有（用户 2026-10-02 的截图）。
+   要"像一本书"靠的是排版本身：内框 + 书名字号，不是色块。 —— */
 .cover-fallback {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 6px; width: 100%; height: 100%; padding: 12% 10%; box-sizing: border-box;
   text-align: center; overflow: hidden;
-  background: linear-gradient(160deg, var(--accent-soft), var(--surface-muted) 72%);
+  background: linear-gradient(180deg, var(--surface), var(--surface-muted));
   color: var(--ink);
   font-family: Georgia, "Noto Serif SC", serif; font-weight: 600; line-height: 1.45;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent),
-    inset 5px 0 0 color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+/* 内框压在 padding 内侧，等于给文字书封加了一圈"书壳"，避免整块看着就是一张空纸 */
+.cover-fallback::after {
+  content: ''; position: absolute; inset: 7px; pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--ink) 7%, transparent); border-radius: 2px;
 }
 /* 390px 档实测：封面只有 ~95px 宽，"镜夜思（未修改）"这种作者串会把字挤出去 3px，
    表现为整页横向滚动（source-scale-check 三条 FAIL 同一个根因）。作者单行 + 省略号，
    标题多行但也不许撑破容器。 */
 .cover-fallback-title { max-width: 100%; min-width: 0; display: -webkit-box; overflow: hidden; font-size: max(14px, min(19px, 1.1vw + 9px)); line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
 .cover-fallback-author { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: max(10px, min(var(--t-sm), 2.6vw)); font-weight: 500; letter-spacing: .02em; }
-/* 46px 以下的小封面放不下字，且旁边就写着书名作者：退回两字，也不要书脊/渐变 */
+/* 46px 以下的小封面放不下字，且旁边就写着书名作者：退回两字，也不要内框/渐变 */
 .cover-fallback-compact { gap: 0; padding: 0; box-shadow: none; background: var(--surface-muted); color: var(--muted); font-size: 15px; letter-spacing: .04em; }
+.cover-fallback-compact::after { display: none; }
 .cover-fallback-compact span { display: block; -webkit-line-clamp: 1; }
 
 /* —— 上游只有列表卡才显示作者，网格档把这一行让给书名 —— */
@@ -4657,8 +4669,9 @@ input[type=range] { min-height: 24px; }
   .shelf-resume .primary-button { grid-column: 1 / -1; width: 100%; }
 }
 
-/* 读到 1% 时 3px 宽的填充在封底上几乎看不见，给个最小可见长度 */
-.shelf-card-read-fill, .shelf-resume-track i { min-width: 5px; }
+/* 继续阅读条读到 1% 时 3px 宽的填充几乎看不见，给个最小可见长度。
+   网格卡那条不给：封面下角的一颗绿点会被读成"脏了一块"，宁可看不见。 */
+.shelf-resume-track i { min-width: 5px; }
 .shelf-resume-track { margin-top: 6px; }
 
 /* 内置浏览器：页面跑不起来时把原因说出来，别让用户对着残页猜 */

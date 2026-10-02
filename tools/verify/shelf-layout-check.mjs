@@ -135,6 +135,41 @@ try {
   })
   check('继续阅读那条 44px 小封面仍走两字（旁边就有书名作者）',
     !!resumeCompact && resumeCompact.compact && resumeCompact.text.length <= 2, JSON.stringify(resumeCompact))
+
+  // 占位封面上不许出现强调色、封面下沿不许有"绿了一角"的进度残块
+  // （用户 2026-10-02：「封面下面或左下角有一片绿，有点有，有点没有，应该是你图层定位没做好」）
+  const coverPaint = await page.evaluate(() => {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().toLowerCase()
+    const solid = getComputedStyle(document.documentElement).getPropertyValue('--accent-solid').trim().toLowerCase()
+    const soft = getComputedStyle(document.documentElement).getPropertyValue('--accent-soft').trim().toLowerCase()
+    const tints = [...new Set([accent, solid, soft].filter(Boolean))]
+    const painted = node => {
+      const cs = getComputedStyle(node)
+      const raw = `${cs.backgroundImage} ${cs.backgroundColor} ${cs.boxShadow}`
+      return { node, raw, tinted: tints.some(color => raw.includes(color)) }
+    }
+    const fallbacks = [...document.querySelectorAll('.shelf-grid.shelf-mode-grid .cover-fallback')].map(painted)
+    const tracks = [...document.querySelectorAll('.shelf-grid.shelf-mode-grid .shelf-card-read-track')]
+      .map(track => {
+        const fill = track.querySelector('.shelf-card-read-fill')
+        const ratio = fill ? fill.getBoundingClientRect().width / track.getBoundingClientRect().width : 0
+        return { ratio, px: fill ? +fill.getBoundingClientRect().width.toFixed(1) : 0 }
+      })
+    return {
+      accent, solid, soft,
+      tintedFallbacks: fallbacks.filter(f => f.tinted).length, fallbackCount: fallbacks.length,
+      sample: fallbacks[0]?.raw.slice(0, 90) ?? '',
+      tracks: tracks.length,
+      nubs: tracks.filter(t => t.px > 0 && t.px < 8 && t.ratio < 0.02).length,
+      overFull: tracks.filter(t => t.ratio > 1.001).length,
+    }
+  })
+  check('占位封面只用纸色与墨色，不掺强调色',
+    coverPaint.tintedFallbacks === 0, `${coverPaint.tintedFallbacks}/${coverPaint.fallbackCount} 张染了 accent（accent=${coverPaint.accent} solid=${coverPaint.solid} soft=${coverPaint.soft}）`)
+  check('进度条不画 8px 以下的绿残块（读到 2% 以下宁可不显示）',
+    coverPaint.nubs === 0, JSON.stringify(coverPaint.tracks) + ' 条里有 ' + coverPaint.nubs + ' 个残块')
+  check('进度填充不会溢出封面宽度', coverPaint.overFull === 0, JSON.stringify(coverPaint))
+
   const phone = await (async () => { await openShelf(page, VIEWS[1], null); return measureGrid(page) })()
   check('窄屏固定 3 列小封面（不是 1 列大封面）', phone.columns === 3, `${phone.columns} 列 / ${phone.coverWidth}px`)
   await page.setViewport({ width: VIEWS[0].width, height: VIEWS[0].height, deviceScaleFactor: 1 })

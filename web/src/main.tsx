@@ -2787,6 +2787,8 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
             const isCaching = item.cacheState === 'caching'
             const isLocal = item.sourceId === 'loc_book'
             const percent = Math.min(100, Math.round((item.cachedChapters / Math.max(1, item.totalChapters || 1)) * 100))
+            // 读到 1/1000 章也算"开过"，但封面下沿那颗 5px 绿点看起来就是脏了一块 —— 2% 以下不画。
+            const readPercent = Math.min(100, Math.round((((item.chapterIndex ?? 0) + 1) / Math.max(1, item.totalChapters)) * 100))
 
             return (
               <article
@@ -2861,9 +2863,9 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
                     </div>
                   )}
                   {/* 上游网格卡封面底部有阅读进度条；原来只标了缓存章数，读到哪儿完全看不出来 */}
-                  {!item.completed && item.totalChapters > 0 && (
+                  {!item.completed && readPercent >= 2 && (
                     <div className="shelf-card-read-track" aria-hidden="true">
-                      <div className="shelf-card-read-fill" style={{ width: `${Math.min(100, Math.round((((item.chapterIndex ?? 0) + 1) / item.totalChapters) * 100))}%` }} />
+                      <div className="shelf-card-read-fill" style={{ width: `${readPercent}%` }} />
                     </div>
                   )}
                   <div className="shelf-card-hover" aria-hidden="true">
