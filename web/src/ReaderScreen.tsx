@@ -4,7 +4,7 @@ import { Icon } from './icons'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
-import { flowAdvance, holdScroll, sectionProgress } from './readerFlow'
+import { flowAdvance, holdScroll, pageProgress, pageWindowShift, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
 import { toast } from './Toast'
@@ -350,6 +350,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 滚动回调是长期存在的闭包，读续接窗口要经 ref（与 currentChapterUrlRef 同一手法）
   const flowTailRef = useRef<{ chapter: Chapter; content: string }[]>([])
   flowTailRef.current = flowTail
+  /** 分页模式下每一章占的页区间（量自排版后的 DOM），以及顶窗口之后该落到第几页。 */
+  const pageSpansRef = useRef<{ start: number; end: number }[]>([])
+  const pendingPageRef = useRef<number | null>(null)
   const [chapterIndex, setChapterIndex] = useState(startIndex)
   /** 同一个手法：判断"只能往前顶"要读当前的那一个，不能闭包里那个早就过期的数字。 */
   const chapterIndexRef = useRef(chapterIndex)
@@ -772,7 +775,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const paragraphEls = Array.from(
       document.querySelectorAll<HTMLElement>(
         settings.pageMode === 'paginate'
-          ? '.reader-paginated-column-body [data-paragraph-index]'
+          ? '.reader-paginated-column-body .reader-page-chapter:first-of-type [data-paragraph-index]'
           : '.reading-content .reader-flow-chapter:first-of-type [data-paragraph-index]'
       )
     )
@@ -1169,12 +1172,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [chapter, currentBook.bookUrl, currentBook.details.sourceId, currentBook.progress?.scrollPosition, startIndex])
 
   /**
-   * 续接窗口：把锚点章之后的 1~2 章挂到下面（只在滚动模式）。
+   * 续接窗口：把锚点章之后的 1~2 章挂到下面（滚动与分页两种模式都要）。
    * 优先吃预载缓存 —— `preloadNextChapter` 在本章读到 70% 时就把下一章取回来了，
    * 所以正常情况下这一趟零请求。
    */
   useEffect(() => {
-    if (settings.pageMode !== 'scroll' || !content) return
+    if (!content) return
     // 锚点还没换上这一章的正文时不许重排窗口：那会在"上一章的字还挂着"的那一两帧里
     // 把已经续接进来的那一章从 DOM 中摘走，画面凭空少一章 —— 正是要消灭的"跳"。
     // 宁可让那一章短暂地出现两次（重复的那份在视口下方，看不见），也不许它消失。
@@ -1247,6 +1250,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     return () => window.cancelAnimationFrame(rafId)
   }, [content, loading, settings.pageMode])
 
+  /**
+   * 分页模式的跨章也是"顶窗口"（用户 2026-10-02：「竖版做好了，横板还是跳转」）。
+   * 翻进已经挂在下面的那一章时不换章、不重挂子树、不把页码归零：
+   * 摘掉最前面那一章，页码减去它的页数 —— 与滚动模式同一套动作，只是单位从像素换成页。
+   */
+  useLayoutEffect(() => {
+    if (settings.pageMode !== 'paginate' || pendingPageRef.current !== null) return
+    const shift = pageWindowShift(pageSpansRef.current, pageIndex)
+    if (!shift) return
+    const target = flowTailRef.current[shift.lead - 1]
+    if (!target) return
+    const targetIndex = currentBook.chapters.findIndex(item => item.url === target.chapter.url)
+    if (targetIndex <= chapterIndexRef.current) return
+    pendingPageRef.current = shift.pageIndex
+    setChapterIndex(targetIndex)
+  }, [pageIndex, settings.pageMode, currentBook.chapters])
+
   // Pagination measurement
   const measurePagination = useCallback(() => {
     const viewport = viewportRef.current
@@ -1268,6 +1288,30 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setStride(layout.stride)
     setIsDoubleColumn(layout.isDoubleColumn)
     setPageCount(layout.pageCount)
+
+    // 每一章在窗口里占哪几页：分栏里每个 <section> 的 h1 带 break-before: column，
+    // 所以它的第一块碎片就在自己那一章的第一列 —— 两块矩形的左边缘之差除以步长就是页差。
+    const sections = [...body.querySelectorAll<HTMLElement>('.reader-page-chapter')]
+    if (sections.length > 0) {
+      const bodyLeft = body.getBoundingClientRect().left
+      const starts = sections.map(node => Math.min(
+        layout.pageCount - 1,
+        Math.max(0, Math.round((node.getBoundingClientRect().left - bodyLeft) / layout.stride)),
+      ))
+      pageSpansRef.current = starts.map((start, index) => ({
+        start,
+        end: index + 1 < starts.length ? starts[index + 1] : layout.pageCount,
+      }))
+      // 刚把窗口往前挪过：页码要落到"摘掉前面那几章之后"的那一页上，否则画面跳回窗口开头
+      if (pendingPageRef.current !== null) {
+        const next = Math.min(layout.pageCount - 1, Math.max(0, pendingPageRef.current))
+        pendingPageRef.current = null
+        setPageIndex(next)
+        return
+      }
+    } else {
+      pageSpansRef.current = []
+    }
 
     if (targetInitialPageRef.current === 'last') {
       targetInitialPageRef.current = null
@@ -1293,6 +1337,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     measurePagination()
     const viewport = viewportRef.current
     if (!viewport) return
+    // 只观察 viewport 是不够的：续接窗口挂上/摘掉章节时窗口宽度会变，而视口尺寸没变，
+    // ResizeObserver 一次都不会回调 —— 于是 pageCount 停在"只有锚点那一章"的页数上，
+    // 多出来的那些列被 overflow:hidden 裁掉，用户永远翻不进去（横版"还是跳转"就是这么来的）。
     const observer = new ResizeObserver(() => measurePagination())
     observer.observe(viewport)
     return () => observer.disconnect()
@@ -1300,6 +1347,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     settings.pageMode,
     content,
     loading,
+    flowTail,
     settings.fontSize,
     settings.lineHeight,
     settings.letterSpacing,
@@ -1406,7 +1454,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   useEffect(() => {
     if (settings.pageMode !== 'paginate') return
-    const position = pageCount > 1 ? pageIndex / (pageCount - 1) : 0
+    // 分母是"这一章有几页"，不是"这个窗口有几页" —— 与滚动模式同一份进度契约
+    const position = pageSpansRef.current.length
+      ? pageProgress(pageSpansRef.current, pageIndex)
+      : (pageCount > 1 ? pageIndex / (pageCount - 1) : 0)
     const current = currentRef.current
     if (current && chapter) {
       current.position = position
@@ -1510,9 +1561,14 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
     } else if (settings.pageMode === 'paginate') {
-      const el = bodyRef.current?.querySelector(`[data-paragraph-index="${activeParagraphIndex}"]`) as HTMLElement | null
-      if (el && stride > 0) {
-        const targetPage = Math.min(pageCount - 1, Math.max(0, Math.floor(el.offsetLeft / stride)))
+      // 高亮跟读只在锚点那一章里找（续接进来的下一章有同名段落），页码换算用与
+      // `pageSpansRef` 同一套矩形差：offsetLeft 与 rect.left 混着量，跳页就会偏一整页。
+      const body = bodyRef.current
+      const anchor = body?.querySelector<HTMLElement>('.reader-page-chapter')
+      const el = anchor?.querySelector<HTMLElement>(`[data-paragraph-index="${activeParagraphIndex}"]`)
+      if (body && el && stride > 0) {
+        const offset = el.getBoundingClientRect().left - body.getBoundingClientRect().left
+        const targetPage = Math.min(pageCount - 1, Math.max(0, Math.round(offset / stride)))
         setPageIndex(targetPage)
       }
     }
@@ -1922,13 +1978,26 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate}>
           <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}`}>
             <div className="reader-paginated-track" style={{ transform: `translateX(-${pageIndex * stride}px)` }}>
-              <article ref={bodyRef} key={loadedChapterUrl || 'pending'} className={`reader-paginated-column-body chapter-enter${isStaleContent ? ' is-stale' : ''}`} style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
-                <h1>{shownChapterTitle}</h1>
-                {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
-                {loading && !content && <ReaderContentSkeleton />}
-                {message && <p className="reader-error">{message}</p>}
-                {paragraphs.map((line, index) => renderContentBlock(line, index))}
-                {/* 双栏模式下，在本章末尾插入隐形占位，确保下一章从新的左栏开始 */}
+              {/*
+                分页模式也是一篇连续文档：一章一个 <section> 排在同一条分栏流里，
+                翻页翻过章边界只是"下一页"，不是重挂一棵子树再回到章首。
+                容器的 key 只在主动跳章/换书时换（续接推进不换），否则每跨一章白闪一次。
+              */}
+              <article ref={bodyRef} key={flowKey} className={`reader-paginated-column-body chapter-enter${isStaleContent ? ' is-stale' : ''}`} style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
+                <section className="reader-page-chapter" data-chapter-index={chapter?.index ?? 0}>
+                  <h1>{shownChapterTitle}</h1>
+                  {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
+                  {loading && !content && <ReaderContentSkeleton />}
+                  {message && <p className="reader-error">{message}</p>}
+                  {paragraphs.map((line, index) => renderContentBlock(line, index))}
+                </section>
+                {flowTail.map(item => (
+                  <section key={item.chapter.url} className="reader-page-chapter reader-page-tail" data-chapter-index={item.chapter.index}>
+                    <h1>{item.chapter.title}</h1>
+                    {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+                  </section>
+                ))}
+                {/* 双栏模式下，在窗口末尾插入隐形占位，确保下一章从新的左栏开始 */}
                 {isDoubleColumn && <div className="column-break-placeholder" aria-hidden="true" />}
               </article>
             </div>

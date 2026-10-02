@@ -107,6 +107,18 @@ try {
     const before = await api(page, 'GET', `/api/reading-progress?sourceId=${encodeURIComponent(picked.sourceId)}&bookUrl=${encodeURIComponent(picked.bookUrl)}`)
     if (before.status === 200 && before.text.trim().startsWith('{')) progressBefore = JSON.parse(before.text)
 
+    // 进门先落到**中间那一章**：这本书上次被读到最后一章时，页脚的「下一章」本来就是禁用的，
+    // 于是一条"点它该换章"的判据会红在夹具上而不是产品上（实测抓到过一次）。
+    const tocEarly = JSON.parse((await api(page, 'POST', '/api/books/chapters',
+      { sourceId: picked.sourceId, bookUrl: picked.bookUrl })).text || '[]')
+    const middle = tocEarly[Math.floor(tocEarly.length / 2)]
+    if (middle) {
+      await api(page, 'PUT', '/api/reading-progress', {
+        sourceId: picked.sourceId, bookUrl: picked.bookUrl,
+        chapterUrl: middle.url, chapterIndex: Math.floor(tocEarly.length / 2), scrollPosition: 0,
+      })
+    }
+
     // 滚动模式（默认即是，但显式写一次，别让上一次跑的残留影响判据）
     await page.evaluate(({ key, settings }) => {
       const base = JSON.parse(localStorage.getItem(key) || '{}')
@@ -132,13 +144,13 @@ try {
       return '已点击'
     })
     const titleBefore = (await snapshot(page)).title
-    await nextButton()
+    const clicked = await nextButton()
     await sleep(120)
     const instantly = await snapshot(page)
     check('预载命中时切章不出现骨架屏', !instantly.skeleton, instantly.skeleton ? '看到了骨架屏（旧行为）' : '无')
     check('预载命中时切章当场就有正文（不是空页）', instantly.paragraphs > 0, `${instantly.paragraphs} 段`)
     check('切章确实换了章（标题与之前不同）', instantly.title && instantly.title !== titleBefore,
-      `${titleBefore} → ${instantly.title}`)
+      `${clicked} · ${titleBefore} → ${instantly.title}`)
 
     // —— ② 正文在飞：旧文字挂着 + 「正在载入：新章名」，不挖空 ——
     // 连续流已经把"下一章"提前取回来了（它就挂在下面），点「下一章」根本不会有在飞的一帧 ——

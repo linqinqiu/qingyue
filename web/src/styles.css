@@ -953,6 +953,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
    如果它自己的 padding-top/边框随之变化，锚点的内容就会在它自己的盒子里往上蹿 ——
    按节的外框校正滚动位置是量不到这一段的（外框没动），实测每跨一章差 42px。 */
 .reader-flow-chapter { padding-top: 2.2em; border-top: 1px solid transparent; }
+/* 分页模式的连续流同理：每一章一节，节与节之间一条分隔线，内边距必须每节都一样
+   （页码换算按量出来的几何算，第一节少一条内边距就会把后面每一章的起点都挪歪）。 */
+.reader-page-chapter { padding-top: 2.2em; border-top: 1px solid transparent; }
+.reader-page-chapter + .reader-page-chapter { margin-top: 1.6em; border-top-color: color-mix(in srgb, var(--line) 65%, transparent); }
 .reader-flow-chapter + .reader-flow-chapter { margin-top: 3.2em; border-top-color: color-mix(in srgb, var(--line) 65%, transparent); }
 /* 首行缩进由「阅读设置 · 排版」的 --reader-text-indent 控制（正文段落的 trim 会先剥掉源站自带的
    全角空格，缩进只能有一个主人）；标题 h1 与配图不跟着缩。 */

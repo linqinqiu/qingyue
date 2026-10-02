@@ -64,6 +64,43 @@ export function holdScroll(scrollTop: number, measuredTop: number, keepTop: numb
 }
 
 /**
+ * 分页模式里一章占的页区间（`start` 含、`end` 不含），量自排版后的 DOM。
+ * 翻页模式的"连续"和滚动模式是同一件事，只是单位从像素换成页（用户 2026-10-02：「横板还是跳转」）。
+ */
+export type PageSpan = { start: number; end: number }
+
+/** 这一页落在哪一节：最后一个起点不晚于这一页的那一节。 */
+export function sectionAtPage(spans: PageSpan[], page: number): number {
+  let index = 0
+  for (let i = 0; i < spans.length; i += 1) if (spans[i].start <= page) index = i
+  return index
+}
+
+/**
+ * 页内进度 —— 分母是**当前这一章的页数**，不是整个窗口的页数。
+ * 与滚动模式 `sectionProgress` 同一条契约：存进服务端的永远是"这一章读了多少"。
+ */
+export function pageProgress(spans: PageSpan[], page: number): number {
+  if (!spans.length) return 0
+  const span = spans[Math.min(sectionAtPage(spans, page), spans.length - 1)]
+  const pages = span.end - span.start
+  if (pages <= 1) return 1
+  return Math.min(1, Math.max(0, (page - span.start) / (pages - 1)))
+}
+
+/**
+ * 窗口该往前挪几章，以及挪完之后页码是多少。
+ *
+ * 翻到已经挂在下面的那一章时不是"换章"：摘掉最前面那一章、页码减去它的页数 ——
+ * 不减的话窗口一空，画面就从第三章的第一页重新开始，用户看到的是"跳回去"。
+ */
+export function pageWindowShift(spans: PageSpan[], page: number): { lead: number; pageIndex: number } | null {
+  const lead = sectionAtPage(spans, page)
+  if (lead === 0) return null
+  return { lead, pageIndex: page - spans[lead].start }
+}
+
+/**
  * 章内进度（写进 `reading_progress.scroll_position` 的那个 0..1）。
  *
  * 契约没变：**仍然是"这一章里读了多少"**，只是分母从"整篇文档"换成"这一章那一节"。

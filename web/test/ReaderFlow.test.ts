@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chapterConsumed, flowAdvance, holdScroll, SectionBox, sectionProgress } from '../src/readerFlow'
+import { chapterConsumed, flowAdvance, holdScroll, pageProgress, pageWindowShift, SectionBox, sectionAtPage, sectionProgress } from '../src/readerFlow'
 
 /**
  * 连续滚动的算术（用户 2026-10-02：「章节间的连接还是不对，怎么能跳转呢，不是一体的吗」）。
@@ -83,4 +83,33 @@ test('sectionProgress - 分母是"这一章"，不是整篇文档', () => {
   assert.ok(Math.abs(sectionProgress(second, 2280, VIEW) - 0.4) < 1e-9, '中段按比例：可滚 700px，滚了 280px 就是 0.4')
   assert.equal(sectionProgress({ top: 0, height: 300 }, 900, VIEW), 1, '比一屏还短的一章：翻过去就是 1')
   assert.equal(sectionProgress({ top: 5000, height: 300 }, 0, VIEW), 0, '还没到就是 0')
+})
+
+/** 分页模式的同一件事，单位从像素换成页（用户 2026-10-02：「横板还是跳转」）。 */
+const SPANS = [{ start: 0, end: 5 }, { start: 5, end: 9 }, { start: 9, end: 12 }]
+
+test('sectionAtPage / pageProgress - 页码落在哪一章、这一章读了几页', () => {
+  assert.equal(sectionAtPage(SPANS, 0), 0)
+  assert.equal(sectionAtPage(SPANS, 4), 0)
+  assert.equal(sectionAtPage(SPANS, 5), 1, '起点是含的：第 5 页已经是第二章的第一页')
+  assert.equal(sectionAtPage(SPANS, 99), 2, '翻过头也不许越界')
+  assert.equal(pageProgress(SPANS, 0), 0)
+  assert.equal(pageProgress(SPANS, 2), 0.5)
+  assert.equal(pageProgress(SPANS, 4), 1, '这一章最后一页就是 1')
+  assert.equal(pageProgress(SPANS, 8), 1)
+})
+
+test('pageProgress 反向对照：分母是这一章的页数，不是整个窗口的页数', () => {
+  // 窗口共 12 页；第二章占 5..9。按窗口算第 8 页是 8/11≈0.73，
+  // 而服务端存的进度语义是"这一章读了多少" —— 第二章的最后一页必须是 1。
+  assert.equal(pageProgress(SPANS, 8), 1)
+  assert.notEqual(pageProgress(SPANS, 8), 8 / 11)
+})
+
+test('pageWindowShift - 翻进挂着的下一章是顶窗口，页码减去被摘掉那几章的页数', () => {
+  assert.equal(pageWindowShift(SPANS, 4), null, '还在第一章里就不该动窗口')
+  assert.deepEqual(pageWindowShift(SPANS, 5), { lead: 1, pageIndex: 0 }, '刚进第二章：摘掉第一章，落在新窗口的第一页')
+  assert.deepEqual(pageWindowShift(SPANS, 10), { lead: 2, pageIndex: 1 }, '一帧跨两章：摘两章，页码跟着减')
+  // 反向对照：归零会把人甩回窗口开头（=跳），减去被摘页数才停在原来那一页上
+  assert.notEqual(pageWindowShift(SPANS, 10)!.pageIndex, 0)
 })
