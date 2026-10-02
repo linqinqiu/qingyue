@@ -493,8 +493,21 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             it.executeQuery().use { rs -> if (rs.next()) rs.toShelf() else null }
         }
     }
-    fun setBookshelfCompleted(sourceId: String, bookUrl: String, completed: Boolean): BookshelfItem? = write { db ->
-        db.prepareStatement("update book_shelf set completed=? where source_id=? and book_url=?").use {
+    /**
+     * 换规则重切目录后，把阅读进度夹回新的章节数范围内。
+     * 读到第 900 章的书被切成 12 章时，进度不能留在 900 —— 那既进不去也不该被悄悄清零。
+     */
+    fun clampShelfProgress(sourceId: String, bookUrl: String, chapterCount: Int): Int = write { db ->
+        db.prepareStatement("update reading_progress set chapter_index = ? where source_id = ? and book_url = ? and chapter_index > ?").use {
+            it.setInt(1, (chapterCount - 1).coerceAtLeast(0))
+            it.setString(2, sourceId)
+            it.setString(3, bookUrl)
+            it.setInt(4, (chapterCount - 1).coerceAtLeast(0))
+            it.executeUpdate()
+        }
+    }
+
+    fun setBookshelfCompleted(sourceId: String, bookUrl: String, completed: Boolean): BookshelfItem? = write { db ->        db.prepareStatement("update book_shelf set completed=? where source_id=? and book_url=?").use {
             it.setInt(1, if (completed) 1 else 0); it.setString(2, sourceId); it.setString(3, bookUrl); it.executeUpdate()
         }
         getBookshelf(db, sourceId, bookUrl)
@@ -795,12 +808,13 @@ class Database(private val path: String) : Closeable, AutoCloseable {
 
             // 1. Insert/update book_shelf
             db.prepareStatement("""
-                insert into book_shelf(source_id, book_url, name, author, toc_url, cover_url, cover_key, last_read_at, completed, alternate_sources, group_id)
-                values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                insert into book_shelf(source_id, book_url, name, author, toc_url, cover_url, cover_key, last_read_at, completed, alternate_sources, group_id, toc_rule)
+                values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(source_id, book_url) do update set
                     name = excluded.name, author = excluded.author, toc_url = excluded.toc_url,
                     cover_key = coalesce(excluded.cover_key, book_shelf.cover_key),
-                    last_read_at = excluded.last_read_at, group_id = excluded.group_id
+                    last_read_at = excluded.last_read_at, group_id = excluded.group_id,
+                    toc_rule = coalesce(excluded.toc_rule, book_shelf.toc_rule)
             """.trimIndent()).use { stmt ->
                 stmt.setString(1, sourceId)
                 stmt.setString(2, bookUrl)
@@ -813,6 +827,8 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 stmt.setInt(9, 0)
                 stmt.setString(10, "[]")
                 stmt.setLong(11, groupId)
+                // 存"这次实际生效的规则"，不是"用户当时选的那条"
+                stmt.setString(12, parsed.tocRuleUsed)
                 stmt.executeUpdate()
             }
 
@@ -1766,6 +1782,8 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             completed = getInt(14) != 0,
             alternateSources = altSources,
             groupId = getLong(16),
+            // 第 18 列：这本本地书实际是用哪条目录规则切的（`builtin` 或规则 id；在线书为 null）
+            tocRule = getString(18),
         )
     }
     private fun java.sql.ResultSet.toReplaceRule(): ReplaceRule = ReplaceRule(
@@ -2001,6 +2019,9 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         if ("completed" !in columns) db.createStatement().use { it.executeUpdate("alter table book_shelf add column completed integer not null default 0") }
         if ("alternate_sources" !in columns) db.createStatement().use { it.executeUpdate("alter table book_shelf add column alternate_sources text") }
         if ("group_id" !in columns) db.createStatement().use { it.executeUpdate("alter table book_shelf add column group_id integer not null default 0") }
+        // 本地书记住"这本书是用哪条目录规则切的"：换规则重切之后界面要能说实话，
+        // 而不是显示一个全局设置值假装每本书都按它来。
+        if ("toc_rule" !in columns) db.createStatement().use { it.executeUpdate("alter table book_shelf add column toc_rule text") }
     }
     private fun migrateSourceTable(db: Connection) {
         val columns = db.createStatement().use { statement ->
@@ -2023,7 +2044,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         private val HOST_IN_URL = Regex("""https?://([^/\s"'<>\\:?#]+)""", RegexOption.IGNORE_CASE)
 
         /** 书架列表与单本查询共用同一份 SELECT：两处各写一遍迟早会漂移成不同字段。 */
-        private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)) from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url"
+        private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)),s.toc_rule from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url"
     }
 }
 

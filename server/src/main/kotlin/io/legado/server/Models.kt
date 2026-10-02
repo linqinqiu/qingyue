@@ -383,10 +383,35 @@ data class CachedBookRequest(
     val alternateSources: List<SearchResult> = emptyList(),
     /** 书架分组，0 = 未分组（见 [BookGroup]）。 */
     val groupId: Long = 0,
+    /**
+     * 这本本地书实际用的目录规则（`builtin` 或 `txtTocRule.json` 里的 id）；在线书为 null。
+     * 存"实际生效的那条"而不是"用户选的那条"：选了 A 却因切不出第二章回落到 B 时，
+     * 界面必须能说清现在是 B。
+     */
+    val tocRule: String? = null,
 )
 
 /** 书架分组（上游 `data/entities/BookGroup.kt`）。`bookCount` 由查询侧带出，不落库。 */
 @Serializable data class BookGroup(val id: Long, val name: String, val bookCount: Int = 0)
+
+/**
+ * 「阅读设置 → 本地书目录」下拉里的一项。
+ * `key` 直接就是服务端认的值（`auto` / `builtin` / 规则 id），
+ * 前端不需要知道那两个特殊值怎么来的 —— 否则两边各写一份哨兵字符串迟早漂移。
+ */
+@Serializable data class TocRuleOption(val key: String, val label: String, val example: String = "", val builtIn: Boolean = false)
+@Serializable data class TocRuleList(val options: List<TocRuleOption>)
+@Serializable data class LocalBookReparseRequest(val sourceId: String, val bookUrl: String, val ruleKey: String)
+/** 重切目录的结果。`tocRuleUsed` 是**实际生效**的那条，可能与请求里选的不同。 */
+@Serializable data class LocalBookReparseResult(
+    val success: Boolean,
+    val name: String = "",
+    val totalChapters: Int = 0,
+    val tocRuleUsed: String = "",
+    val ruleLabel: String = "",
+    val fellBack: Boolean = false,
+    val error: String? = null,
+)
 @Serializable data class BookGroupCreateRequest(val name: String)
 @Serializable data class BookGroupAssignRequest(val sourceId: String, val bookUrl: String, val groupId: Long)
 

@@ -21,6 +21,12 @@ data class ParsedBook(
     val coverBytes: ByteArray? = null,
     val coverContentType: String? = null,
     val chapters: List<ParsedChapter>,
+    /**
+     * 这次实际是哪条规则切出来的目录（`builtin` 或规则 id）。
+     * 单独报出来是因为"用户选了 A 规则、实际生效的是 B"这件事必须能看见，
+     * 否则界面上那个选择器就是在骗人。
+     */
+    val tocRuleUsed: String? = null,
 )
 
 data class ParsedChapter(
@@ -54,17 +60,17 @@ object LocalBookParser {
         RegexOption.IGNORE_CASE
     )
 
-    fun parse(filename: String, bytes: ByteArray): ParsedBook {
+    fun parse(filename: String, bytes: ByteArray, ruleKey: String? = null): ParsedBook {
         val lowerName = filename.lowercase()
         return when {
             lowerName.endsWith(".epub") -> parseEpub(filename, bytes)
-            lowerName.endsWith(".txt") || lowerName.endsWith(".text") -> parseTxt(filename, bytes)
+            lowerName.endsWith(".txt") || lowerName.endsWith(".text") -> parseTxt(filename, bytes, ruleKey)
             else -> {
                 // 自动探测是否为 zip/epub 结构
                 if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
-                    runCatching { parseEpub(filename, bytes) }.getOrElse { parseTxt(filename, bytes) }
+                    runCatching { parseEpub(filename, bytes) }.getOrElse { parseTxt(filename, bytes, ruleKey) }
                 } else {
-                    parseTxt(filename, bytes)
+                    parseTxt(filename, bytes, ruleKey)
                 }
             }
         }
@@ -72,10 +78,34 @@ object LocalBookParser {
 
     /**
      * TXT 文本自动探测编码与分章
+     *
+     * [ruleKey]：`null`/`auto` 按正文打分选一条上游规则，`builtin` 强制走下面那条内置逐行匹配，
+     * 其余是 `assets/txtTocRule.json` 里的规则 id。
      */
-    fun parseTxt(filename: String, bytes: ByteArray): ParsedBook {
+    fun parseTxt(filename: String, bytes: ByteArray, ruleKey: String? = null): ParsedBook {
         val (detectedTitle, detectedAuthor) = extractTitleAndAuthorFromFilename(filename)
         val text = decodeText(bytes)
+
+        val chosen: TxtTocRule? = when {
+            ruleKey == TocRules.BUILTIN -> null
+            ruleKey.isNullOrBlank() || ruleKey == TocRules.AUTO -> TocRules.suggest(text)
+            else -> TocRules.byId(ruleKey.toIntOrNull() ?: Int.MIN_VALUE)
+        }
+        val regex = chosen?.let { TocRules.regexFor(it.id.toString()) }
+        if (chosen != null && regex != null) {
+            val byRule = TocRules.split(text, regex)
+            // 只切出 0 或 1 章 = 这条规则在这本书上不成立，回落逐行匹配。
+            // 用户显式选的也会回落 —— 那件事由 tocRuleUsed 报出去，不在界面上装"生效了"。
+            if (byRule.size > 1) {
+                return ParsedBook(
+                    title = detectedTitle,
+                    author = detectedAuthor,
+                    intro = if (byRule.first().title == "前言") byRule.first().content.take(300) else null,
+                    chapters = byRule,
+                    tocRuleUsed = chosen.id.toString(),
+                )
+            }
+        }
 
         val lines = text.lines()
         val chapters = mutableListOf<ParsedChapter>()
@@ -127,6 +157,8 @@ object LocalBookParser {
             author = detectedAuthor,
             intro = if (finalChapters.firstOrNull()?.title == "前言") finalChapters.first().content.take(300) else null,
             chapters = finalChapters,
+            // 走到这里就是内置那条（包括"选了某条规则但它切不出第二章"的回落）
+            tocRuleUsed = TocRules.BUILTIN,
         )
     }
 

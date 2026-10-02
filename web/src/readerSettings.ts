@@ -48,6 +48,12 @@ export type ReaderSettings = {
   ttsCustomVoice?: string
   /** 附加请求头，JSON 对象文本（例如 `{"Authorization": "Bearer xxx"}`）。第三方 TTS 基本都要一个 key。 */
   ttsCustomHeader?: string
+  /**
+   * 导入本地 TXT 时用哪条目录规则切章：`auto` 让服务端按正文打分选，
+   * `builtin` 强制用服务端原本那条逐行匹配，其余是规则 id（选项来自 `GET /api/books/toc-rules`）。
+   * 这是**下一本**的默认值；已经进来的书以自己记着的那条为准（`BookshelfItem.tocRule`）。
+   */
+  txtTocRule: string
 }
 
 const storageKey = 'legado-reader-settings-v2'
@@ -78,6 +84,7 @@ export const defaultReaderSettings: ReaderSettings = {
   ttsCustomMethod: 'GET',
   ttsCustomVoice: '',
   ttsCustomHeader: '',
+  txtTocRule: 'auto',
 }
 
 export function clampScrollPosition(value: number): number {
@@ -175,6 +182,18 @@ export function parseTtsEngine(engine: unknown): TtsEngineType {
 }
 
 /**
+ * 本地书目录规则的键：`auto` / `builtin` / 一个规则 id（上游那份表里全是负数）。
+ *
+ * 有意**不做白名单校验**：合法取值来自服务端 `GET /api/books/toc-rules`，前端硬编码一份迟早漂移。
+ * 但形状要挡：这个串会被拼进查询参数与请求体，空串、超长、带符号的都当没填。
+ */
+export function parseTocRuleKey(value: unknown): string {
+  if (typeof value !== 'string') return defaultReaderSettings.txtTocRule
+  const trimmed = value.trim()
+  return /^(auto|builtin|-?[0-9]{1,6})$/.test(trimmed) ? trimmed : defaultReaderSettings.txtTocRule
+}
+
+/**
  * 真正发给 TTS 的发音人。自定义引擎用它自己那一栏（`{{speakVoice}}` 的取值），
  * 其余引擎用音色表选出来的 ttsVoice。Edge 的音色 id 不该出现在用户自建服务的请求里，
  * 反过来也一样 —— 所以两边各存各的，这里只在发出去的一刻汇合。
@@ -236,6 +255,7 @@ export function loadReaderSettings(): ReaderSettings {
       ttsCustomMethod: saved.ttsCustomMethod === 'POST' ? 'POST' : 'GET',
       ttsCustomVoice: typeof saved.ttsCustomVoice === 'string' ? saved.ttsCustomVoice : '',
       ttsCustomHeader: typeof saved.ttsCustomHeader === 'string' ? saved.ttsCustomHeader : '',
+      txtTocRule: parseTocRuleKey(saved.txtTocRule),
     }
   } catch {
     return defaultReaderSettings

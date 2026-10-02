@@ -86,6 +86,7 @@ local-patches.diff
 !/tools/verify/ui-shell-check.mjs
 !/tools/verify/logs-ui-check.mjs
 !/tools/verify/search-layout-check.mjs
+!/tools/verify/toc-rule-check.mjs
 !/tools/verify/specified-source-search-check.mjs
 !/tools/verify/zip-make.mjs
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，

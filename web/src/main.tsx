@@ -2329,7 +2329,9 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
     setUploading(true)
     toast.info(`正在解析并导入 ${list.length} 本本地书籍…`)
     try {
-      const resp = await api.importLocalBooks(list)
+      // 导入时带上「阅读设置 → 本地书目录」那一档。ShelfPage 不吃 settings prop，
+      // 这里读的是同一份 localStorage（改设置即刻落盘），不是另存一份偏好。
+      const resp = await api.importLocalBooks(list, loadReaderSettings().txtTocRule)
       if (resp.imported > 0) {
         // 只报数量的 toast 等于没说：哪几本进来了、进到哪一组，要当场看得见
         const names = resp.results.filter(r => r.success).map(r => `《${r.name}》`).slice(0, 3).join('、')

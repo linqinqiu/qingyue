@@ -14,7 +14,7 @@ export type ExploreTab = { title: string; url: string }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[] }
 export type Chapter = { index: number; title: string; url: string; isVolume?: boolean }
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
-export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number }
+export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
 export type ImportResponse = { imported: number; updated: number; skipped: number; errors: string[] }
@@ -22,6 +22,11 @@ export type DebugTrace = { field: string; rule: string; value: string; failure: 
 export type DebugStep = { stage: string; label: string; detail: string; ok: boolean; elapsedMs: number; traces: DebugTrace[] }
 export type LocalBookImportItem = { filename: string; success: boolean; bookUrl?: string; name?: string; author?: string; totalChapters: number; error?: string }
 export type LocalBookImportResponse = { total: number; imported: number; failed: number; results: LocalBookImportItem[] }
+/** 「阅读设置 → 本地书目录」下拉的一项（服务端把 auto / builtin / 规则 id 统一成同一形状）。 */
+export type TocRuleOption = { key: string; label: string; example?: string; builtIn?: boolean }
+export type TocRuleList = { options: TocRuleOption[] }
+/** 重切目录的回报。`tocRuleUsed` 是**实际生效**的那条，可能与请求里选的不同（`fellBack` 会说清）。 */
+export type LocalBookReparseResult = { success: boolean; name: string; totalChapters: number; tocRuleUsed: string; ruleLabel: string; fellBack?: boolean; error?: string }
 export type SourceSubscription = { id: number; url: string; enabled: boolean; createdAt: number; updatedAt: number; lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string; lastImported: number; contentHash?: string }
 export type RssSourceSummary = { sourceUrl: string; name: string; group?: string; icon?: string; enabled: boolean; hasListRule: boolean; updatedAt: number }
 export type RssArticle = { origin: string; title: string; link?: string; pubDate?: string; description?: string; image?: string }
@@ -464,13 +469,14 @@ export const api = {
   setBookshelfCompleted: (sourceId: string, bookUrl: string, completed: boolean) => request<BookshelfItem>('/api/bookshelf/status', { method: 'PUT', body: JSON.stringify({ sourceId, bookUrl, completed }) }),
   updateBookshelfInfo: (data: { sourceId: string; bookUrl: string; name: string; author?: string; coverUrl?: string }) => request<BookshelfItem>('/api/bookshelf/info', { method: 'PUT', body: JSON.stringify(data) }),
   switchBookshelfSource: (value: BookshelfSourceSwitch) => request<BookshelfItem>('/api/bookshelf/switch-source', { method: 'POST', body: JSON.stringify(value) }),
-  importLocalBooks: async (files: File[]): Promise<LocalBookImportResponse> => {
+  importLocalBooks: async (files: File[], tocRule?: string): Promise<LocalBookImportResponse> => {
     const formData = new FormData()
     for (const file of files) {
       formData.append('file', file, file.name)
     }
     const headers = new Headers()
-    const response = await fetch('/api/bookshelf/import-local', {
+    // 规则走查询参数：multipart 字段的到达顺序靠不住（服务端是边读边解析的）
+    const response = await fetch(`/api/bookshelf/import-local${tocRule && tocRule !== 'auto' ? `?tocRule=${encodeURIComponent(tocRule)}` : ''}`, {
       method: 'POST',
       headers,
       credentials: 'same-origin',
@@ -482,6 +488,14 @@ export const api = {
     }
     return response.json() as Promise<LocalBookImportResponse>
   },
+  /** 本地书可选的目录规则（auto / builtin / 上游那 26 条里编译得出来的）。 */
+  tocRules: () => request<TocRuleList>('/api/books/toc-rules'),
+  /** 换规则重切一本本地书的目录。失败时服务端会说清是"这条切不出第二章"还是"原文件不在了"。 */
+  reparseLocalBook: (sourceId: string, bookUrl: string, ruleKey: string) =>
+    request<LocalBookReparseResult>('/api/books/reparse-local', {
+      method: 'POST',
+      body: JSON.stringify({ sourceId, bookUrl, ruleKey }),
+    }),
   cover: (key: string) => `/api/covers/${encodeURIComponent(key)}`,
   bookImage: (url: string, page?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`,
   /** 浏览器直传手机备份包：选文件即导入，服务端读完临时文件就删。 */

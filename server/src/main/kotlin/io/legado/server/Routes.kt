@@ -1048,6 +1048,9 @@ fun Route.apiRoutes(
         }
         post("/bookshelf/import-local") {
             if (!call.requireSameOriginWrite()) return@post
+            // 规则走查询参数而不是 multipart 字段：字段在流里的顺序由前端拼接顺序决定，
+            // 而解析发生在读到文件的那一刻 —— 依赖"对方先把规则放前面"是脆的。
+            val tocRule = call.request.queryParameters["tocRule"]?.takeIf { it.isNotBlank() }
             val multipart = call.receiveMultipart()
             val items = mutableListOf<LocalBookImportItem>()
             var importedCount = 0
@@ -1061,7 +1064,7 @@ fun Route.apiRoutes(
                     val bytes = part.streamProvider().readBytes()
                     if (bytes.isNotEmpty()) {
                         try {
-                            val parsed = LocalBookParser.parse(originalFilename, bytes)
+                            val parsed = LocalBookParser.parse(originalFilename, bytes, tocRule)
                             val bookId = UUID.randomUUID().toString().replace("-", "")
                             val ext = if (originalFilename.contains('.')) "." + originalFilename.substringAfterLast('.') else ".txt"
                             runCatching {
@@ -1101,6 +1104,74 @@ fun Route.apiRoutes(
                 failed = failedCount,
                 results = items,
             ))
+        }
+        /**
+         * 「阅读设置 → 本地书目录」的可选规则清单：`auto` + `builtin` + 随包那 26 条里编译得出来的。
+         * 坏正则在这里就已经被滤掉了（`TocRules.candidates`），界面上不会摆一个用了就报错的选项。
+         */
+        get("/books/toc-rules") {
+            call.respond(TocRuleList(
+                options = listOf(
+                    TocRuleOption(TocRules.AUTO, TocRules.label(TocRules.AUTO)),
+                    TocRuleOption(TocRules.BUILTIN, TocRules.label(TocRules.BUILTIN), builtIn = true),
+                ) + TocRules.candidates.map { rule ->
+                    TocRuleOption(rule.id.toString(), rule.name, rule.example.orEmpty())
+                },
+            ))
+        }
+        /**
+         * 换一条目录规则，把这本本地书重切一遍（用户 2026-10-02：「txt目录规则，这个可以放到阅读设置里」）。
+         *
+         * 原始文件在导入时就整本留在 `local_books/` 里，所以换规则不必让用户重新上传。
+         * 重切会覆盖目录并清掉正文缓存 —— 章节编号整体错位之后留着旧正文等于让读者读到错章。
+         * 两种情况**拒绝并保留原目录**：一条规则切不出第二个章节、原文件已经不在本机。
+         */
+        post("/books/reparse-local") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = runCatching { call.receive<LocalBookReparseRequest>() }.getOrElse {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_body", "缺少 sourceId / bookUrl / ruleKey"))
+            }
+            val bookId = request.bookUrl.removePrefix("local://").substringBefore('/').trim()
+            if (request.sourceId != LocalBookParser.LOC_BOOK_SOURCE_ID || bookId.isEmpty()) {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("not_local_book", "只有导入到本机的书才有目录规则可换"))
+            }
+            val existing = database.shelfBook(request.sourceId, request.bookUrl)
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("book_missing", "书架上没有这本书"))
+            val file = runCatching {
+                localBooksDirectory.toFile().listFiles()?.firstOrNull { it.isFile && it.name.startsWith("$bookId.") }
+            }.getOrNull()
+                ?: return@post call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiError("local_file_missing", "本机找不到这本书的原始文件（可能被清理过），重新导入一次才能换规则"),
+                )
+            val parsed = try {
+                LocalBookParser.parse(file.name, file.readBytes(), request.ruleKey)
+            } catch (error: Throwable) {
+                Unit.logParsing("本地书重切目录失败", mapOf("书名" to existing.name, "规则" to request.ruleKey, "原因" to (error.message ?: "")), error)
+                return@post call.respond(HttpStatusCode.BadGateway, ApiError("reparse_failed", error.message ?: "重切目录失败"))
+            }
+            val askedForSpecific = request.ruleKey != TocRules.AUTO && request.ruleKey != TocRules.BUILTIN
+            if (askedForSpecific && parsed.tocRuleUsed == TocRules.BUILTIN) {
+                // 回落意味着这条规则在这本书上切不出第二个章节：直接把整本书变成一章是破坏，
+                // 所以这里不写库，把原因说清楚让用户换一条。
+                return@post call.respond(
+                    HttpStatusCode.BadGateway,
+                    ApiError("rule_carved_nothing", "这条规则在这本书上切不出第二个章节，已保留原目录；换一条或改用自动"),
+                )
+            }
+            database.importLocalBook(bookId, parsed, null, existing.groupId)
+            database.clampShelfProgress(request.sourceId, request.bookUrl, parsed.chapters.size)
+            val used = parsed.tocRuleUsed ?: TocRules.BUILTIN
+            call.respond(
+                LocalBookReparseResult(
+                    success = true,
+                    name = parsed.title,
+                    totalChapters = parsed.chapters.size,
+                    tocRuleUsed = used,
+                    ruleLabel = TocRules.label(used),
+                    fellBack = used == TocRules.BUILTIN && request.ruleKey == TocRules.AUTO,
+                ),
+            )
         }
         get("/bookshelf/groups") {
             call.respond(database.listBookGroups())

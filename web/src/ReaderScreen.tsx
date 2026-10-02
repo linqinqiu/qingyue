@@ -1,6 +1,7 @@
 import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, BookDetails, Chapter, ReadingProgress, SearchResult } from './api'
+import { api, BookDetails, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
 import { Icon } from './icons'
+import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { SourceSwitchModal } from './SourceSwitchModal'
@@ -44,12 +45,32 @@ function ReaderSettingsControls({
   settings,
   onChange,
   onOpenReplaceRules,
+  localBook,
+  tocRuleOptions,
+  onReparseLocal,
 }: {
   settings: ReaderSettings
   onChange: (next: ReaderSettings) => void
   onOpenReplaceRules?: () => void
+  /** 当前是导入到本机的书才给；在线书没有"目录规则"这件事。 */
+  localBook?: { name: string; tocRule?: string | null } | null
+  tocRuleOptions?: TocRuleOption[]
+  /** 返回一句给人看的话；null 表示成功（成功的话由 reparseMessage 自己报）。 */
+  onReparseLocal?: (ruleKey: string) => Promise<string | null>
 }) {
   const update = (value: Partial<ReaderSettings>) => onChange({ ...settings, ...value })
+  const [reparseBusy, setReparseBusy] = useState(false)
+  const [reparseMessage, setReparseMessage] = useState('')
+  const ruleLabelOf = (key?: string | null) =>
+    tocRuleOptions?.find(option => option.key === (key || 'auto'))?.label ?? (key || '自动选择（按正文打分）')
+  const runReparse = async () => {
+    if (!onReparseLocal || reparseBusy) return
+    setReparseBusy(true)
+    setReparseMessage('')
+    const failure = await onReparseLocal(settings.txtTocRule).catch((error: unknown) => error instanceof Error ? error.message : '重切失败')
+    setReparseMessage(failure ?? '')
+    setReparseBusy(false)
+  }
   return <div className="drawer-scroll-content">
     <section className="setting-section"><span className="setting-label">主题</span><div className="theme-grid">{themes.map(([theme, label]) => <button key={theme} className={`theme-choice swatch-${theme} ${settings.theme === theme ? 'selected' : ''}`} onClick={() => update({ theme })}><i>{settings.theme === theme && <Icon name="check" />}</i><small>{label}</small></button>)}</div></section>
     <section className="setting-section"><span className="setting-label">字体</span><label className="font-select"><select value={settings.font} onChange={event => update({ font: event.target.value as ReaderSettings['font'] })}><option value="song">思源宋体</option><option value="hei">黑体 / 苹方</option><option value="kai">华文楷体</option><option value="fangsong">华文仿宋</option><option value="system">系统字体</option></select><Icon name="chevronDown" /></label></section>
@@ -73,6 +94,32 @@ function ReaderSettingsControls({
     </section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
+    {/*
+      本地书的目录规则（用户 2026-10-02：「txt目录规则，这个可以放到阅读设置里」）。
+      只对导入到本机的书出现 —— 在线书的目录来自书源的 ruleToc，在这里改它只会误导。
+      下面那句报的是**这本书当前实际用的规则**，不是设置框里高亮的那条：
+      选了 A 但 A 在这本书上切不出第二个章节时，服务端会回落，界面不能装作 A 生效了。
+    */}
+    {!!localBook && (tocRuleOptions?.length ?? 0) > 0 && (
+      <section className="setting-section">
+        <span className="setting-label">本地书目录</span>
+        <Select
+          ariaLabel="TXT 目录规则"
+          value={settings.txtTocRule}
+          options={tocRuleOptions!.map(option => ({ value: option.key, label: option.label, hint: option.example || undefined }))}
+          onChange={value => update({ txtTocRule: value })}
+        />
+        <small className="setting-hint">
+          这本《{localBook.name}》现在用的是「{ruleLabelOf(localBook.tocRule)}」。换规则会重切目录并清掉正文缓存，阅读进度按新章数夹住。
+        </small>
+        {onReparseLocal && (
+          <button type="button" className="rules-setting-btn" disabled={reparseBusy} onClick={() => void runReparse()}>
+            {reparseBusy ? '正在重切目录…' : '按这条规则重新识别目录'}
+          </button>
+        )}
+        {!!reparseMessage && <small className="setting-hint">{reparseMessage}</small>}
+      </section>
+    )}
     {onOpenReplaceRules && (
       <section className="setting-section">
         <span className="setting-label">内容净化</span>
@@ -278,6 +325,10 @@ export function VirtualChapterList({
 
 export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange, onClose }: ReaderScreenProps) {
   const [currentBook, setCurrentBook] = useState<OpenBook>(openBook)
+  /** 可选的目录规则清单（只在读本地书时取一次）；取不到就不摆这一档控件。 */
+  const [tocRuleOptions, setTocRuleOptions] = useState<TocRuleOption[]>([])
+  /** 这本本地书**实际**用的规则，来自书架记录（设置里那条只是下一本的默认值）。 */
+  const [shelfTocRule, setShelfTocRule] = useState<string | null>(null)
   const [chapterIndex, setChapterIndex] = useState(startIndex)
   const [content, setContent] = useState('')
   const [loadedChapterUrl, setLoadedChapterUrl] = useState('')
@@ -359,6 +410,36 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   currentChapterUrlRef.current = chapter?.url ?? ''
   const bookName = currentBook.details.name || '书籍正文'
 
+  /** 读本地书时才去取规则清单；取不到就整档不出现，不摆一个点了没反应的控件。 */
+  useEffect(() => {
+    if (currentBook.details.sourceId !== 'loc_book' || tocRuleOptions.length > 0) return
+    void api.tocRules().then(list => setTocRuleOptions(list.options)).catch(() => undefined)
+  }, [currentBook.details.sourceId, tocRuleOptions.length])
+
+  /**
+   * 换一条目录规则重切这本本地书（用户 2026-10-02：「txt目录规则，这个可以放到阅读设置里」）。
+   * 原始文件在导入时就整本留在服务端 `local_books/` 里，所以不必让用户重新上传。
+   * 重切后目录、预载缓存、正文缓存要一起换 —— 章节编号整体错位之后留着旧正文等于让读者读到错章。
+   */
+  const reparseLocalBook = async (ruleKey: string): Promise<string | null> => {
+    if (currentBook.details.sourceId !== 'loc_book') return '只有导入到本机的书可以换目录规则'
+    try {
+      const result = await api.reparseLocalBook(currentBook.details.sourceId, currentBook.bookUrl, ruleKey)
+      const chapters = await api.chapters(currentBook.details.sourceId, currentBook.bookUrl)
+      const next = { ...currentBook, chapters }
+      setCurrentBook(next)
+      setChapterIndex(0)
+      setShelfTocRule(result.tocRuleUsed)
+      preloadedContentRef.current.clear()
+      sessionStorage.setItem('legado-open-book-v1', JSON.stringify({ book: next, index: 0 }))
+      void syncCacheStatus()
+      toast.success(`已按「${result.ruleLabel}」重切出 ${result.totalChapters} 章`)
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : '重切目录失败'
+    }
+  }
+
   // Sync cache status with bookshelf and local IndexedDB
   const syncCacheStatus = useCallback(async () => {
     try {
@@ -377,6 +458,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       setCachedChapterUrls(mergedSet)
 
       const item = shelf.find(s => s.sourceId === currentBook.details.sourceId && s.bookUrl === currentBook.bookUrl)
+      // 这本本地书"实际用的是哪条目录规则"只有书架记录知道（设置里那条只是下一本的默认值）
+      setShelfTocRule(item?.tocRule ?? null)
       if (item) {
         setInShelf(true)
         setCacheStatus(prev => {
@@ -1656,6 +1739,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         settings={settings}
         onChange={onSettingsChange}
         onOpenReplaceRules={() => setShowReplaceRules(true)}
+        localBook={currentBook.details.sourceId === 'loc_book' ? { name: bookName, tocRule: shelfTocRule } : null}
+        tocRuleOptions={tocRuleOptions}
+        onReparseLocal={currentBook.details.sourceId === 'loc_book' ? reparseLocalBook : undefined}
       />
     </aside>
 
