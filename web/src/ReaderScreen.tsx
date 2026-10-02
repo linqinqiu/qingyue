@@ -999,7 +999,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }, 1400)
   }, [])
 
-  const changeChapter = useCallback((rawIndex: number, targetPage: 'first' | 'last' | 'auto' = 'auto') => {
+  /**
+   * @param keepContainer 翻页模式里"跨章的那一翻"用：不换容器 key，于是整棵子树不重挂、
+   *   进场动画不重放。主动跳章（目录、`Home/End`、章末提示条）仍然要重挂 —— 那是另一回事。
+   */
+  const changeChapter = useCallback((rawIndex: number, targetPage: 'first' | 'last' | 'auto' = 'auto', keepContainer = false) => {
     if (rawIndex < 0 || rawIndex >= currentBook.chapters.length || rawIndex === chapterIndex) {
       if (rawIndex < 0 || rawIndex >= currentBook.chapters.length) {
         showBoundaryNotice(rawIndex < 0 ? '已是第一章' : '已是最后一章')
@@ -1038,7 +1042,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     pendingKeepRef.current = null
     // 续接窗口跟着跳：留着旧位置后面那几章的话，这一帧会在新的锚点下面挂出毫不相干的章节。
     setFlowTail([])
-    setFlowKey(currentBook.chapters[nextIndex]?.url ?? `jump-${nextIndex}`)
+    if (!keepContainer) setFlowKey(currentBook.chapters[nextIndex]?.url ?? `jump-${nextIndex}`)
   }, [chapterIndex, currentBook.chapters.length, persist, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
 
   // 滚动模式的"滚到底再往下推一下就进下一章"。判据必须是"已经触底 + 继续向下滚"，
@@ -1454,17 +1458,18 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       // 已到本章最后一页，尝试跳转到下一章
       // 双栏模式下，如果当前页是本章最后一页且处于右栏位置，
       // 需要确保下一章内容能正确衔接
-      changeChapter(chapterIndex + 1, 'first')
+      // 翻页模式下这是"下一页"而不是"跳一章"：不换容器 key，就不该重挂 + 重放进场动画
+      changeChapter(chapterIndex + 1, 'first', settings.pageMode === 'paginate')
     }
-  }, [chapterIndex, changeChapter, pageCount, pageIndex])
+  }, [chapterIndex, changeChapter, pageCount, pageIndex, settings.pageMode])
 
   const goPrevPage = useCallback(() => {
     if (pageIndex > 0) {
       setPageIndex(p => p - 1)
     } else {
-      changeChapter(chapterIndex - 1, 'last')
+      changeChapter(chapterIndex - 1, 'last', settings.pageMode === 'paginate')
     }
-  }, [chapterIndex, changeChapter, pageIndex])
+  }, [chapterIndex, changeChapter, pageIndex, settings.pageMode])
 
   // Sync scroll / page progress
   useEffect(() => {

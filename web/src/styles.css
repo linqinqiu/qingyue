@@ -951,7 +951,13 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-workspace { --reader-pad: var(--reader-content-padding, 80px); }
 .reading-content { width: min(var(--reader-max-width, 860px), calc(100% - var(--reader-pad) * 2)); padding: calc(clamp(64px, 8vw, 88px) + var(--safe-top)) max(0px, var(--safe-right)) calc(48px + var(--safe-bottom)) max(0px, var(--safe-left)); margin: 0 auto; font-family: var(--reader-font-family, serif) !important; font-size: var(--reader-font-size); line-height: var(--reader-line-height); letter-spacing: var(--reader-letter-spacing); }
 .reading-content *, .reader-paginated-column-body * { font-family: inherit !important; }
-.reading-content h1, .reader-paginated-column-body h1 { margin-bottom: 1.55em; font-size: 1.22em; font-weight: 650; line-height: 1.45; break-before: column; page-break-before: always; }
+/* 章标题必须真的**换栏**：分栏流里每一章从新的一栏开头，section 的矩形才互不重叠，
+   `measurePagination` 才能按"两节左边缘之差 / 步长"算出每章占哪几页。
+   这里原本还挂着一条 `page-break-before: always` —— 它是 `break-before: page` 的旧别名，
+   写在后面就把 `column` 顶掉了（实测计算值是 `page`），于是三章连成一片流、
+   页窗口算的是重叠区间：footer 报 7/7 而正文其实有 15 页宽，翻到"最后一页"就再也按不动。
+   打印分页要的话请在 `@media print` 里单独说。 */
+.reading-content h1, .reader-paginated-column-body h1 { margin-bottom: 1.55em; font-size: 1.22em; font-weight: 650; line-height: 1.45; break-before: column; }
 /*
   连续滚动的章节边界（滚动模式一次渲染"锚点章 + 续接的两章"）：
   章与章之间一条细分隔线 —— 用户要的是"一体的"，这条线只是标出"这里换章了"，
@@ -1073,7 +1079,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-paginated-track { height: 100%; transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1); will-change: transform; }
 .reader-paginated-column-body { height: 100%; column-fill: auto; font-family: var(--reader-font-family, serif) !important; font-size: var(--reader-font-size); line-height: var(--reader-line-height); letter-spacing: var(--reader-letter-spacing); }
 /* 双栏分页的章节边界占位：确保下一章总是从新的左栏开始，避免右栏留白 */
-.column-break-placeholder { break-before: column; page-break-before: always; height: 0; visibility: hidden; }
+.column-break-placeholder { break-before: column; height: 0; visibility: hidden; }
 .reader-paginated-footer { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px, 5vw, 40px) 10px; color: var(--muted); font-size: 12px; user-select: none; }
 
 /* Desktop Sidebar Pinning */

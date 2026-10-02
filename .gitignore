@@ -63,6 +63,7 @@ local-patches.diff
 !/tools/verify/multipart.mjs
 !/tools/verify/opensource-hygiene-check.mjs
 !/tools/verify/overlay-audit.mjs
+!/tools/verify/paginate-flow-check.mjs
 !/tools/verify/reader-flow-check.mjs
 !/tools/verify/reader-transition-check.mjs
 !/tools/verify/reader-typography-check.mjs
