@@ -60,19 +60,88 @@ object LocalBookParser {
         RegexOption.IGNORE_CASE
     )
 
-    fun parse(filename: String, bytes: ByteArray, ruleKey: String? = null): ParsedBook {
+    /**
+     * TXT 里写的 `<img src="http…">` 换成占位行。
+     *
+     * 只认绝对 http(s) 地址：TXT 是纯文本，没有"相对哪篇文档"的基准，
+     * 相对路径解析出来必然是错的（拼成包根去取会拿到不相干的文件，或者 404）。
+     * 认不了的地址连标签一起去掉 —— 留一行 `<img src="…">` 字面文本，
+     * 用户看到的是标签，还以为是我们把图弄坏了。
+     */
+    private val TXT_IMG_TAG = Regex(
+        "(?i)<img[^>]*?\\b(?:data-original|data-src|src)\\s*=\\s*[\"']([^\"'\\s>]+)[\"'][^>]*>",
+    )
+
+    private fun preserveTxtImages(line: String): String {
+        if (!line.contains("<img", ignoreCase = true)) return line
+        return TXT_IMG_TAG.replace(line) { match ->
+            val src = match.groupValues[1].trim()
+            if (src.startsWith("http:", true) || src.startsWith("https:", true)) "\n![图片]($src)\n" else ""
+        }
+    }
+
+    fun parse(filename: String, bytes: ByteArray, ruleKey: String? = null, bookId: String = ""): ParsedBook {
         val lowerName = filename.lowercase()
         return when {
-            lowerName.endsWith(".epub") -> parseEpub(filename, bytes)
+            lowerName.endsWith(".epub") -> parseEpub(filename, bytes, bookId)
             lowerName.endsWith(".txt") || lowerName.endsWith(".text") -> parseTxt(filename, bytes, ruleKey)
             else -> {
                 // 自动探测是否为 zip/epub 结构
                 if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
-                    runCatching { parseEpub(filename, bytes) }.getOrElse { parseTxt(filename, bytes, ruleKey) }
+                    runCatching { parseEpub(filename, bytes, bookId) }.getOrElse { parseTxt(filename, bytes, ruleKey) }
                 } else {
                     parseTxt(filename, bytes, ruleKey)
                 }
             }
+        }
+    }
+
+    /**
+     * 包内图片的取图地址。
+     *
+     * EPUB 里的插图在 zip 里，不会自己出现在网上，所以必须回服务端按 entry 取
+     * （上游是 `EpubFile.getImage(book, href)`，我们走一条只读路由，语义相同）。
+     * 参数放查询串而不是路径通配（`/books/local/{id}/asset/{path...}`）：
+     * zip 路径带斜杠与 `%`，通配段的解码规则各家不同，一个参数把这件事变成一次编码。
+     */
+    private fun localAssetUrl(bookId: String, zipPath: String): String =
+        "/api/books/local/asset?bookId=${java.net.URLEncoder.encode(bookId, "UTF-8")}" +
+            "&path=${java.net.URLEncoder.encode(zipPath, "UTF-8")}"
+
+    /** 按 EPUB 规范解析相对引用：`images/p1.png` 是相对**当前那篇 XHTML** 的，不是相对包根。 */
+    private fun resolveZipPath(baseDir: String, raw: String): String {
+        val joined = if (raw.startsWith("/")) raw.removePrefix("/") else "$baseDir/$raw"
+        return normalizeZipPath(joined)
+    }
+
+    /**
+     * 把正文里的 `<img>` / SVG `<image>` 换成 `![图片](地址)` 占位行。
+     *
+     * 为什么是"换成一行文本"而不是留着标签：整条正文链路（净化规则、离线缓存、TTS、
+     * 前后端之间的字符串）走的是同一种行文本结构，前端 `contentImageUrl` 认的就是这一行 ——
+     * 与在线书那边 `RuleRunner.preserveContentImages` 是同一个口径，两套数据结构迟早漂移。
+     * 原来这里是直接 `body().text()`，`<img>` 整个消失，所以"EPUB 有图也看不见"。
+     */
+    private fun preserveImages(doc: Document, entryPath: String, bookId: String) {
+        val baseDir = if (entryPath.contains('/')) entryPath.substringBeforeLast('/') else ""
+        for (img in doc.select("img, image")) {
+            val raw = img.attr("src").ifBlank { img.attr("xlink:href") }.trim()
+            // data: 内联图整块丢掉（与在线侧同一处理）：一张 base64 图能到几 MB，
+            // 塞进正文缓存会把"一行文本"的结构撑坏。
+            if (raw.isBlank() || raw.startsWith("data:")) {
+                img.remove()
+                continue
+            }
+            val target = if (raw.startsWith("http:", true) || raw.startsWith("https:", true)) {
+                raw
+            } else if (bookId.isBlank()) {
+                // 没有 bookId 就取不到包内资源（只有单测会走到这里），不生成一个必然 404 的地址
+                img.remove()
+                continue
+            } else {
+                localAssetUrl(bookId, resolveZipPath(baseDir, raw))
+            }
+            img.replaceWith(org.jsoup.nodes.Element("p").text("![图片]($target)"))
         }
     }
 
@@ -130,7 +199,7 @@ object LocalBookParser {
                 if (currentContent.isNotEmpty()) {
                     currentContent.append("\n")
                 }
-                currentContent.append(line)
+                currentContent.append(preserveTxtImages(line))
             }
         }
 
@@ -165,7 +234,7 @@ object LocalBookParser {
     /**
      * EPUB 规范解压与元数据、目录、正文提取
      */
-    fun parseEpub(filename: String, bytes: ByteArray): ParsedBook {
+    fun parseEpub(filename: String, bytes: ByteArray, bookId: String = ""): ParsedBook {
         val entries = mutableMapOf<String, ByteArray>()
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
             var entry: ZipEntry? = zis.nextEntry
@@ -258,7 +327,7 @@ object LocalBookParser {
                         val fullPath = normalizeZipPath(ncxBaseDir + src)
                         val htmlBytes = findZipEntry(entries, fullPath)
                         if (htmlBytes != null) {
-                            val content = extractHtmlContent(htmlBytes)
+                            val content = extractHtmlContent(htmlBytes, fullPath, bookId)
                             if (content.isNotBlank()) {
                                 chapters.add(ParsedChapter(label, content))
                             }
@@ -284,7 +353,7 @@ object LocalBookParser {
                             val fullPath = normalizeZipPath(navBaseDir + src)
                             val htmlBytes = findZipEntry(entries, fullPath)
                             if (htmlBytes != null) {
-                                val content = extractHtmlContent(htmlBytes)
+                                val content = extractHtmlContent(htmlBytes, fullPath, bookId)
                                 if (content.isNotBlank()) {
                                     chapters.add(ParsedChapter(label, content))
                                 }
@@ -303,7 +372,7 @@ object LocalBookParser {
                 val idref = itemref.attr("idref")
                 val item = manifest[idref] ?: continue
                 val htmlBytes = findZipEntry(entries, item.href) ?: continue
-                val (extractedTitle, content) = extractHtmlTitleAndContent(htmlBytes, idx)
+                val (extractedTitle, content) = extractHtmlTitleAndContent(htmlBytes, idx, item.href, bookId)
                 if (content.isNotBlank()) {
                     chapters.add(ParsedChapter(extractedTitle, content))
                     idx++
@@ -312,7 +381,8 @@ object LocalBookParser {
         }
 
         val finalChapters = if (chapters.isEmpty()) {
-            listOf(ParsedChapter("正文", "本书正文内容解析为空或为纯图片。"))
+            // 图片现在会被提成占位行，所以走到这里是真的什么都没有（不是"只有图片"了）
+            listOf(ParsedChapter("正文", "本书正文解析为空：没有文本，也没有可提取的图片资源。"))
         } else chapters
 
         return ParsedBook(
@@ -330,17 +400,26 @@ object LocalBookParser {
         return entries[norm] ?: entries.entries.firstOrNull { it.key.equals(norm, ignoreCase = true) }?.value
     }
 
-    private fun extractHtmlContent(bytes: ByteArray): String {
+    /**
+     * jsoup 的 `Element.text()` 会把所有空白（含换行）压成单个空格 —— 用它取正文，
+     * 上面 `prepend("\n\n")` 造出来的段落边界就全没了，`![图片](…)` 占位行也会被并进
+     * 前后句子中间，于是前端那条"整行必须是占位"的正则永远匹配不上，图就又不显示了。
+     * `wholeText()` 原样保留空白，段落边界交给 `cleanText` 统一收。
+     */
+    private fun bodyText(doc: Document): String = doc.body()?.wholeText() ?: doc.wholeText()
+
+    private fun extractHtmlContent(bytes: ByteArray, entryPath: String, bookId: String): String {
         val html = String(bytes, StandardCharsets.UTF_8)
         val doc = Jsoup.parse(html)
         doc.select("script, style, link, meta").remove()
+        // 先换图片再取文本：`body().text()` 会把 `<img>` 整个吞掉，这就是"EPUB 有图也看不见"的原因
+        preserveImages(doc, entryPath, bookId)
         // 将块级元素转换为换行
         doc.select("p, div, br, h1, h2, h3, h4, h5, h6, tr, li, blockquote").prepend("\n\n")
-        val text = doc.body()?.text() ?: doc.text()
-        return cleanText(text)
+        return cleanText(bodyText(doc))
     }
 
-    private fun extractHtmlTitleAndContent(bytes: ByteArray, defaultIndex: Int): Pair<String, String> {
+    private fun extractHtmlTitleAndContent(bytes: ByteArray, defaultIndex: Int, entryPath: String, bookId: String): Pair<String, String> {
         val html = String(bytes, StandardCharsets.UTF_8)
         val doc = Jsoup.parse(html)
         doc.select("script, style, link, meta").remove()
@@ -350,9 +429,9 @@ object LocalBookParser {
         } else {
             "第 $defaultIndex 章"
         }
+        preserveImages(doc, entryPath, bookId)
         doc.select("p, div, br, h1, h2, h3, h4, h5, h6, tr, li, blockquote").prepend("\n\n")
-        val text = doc.body()?.text() ?: doc.text()
-        return title to cleanText(text)
+        return title to cleanText(bodyText(doc))
     }
 
     private fun cleanText(text: String): String {

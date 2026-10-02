@@ -12,6 +12,7 @@ import {
   calculatePaginationLayout,
   isDoubleColumnActive,
   contentImageUrl,
+  isSameSiteAsset,
 } from '../src/readerInteractions.ts'
 import {
   clampScrollPosition,
@@ -107,6 +108,15 @@ test('reader settings - parsing, math clamping and localStorage persistence', ()
 test('正文配图占位行只认服务端产出的那一种形状', () => {
   assert.equal(contentImageUrl('![图片](https://cdn.example/a.jpg)'), 'https://cdn.example/a.jpg')
   assert.equal(contentImageUrl('  ![图片](http://example.test/b.png)  '), 'http://example.test/b.png')
+  // 本地 EPUB 的内嵌插图走站内地址（服务端按 zip entry 回字节），也必须认这一类
+  assert.equal(
+    contentImageUrl('![图片](/api/books/local/asset?bookId=abc123&path=OEBPS%2Fimages%2Fp1.png)'),
+    '/api/books/local/asset?bookId=abc123&path=OEBPS%2Fimages%2Fp1.png',
+  )
+  assert.ok(isSameSiteAsset('/api/books/local/asset?bookId=abc'), '站内地址不能再过一遍图片代理（那层只收 http(s)）')
+  assert.ok(!isSameSiteAsset('https://cdn.example/a.jpg'), '远程图仍然要走代理（防盗链与混合内容）')
+  assert.equal(contentImageUrl('![图片](images/p1.png)'), null, '相对路径没有基准可解析，服务端不该产出这种行')
+  assert.equal(contentImageUrl('![图片](//evil.test/a.png)'), null, '协议省略写法不认（它会跟着当前协议跑）')
   // 普通段落、被净化规则改坏的半截占位、以及 javascript: 之类协议都不能被当成图片渲染
   assert.equal(contentImageUrl('他低声说：「走吧。」'), null)
   assert.equal(contentImageUrl('![图片](javascript:alert(1))'), null)

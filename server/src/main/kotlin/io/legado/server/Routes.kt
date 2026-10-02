@@ -1064,8 +1064,10 @@ fun Route.apiRoutes(
                     val bytes = part.streamProvider().readBytes()
                     if (bytes.isNotEmpty()) {
                         try {
-                            val parsed = LocalBookParser.parse(originalFilename, bytes, tocRule)
+                            // 先生成 bookId 再解析：EPUB 里的内嵌插图要按 `/api/books/local/asset?bookId=…`
+                            // 取，解析时不知道 id 就只能把图丢掉。
                             val bookId = UUID.randomUUID().toString().replace("-", "")
+                            val parsed = LocalBookParser.parse(originalFilename, bytes, tocRule, bookId)
                             val ext = if (originalFilename.contains('.')) "." + originalFilename.substringAfterLast('.') else ".txt"
                             runCatching {
                                 Files.createDirectories(localBooksDirectory)
@@ -1145,7 +1147,7 @@ fun Route.apiRoutes(
                     ApiError("local_file_missing", "本机找不到这本书的原始文件（可能被清理过），重新导入一次才能换规则"),
                 )
             val parsed = try {
-                LocalBookParser.parse(file.name, file.readBytes(), request.ruleKey)
+                LocalBookParser.parse(file.name, file.readBytes(), request.ruleKey, bookId)
             } catch (error: Throwable) {
                 Unit.logParsing("本地书重切目录失败", mapOf("书名" to existing.name, "规则" to request.ruleKey, "原因" to (error.message ?: "")), error)
                 return@post call.respond(HttpStatusCode.BadGateway, ApiError("reparse_failed", error.message ?: "重切目录失败"))
@@ -1361,6 +1363,41 @@ fun Route.apiRoutes(
             val type = database.coverContentType(key)?.let(ContentType::parse) ?: ContentType.Application.OctetStream
             call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 7 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
             call.respond(LocalFileContent(file.toFile(), type))
+        }
+        /**
+         * 本地 EPUB 的内嵌插图（用户 2026-10-02：本地阅读器要「支持图片」）。
+         *
+         * 包里的图不会自己出现在网上，只能从原始文件里按 zip entry 取字节。三条边界写死在这里：
+         * ① `bookId` 必须是导入时生成的那串十六进制 —— 它同时是磁盘上的文件名，
+         *    放开形状等于"用文件名读盘上任意文件"；
+         * ② entry 路径拒绝 `..`，且只接受包里真实存在、归一化后完全相等的那个名字（不做前缀匹配）；
+         * ③ 只回真正的图片（按魔数判，扩展名只作兜底），svg 一律不回 —— 同源 SVG 能带脚本。
+         */
+        get("/books/local/asset") {
+            val bookId = call.request.queryParameters["bookId"].orEmpty()
+            val wanted = call.request.queryParameters["path"].orEmpty().replace('\\', '/').trimStart('/')
+            if (!LOCAL_BOOK_ID.matches(bookId) || wanted.isBlank() || wanted.contains("..")) {
+                return@get call.respond(HttpStatusCode.NotFound)
+            }
+            val archive = runCatching {
+                localBooksDirectory.toFile().listFiles()?.firstOrNull {
+                    it.isFile && it.name.startsWith("$bookId.") && it.name.endsWith(".epub", ignoreCase = true)
+                }
+            }.getOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
+            val asset = runCatching {
+                java.util.zip.ZipFile(archive).use { zip ->
+                    val entry = zip.entries().asSequence().firstOrNull { candidate ->
+                        !candidate.isDirectory &&
+                            candidate.name.replace('\\', '/').removePrefix("./") == wanted
+                    } ?: return@use null
+                    if (entry.size > 5L * 1024 * 1024 || entry.size < 0) return@use null
+                    val bytes = zip.getInputStream(entry).readBytes()
+                    localAssetType(wanted, bytes)?.let { Triple(bytes, it, entry.time) }
+                }
+            }.getOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
+            call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 30 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
+            call.response.header("X-Content-Type-Options", "nosniff")
+            call.respondBytes(asset.first, ContentType.parse(asset.second))
         }
         get("/book/image") {
             val url = call.request.queryParameters["url"].orEmpty()
@@ -1658,6 +1695,45 @@ internal fun tryCacheCover(coverCache: CoverCache, primaryUrl: String?, alternat
 private fun jsonEvent(message: String): String = Json.encodeToString(message)
 
 /** 调试事件的序列化器：`encodeDefaults` 必须开着，否则前端拿到的 JSON 会缺掉空字段。 */
+/**
+ * 本地书 id 的形状：导入时 `UUID.randomUUID().toString().replace("-", "")` 生成，32 位小写十六进制。
+ * 取包内图片时拿它当文件名用，所以宁可窄：不匹配就直接 404，不去猜。
+ */
+private val LOCAL_BOOK_ID = Regex("^[0-9a-f]{16,64}$")
+
+/**
+ * 包内资源的媒体类型。**先按魔数判，扩展名只作兜底**：zip 里的名字是作者起的，
+ * 内容与扩展名不符时按扩展名回会让浏览器拿错的类型渲染（而这里回的是同源地址）。
+ * 认不出来的一律不回（null → 404），svg 显式排除 —— 同源 SVG 可以带脚本。
+ * `internal` 而不是 `private`：这是路由的安全边界，判据要能直接打到它，不该靠反射。
+ */
+internal fun localAssetType(path: String, bytes: ByteArray): String? {
+    // 小于这个尺寸不可能是能显示的图片（1x1 的 gif 也有三十几字节）。
+    // 有了这一档，"扩展名叫 cover.png 但内容只有几个字节"也不会被当图片同源回出去。
+    if (bytes.size < 32) return null
+    fun isPrefix(offset: Int, text: String) = bytes.size > offset + text.length &&
+        (0 until text.length).all { bytes[offset + it] == text[it].code.toByte() }
+    val magic = when {
+        bytes.size > 8 && bytes[0] == 0x89.toByte() && isPrefix(1, "PNG") -> "image/png"
+        bytes.size > 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() -> "image/jpeg"
+        isPrefix(0, "GIF8") -> "image/gif"
+        isPrefix(0, "RIFF") && isPrefix(8, "WEBP") -> "image/webp"
+        isPrefix(0, "BM") -> "image/bmp"
+        else -> null
+    }
+    if (magic != null) return magic
+    val ext = path.substringAfterLast('.', "").lowercase()
+    return when (ext) {
+        "png" -> "image/png"
+        "jpg", "jpeg" -> "image/jpeg"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "bmp" -> "image/bmp"
+        // svg / xml / html / 未知：同源回出去就是 XSS 面，宁可不显示
+        else -> null
+    }
+}
+
 private val debugJson = Json { encodeDefaults = true }
 
 /**

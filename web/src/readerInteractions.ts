@@ -147,7 +147,15 @@ export function findFirstFullyVisibleParagraphIndex(
 /**
  * 服务端把正文里的 `<img>` 换成的占位行：`![图片](绝对地址)`。
  * 图片因此能穿过净化管道、离线缓存与 TTS 的同一条字符串链路，不用另开一套数据结构。
+ *
+ * 地址有两类，都必须认：
+ * - `https?://…` —— 在线书的图，要经 `/api/book/image` 代理（防盗链与混合内容）；
+ * - `/api/…` —— 本地 EPUB 的内嵌插图，本来就在同源，**再套一层代理是错的**
+ *   （代理只收 http(s)，且会把包内资源当成外部站点去抓）。
  */
-const CONTENT_IMAGE_LINE = /^!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)$/
+const CONTENT_IMAGE_LINE = /^!\[[^\]]*\]\((https?:\/\/[^)\s]+|\/api\/[^)\s]+)\)$/
 
 export const contentImageUrl = (line: string): string | null => CONTENT_IMAGE_LINE.exec(line.trim())?.[1] ?? null
+
+/** 站内绝对路径直接就是能用的地址，不需要再过图片代理。 */
+export const isSameSiteAsset = (url: string): boolean => url.startsWith('/api/')

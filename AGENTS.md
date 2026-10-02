@@ -181,6 +181,8 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
   的图标按钮整块从判据里消失（内置浏览器工具栏那五个就是这么留下的）。
   规则：**清单按码位写、由 `String.fromCodePoint` 组装**（空项根本组装不出来），加一条"清单无空项 / 无重复"的自检，
   再把清单里**每一项**注入样本反扫一遍；写任何一条判据时先问一句"如果违规了，它会红吗"。
+- **[解析/jsoup] `Element.text()` 会把所有空白压成单个空格，靠换行分隔的结构会被它抹平**：本地 EPUB 正文里插入的 `![图片](地址)` 占位行，用 `body().text()` 取文本后就并进了前后句子，前端"整行必须是占位"的正则永远匹配不上 —— 表现是"图还是不显示"，而服务端返回的字节、类型、URL 全对。要保留换行用 `wholeText()`，段落归一交给自己的清洗函数。同类坑：任何"我往 DOM 里塞了一个依赖换行的标记"的改动，判据都要断言**它独占一行**，而不是只断言字符串里出现过。
+- **[判据/夹具] 门禁自己造的测试数据也要能被真浏览器解码，否则红的是探针不是产品**：手拼十六进制造的一张 1x1 PNG，服务端照常回 `200 image/png` 且字节数一致，浏览器 `naturalWidth` 仍是 0 —— 一条端到端门禁因此刷红。造二进制夹具用公认的那份 base64，别手拼；并且**断言要写清"什么情况下收起/保留"**：路由按设计拒掉的那张（同源 SVG）应该被收起，写成"一张都没收"就是把正确行为判成红。
 - **[测试/注册] `web/test/run-all.ts` 是一个一个 `import` 的，不扫目录 —— 没注册的测试等于没跑**：
   本轮发现两份文件存在、名字像测试、套件全绿，其实一条都没执行（`HeaderMenu.test.ts` 被删 AppHeader 时
   顺带从 runner 摘掉；`LocalBookImport.test.ts` 从来没被引过）。已在 `CustomizeSkin.test.ts` 里把
@@ -319,6 +321,8 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 
 | 2026-10-02 | Fix | **运行日志改造**（用户：「优化日志」）。一次 4,000 行采样里 3,039 行 ERROR、2,112 行空行、1,093 行同一句话，日志已经不能用来定位问题。四条一起修：一条日志一行（`oneLine` 折行 + 截断）、级别说真话（网络默认警告、上游 4xx 警告 / 5xx 错误、重试成功只算抖动）、同类 60 秒窗口并成一行带 `count`（`log_entry.repeat_count`）、每条带上 `host` 让界面说得出哪个站在失败。另两处"收集了却看不见"同病同治：`LooseJson` 的 `System.getLogger` 旁路、`/api/book/image` 只写 Ktor debug 档 | `server/src/main/kotlin/io/legado/server/LogService.kt` · `Database.kt` · `RuleRunner.kt` · `Routes.kt` · 能力波 v36 | Tested & Deployed（本机，未推送） |
 | 2026-10-02 | Test | **文案与判据的两次自证**。界面文案全量清理（装饰字形、说谎的能力描述、裸 `sourceId`、术语与标点 114 处）钉成 `web/test/CopyStyle.test.ts`；第二遍审这条判据自己，抓出两处让它形同虚设的盲区 —— 清单里有五个字面量被吞成 `''`（`find` 拿到空串是 falsy，于是既不报错也不拦），以及"JSX 文本必须含中文才算界面文案"（`<button>›</button>` 这种只有字形的按钮整个看不见）。改成清单按码位组装 + 无空项自检 + **逐字形注入反扫**，并补一条 31 项的界面门禁 `tools/verify/logs-ui-check.mjs`（探针自己造数据：跨站写请求验合并、`.invalid` 取图验域名芯片与级别、把 `/api/logs` 打成 503 与 `[]` 验"取失败 ≠ 确实没有"） | `web/test/CopyStyle.test.ts` · `tools/verify/logs-ui-check.mjs` · `server/src/test/kotlin/io/legado/server/LogServiceTest.kt` · AGENTS §5 | Tested & Deployed（前端 281/281，`logs-ui-check` 31/31，`version-check` 16/16） |
+
+| 2026-10-02 | Feat | **本地书目录规则 + 图片**（用户十项需求里的"txt 目录规则进阅读设置"与"重点研究本地阅读…支持图片"）。规则：照上游 `TxtTocRule` 做，随包 **26 条规则（启用 12 条）**原样装成资源不手抄，读文件头 512KB 按 `csNum >= numE*3` 打分选规则、「阅读设置 → 本地书目录」可选可重切，库里存**实际生效**的那条；切不出第二个章节的规则**拒绝写入并保留原目录**。图片：EPUB 原来 `body().text()` 把 `<img>` 整个吞掉，现在解析阶段换成 `![图片](地址)` 占位行 + 新只读路由按 zip entry 回字节（bookId 形状、`..`、魔数判型、同源 SVG 排除、nosniff 五道边界），相对路径按当前那篇 XHTML 解析，TXT 的绝对地址也认。踩到两个坑并写进 §5：`text()` 压平换行导致占位行匹配不上（改 `wholeText()`）、门禁手拼的 1x1 PNG 浏览器解不出来 | `server/src/main/kotlin/io/legado/server/TxtTocRule.kt` · `LocalBookParser.kt` · `Routes.kt` · `web/src/ReaderScreen.tsx` · 能力波 v38/v39 | Tested & Deployed（本机，未推送；前端 292/292，`:server:test` 271/47 与基线集合一致，`toc-rule-check` 13/13、`local-image-check` 15/15） |
 
 ---
 

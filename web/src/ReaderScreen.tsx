@@ -2,7 +2,7 @@ import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useDefer
 import { api, BookDetails, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
 import { Icon } from './icons'
 import { Select } from './Select'
-import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
+import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
@@ -843,17 +843,19 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const renderContentBlock = (line: string, index: number) => {
     const image = contentImageUrl(line)
     if (image) {
+      // 本地 EPUB 的插图本来就是站内地址，再过一道图片代理是错的（那一层只收 http(s)）
+      const src = isSameSiteAsset(image) ? image : api.bookImage(image, chapter?.url)
       return (
         <figure key={index} className="reader-paragraph-image">
           <img
-            src={api.bookImage(image, chapter?.url)}
+            src={src}
             alt=""
             loading="lazy"
             decoding="async"
             role="button"
             tabIndex={0}
             style={{ cursor: 'zoom-in' }}
-            onClick={event => { event.stopPropagation(); setLightboxSrc(api.bookImage(image, chapter?.url)) }}
+            onClick={event => { event.stopPropagation(); setLightboxSrc(src) }}
             onError={event => { event.currentTarget.closest('figure')?.setAttribute('hidden', '') }}
           />
         </figure>
