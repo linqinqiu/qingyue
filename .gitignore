@@ -64,6 +64,8 @@ local-patches.diff
 !/tools/verify/index-selector-census.mjs
 !/tools/verify/multipart.mjs
 !/tools/verify/opensource-hygiene-check.mjs
+!/tools/verify/snapshot-coverage.mjs
+!/tools/verify/archive-verify.mjs
 !/tools/verify/overlay-audit.mjs
 !/tools/verify/paginate-flow-check.mjs
 !/tools/verify/reader-flow-check.mjs
