@@ -1145,7 +1145,13 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-paginated-track { height: 100%; transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1); will-change: transform; }
 .reader-paginated-column-body { height: 100%; column-fill: auto; font-family: var(--reader-font-family, serif) !important; font-size: var(--reader-font-size); line-height: var(--reader-line-height); letter-spacing: var(--reader-letter-spacing); }
 /* 双栏分页的章节边界占位：确保下一章总是从新的左栏开始，避免右栏留白 */
-.column-break-placeholder { break-before: column; height: 0; visibility: hidden; }
+/* 双栏翻页时垫在章末的一整栏空白：这一章占了奇数栏，不垫的话下一章的第一栏
+   正好是上一页的右半格（用户已经看过），翻页窗口一挪就把同一栏再摆一次
+   （用户 2026-10-03「不要这样的跳转」）。
+   break-before 与 break-after 必须成对：只有 break-after 时它不占栏 ——
+   h1 本来就带 break-before: column，两个断点挨在一起会被合成一次换栏，
+   等于什么都没垫（实测就是这样第一次没修好）。给它 1px 高度，让它真的占掉一整栏。 */
+.reader-column-filler { break-before: column; break-after: column; height: 1px; visibility: hidden; }
 .reader-paginated-footer { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px, 5vw, 40px) 10px; color: var(--muted); font-size: 12px; user-select: none; }
 
 /* Desktop Sidebar Pinning */

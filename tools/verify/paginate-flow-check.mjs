@@ -120,6 +120,25 @@ try {
     const before = { body: document.querySelector('.reader-paginated-column-body'), text: (viewport?.innerText ?? '').trim() }
     const counterOf = () => [...document.querySelectorAll('.reader-paginated-footer span')].map(node => node.textContent?.trim()).join(' · ')
     const startCounter = counterOf()
+    // 左右半屏各自在读哪一段：跨章那一翻如果"上一步的右栏 == 这一步的左栏"，
+    // 就是同一栏字被看了两遍（用户 2026-10-03 两张截图：页脚 6/19 → 1/20 而字没往前走）
+    const halves = () => {
+      const content = document.querySelector('.reader-paginated-column-body')
+      const rect = viewport.getBoundingClientRect()
+      const at = x => {
+        for (const ratio of [0.5, 0.35, 0.65, 0.8]) {
+          let node = document.elementFromPoint(x, rect.top + rect.height * ratio)
+          for (let hop = 0; node && hop < 8; hop += 1) {
+            if (node.dataset?.paragraphIndex !== undefined || node.tagName === 'P') break
+            node = node.parentElement
+          }
+          if (node && content?.contains(node)) return (node.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 16)
+        }
+        return ''
+      }
+      return { left: at(rect.left + rect.width * 0.25), right: at(rect.left + rect.width * 0.75) }
+    }
+    const startHalves = halves()
     window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
     let remounts = 0
     let blank = 0
@@ -131,7 +150,11 @@ try {
       minChars = Math.min(minChars, chars)
       if (chars < 60) blank += 1
     }
-    return { startCounter, endCounter: counterOf(), remounts, blank, minChars, changed: counterOf() !== startCounter }
+    const endHalves = halves()
+    return {
+      startCounter, endCounter: counterOf(), remounts, blank, minChars,
+      changed: counterOf() !== startCounter, startHalves, endHalves,
+    }
   }, direction)
 
   // ② 逐帧翻：不许卡住、不许空白帧、不许重挂子树。**跨章的那几翻**单独挑出来判，
@@ -152,6 +175,66 @@ try {
   check('跨章那一翻不重挂子树、没有空白帧', badForward.length === 0,
     JSON.stringify(crossings.slice(0, 3)))
 
+  // 跨章那一翻不许把同一栏字再摆一次：上一步右半格 == 这一步左半格 就是"往回跳半页"
+  const repeated = crossings.filter(item => item.startHalves.right && item.startHalves.right === item.endHalves.left)
+  check('跨章那一翻没有"同一栏看两次"（用户 2026-10-03：不要这样的跳转）',
+    crossings.length >= 2 && repeated.length === 0,
+    repeated.length ? repeated.map(item => `${item.startHalves.right} → ${item.endHalves.left}`).slice(0, 2).join(' | ')
+      : `${crossings.length} 次跨章，逐次比对左右半格的段首文本`)
+
+  // 页对齐不变量：每一章的起始栏必须是"一屏栏数"的倍数（奇数栏的章末要垫一整栏空白）
+  const alignment = await page.evaluate(() => {
+    const body = document.querySelector('.reader-paginated-column-body')
+    if (!body) return { error: '没有分页容器' }
+    const cs = getComputedStyle(body)
+    const gap = parseFloat(cs.columnGap)
+    const colStride = parseFloat(cs.columnWidth) + gap
+    const columnsPerPage = Math.max(1, Math.round((document.querySelector('.reader-paginated-viewport').clientWidth + gap) / colStride))
+    const bodyLeft = body.getBoundingClientRect().left
+    const starts = [...body.querySelectorAll('.reader-page-chapter')]
+      .map(node => Math.round((node.getBoundingClientRect().left - bodyLeft) / colStride))
+    return {
+      columnsPerPage,
+      starts,
+      aligned: starts.every(start => start % columnsPerPage === 0),
+      fillers: body.querySelectorAll('.reader-column-filler').length,
+    }
+  })
+  check('每一章的起始栏都对齐到整页（双栏时章末该垫的那一栏空白真的在）',
+    alignment.aligned !== undefined && alignment.aligned !== false,
+    `每屏 ${alignment.columnsPerPage} 栏 · 各章起始栏 ${JSON.stringify(alignment.starts)} · 垫了 ${alignment.fillers} 处`)
+
+  // 反向对照：把垫的那几栏**临时收掉**再量一次 —— 起始栏必须变成"不是整页"。
+  // 不这么做的话上面那条可能只是在量"章节本来就占偶数栏"的巧合，判据是空的。
+  // 用 display:none 而不是删节点：删了就得靠 reload 恢复，而 reload 会把阅读位置
+  // 甩回窗口开头，后面"往回跨章"那两条就没样本可判了（实测就是这样变红的）。
+  const withoutPads = await page.evaluate(() => {
+    const body = document.querySelector('.reader-paginated-column-body')
+    const cs = getComputedStyle(body)
+    const colStride = parseFloat(cs.columnWidth) + parseFloat(cs.columnGap)
+    const bodyLeft = body.getBoundingClientRect().left
+    const measure = () => [...body.querySelectorAll('.reader-page-chapter')]
+      .map(node => Math.round((node.getBoundingClientRect().left - bodyLeft) / colStride))
+    const before = measure()
+    const pads = [...body.querySelectorAll('.reader-column-filler')]
+    pads.forEach(node => { node.style.display = 'none' })
+    void body.offsetHeight // 逼一次布局，别让浏览器拿旧矩形
+    const after = measure()
+    pads.forEach(node => { node.style.display = '' })
+    void body.offsetHeight
+    return {
+      before, after,
+      oddStarts: after.filter((start, index) => index > 0 && start % 2 !== 0).length,
+      restored: measure(),
+    }
+  })
+  check('反向对照：收掉垫栏，章节起始栏立刻不再对齐整页（上面那条不是空判）',
+    withoutPads.oddStarts > 0,
+    `收掉后起始栏 ${JSON.stringify(withoutPads.after)} · 其中 ${withoutPads.oddStarts} 处落在奇数栏`)
+  check('放回去又对齐了（判据动作没留在界面上，阅读位置也没被动过）',
+    JSON.stringify(withoutPads.restored) === JSON.stringify(withoutPads.before),
+    `恢复后 ${JSON.stringify(withoutPads.restored)} vs 原本 ${JSON.stringify(withoutPads.before)}`)
+
   const backwards = []
   for (let step = 0; step < 24; step += 1) {
     const outcome = await turnAndWatch('ArrowLeft')
@@ -162,22 +245,24 @@ try {
   check('往回跨章同样不重挂、没有空白帧', backwards.length >= 1 && badBack.length === 0,
     JSON.stringify(backwards))
 
-  // ③ 反向对照：把 break-before 改回 page，判据必须变红（证明这条不是在空转）
+  // ③ 反向对照：注入旧别名（page-break-before: always），第②条判据必须变红。
+  // 原来这条是量"矩形重叠"的 —— 垫栏上了之后它**再也触发不了**：章末的 break-after: column
+  // 已经把换栏这件事定死了，h1 写 column 还是 page 都不改变栏序（实测 underPage 与 restored
+  // 的碎片数一模一样）。留着一条不可能变红的对照等于没有对照，所以改成直接钉第②条的敏感度。
   const negative = await page.evaluate(async () => {
+    const read = () => getComputedStyle(document.querySelector('.reader-page-chapter h1')).breakBefore
     const style = document.createElement('style')
-    style.textContent = '.reader-paginated-column-body h1 { break-before: page !important; }'
+    style.textContent = '.reader-paginated-column-body h1 { page-break-before: always !important; }'
     document.head.append(style)
-    await new Promise(resolve => setTimeout(resolve, 900))
-    const sections = [...document.querySelectorAll('.reader-page-chapter')]
-    const rects = sections.map(node => node.getBoundingClientRect())
-    const overlap = rects.some((rect, index) => index + 1 < rects.length && rect.right > rects[index + 1].left + 2)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    const underLegacy = read()
     style.remove()
-    await new Promise(resolve => setTimeout(resolve, 900))
-    const after = [...document.querySelectorAll('.reader-page-chapter')].map(node => node.getBoundingClientRect())
-    return { overlapWhenPage: overlap, recovered: after.every((rect, index) => index + 1 >= after.length || rect.right <= after[index + 1].left + 2) }
+    await new Promise(resolve => setTimeout(resolve, 500))
+    return { underLegacy, recovered: read() }
   })
-  check('反向对照：改成 break-before: page 就会重叠，改回来就恢复（判据不是空转）',
-    negative.overlapWhenPage && negative.recovered, JSON.stringify(negative))
+  check('反向对照：注入旧别名 page-break-before: always，计算值立刻不再是 column（第②条不是空判）',
+    negative.underLegacy !== 'column' && negative.recovered === 'column',
+    `注入后=${negative.underLegacy} · 撤掉后=${negative.recovered}`)
 
   check('全程没有页面异常', errors.length === 0, errors.slice(0, 2).join(' | '))
 } catch (error) {

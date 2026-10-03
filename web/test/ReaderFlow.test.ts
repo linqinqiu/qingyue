@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chapterConsumed, flowAdvance, holdScroll, pageProgress, pageWindowShift, SectionBox, sectionAtPage, sectionProgress } from '../src/readerFlow'
+import { chapterConsumed, flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, SectionBox, sectionAtPage, sectionProgress } from '../src/readerFlow'
 
 /**
  * 连续滚动的算术（用户 2026-10-02：「章节间的连接还是不对，怎么能跳转呢，不是一体的吗」）。
@@ -112,4 +112,48 @@ test('pageWindowShift - 翻进挂着的下一章是顶窗口，页码减去被�
   assert.deepEqual(pageWindowShift(SPANS, 10), { lead: 2, pageIndex: 1 }, '一帧跨两章：摘两章，页码跟着减')
   // 反向对照：归零会把人甩回窗口开头（=跳），减去被摘页数才停在原来那一页上
   assert.notEqual(pageWindowShift(SPANS, 10)!.pageIndex, 0)
+})
+
+test('pageAlignmentPads - 双栏时每一章补齐到整页（用户 2026-10-03「不要这样的跳转」）', () => {
+  // 垫的量算在**章末**：第一章占 5 栏（奇数）→ 它自己补 1 栏，第二章才落在整页开头
+  assert.deepEqual(pageAlignmentPads([5, 4, 6], 2), [1, 0, 0],
+    '奇数栏补一栏，偶数栏不补')
+  assert.deepEqual(pageAlignmentStarts([5, 4, 6], 2), [0, 6, 10],
+    '补完之后每一章的起始栏都是 2 的倍数')
+  assert.deepEqual(pageAlignmentPads([5, 5, 5], 2), [1, 1, 1])
+  // 窗口里最后一章也补：它只是下一张预览，不是书的末尾；开"最后一章不补"的口子
+  // 会让"首屏只量到一节"时整个计划算成 0，之后没人回来补（第一版就栽在这儿）
+  assert.deepEqual(pageAlignmentPads([4, 7], 2), [0, 1], '最后一章是奇数栏也照样补')
+  assert.deepEqual(pageAlignmentStarts([5, 5, 5], 2), [0, 6, 12])
+  // 单栏模式没有"半页"这回事，一律不补
+  assert.deepEqual(pageAlignmentPads([5, 5], 1), [0, 0])
+  // 反向对照：不补的话起始栏就是奇数 —— 那正是重复一栏的那个形状
+  assert.deepEqual(pageAlignmentStarts([5, 4, 6], 1), [0, 5, 9])
+  assert.equal(pageAlignmentStarts([5, 4, 6], 1)[1] % 2, 1, '不补时第二章从奇数列开始（会被看过一遍）')
+})
+
+test('pageAlignmentPads 的不变量：窗口往前挪（摘掉整章）之后仍然对齐 —— 第一版就是栽在这里', () => {
+  const counts = [5, 4, 7, 3]
+  const full = pageAlignmentStarts(counts, 2)
+  assert.deepEqual(full, [0, 6, 10, 18])
+  for (let lead = 1; lead < counts.length; lead += 1) {
+    const shifted = pageAlignmentStarts(counts.slice(lead), 2)
+    assert.deepEqual(shifted.map(start => start % 2), counts.slice(lead).map(() => 0),
+      `摘掉前 ${lead} 章之后起始栏不再是整数页 —— 那一栏会被看两次`)
+    // 挪窗口只是整体平移：相邻章之间的页距必须和没挪之前一致，
+    // 否则 `页码 - 被摘章的页数` 就不指向原来那一栏了
+    assert.deepEqual(shifted, full.slice(lead).map(start => start - full[lead]))
+  }
+})
+
+test('pageAlignmentPads 与 pageWindowShift 接起来：跨章那一步页码归零但绝不重复一栏', () => {
+  // 第一章 5 栏、第二章 4 栏，双栏一屏两栏 → 垫一栏后页号是 0 起 3 页、第二章从第 3 页开始
+  const starts = pageAlignmentStarts([5, 4], 2)
+  const spans = [{ start: starts[0] / 2, end: starts[1] / 2 }, { start: starts[1] / 2, end: 6 }]
+  assert.deepEqual(spans, [{ start: 0, end: 3 }, { start: 3, end: 6 }])
+  // 第二章第一页（窗口第 3 页）就是窗口挪动的那一步：新页码 0，且起点是第二章的第 0 栏
+  assert.deepEqual(pageWindowShift(spans, 3), { lead: 1, pageIndex: 0 })
+  // 关键不变量：每一章的起始栏都是"一屏栏数"的倍数 ⇒ 上一章的右半格不可能是下一章的第一栏
+  assert.deepEqual(pageAlignmentStarts([5, 4], 2).map(start => start % 2), [0, 0])
+  assert.equal(starts[1] % 2, 0, '第二章必须落在偶数栏上，否则右半格会被看两次')
 })

@@ -1,4 +1,4 @@
-import { CSSProperties, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, Fragment, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, BookDetails, BookMark, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
 import { BookmarkDrawer } from './BookmarkDrawer'
 import { MarkSelection, readSelection, resolveChapter, WHOLE_CHAPTER } from './bookmarks'
@@ -6,7 +6,7 @@ import { Icon } from './icons'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
-import { flowAdvance, holdScroll, pageProgress, pageWindowShift, sectionProgress } from './readerFlow'
+import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, sectionAtPage, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
 import { toast } from './Toast'
@@ -353,6 +353,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   flowTailRef.current = flowTail
   /** 分页模式下每一章占的页区间（量自排版后的 DOM），以及顶窗口之后该落到第几页。 */
   const pageSpansRef = useRef<{ start: number; end: number }[]>([])
+  /** 屏幕上真的对齐了吗（按 DOM 量出来的，不是按算术推的）—— 挪窗口的闸门看这个。 */
+  const pageAlignedRef = useRef(true)
   const pendingPageRef = useRef<number | null>(null)
   const [chapterIndex, setChapterIndex] = useState(startIndex)
   /** 同一个手法：判断"只能往前顶"要读当前的那一个，不能闭包里那个早就过期的数字。 */
@@ -489,6 +491,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // Pagination states
   const [pageIndex, setPageIndex] = useState(0)
   const [pageCount, setPageCount] = useState(1)
+  /** 每一章**前面**垫几栏空白（双栏时把章节边界对齐到页开头）；量出来的，见 measurePagination。 */
+  const [pageFillers, setPageFillers] = useState<number[]>([])
   const [columnWidth, setColumnWidth] = useState(600)
   const [stride, setStride] = useState(640)
   const [isDoubleColumn, setIsDoubleColumn] = useState(false)
@@ -648,6 +652,18 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 过渡期间大标题跟着正文走（挂着上一章的标题），新章名只出现在「正在载入」那条里 ——
   // 标题是新的、正文是旧的，比两者都旧更容易让人以为串了章。
   const shownChapterTitle = isStaleContent ? (currentRef.current?.chapter.title || chapter?.title) : chapter?.title
+  /**
+   * 页脚那一格要说的是**你眼前这一页属于哪一章**，不是"这一窗口锚在哪一章"。
+   * 窗口里挂着两三章，用锚点名就会连着几页都写着上一章的名字 —— 用户截图里
+   * 「第4章 生活」配着满屏的「第5章 片刻喘息」就是这一条（2026-10-03）。
+   */
+  const paginatedFooterTitle = (() => {
+    const spans = pageSpansRef.current
+    if (spans.length <= 1) return shownChapterTitle ?? ''
+    const index = sectionAtPage(spans, pageIndex)
+    if (index === 0) return shownChapterTitle ?? ''
+    return flowTail[index - 1]?.chapter.title ?? shownChapterTitle ?? ''
+  })()
   const incomingChapterTitle = isStaleContent ? chapter?.title : ''
   // 章末那条「下一章」提示要写出真实章名，跳过卷分组头与没有地址的条目（与预载走同一套判据）。
   const nextChapterTitle = useMemo(() => {
@@ -1346,6 +1362,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    */
   useLayoutEffect(() => {
     if (settings.pageMode !== 'paginate' || pendingPageRef.current !== null) return
+    // 只在几何真的对齐时才挪窗口。垫栏是"量完再渲染"的，首屏那一轮可能还没落进 DOM：
+    // 这时下一章的起始栏是奇数（正好挂在上一页的右半格），挪一下会把页码归零到
+    // 同一栏上 —— 用户看到的就是"同一栏读两遍"。不挪反而没事：继续往前翻是连续的。
+    // 下一轮重量会把垫栏补上，之后再挪就是无缝的。
+    if (!pageAlignedRef.current) return
     const shift = pageWindowShift(pageSpansRef.current, pageIndex)
     if (!shift) return
     const target = flowTailRef.current[shift.lead - 1]
@@ -1378,18 +1399,48 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setIsDoubleColumn(layout.isDoubleColumn)
     setPageCount(layout.pageCount)
 
-    // 每一章在窗口里占哪几页：分栏里每个 <section> 的 h1 带 break-before: column，
-    // 所以它的第一块碎片就在自己那一章的第一列 —— 两块矩形的左边缘之差除以步长就是页差。
+    // 每一章在窗口里占哪几页。
+    // 关键：**先算每一章占几栏（精确整数），再累加出起始栏号**，最后才除以"一屏几栏"。
+    // 原来直接 (矩形左边缘 - body 左边缘) / stride 取整，等于把章节起始列的奇偶丢掉 ——
+    // 下一章落在奇数列时，它的第一栏是上一页的右半格（用户已经看过），窗口一挪页码归零，
+    // 那一栏又挪回左半格。用户 2026-10-03 的两句"不要这样的跳转"就是这么来的。
     const sections = [...body.querySelectorAll<HTMLElement>('.reader-page-chapter')]
     if (sections.length > 0) {
+      const columnsPerPage = layout.isDoubleColumn ? 2 : 1
+      // 每一章占几栏 —— **不能量 section 的 getBoundingClientRect().width**：
+      // 分栏里一个跨七栏的 <section>，它的矩形只报到约两栏宽（实测算出 [1,2,2] 而真实是 [1,7,7]），
+      // 于是"补齐到整页"永远算出 0，界面照旧重复一栏。用 Range 量才拿得到每一栏的那块碎片。
+      // 也正因为如此，垫的那一栏必须落在 section **外面**：算在里面的话章数会被自己数多一栏，
+      // 下一轮又算成不用垫 —— 来回振荡。
+      const columnCounts = sections.map(node => {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const lefts = new Set([...range.getClientRects()]
+          .filter(rect => rect.width > 1)
+          .map(rect => Math.round(rect.left)))
+        return Math.max(1, lefts.size)
+      })
+      const nextFillers = pageAlignmentPads(columnCounts, columnsPerPage)
+      const starts = pageAlignmentStarts(columnCounts, columnsPerPage)
+      // 对齐闸门按**量出来的**起始栏判，不按算术：算术说垫了、DOM 里还没渲染出来，
+      // 这一刻挪窗口照样会重复一栏。
       const bodyLeft = body.getBoundingClientRect().left
-      const starts = sections.map(node => Math.min(
-        layout.pageCount - 1,
-        Math.max(0, Math.round((node.getBoundingClientRect().left - bodyLeft) / layout.stride)),
-      ))
+      const measuredStride = layout.columnWidth + columnGap
+      const measuredStarts = sections.map(node => {
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const rects = [...range.getClientRects()].filter(rect => rect.width > 1)
+        const left = rects.length > 0 ? Math.min(...rects.map(rect => rect.left)) : bodyLeft
+        return Math.round((left - bodyLeft) / measuredStride)
+      })
+      pageAlignedRef.current = measuredStarts.every(col => col % columnsPerPage === 0)
+      setPageFillers(current => (current.length === nextFillers.length
+        && current.every((value, index) => value === nextFillers[index]) ? current : nextFillers))
       pageSpansRef.current = starts.map((start, index) => ({
-        start,
-        end: index + 1 < starts.length ? starts[index + 1] : layout.pageCount,
+        start: Math.round(start / columnsPerPage),
+        end: index + 1 < starts.length
+          ? Math.round(starts[index + 1] / columnsPerPage)
+          : layout.pageCount,
       }))
       // 刚把窗口往前挪过：页码要落到"摘掉前面那几章之后"的那一页上，否则画面跳回窗口开头
       if (pendingPageRef.current !== null) {
@@ -1437,6 +1488,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     content,
     loading,
     flowTail,
+    // 垫栏本身要再量一次：首屏只挂上锚点那一章时"章末那一栏"还没有地方渲染，
+    // 等下一张预览挂上来才补得上 —— 不重量的话第一次跨章那一下仍会重复一栏。
+    pageFillers,
     settings.fontSize,
     settings.lineHeight,
     settings.letterSpacing,
@@ -2116,6 +2170,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 容器的 key 只在主动跳章/换书时换（续接推进不换），否则每跨一章白闪一次。
               */}
               <article ref={bodyRef} key={flowKey} className={`reader-paginated-column-body chapter-enter${isStaleContent ? ' is-stale' : ''}`} style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
+                {/*
+                  章末垫的那一栏空白，渲染在两个 <section> **之间**（不是章节里面）：
+                  这一章占了奇数栏时，不垫的话下一章的第一栏正好是上一页的右半格（用户已经看过），
+                  翻页窗口一挪、页码归零，同一栏又挪回左半格 —— 用户 2026-10-03 的"不要这样的跳转"。
+                */}
                 <section className="reader-page-chapter" data-chapter-index={chapter?.index ?? 0}>
                   <h1>{shownChapterTitle}</h1>
                   {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
@@ -2123,19 +2182,20 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   {message && <p className="reader-error">{message}</p>}
                   {paragraphs.map((line, index) => renderContentBlock(line, index))}
                 </section>
-                {flowTail.map(item => (
-                  <section key={item.chapter.url} className="reader-page-chapter reader-page-tail" data-chapter-index={item.chapter.index}>
-                    <h1>{item.chapter.title}</h1>
-                    {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
-                  </section>
+                {flowTail.map((item, tailIndex) => (
+                  <Fragment key={item.chapter.url}>
+                    {(pageFillers[tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
+                    <section className="reader-page-chapter reader-page-tail" data-chapter-index={item.chapter.index}>
+                      <h1>{item.chapter.title}</h1>
+                      {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+                    </section>
+                  </Fragment>
                 ))}
-                {/* 双栏模式下，在窗口末尾插入隐形占位，确保下一章从新的左栏开始 */}
-                {isDoubleColumn && <div className="column-break-placeholder" aria-hidden="true" />}
               </article>
             </div>
           </div>
           <footer className="reader-paginated-footer">
-            <span>{shownChapterTitle || ''}</span>
+            <span>{paginatedFooterTitle || ''}</span>
             <span>{pageIndex + 1} / {pageCount}</span>
           </footer>
         </div>

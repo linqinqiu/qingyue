@@ -101,6 +101,53 @@ export function pageWindowShift(spans: PageSpan[], page: number): { lead: number
 }
 
 /**
+ * 双栏时把每一章**补齐到整页**（章末可能要垫一整栏空白）。
+ *
+ * 为什么必须垫（用户 2026-10-03 两张截图：页脚 6/19 → 1/20，而这两步的右栏/左栏是同一栏字）：
+ * 一屏 = 两栏，而一章占几栏由内容决定。下一章若落在**奇数列**上，它的第一栏正好是上一页的
+ * 右半格 —— 用户在那一页已经看过它了；再按一次下一页，窗口往前挪、页码归零，那一栏又从
+ * 右半格挪回左半格，看起来像"往回跳了半页"。页网格与章节边界对不齐时这个重复无法避免：
+ * 要么重复一栏，要么跳过一栏。所以让每一章都从**新的一页的左栏**开始
+ * （纸质书"下一章另起一页"是同一件事）。
+ *
+ * 关键取舍：垫的量算在**每一章自己身上**（补齐到整页），不是"相对窗口开头对齐"。
+ * 窗口会往前挪 —— 相对窗口的方案在挪窗口那一刻计划就变了，被摘掉的章数一变，
+ * 后面每一章的起始页跟着变，`页码 - 被摘章的页数` 就不再指向原来那一栏（第一版就是这么错的）。
+ * 按章补齐之后每一章占的都是整数页，摘掉任意前缀都仍然对齐。
+ *
+ * 每一章都补，**包括窗口里最后一章**：这一窗口的"最后一章"只是下一张预览，
+ * 书后面还有内容，补出来的那一栏空白不会变成读者要空翻的一页；反过来，若在这里
+ * 开一个"最后一章不补"的口子，量到几节就算几节的计划 —— 首屏只挂上锚点那一章时
+ * 全部算成 0，之后没人再补，界面就还是老样子重复一栏（第一版栽在这儿）。
+ *
+ * 只算栏数，不碰 DOM；垫不垫由 ReaderScreen 渲染，判据在 web/test/ReaderFlow.test.ts。
+ */
+export function pageAlignmentPads(columnCounts: number[], columnsPerPage: number): number[] {
+  if (columnsPerPage <= 1) return columnCounts.map(() => 0)
+  return columnCounts.map(count => {
+    const offset = count % columnsPerPage
+    return offset === 0 ? 0 : columnsPerPage - offset
+  })
+}
+
+/**
+ * 垫完空白之后，每一章从第几**栏**开始（累加出来的，不去量矩形）。
+ *
+ * 量矩形会得到带浮点误差的左边缘，再除以"一屏几栏"取整 —— 章节起始列的奇偶就是这么丢掉的。
+ * 这里栏号是精确整数，页号 = 栏号 / 每页栏数 也就没有余数。
+ */
+export function pageAlignmentStarts(columnCounts: number[], columnsPerPage: number): number[] {
+  const pads = pageAlignmentPads(columnCounts, columnsPerPage)
+  const starts: number[] = []
+  let running = 0
+  columnCounts.forEach((count, index) => {
+    starts.push(running)
+    running += count + pads[index]
+  })
+  return starts
+}
+
+/**
  * 章内进度（写进 `reading_progress.scroll_position` 的那个 0..1）。
  *
  * 契约没变：**仍然是"这一章里读了多少"**，只是分母从"整篇文档"换成"这一章那一节"。
