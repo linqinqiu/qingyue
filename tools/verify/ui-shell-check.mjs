@@ -6,7 +6,9 @@
 //   ① 界面只有旧版这一套外壳（侧栏/页头条的文件与类名都不许再出现）；
 //   ② 「更新日志」页读的是随包的 CHANGELOG.md，结构、当前版本高亮、来源都真的在；
 //   ③ 「自定义」里的自定义皮肤**真的生效**，而且是**叠**在内置皮肤之上的
-//      （只写一个变量也不许花屏）—— 这条带反向对照，摘掉基类必须立刻取不到变量。
+//      （只写一个变量也不许花屏）—— 这条带反向对照，摘掉基类必须立刻取不到变量；
+//   ④ 「我的」菜单的条目集合（用户 2026-10-03：「顶栏『我的』菜单堆太多」——
+//      「更新日志」「快捷键」收进「关于」，这里按新的分法判，旧的两条要判为"不在菜单里"）。
 //
 // 只读界面 + 只改 localStorage 里的设置，不动任何书源/书架数据，跑完自己清干净。
 // 跑法：node tools/verify/ui-shell-check.mjs
@@ -93,7 +95,12 @@ try {
   })
   check('②皮肤三档都在（晓白 / 护眼 / 夜读）', menu.skins.join('、') === '晓白、护眼、夜读', menu.skins.join('、') || '(取不到)')
   check('②菜单里有「自定义」入口', menu.labels.some(l => l.includes('自定义')) && menu.hasCustomize, menu.labels.join(' / '))
-  check('②菜单里有「更新日志」入口', menu.labels.some(l => l.includes('更新日志')), '')
+  // 「更新日志」「快捷键」两条从菜单里收掉了（用户 2026-10-03：「顶栏『我的』菜单堆太多」）：
+  // 前者有顶栏版本芯片 + 「关于」两条路，后者改由「关于」进。这里按新的分法判。
+  check('②菜单里有「关于」入口', menu.labels.some(l => l.includes('关于')), menu.labels.join(' / '))
+  check('②菜单不再堆着「更新日志」「快捷键」',
+    !menu.labels.some(l => l === '更新日志') && !menu.labels.some(l => l === '快捷键'),
+    menu.labels.join(' / '))
   check('②色片是 22px 那一套（v2 的 9px 小点不该留下来）', menu.swatchSize === '22px', `实测 ${menu.swatchSize || '(取不到)'}`)
 
   // ─────────────────────── ③ 应用内「更新日志」 ───────────────────────
@@ -104,7 +111,25 @@ try {
   check('③ GET /api/changelog 给出随包的 markdown（非空）',
     api.status === 200 && api.type.startsWith('text/markdown') && api.length > 200,
     `HTTP ${api.status} · ${api.type} · ${api.length} 字符`)
-  check('③「更新日志」入口点得动', await clickIn(page, '.header-menu-dropdown', '更新日志'), '')
+  check('③从「关于」进「更新日志」（菜单里那条已收掉，这一条走的是新路径）',
+    await clickIn(page, '.header-menu-dropdown', '关于'), '')
+  await page.waitForSelector('.about-page', { timeout: 8000 })
+  const about = await page.evaluate(() => ({
+    actions: [...document.querySelectorAll('.about-actions button, .about-actions a')].map(n => (n.textContent ?? '').trim()),
+  }))
+  check('③「关于」给得出更新日志与快捷键这两个入口',
+    about.actions.some(l => l === '更新日志') && about.actions.some(l => l === '快捷键'),
+    about.actions.join(' / ') || '(没有动作按钮)')
+  // 快捷键这张表就一条判据：点得开、真的画出按键表（内容与生效的键同源，由 shortcut-check 盯）
+  check('③「快捷键」点得开那张表', await clickIn(page, '.about-actions', '快捷键'), '')
+  await page.waitForSelector('.shortcut-modal', { timeout: 8000 })
+  const shortcutRows = await page.evaluate(() => document.querySelectorAll('.shortcut-row, .shortcut-table tr').length)
+  check('③那张表真的列出了按键（不是空弹窗）', shortcutRows > 0, `实测 ${shortcutRows} 行`)
+  await page.evaluate(() => document.querySelector('.shortcut-close')?.click())
+  await sleep(250)
+  check('③那张表关得掉（不留一层挡住「关于」的挡片）',
+    await page.evaluate(() => !document.querySelector('.shortcut-modal')), '')
+  check('③「更新日志」点得动', await clickIn(page, '.about-actions', '更新日志'), '')
   await page.waitForSelector('.changelog-page', { timeout: 8000 })
   await page.waitForFunction(() => !!document.querySelector('.changelog-release') || !!document.querySelector('.changelog-empty'), { timeout: 15000 })
   const log = await page.evaluate(() => ({
@@ -210,23 +235,90 @@ try {
     !clearedSkin.style && !clearedSkin.classes.includes('theme-gatemidnight') && clearedSkin.skins === 3,
     `注入=${clearedSkin.style} 类=${clearedSkin.classes} 档数=${clearedSkin.skins}`)
 
-  // ─────────────────────────── ⑤ 收尾 ──────────────────────────
+  // ─────────── ⑤ 分章规则的落点（搬出「自定义」，长在书架导入旁边） ───────────
+  // ④ 收场时「自定义」弹窗还开着：不关掉就点下一颗按钮，点到的其实是挡片底下的控件。
+  await page.evaluate(() => document.querySelector('.customize-close')?.click())
+  await sleep(250)
+  await page.goto(`${BASE}/#shelf`, { waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.shelf-bar', { timeout: 30000 })
+  const shelfBar = await page.evaluate(() => ({
+    labels: [...document.querySelectorAll('.shelf-header-actions button')].map(n => (n.textContent ?? '').trim()),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }))
+  check('⑤书架顶栏同时给得出「导入本地」与「分章规则」（规则入口长在它服务的动作旁边）',
+    shelfBar.labels.some(l => l.includes('导入')) && shelfBar.labels.some(l => l.includes('分章规则')),
+    shelfBar.labels.join(' / '))
+  check('⑤加了一颗按钮之后 1440 宽仍不横向溢出', shelfBar.overflow <= 1, `溢出 ${shelfBar.overflow}px`)
+  check('⑤「分章规则」点得开弹窗', await clickIn(page, '.shelf-header-actions', '分章规则'), '')
+  await page.waitForSelector('.toc-rules-modal', { timeout: 8000 })
+  await sleep(400)
+  const toc = await page.evaluate(() => {
+    const modal = document.querySelector('.toc-rules-modal')
+    const cs = modal ? getComputedStyle(modal) : null
+    const body = document.querySelector('.toc-rules-body')
+    return {
+      rows: modal ? modal.querySelectorAll('.toc-rule').length : 0,
+      switches: modal ? modal.querySelectorAll('.toc-rule-switch input').length : 0,
+      regexShown: [...(modal?.querySelectorAll('.toc-rule-main code') ?? [])].filter(n => n.textContent?.trim()).length,
+      defaultSelect: !!modal?.querySelector('.customize-field'),
+      importBtn: [...(modal?.querySelectorAll('button') ?? [])].some(n => (n.textContent ?? '').includes('按这条导入本地书')),
+      note: (modal?.textContent ?? '').includes('手动选一条不需要先'),
+      // 壳要真的成了一个有边框有圆角的浮层：样式表漏了类名的典型表现就是一段裸 div
+      mounted: !!cs && cs.borderTopWidth !== '0px' && cs.borderRadius !== '0px',
+      scrollable: !!body && body.scrollHeight >= body.clientHeight - 1,
+      overflow: modal ? modal.scrollWidth - modal.clientWidth : -1,
+    }
+  })
+  check('⑤弹窗列出全部规则（26 条里编得出正则的那些），不是只列启用的 12 条',
+    toc.rows >= 20 && toc.switches === toc.rows, `${toc.rows} 行 · ${toc.switches} 个开关`)
+  check('⑤每行把正则原文露出来（不写出来没人判断得了适不适合自己的书）',
+    toc.regexShown >= toc.rows - 2, `${toc.regexShown}/${toc.rows} 行有正则`)
+  check('⑤一屏给齐三样：默认规则选择器、接着导书的按钮、把两件事分开讲的说明',
+    toc.defaultSelect && toc.importBtn && toc.note, '')
+  check('⑤弹窗有壳、能滚、不横向溢出（样式表里那个类名是真的）',
+    toc.mounted && toc.scrollable && toc.overflow <= 1,
+    `壳=${toc.mounted} 可滚=${toc.scrollable} 溢出 ${toc.overflow}px`)
+  await page.screenshot({ path: path.join(SHOTS, `toc-rules-modal-${STAMP}.png`) }).catch(() => null)
+  check('⑤这颗关闭按钮关得掉弹窗（挡片不留在那儿挡住后面的操作）',
+    await page.evaluate(() => { document.querySelector('.toc-rules-close')?.click(); return true })
+    && (await sleep(250), await page.evaluate(() => !document.querySelector('.toc-rules-modal'))), '')
+  // 「自定义」这一边：搬走了就必须在界面上真的看不见，不只是代码里删了
+  check('⑤「自定义」弹窗还开得住（搬空之后不是空壳）',
+    await clickIn(page, '.app-page-header', '我的') && (await sleep(200), await clickIn(page, '.header-menu-dropdown', '自定义')), '')
+  await page.waitForSelector('.customize-dialog', { timeout: 8000 })
+  const customize = await page.evaluate(() => {
+    const dialog = document.querySelector('.customize-dialog')
+    return {
+      text: dialog?.textContent ?? '',
+      tocRows: dialog ? dialog.querySelectorAll('.toc-rule, .customize-toc-rule').length : -1,
+      sections: [...(dialog?.querySelectorAll('.customize-section h3') ?? [])].map(n => (n.textContent ?? '').trim()),
+    }
+  })
+  check('⑤「自定义」不再是杂物间：只剩皮肤那两档，没有分章规则',
+    customize.tocRows === 0 && !customize.text.includes('分章规则')
+    && customize.sections.join('、') === '皮肤、自定义皮肤',
+    `${customize.sections.join('、') || '(没有分节)'} · 规则行 ${customize.tocRows}`)
+
+  // ─────────────────────────── ⑥ 收尾 ──────────────────────────
   const cleared = await page.evaluate(() => {
     localStorage.removeItem('legado-reader-settings-v2')
     document.getElementById('legado-custom-skin')?.remove()
     return { stored: localStorage.getItem('legado-reader-settings-v2'), style: !!document.getElementById('legado-custom-skin') }
   })
-  check('⑤探针留下的设置与注入的样式都清干净了（下次打开回到默认皮肤）',
+  check('⑥探针留下的设置与注入的样式都清干净了（下次打开回到默认皮肤）',
     cleared.stored === null && !cleared.style, `残留设置=${String(cleared.stored)} 残留样式=${cleared.style}`)
 
   // 源码侧也钉一次：删掉的文件不许被谁又建回来（构建产物里同样不许有那套类名）
   const srcDir = path.join(ROOT, 'web', 'src')
-  check('⑤ web/src 里没有侧栏/页头条那套组件文件',
+  check('⑥ web/src 里没有侧栏/页头条那套组件文件',
     !fs.existsSync(path.join(srcDir, 'AppRail.tsx')) && !fs.existsSync(path.join(srcDir, 'PageBar.tsx')),
     [fs.existsSync(path.join(srcDir, 'AppRail.tsx')) && 'AppRail.tsx', fs.existsSync(path.join(srcDir, 'PageBar.tsx')) && 'PageBar.tsx'].filter(Boolean).join('、') || '干净')
   const css = fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8')
-  check('⑤样式表里没有 v2 的类名残留',
+  check('⑥样式表里没有 v2 的类名残留',
     !/\.app-rail|\.rail-item|\.page-bar|\.app-frame|\.rail-tabs/.test(css), '命中了 v2 选择器')
+  check('⑥「自定义」弹窗的代码里没有分章规则那一段（判代码，不只是判界面）',
+    !fs.readFileSync(path.join(srcDir, 'CustomizeModal.tsx'), 'utf8').includes('tocRules'),
+    'CustomizeModal.tsx 又长回了 tocRules')
 
   check('全程没有页面异常', errors.length === 0, errors.slice(0, 2).join(' | '))
 } catch (error) {

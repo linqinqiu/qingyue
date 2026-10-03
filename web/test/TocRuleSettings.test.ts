@@ -29,16 +29,27 @@ test('目录规则不参与朗读会话身份（换规则不该打断正在读�
     'txtTocRule 进了 ttsSessionKey 的话，改目录规则会把正在播的朗读打断')
 })
 
-test('这一组不只在读本地书时才出现（用户：「txt目录规则你也没有做啊」）', () => {
-  const reader = read('../src/ReaderScreen.tsx')
-  assert.ok(!reader.includes('!!localBook && (tocRuleOptions'), '整组的门槛不许是"正在读本地书"')
-  assert.ok(reader.includes('{(tocRuleOptions?.length ?? 0) > 0 && ('), '只看规则清单取到没有，与是不是本地书无关')
-  assert.match(reader, /\{!!localBook && onReparseLocal/, '"重切"这个动作仍然只对着正在读的那本本地书')
-  // 不打开任何书也要能设默认值：自定义弹窗里有一份
+/**
+ * 三个入口各管一件事（用户 2026-10-03：「『自定义』弹窗成了杂物间」+「抽屉里只留
+ * 『这本用的哪条 + 重切』」）。原来"下一本的默认规则"同时挂在阅读设置抽屉和「自定义」里，
+ * 而抽屉里那颗选择器一动手就把全局默认改了 —— 同一个旗标兼两个职务，跟 `enable` 那个 bug 同形状。
+ *
+ * 现在的分法：书架「导入本地」旁边 = 下一本用哪条 + 哪几条参与自动打分；
+ * 阅读设置抽屉 = 只对着手上这本（暂选，不写全局）。
+ */
+test('默认规则长在书架的导入动作旁边，不在「自定义」里', () => {
   const customize = read('../src/CustomizeModal.tsx')
-  assert.match(customize, /本地书分章规则/, '「自定义」里有这一组')
-  assert.match(customize, /api\.tocRules\(\)/, '它自己去服务端取规则清单')
-  assert.match(customize, /txtTocRule/, '写的就是同一个设置项，不是又造一份状态')
+  // 判的是代码痕迹，不是那句"搬走了"的说明文字
+  assert.doesNotMatch(customize, /api\.tocRules|txtTocRule|<Select/, '「自定义」只剩皮肤；分章规则的代码别再长回来')
+  const main = read('../src/main.tsx')
+  assert.match(main, /<TocRulesModal/, '书架渲染这个弹窗')
+  assert.match(main, /<span>分章规则<\/span>/, '入口按钮就挨着「导入本地」')
+  assert.match(main, /onTxtTocRuleChange=\{value => setSettings\(\{ \.\.\.settings, txtTocRule: value \}\)\}/,
+    '它写的是 App 那一份阅读设置，不是又造一份状态')
+  const modal = read('../src/TocRulesModal.tsx')
+  assert.match(modal, /api\.tocRules\(\)/, '它自己去服务端取规则清单')
+  assert.match(modal, /onClick=\{onImport\}/, '弹窗里能直接接着导书，不用关掉再找那颗按钮')
+
   // 备份里那份要真的能套用到服务端规则表（不是只"收下"）
   const backup = read('../src/BackupPage.tsx')
   assert.match(backup, /api\.applyTocRulesFromBackup\(\)/, '备份页对这条有真的套用动作')
@@ -47,15 +58,23 @@ test('这一组不只在读本地书时才出现（用户：「txt目录规则�
   assert.match(store, /APPLYABLE_NAMES = listOf\([^)]*"txtTocRule\.json"/, '服务端也把这条标成可套用（界面上的按钮按它出现）')
 })
 
-test('设置面板与导入都接上了（不只是一个能改的 localStorage 值）', () => {
+test('阅读设置抽屉里那一档只对着手上这本', () => {
   const reader = read('../src/ReaderScreen.tsx')
+  assert.match(reader, /\{!!localBook && \(tocRuleOptions\?\.length \?\? 0\) > 0 && \(/,
+    '在线书没有"目录规则"这件事，这一组就跟着本地书出现')
   assert.match(reader, /setting-label">本地书目录/, '面板里有这一组')
-  assert.match(reader, /ariaLabel="TXT 目录规则"/, '用的是站内 Select，不是原生 select')
+  assert.match(reader, /现在用的是「\{ruleLabelOf\(localBook\.tocRule\)\}」/, '报的是这本书**实际**用的规则')
+  assert.match(reader, /ariaLabel="换一条规则重切这本"/, '那颗选择器的名字就说清了它只管这本')
   assert.match(reader, /按这条规则重新识别目录/, '有"重切"这个动作，不是选了不生效')
   assert.match(reader, /api\.reparseLocalBook/, '重切真的打到服务端')
-  assert.match(reader, /setShelfTocRule\(item\?\.tocRule/, '面板显示的是这本书**实际**用的规则，不是设置框里高亮的那条')
+  assert.match(reader, /setShelfTocRule\(item\?\.tocRule/, '重切之后把服务端说的那条回填进面板，界面不沿用旧值')
+  assert.doesNotMatch(reader, /ariaLabel="TXT 目录规则"/, '"下一本用哪条"不在抽屉里改：抽屉与弹窗各留一条路，避免重复入口')
+  assert.doesNotMatch(reader, /update\(\{ txtTocRule/, '抽屉里的暂选绝不写全局默认（那是"改这本"时最不该发生的事）')
+  assert.match(reader, /onReparseLocal\(repickRule\)/, '重切用的是那颗选择器的暂选')
+  assert.match(reader, /useEffect\(\(\) => \{ setRepick\(null\) \}, \[localBook\?\.name\]\)/,
+    '换书时暂选归零：抽屉是常驻挂载的，不清就会带着上一本的选择')
   const main = read('../src/main.tsx')
-  assert.match(main, /api\.importLocalBooks\(list, loadReaderSettings\(\)\.txtTocRule\)/, '导入时带上当前选择')
+  assert.match(main, /api\.importLocalBooks\(list, txtTocRule\)/, '导入用的是书架那一份选择')
 })
 
 /**
@@ -80,10 +99,11 @@ test('手动可选 与 参与自动打分 是两件事，界面和服务端都�
   assert.match(api, /toggleTocRule: \(key: string, enable: boolean\)/)
   assert.match(api, /enable\?: boolean; broken\?: boolean/, '选项要带得上"参不参与自动"和"正则坏没坏"')
 
-  const modal = read('../src/CustomizeModal.tsx')
-  assert.match(modal, /tocPickable = \(tocRules\?\.options \?\? \[\]\)\.filter\(option => !option\.broken\)/,
+  const modal = read('../src/TocRulesModal.tsx')
+  assert.match(modal, /pickable = options\.filter\(option => !option\.broken\)/,
     '默认规则选择器列的是全部能用的规则')
-  assert.match(modal, /tocRuleRows/, '另有一张规则清单（开关在那儿，不在选择器里）')
+  assert.match(modal, /rows = options\.filter\(option => !option\.builtIn && option\.key !== 'auto'\)/,
+    '另有一张规则清单（开关在那儿，不在选择器里）')
   assert.match(modal, /aria-label=\{`\$\{rule\.label\} 参与自动选择`\}/, '开关说的是它真正管的那件事')
   assert.match(modal, /<code title=\{rule\.rule\}>/, '正则原文要露出来，否则没人判断得了它适不适合自己的书')
   assert.match(modal, /手动选一条不需要先"启用"它/, '界面文案把这两件事分开讲')

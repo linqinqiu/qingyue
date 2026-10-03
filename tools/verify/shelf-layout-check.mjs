@@ -160,13 +160,13 @@ try {
       tintedFallbacks: fallbacks.filter(f => f.tinted).length, fallbackCount: fallbacks.length,
       sample: fallbacks[0]?.raw.slice(0, 90) ?? '',
       tracks: tracks.length,
-      nubs: tracks.filter(t => t.px > 0 && t.px < 8 && t.ratio < 0.02).length,
+      nubs: tracks.filter(t => t.px > 0 && t.px < 8).length,
       overFull: tracks.filter(t => t.ratio > 1.001).length,
     }
   })
   check('占位封面只用纸色与墨色，不掺强调色',
     coverPaint.tintedFallbacks === 0, `${coverPaint.tintedFallbacks}/${coverPaint.fallbackCount} 张染了 accent（accent=${coverPaint.accent} solid=${coverPaint.solid} soft=${coverPaint.soft}）`)
-  check('进度条不画 8px 以下的绿残块（读到 2% 以下宁可不显示）',
+  check('进度条不画 8px 以下的绿残块（读到 8% 以下宁可不显示，见 main.tsx 的 GRID_READ_TRACK_MIN_PERCENT）',
     coverPaint.nubs === 0, JSON.stringify(coverPaint.tracks) + ' 条里有 ' + coverPaint.nubs + ' 个残块')
   check('进度填充不会溢出封面宽度', coverPaint.overFull === 0, JSON.stringify(coverPaint))
 

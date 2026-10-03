@@ -128,13 +128,18 @@ test('theme-color 跟着皮肤走，且取的是计算值', () => {
   assert.match(main, /meta\[name="theme-color"\]/)
 })
 
-test('样式表里两张新界面都有规则（更新日志页与自定义弹窗）', () => {
+test('样式表里两张新界面都有规则（更新日志页、自定义弹窗、分章规则弹窗）', () => {
   const css = read('..', 'src', 'styles.css')
   assert.match(css, /\.customize-dialog \{/)
   assert.match(css, /\.changelog-page \{/)
   assert.match(css, /\.theme-swatch-custom/)
   assert.match(css, /\.menu-section-action/)
   assert.match(css, /\.theme-name/)
+  // 搬出去的弹窗得有自己完整的壳：类名不在样式表里 = 渲染出来是一个没有边框没有滚动的裸 div
+  assert.match(css, /\.toc-rules-modal \{/)
+  assert.match(css, /\.toc-rules-body \{/)
+  assert.match(css, /\.toc-rule \{/)
+  assert.doesNotMatch(css, /\.customize-toc-/, '分章规则的样式不姓"自定义"了，类名也跟着搬')
 })
 
 /**

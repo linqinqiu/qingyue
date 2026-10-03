@@ -1,8 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { api, type TocRuleList } from './api'
+import React, { useState } from 'react'
 import { Icon } from './icons'
-import { Select } from './Select'
-import { toast } from './Toast'
 import { useEscapeClose } from './useEscapeClose'
 import { availableSkins, BUILTIN_SKINS, parseSkinId, type ReaderSettings } from './readerSettings'
 
@@ -15,6 +12,8 @@ import { availableSkins, BUILTIN_SKINS, parseSkinId, type ReaderSettings } from 
  *
  * 这里原来还有一档「界面布局（顶栏 / 侧栏）」，随界面框架 v2 一起撤掉了 ——
  * 用户 2026-10-01 拍板「整个应用回旧版，撤掉 v2」，只剩一套外壳时那一档没有可选项可言。
+ * 本地书分章规则也搬走了（用户 2026-10-03：「『自定义』弹窗成了杂物间」），
+ * 它现在长在书架的导入动作旁边 —— 见 `TocRulesModal`。
  */
 export function CustomizeModal({
   settings,
@@ -32,29 +31,6 @@ export function CustomizeModal({
   const [skinError, setSkinError] = useState('')
 
   const sanitized = parseSkinId(skinId)
-  /**
-   * 本地书的分章规则表（用户 2026-10-02：「txt目录规则你也没有做啊」）。
-   * 原来这一档只在"正在读一本本地书"时才出现，于是没在读本地书的人根本不知道有这件事 ——
-   * 它是导入下一本时生效的默认值，跟皮肤一样属于"这台机器的设置"，所以放在这里一份。
-   */
-  const [tocRules, setTocRules] = useState<TocRuleList | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    void api.tocRules().then(list => { if (!cancelled) setTocRules(list) }).catch(() => undefined)
-    return () => { cancelled = true }
-  }, [])
-  /**
-   * 「参与自动打分」和「能不能手动选」是两件事，界面上就得分成两处表达：
-   * 上面那颗选择器列全部（编得出正则的），下面的清单只管开关自动候选。
-   */
-  const tocPickable = (tocRules?.options ?? []).filter(option => !option.broken)
-  const tocRuleRows = (tocRules?.options ?? []).filter(option => !option.builtIn && option.key !== 'auto')
-  const toggleTocRule = (key: string, enable: boolean) => {
-    void api.toggleTocRule(key, enable)
-      .then(() => api.tocRules())
-      .then(setTocRules)
-      .catch(error => toast.error(error instanceof Error ? error.message : '这条规则没开关成功'))
-  }
   const cssLooksLikeRules = /(^|\})\s*[.#a-zA-Z][^{}]*\{[^{}]*\}/.test(skinCss)
 
   const applySkin = () => {
@@ -183,73 +159,6 @@ export function CustomizeModal({
               </p>
             )}
           </section>
-          {(tocRules?.options.length ?? 0) > 1 && (
-            <section className="customize-section">
-              <h3>本地书分章规则</h3>
-              <div className="customize-field">
-                <span>导入下一本 TXT 时按哪条切目录</span>
-                <Select
-                  ariaLabel="TXT 目录规则（默认）"
-                  value={settings.txtTocRule}
-                  options={tocPickable.map(option => ({
-                    value: option.key,
-                    label: option.enable || option.builtIn || option.key === 'auto' ? option.label : `${option.label}（不参与自动）`,
-                    hint: option.example || undefined,
-                  }))}
-                  onChange={value => onChange({ ...settings, txtTocRule: value })}
-                />
-              </div>
-              <p className="customize-note">
-                上面那颗列全部 {tocPickable.length} 条 —— 手动选一条不需要先"启用"它。
-                下面这些勾只管一件事：<strong>「自动」打分时允许考虑哪几条</strong>
-                （当前 {tocRules!.enabled ?? 0} / {tocRules!.total ?? 0} 条参与）。
-                已经在读的那本用它当初切好的规则，在那本书的「阅读设置 → 本地书目录」里单独换。
-                手机上改过启用勾选的话，到「备份包」把包导进来，在「包里收下的条目」里对 TXT 分章规则点「套用」。
-              </p>
-              <div className="customize-toc-rules">
-                {tocRuleRows.map(rule => (
-                  <div key={rule.key} className={`customize-toc-rule${rule.broken ? ' is-broken' : ''}`}>
-                    <label className="customize-toc-rule-switch">
-                      <input
-                        type="checkbox"
-                        checked={rule.enable !== false}
-                        disabled={rule.broken}
-                        aria-label={`${rule.label} 参与自动选择`}
-                        onChange={event => toggleTocRule(rule.key, event.target.checked)}
-                      />
-                      <span>自动</span>
-                    </label>
-                    <div className="customize-toc-rule-main">
-                      <strong>{rule.label}</strong>
-                      <code title={rule.rule}>{rule.rule || '内置逐行匹配'}</code>
-                      {rule.example && <small>例：{rule.example}</small>}
-                      {rule.broken && <small className="customize-toc-rule-broken">正则在本机编译不出来，选了也切不出章</small>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {tocRules!.overridden && (
-                <div className="customize-actions">
-                  <button
-                    type="button"
-                    className="subtle-button"
-                    onClick={() => {
-                      // 套用是一次显式动作，就得能显式反悔：这条清掉本机那份覆盖，回到随包的 26 条
-                      void api.resetTocRules()
-                        .then(result => {
-                          toast.success(`已恢复随包那份规则表（${result.total} 条）`)
-                          return api.tocRules()
-                        })
-                        .then(list => setTocRules(list))
-                        .catch(() => toast.error('恢复失败'))
-                    }}
-                  >
-                    恢复成随包那份规则表
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
         </div>
       </div>
     </div>

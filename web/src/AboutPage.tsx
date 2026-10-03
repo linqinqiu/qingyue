@@ -4,6 +4,10 @@ import { api, type AboutInfo, type UpdateCheckResult } from './api'
 /**
  * 「关于」（用户 2026-10-02：「加入关于（名称，开发者，更新日志，检查更新，用户协议，开源许可，免责声明）」）。
  *
+ * 这一页也是"这条产品是谁做的、改到哪一版、怎么按键"的落点：顶栏「我的」里原来的
+ * 「快捷键」「更新日志」两条都收到这里来了（用户 2026-10-03：「顶栏『我的』菜单堆太多」）。
+ * 版本号本身在顶栏还是个芯片，点它同样进更新日志 —— 那是同一个目标的第二条路，不算重复入口。
+ *
  * 版本与仓库地址都从服务端 `/api/about` 拿：界面里写死一个版本号，就有了第二个事实来源，
  * 而那两个来源一定会漂（这条在本项目里翻过车，见 `tools/verify/version-check.mjs`）。
  */
@@ -42,7 +46,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export function AboutPage({ onOpenChangelog }: { onOpenChangelog: () => void }) {
+export function AboutPage({
+  onOpenChangelog,
+  onOpenShortcuts,
+}: {
+  onOpenChangelog: () => void
+  onOpenShortcuts: () => void
+}) {
   const [info, setInfo] = useState<AboutInfo | null>(null)
   const [check, setCheck] = useState<UpdateCheckResult | null>(null)
   const [checking, setChecking] = useState(false)
@@ -78,6 +88,9 @@ export function AboutPage({ onOpenChangelog }: { onOpenChangelog: () => void }) 
             {checking ? '正在检查…' : '检查更新'}
           </button>
           <button type="button" className="ghost-button" onClick={onOpenChangelog}>更新日志</button>
+          {/* 「更新日志」「快捷键」从「我的」下拉里收进来：那一栏原来堆了 9 项，
+              用户 2026-10-03 拍板「顶栏『我的』菜单堆太多」。版本芯片本身也能进日志。 */}
+          <button type="button" className="ghost-button" onClick={onOpenShortcuts}>快捷键</button>
           {homepage && <a className="ghost-button" href={homepage} target="_blank" rel="noreferrer">项目主页</a>}
         </div>
         {notice && <p className="about-check is-unreachable">{notice}</p>}

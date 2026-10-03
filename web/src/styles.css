@@ -5195,18 +5195,57 @@ input[type=range] { min-height: 24px; }
 .customize-error { margin: 0; color: var(--danger); font-size: 13px; }
 .customize-note { margin: 0; color: var(--muted); font-size: 12px; }
 .customize-note code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+/* ==========================================================================
+ * 「本地书分章规则」弹窗（2026-10-03：从「自定义」里搬出来，挂在书架导入旁边）
+ * 壳沿用「自定义」弹窗那一套尺寸与圆角：同一应用里两种弹窗几何只会显得随机。
+ * ========================================================================== */
+.toc-rules-modal {
+  width: min(560px, 94vw);
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+  overflow: hidden;
+  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.toc-rules-head {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.toc-rules-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 600; }
+.toc-rules-head h2 svg { width: 18px; height: 18px; color: var(--accent); }
+.toc-rules-close {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  color: var(--muted); background: transparent;
+}
+.toc-rules-close:hover { background: var(--surface-muted); color: var(--ink); }
+.toc-rules-close svg { width: 16px; height: 16px; }
+.toc-rules-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 14px; }
+.toc-rules-failed { margin: 0; color: var(--danger); font-size: 13px; }
+.toc-rules-loading { margin: 0; color: var(--muted); font-size: 13px; }
 /* 分章规则清单：一条一行，正则原文必须露出来 —— 不写出来没人判断得了它适不适合自己的书 */
-.customize-toc-rules { display: grid; gap: 1px; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); }
-.customize-toc-rule { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 10px; background: var(--surface); }
-.customize-toc-rule-switch { display: flex; align-items: center; gap: 5px; padding-top: 2px; color: var(--muted); font-size: var(--t-xs); cursor: pointer; }
-.customize-toc-rule-switch input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
-.customize-toc-rule.is-broken { opacity: .62; }
-.customize-toc-rule.is-broken .customize-toc-rule-switch { cursor: not-allowed; }
-.customize-toc-rule-main { display: grid; gap: 3px; min-width: 0; }
-.customize-toc-rule-main strong { font-size: var(--t-sm); font-weight: 600; }
-.customize-toc-rule-main code { overflow: hidden; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.customize-toc-rule-main small { color: var(--muted); font-size: var(--t-xs); overflow-wrap: anywhere; }
-.customize-toc-rule-broken { color: var(--danger); }
+.toc-rules-list { display: grid; gap: 1px; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); }
+.toc-rule { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 10px; background: var(--surface); }
+.toc-rule-switch { display: flex; align-items: center; gap: 5px; padding-top: 2px; color: var(--muted); font-size: var(--t-xs); cursor: pointer; }
+.toc-rule-switch input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
+.toc-rule.is-broken { opacity: .62; }
+.toc-rule.is-broken .toc-rule-switch { cursor: not-allowed; }
+.toc-rule-main { display: grid; gap: 3px; min-width: 0; }
+.toc-rule-main strong { font-size: var(--t-sm); font-weight: 600; }
+.toc-rule-main code { overflow: hidden; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.toc-rule-main small { color: var(--muted); font-size: var(--t-xs); overflow-wrap: anywhere; }
+.toc-rule-broken { color: var(--danger); }
+/* 阅读设置抽屉里那一档：这一本用的哪条 + 就地换一条重切，选择器和按钮排同一行，窄屏再折。 */
+.toc-repick { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.toc-repick > * { min-width: 0; }
+.toc-repick .rules-setting-btn { flex: none; }
 .customize-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .customize-saved { color: var(--muted); font-size: 12px; }
 

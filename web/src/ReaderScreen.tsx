@@ -65,13 +65,22 @@ function ReaderSettingsControls({
   const update = (value: Partial<ReaderSettings>) => onChange({ ...settings, ...value })
   const [reparseBusy, setReparseBusy] = useState(false)
   const [reparseMessage, setReparseMessage] = useState('')
+  /**
+   * 「这本换成哪条重切」的暂选，**只影响这一本**：不写进 `settings.txtTocRule`，
+   * 否则"给在读的这本换个规则"会顺手把下一本导入的默认规则也改掉（用户 2026-10-03：
+   * 一个元素干两件事、功能分配不当）。null 表示还没改过，跟着这本当前生效的那条。
+   */
+  const [repick, setRepick] = useState<string | null>(null)
+  const repickRule = repick ?? (localBook?.tocRule || 'auto')
+  // 抽屉常驻挂载：换一本书读时那颗选择器要回到"跟着这本"，不能留着上一本的暂选。
+  useEffect(() => { setRepick(null) }, [localBook?.name])
   const ruleLabelOf = (key?: string | null) =>
     tocRuleOptions?.find(option => option.key === (key || 'auto'))?.label ?? (key || '自动选择（按正文打分）')
   const runReparse = async () => {
     if (!onReparseLocal || reparseBusy) return
     setReparseBusy(true)
     setReparseMessage('')
-    const failure = await onReparseLocal(settings.txtTocRule).catch((error: unknown) => error instanceof Error ? error.message : '重切失败')
+    const failure = await onReparseLocal(repickRule).catch((error: unknown) => error instanceof Error ? error.message : '重切失败')
     setReparseMessage(failure ?? '')
     setReparseBusy(false)
   }
@@ -99,36 +108,37 @@ function ReaderSettingsControls({
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
     {/*
-      本地书的目录规则（用户 2026-10-02：「txt目录规则…你也没有做啊」—— 原来这一组只在读本地书时
-      才出现，于是读完一本在线书的人根本不知道有这件事）。选择器**始终出现**：它写的是"下一本导入的
-      本地书用哪条"。只有真正在读本地书时，才多出示一行"这本现在实际用的是哪条"和重切按钮 ——
-      那句报的是**实际生效**的那条，不是框里高亮的那条：选了 A 而 A 在这本书上切不出第二个章节时
-      服务端会回落，界面不能装作 A 生效了。
+      这一档只管**手上这一本**（用户 2026-10-03：「抽屉里只留『这本用的哪条 + 重切』」）。
+      "下一本导入用哪条"不在这儿改 —— 那是在书架「导入本地」旁边的「分章规则」弹窗里，
+      两处各管一件事，就不会出现"想改这本却把默认值带跑了"。
+      上面那句报的是**实际生效**的那条，不是框里选中的那条：选了 A 而 A 在这本书上切不出
+      第二个章节时服务端会回落，界面不能装作 A 生效了。
     */}
-    {(tocRuleOptions?.length ?? 0) > 0 && (
+    {!!localBook && (tocRuleOptions?.length ?? 0) > 0 && (
       <section className="setting-section">
         <span className="setting-label">本地书目录</span>
-        <Select
-          ariaLabel="TXT 目录规则"
-          value={settings.txtTocRule}
-          options={tocRuleOptions!
-            .filter(option => !option.broken)
-            .map(option => ({
-              value: option.key,
-              label: option.enable || option.builtIn || option.key === 'auto' ? option.label : `${option.label}（不参与自动）`,
-              hint: option.example || undefined,
-            }))}
-          onChange={value => update({ txtTocRule: value })}
-        />
         <small className="setting-hint">
-          {localBook
-            ? `这本《${localBook.name}》现在用的是「${ruleLabelOf(localBook.tocRule)}」。换规则会重切目录并清掉正文缓存，阅读进度按新章数夹住。`
-            : '这一条用于**下一本导入的本地书**；已经在读的那本用自己当初切好的规则，在下面那本书的阅读设置里单独换。'}
+          这本《{localBook.name}》现在用的是「{ruleLabelOf(localBook.tocRule)}」。
+          换规则会重切目录并清掉正文缓存，阅读进度按新章数夹住。
         </small>
-        {!!localBook && onReparseLocal && (
-          <button type="button" className="rules-setting-btn" disabled={reparseBusy} onClick={() => void runReparse()}>
-            {reparseBusy ? '正在重切目录…' : '按这条规则重新识别目录'}
-          </button>
+        {!!onReparseLocal && (
+          <div className="toc-repick">
+            <Select
+              ariaLabel="换一条规则重切这本"
+              value={repickRule}
+              options={tocRuleOptions!
+                .filter(option => !option.broken)
+                .map(option => ({
+                  value: option.key,
+                  label: option.enable || option.builtIn || option.key === 'auto' ? option.label : `${option.label}（不参与自动）`,
+                  hint: option.example || undefined,
+                }))}
+              onChange={setRepick}
+            />
+            <button type="button" className="rules-setting-btn" disabled={reparseBusy} onClick={() => void runReparse()}>
+              {reparseBusy ? '正在重切目录…' : '按这条规则重新识别目录'}
+            </button>
+          </div>
         )}
         {!!reparseMessage && <small className="setting-hint">{reparseMessage}</small>}
       </section>

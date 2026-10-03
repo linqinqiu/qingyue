@@ -36,6 +36,7 @@ import { LogsModal } from './LogsModal'
 import { ShortcutHelp } from './ShortcutHelp'
 import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, shortcutFor } from './shortcuts'
 import { SourceHealthModal } from './SourceHealthModal'
+import { TocRulesModal } from './TocRulesModal'
 import { useHealthRun } from './sourceHealthRun'
 import { SourceEditor } from './SourceEditorPanel'
 import { SourceGroupModal } from './SourceGroupModal'
@@ -53,6 +54,15 @@ const SOURCE_PAGE_SIZE = 120
 /** 书籍详情弹窗的目录预览：初始水位与「继续展开」步长。步长按千章走，五千章的书两次点完。 */
 const TOC_INITIAL = 16
 const TOC_STEP = 1000
+
+/**
+ * 网格卡封面下沿那条阅读进度：**读到 8% 以下不画**。
+ * 封面宽 120~200px，8% 才能保证画出来的最窄一段也不低于 8px。阈值原来是 2%，
+ * 于是一本 202 章的书读到第 4 章就在左下角顶出一枚三像素的绿点 ——
+ * 用户 2026-10-02 报的「封面下面或左下角有一片绿，有点有，有点没有」就是这个，
+ * 而 `shelf-layout-check.mjs` 按「填充 >0 且 <8px」判红（按 2% 判会漏：2% 恰好就是残块）。
+ */
+const GRID_READ_TRACK_MIN_PERCENT = 8
 
 /**
  * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效，音乐` 表示同时属于两个分组。
@@ -2232,7 +2242,17 @@ function BookManageModal({
   )
 }
 
-function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void; sources: SourceSummary[] }) {
+function ShelfPage({
+  onOpen,
+  sources,
+  txtTocRule,
+  onTxtTocRuleChange,
+}: {
+  onOpen: (item: BookshelfItem) => void
+  sources: SourceSummary[]
+  txtTocRule: string
+  onTxtTocRuleChange: (value: string) => void
+}) {
   const [items, setItems] = useState<BookshelfItem[]>([])
   const [message, setMessage] = useState('')
   const [switchingItem, setSwitchingItem] = useState<BookshelfItem | null>(null)
@@ -2342,6 +2362,8 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
   
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  /** 「本地书分章规则」弹窗：从书架的导入动作旁边打开，不在「自定义」里。 */
+  const [showTocRules, setShowTocRules] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const previousStateRef = useRef<Map<string, string>>(new Map())
 
@@ -2389,9 +2411,9 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
     setUploading(true)
     toast.info(`正在解析并导入 ${list.length} 本本地书籍…`)
     try {
-      // 导入时带上「阅读设置 → 本地书目录」那一档。ShelfPage 不吃 settings prop，
-      // 这里读的是同一份 localStorage（改设置即刻落盘），不是另存一份偏好。
-      const resp = await api.importLocalBooks(list, loadReaderSettings().txtTocRule)
+      // 导入时用「分章规则」那一档选中的规则；它是 App 那一份阅读设置里的同一个字段，
+      // 不是书架自己另存的偏好（两处各存一份就会出现"选了却没生效"）。
+      const resp = await api.importLocalBooks(list, txtTocRule)
       if (resp.imported > 0) {
         // 只报数量的 toast 等于没说：哪几本进来了、进到哪一组，要当场看得见
         const names = resp.results.filter(r => r.success).map(r => `《${r.name}》`).slice(0, 3).join('、')
@@ -2648,6 +2670,17 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
           >
             <Icon name="upload" />
             <span>{uploading ? '导入中…' : '导入本地'}</span>
+          </button>
+          {/* 分章规则跟着导入走（用户 2026-10-03：「『自定义』弹窗成了杂物间」）：
+              只有准备导一本书时才会想起它，所以入口就放在那颗导入按钮旁边。 */}
+          <button
+            type="button"
+            className="shelf-import-btn"
+            onClick={() => setShowTocRules(true)}
+            title="本地 TXT 按哪条规则切章节"
+          >
+            <Icon name="list" />
+            <span>分章规则</span>
           </button>
           <div className="shelf-layout-picker" role="group" aria-label="书架布局">
             <button
@@ -2966,8 +2999,9 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
                       <div className="shelf-card-progress-fill" style={{ width: `${percent}%` }} />
                     </div>
                   )}
-                  {/* 上游网格卡封面底部有阅读进度条；原来只标了缓存章数，读到哪儿完全看不出来 */}
-                  {!item.completed && readPercent >= 2 && (
+                  {/* 上游网格卡封面底部有阅读进度条；原来只标了缓存章数，读到哪儿完全看不出来。
+                      阈值不是"有一点进度就画"，见 GRID_READ_TRACK_MIN_PERCENT 那段。 */}
+                  {!item.completed && readPercent >= GRID_READ_TRACK_MIN_PERCENT && (
                     <div className="shelf-card-read-track" aria-hidden="true">
                       <div className="shelf-card-read-fill" style={{ width: `${readPercent}%` }} />
                     </div>
@@ -3061,6 +3095,18 @@ function ShelfPage({ onOpen, sources }: { onOpen: (item: BookshelfItem) => void;
           knownAlternateSources={switchingItem.alternateSources}
           onSwitch={handleSwitchShelfSource}
           onClose={() => setSwitchingItem(null)}
+        />
+      )}
+      {showTocRules && (
+        <TocRulesModal
+          value={txtTocRule}
+          onChange={onTxtTocRuleChange}
+          onClose={() => setShowTocRules(false)}
+          onImport={() => {
+            // 导书这条动作就着这一屏做完：关掉弹窗、直接开文件选择，不再让人回去找那颗按钮
+            setShowTocRules(false)
+            fileInputRef.current?.click()
+          }}
         />
       )}
     </main>
@@ -3339,7 +3385,6 @@ function App() {
         onOpenReplaceRules={() => setShowReplaceRules(true)}
         onOpenOfflineCache={() => setShowOfflineCache(true)}
         onOpenLogs={() => setShowLogs(true)}
-        onOpenShortcuts={() => setShowShortcuts(true)}
         onOpenChangelog={() => navigate('changelog')}
         onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
@@ -3355,11 +3400,19 @@ function App() {
       ) : page === 'changelog' ? (
         <ChangelogPage serverVersion={serverVersion} />
       ) : page === 'about' ? (
-        <AboutPage onOpenChangelog={() => navigate('changelog')} />
+        <AboutPage
+          onOpenChangelog={() => navigate('changelog')}
+          onOpenShortcuts={() => setShowShortcuts(true)}
+        />
       ) : page === 'bookmarks' ? (
         <BookmarksPage onOpen={item => void openShelfItem(item)} />
       ) : page === 'shelf' ? (
-        <ShelfPage sources={sources} onOpen={item => void openShelfItem(item)} />
+        <ShelfPage
+          sources={sources}
+          onOpen={item => void openShelfItem(item)}
+          txtTocRule={settings.txtTocRule}
+          onTxtTocRuleChange={value => setSettings({ ...settings, txtTocRule: value })}
+        />
       ) : page === 'explore' ? (
         <ExplorePage onOpen={openExploreDetail} />
       ) : (

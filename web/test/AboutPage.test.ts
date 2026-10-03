@@ -53,7 +53,22 @@ test('许可那一栏说的是真话：运行时依赖与协议都列出来', ()
 
 test('路由与样式都接上了', () => {
   assert.match(read('../src/main.tsx'), /location\.hash === '#about' \? 'about'/)
-  assert.match(read('../src/main.tsx'), /<AboutPage onOpenChangelog=/)
+  assert.match(read('../src/main.tsx'), /<AboutPage[\s\S]{0,160}onOpenChangelog=\{/)
   assert.match(read('../src/AppHeader.tsx'), /<span>关于<\/span>/)
   assert.match(read('../src/styles.css'), /\.about-page \{/)
+})
+
+/**
+ * 「顶栏『我的』菜单堆太多」（用户 2026-10-03 拍板要瘦）。收掉的两条不是删功能：
+ * 「更新日志」本来就有两条路（顶栏版本芯片 + 这一页那颗按钮），「快捷键」这一页给一条。
+ */
+test('「我的」菜单不再重复列「更新日志」「快捷键」，这两条从「关于」进', () => {
+  assert.match(page, /onOpenShortcuts/, '关于页要有快捷键的入口')
+  assert.match(page, /<button type="button" className="ghost-button" onClick=\{onOpenShortcuts\}>快捷键<\/button>/)
+  assert.match(read('../src/main.tsx'), /onOpenShortcuts=\{\(\) => setShowShortcuts\(true\)\}/,
+    '点它要真的开那张表，不是摆个死按钮')
+  const header = read('../src/AppHeader.tsx')
+  assert.doesNotMatch(header, /<span>快捷键<\/span>/, '菜单里那条已经收进「关于」')
+  assert.doesNotMatch(header, /<span>更新日志<\/span>/, '菜单里那条与顶栏版本芯片是同一个目标，留芯片')
+  assert.match(header, /onClick=\{\(\) => onOpenChangelog\?\.\(\)\}/, '顶栏那颗版本芯片仍然直接进更新日志')
 })

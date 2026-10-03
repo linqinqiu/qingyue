@@ -15,10 +15,8 @@ export interface AppHeaderProps {
   onOpenReplaceRules?: () => void
   onOpenOfflineCache?: () => void
   onOpenLogs?: () => void
-  /** 「更新日志」页与「自定义」弹窗（皮肤）。 */
+  /** 顶栏那颗版本号芯片点开的「更新日志」页（菜单里不再重复列一条）。 */
   onOpenChangelog?: () => void
-  /** 「快捷键」那张表；表的内容与真正生效的键都来自 web/src/shortcuts.ts。 */
-  onOpenShortcuts?: () => void
   onOpenCustomize?: () => void
   /** 服务端 /healthz 报回来的版本号；空串表示还没问到（离线或启动中）。 */
   version?: string
@@ -37,7 +35,6 @@ export function AppHeader({
   onOpenOfflineCache,
   onOpenLogs,
   onOpenChangelog,
-  onOpenShortcuts,
   onOpenCustomize,
   version = '',
 }: AppHeaderProps) {
@@ -305,21 +302,6 @@ export function AppHeader({
                     <span>运行日志</span>
                   </button>
                 )}
-                {onOpenShortcuts && (
-                  <button
-                    type="button"
-                    className="menu-logout-btn"
-                    style={{ color: 'var(--ink)' }}
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      onOpenShortcuts()
-                    }}
-                  >
-                    <Icon name="keyboard" />
-                    <span>快捷键</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   className="menu-logout-btn"
@@ -333,22 +315,6 @@ export function AppHeader({
                   <Icon name="folder" />
                   <span>备份包</span>
                 </button>
-                {onOpenChangelog && (
-                  <button
-                    type="button"
-                    className="menu-logout-btn"
-                    style={{ color: 'var(--ink)' }}
-                    role="menuitem"
-                    aria-current={page === 'changelog' ? 'page' : undefined}
-                    onClick={() => {
-                      setMenuOpen(false)
-                      onOpenChangelog()
-                    }}
-                  >
-                    <Icon name="file" />
-                    <span>更新日志</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   className="menu-logout-btn"
