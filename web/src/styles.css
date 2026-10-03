@@ -4713,60 +4713,47 @@ input[type=range] { min-height: 24px; }
 .shelf-resume-track i { display: block; height: 100%; border-radius: 2px; background: var(--accent-solid); transition: width .2s ease; }
 .shelf-resume .primary-button { flex: none; }
 
-/* —— 网格卡封面底部的阅读进度（上游 BookshelfReadProgress 的位置）。
-   原来轨道是 18% 墨色铺满封面下沿，填充还带 `min-width: 5px`：每张卡底下一条灰带，
-   刚开读的卡左下角多一枚 5px 绿方块，有真封面的又被图压住 —— 就是用户 2026-10-02 说的
-   「封面下面或左下角有一片绿，有点有，有点没有」。现在轨道淡成一条刻痕，填充读到 2% 以上
-   才渲染（门槛在 main.tsx），并且不再有最小可见长度：读到 1/1000 章就该看不见。 —— */
-/* 封面下沿的阅读进度。原来是通长一条贴着封面底边（`left/right:0; bottom:0`），
-   亮色主题下就是一根压在圆角卡下面的方角绿线 —— 用户 2026-10-03「亮色主题下小说封面还是有问题」
-   量的就是它（track top=200 / cover 高 203 / fill rgb(31,106,76) / radius 0）。
-   改成**嵌在封面框内**的一条：四边内缩到 `.cover-fallback::after` 那道内框（7px）里面，
-   两端圆角，读到 100% 也是一条完整的胶囊而不是一根顶到边的线。 */
-.shelf-card-read-track { position: absolute; right: 11px; bottom: 11px; left: 11px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
-.shelf-card-read-fill { height: 100%; border-radius: 2px; background: var(--accent-solid); }
+/* —— 网格卡封面下沿那条阅读进度：整个不画了（用户 2026-10-03：「不用在下面显示绿色的书籍阅读进度条」）。
+   它的历史值得记下来，别哪天又长回来：先做成通长 3px 绿带（轨道还是 18% 墨色铺满下沿、
+   填充带 min-width:5px，于是刚开读的卡左下角多一枚绿方块）→ 改成读到 8% 以上才画 →
+   改成嵌在封面框内的圆角胶囊。两版都还是被指"封面下面有一片绿"。读到哪儿在卡下面那行
+   （第 N 章 / 百分比）、hover 信息层与顶部「继续阅读」那条里都看得到，封面本身不必再叠一层。
+   钉它的判据：shelf-layout-check 的"网格卡上不许出现阅读进度条"那一条。 —— */
 
-/* —— 占位封面：文字版书封。
-   之前有三处互相覆盖的 .cover-fallback，最终算出来是近白的 surface-muted 空板，
-   看上去像"图没加载出来"（用户 2026-10-01：默认封面有漏洞）。这里收口成唯一定义。
-   底色只走纸色（surface → surface-muted 竖向），强调色一处都不用：原来是一条 160deg 的
-   --accent-soft 斜渐变加左侧 4px 书脊，而晓白 / 护眼那两档里 accent-soft 就是浅绿，
-   于是每张占位封面染出一个绿角、有真封面的卡却没有（用户 2026-10-02 的截图）。
-   要"像一本书"靠的是排版本身：内框 + 书名字号，不是色块。 —— */
+/* —— 占位封面：文字版书封（用户 2026-10-03：「网格封面恢复前天那版的」）。
+   这一版就是 10-01 那套：一条 160deg 的浅绿斜纹 + 左侧 5px 书脊 + 一圈墨色描边。
+   10-02 我把它改成纯纸色加内框（当时的理由是 accent-soft 在晓白/护眼下就是浅绿，
+   会染出一个"有真封面的卡没有"的绿角），今天两版都看过之后用户要回带色纹的这一版 ——
+   记下来免得下一轮又被"顺手修正"回去。
+   注意：当时那张截图里真正刺眼的不是这块色纹，而是封面下沿的阅读进度条；
+   那条现在已经整个不画了（见 main.tsx 的网格卡），所以这里不再有"绿角"的问题。 —— */
 .cover-fallback {
-  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 6px; width: 100%; height: 100%; padding: 12% 10%; box-sizing: border-box;
   text-align: center; overflow: hidden;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ink) 5%, var(--surface)), var(--surface-muted));
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface-muted) 72%);
   color: var(--ink);
   font-family: Georgia, "Noto Serif SC", serif; font-weight: 600; line-height: 1.45;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
-}
-/* 内框压在 padding 内侧，等于给文字书封加了一圈"书壳"，避免整块看着就是一张空纸 */
-.cover-fallback::after {
-  content: ''; position: absolute; inset: 7px; pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent); border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent),
+    inset 5px 0 0 color-mix(in srgb, var(--ink) 10%, transparent);
 }
 /* 390px 档实测：封面只有 ~95px 宽，"镜夜思（未修改）"这种作者串会把字挤出去 3px，
    表现为整页横向滚动（source-scale-check 三条 FAIL 同一个根因）。作者单行 + 省略号，
    标题多行但也不许撑破容器。 */
 .cover-fallback-title { max-width: 100%; min-width: 0; display: -webkit-box; overflow: hidden; font-size: max(14px, min(19px, 1.1vw + 9px)); line-height: 1.42; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
 .cover-fallback-author { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-family: Inter, "PingFang SC", sans-serif; font-size: max(10px, min(var(--t-sm), 2.6vw)); font-weight: 500; letter-spacing: .02em; }
-/* 46px 以下的小封面放不下字，且旁边就写着书名作者：退回两字，也不要内框/渐变 */
+/* 46px 以下的小封面放不下字，且旁边就写着书名作者：退回两字，也不要色纹与书脊 */
 .cover-fallback-compact { gap: 0; padding: 0; box-shadow: none; background: var(--surface-muted); color: var(--muted); font-size: 15px; letter-spacing: .04em; }
-.cover-fallback-compact::after { display: none; }
 .cover-fallback-compact span { display: block; -webkit-line-clamp: 1; }
 /*
   列表档的封面只有 52px 宽，却按网格那套排版画：14px 起跳的书名一行塞得下三个字，
-  作者行再挤一层，整张卡看起来像"字溢出来的空白块"（亮色主题下最明显，用户 2026-10-03
-  「亮色主题下小说封面还是有问题」里的另一半）。这一档右边就写着书名与作者，
-  封面里不必重复 —— 收掉作者行、书名压到三行小字、内框跟着缩。
+  作者行再挤一层，整张卡看起来像"字溢出来的空白块"。这一档右边就写着书名与作者，
+  封面里不必重复 —— 收掉作者行、书名压到三行小字。
 */
 .shelf-grid.shelf-mode-list .cover-fallback-author { display: none; }
 .shelf-grid.shelf-mode-list .cover-fallback { gap: 0; }
 .shelf-grid.shelf-mode-list .cover-fallback-title { font-size: 12px; -webkit-line-clamp: 3; }
-.shelf-grid.shelf-mode-list .cover-fallback::after { inset: 4px; }
 
 /* —— 上游只有列表卡才显示作者，网格档把这一行让给书名 —— */
 .shelf-grid.shelf-mode-grid .shelf-card-author { display: none; }

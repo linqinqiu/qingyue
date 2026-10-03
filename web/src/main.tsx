@@ -57,15 +57,6 @@ const TOC_INITIAL = 16
 const TOC_STEP = 1000
 
 /**
- * 网格卡封面下沿那条阅读进度：**读到 8% 以下不画**。
- * 封面宽 120~200px，8% 才能保证画出来的最窄一段也不低于 8px。阈值原来是 2%，
- * 于是一本 202 章的书读到第 4 章就在左下角顶出一枚三像素的绿点 ——
- * 用户 2026-10-02 报的「封面下面或左下角有一片绿，有点有，有点没有」就是这个，
- * 而 `shelf-layout-check.mjs` 按「填充 >0 且 <8px」判红（按 2% 判会漏：2% 恰好就是残块）。
- */
-const GRID_READ_TRACK_MIN_PERCENT = 8
-
-/**
  * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效，音乐` 表示同时属于两个分组。
  * 整串当一个分组的话，4876 个源只数得出 20 个"分组"，选任何分组都只剩几条，且 91% 的源永远归不进去。
  */
@@ -2926,8 +2917,6 @@ function ShelfPage({
             const isCaching = item.cacheState === 'caching'
             const isLocal = item.sourceId === 'loc_book'
             const percent = Math.min(100, Math.round((item.cachedChapters / Math.max(1, item.totalChapters || 1)) * 100))
-            // 读到 1/1000 章也算"开过"，但封面下沿那颗 5px 绿点看起来就是脏了一块 —— 2% 以下不画。
-            const readPercent = Math.min(100, Math.round((((item.chapterIndex ?? 0) + 1) / Math.max(1, item.totalChapters)) * 100))
 
             // 落点线：拖到哪两格之间，就在那一格的左/右缘亮一条竖线（最后一格之后画右缘）
             const dropBefore = drag !== null && drag.at === index && drag.from !== index
@@ -3007,13 +2996,8 @@ function ShelfPage({
                       <div className="shelf-card-progress-fill" style={{ width: `${percent}%` }} />
                     </div>
                   )}
-                  {/* 上游网格卡封面底部有阅读进度条；原来只标了缓存章数，读到哪儿完全看不出来。
-                      阈值不是"有一点进度就画"，见 GRID_READ_TRACK_MIN_PERCENT 那段。 */}
-                  {!item.completed && readPercent >= GRID_READ_TRACK_MIN_PERCENT && (
-                    <div className="shelf-card-read-track" aria-hidden="true">
-                      <div className="shelf-card-read-fill" style={{ width: `${readPercent}%` }} />
-                    </div>
-                  )}
+                  {/* 封面下沿不再画阅读进度（用户 2026-10-03）：读到哪儿在下面的章数/百分比、
+                      hover 信息层与顶部「继续阅读」那条里都有。样式那边也删了，别只删一半。 */}
                   <div className="shelf-card-hover" aria-hidden="true">
                     <strong>{item.name}</strong>
                     <p>{item.author || '未知作者'}</p>

@@ -136,39 +136,53 @@ try {
   check('继续阅读那条 44px 小封面仍走两字（旁边就有书名作者）',
     !!resumeCompact && resumeCompact.compact && resumeCompact.text.length <= 2, JSON.stringify(resumeCompact))
 
-  // 占位封面上不许出现强调色、封面下沿不许有"绿了一角"的进度残块
-  // （用户 2026-10-02：「封面下面或左下角有一片绿，有点有，有点没有，应该是你图层定位没做好」）
+  // 占位封面：用户 2026-10-03 明确要回 10-01 那一版（浅绿斜纹 + 左侧书脊），
+  // 并且**封面下沿不再画阅读进度条**。所以这里判的是两件事：色纹在不在、进度条有没有长回来。
   const coverPaint = await page.evaluate(() => {
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().toLowerCase()
-    const solid = getComputedStyle(document.documentElement).getPropertyValue('--accent-solid').trim().toLowerCase()
-    const soft = getComputedStyle(document.documentElement).getPropertyValue('--accent-soft').trim().toLowerCase()
-    const tints = [...new Set([accent, solid, soft].filter(Boolean))]
-    const painted = node => {
+    // 计算样式里的颜色是 `rgb(234, 244, 238)` 这种，永远不等于样式表里写的 `#eaf4ee`。
+    // 所以先把每个令牌**落到一个探针元素上量出它的计算值**再拿去比对 ——
+    // 直接比十六进制会得到一个恒假的判据（上一版"不许掺强调色"就是这么一直绿着的）。
+    const resolve = value => {
+      const probe = document.createElement('span')
+      probe.style.color = value
+      document.body.appendChild(probe)
+      const rgb = getComputedStyle(probe).color
+      probe.remove()
+      return rgb
+    }
+    const root = getComputedStyle(document.documentElement)
+    const tints = [...new Set(['--accent', '--accent-solid', '--accent-soft']
+      .map(name => resolve(root.getPropertyValue(name).trim())).filter(Boolean))]
+    const fallbacks = [...document.querySelectorAll('.shelf-grid.shelf-mode-grid .cover-fallback')]
+    const painted = fallbacks.map(node => {
       const cs = getComputedStyle(node)
       const raw = `${cs.backgroundImage} ${cs.backgroundColor} ${cs.boxShadow}`
-      return { node, raw, tinted: tints.some(color => raw.includes(color)) }
-    }
-    const fallbacks = [...document.querySelectorAll('.shelf-grid.shelf-mode-grid .cover-fallback')].map(painted)
+      return { raw, tinted: tints.some(color => raw.includes(color)) }
+    })
     const tracks = [...document.querySelectorAll('.shelf-grid.shelf-mode-grid .shelf-card-read-track')]
       .map(track => {
         const fill = track.querySelector('.shelf-card-read-fill')
-        const ratio = fill ? fill.getBoundingClientRect().width / track.getBoundingClientRect().width : 0
-        return { ratio, px: fill ? +fill.getBoundingClientRect().width.toFixed(1) : 0 }
+        return { px: fill ? +fill.getBoundingClientRect().width.toFixed(1) : 0 }
       })
     return {
-      accent, solid, soft,
-      tintedFallbacks: fallbacks.filter(f => f.tinted).length, fallbackCount: fallbacks.length,
-      sample: fallbacks[0]?.raw.slice(0, 90) ?? '',
+      tints,
+      tintedFallbacks: painted.filter(f => f.tinted).length, fallbackCount: fallbacks.length,
+      sample: painted[0]?.raw.slice(0, 110) ?? '',
+      // 紧凑小封面（≤46px，比如「继续阅读」那条）仍然不该带色纹：旁边就写着书名作者
+      compactTinted: [...document.querySelectorAll('.cover-fallback-compact')].filter(node => {
+        const raw = `${getComputedStyle(node).backgroundImage} ${getComputedStyle(node).backgroundColor}`
+        return tints.some(color => raw.includes(color))
+      }).length,
       tracks: tracks.length,
       nubs: tracks.filter(t => t.px > 0 && t.px < 8).length,
-      overFull: tracks.filter(t => t.ratio > 1.001).length,
     }
   })
-  check('占位封面只用纸色与墨色，不掺强调色',
-    coverPaint.tintedFallbacks === 0, `${coverPaint.tintedFallbacks}/${coverPaint.fallbackCount} 张染了 accent（accent=${coverPaint.accent} solid=${coverPaint.solid} soft=${coverPaint.soft}）`)
-  check('进度条不画 8px 以下的绿残块（读到 8% 以下宁可不显示，见 main.tsx 的 GRID_READ_TRACK_MIN_PERCENT）',
-    coverPaint.nubs === 0, JSON.stringify(coverPaint.tracks) + ' 条里有 ' + coverPaint.nubs + ' 个残块')
-  check('进度填充不会溢出封面宽度', coverPaint.overFull === 0, JSON.stringify(coverPaint))
+  check('占位封面用回那版带浅绿斜纹与书脊的（用户 2026-10-03 点名要回来）',
+    coverPaint.fallbackCount > 0 && coverPaint.tintedFallbacks === coverPaint.fallbackCount,
+    `${coverPaint.tintedFallbacks}/${coverPaint.fallbackCount} 张带强调色 · 比对的计算值 ${coverPaint.tints.join(' ')}`)
+  check('小封面（≤46px 那种两字书脊）仍然不掺强调色', coverPaint.compactTinted === 0, `${coverPaint.compactTinted} 张染了`)
+  check('网格卡上不画阅读进度条（用户：「不用在下面显示绿色的书籍阅读进度条」）',
+    coverPaint.tracks === 0 && coverPaint.nubs === 0, `画了 ${coverPaint.tracks} 条（其中 ${coverPaint.nubs} 条是残块）`)
 
   const phone = await (async () => { await openShelf(page, VIEWS[1], null); return measureGrid(page) })()
   check('窄屏固定 3 列小封面（不是 1 列大封面）', phone.columns === 3, `${phone.columns} 列 / ${phone.coverWidth}px`)
