@@ -238,6 +238,7 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | PROPOSAL-014 | 书源批量整理、分组维护与轻量连通性健康体检体系 | [`docs/proposals/PROPOSAL-014-book-source-batch-management-and-health-check.md`](docs/proposals/PROPOSAL-014-book-source-batch-management-and-health-check.md) | Accepted |
 | PROPOSAL-015 | 内置 WebDAV 服务端与数据目录 webdav 存储区（含 Web 端「文件」设置页面）——**已废弃：该服务与页面已于 2026-09-29 删除** | [`docs/proposals/PROPOSAL-015-webdav-storage-server.md`](docs/proposals/PROPOSAL-015-webdav-storage-server.md) | Superseded |
 | PROPOSAL-016 | 本地图书导入与无缝阅读（TXT/EPUB 解析、智能分章与书架集成） | [`docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md`](docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md) | Tested |
+| PROPOSAL-017 | 桌面化封装 —— 把「青阅」打成一个能双击的 Windows 程序（含"同源闸门决定壳只能开到回环 URL"这条约束） | [`docs/proposals/PROPOSAL-017-desktop-packaging-windows-app.md`](docs/proposals/PROPOSAL-017-desktop-packaging-windows-app.md) | Draft（§6 五件待拍板） |
 
 ### 架构决策记录 (ADR)
 | 编号 | 决策标题 | 关联文档 | 状态 |
@@ -258,6 +259,7 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | ADR-014 | 书源批量事务管道、轻量并发探针与浮动管理状态机 | [`docs/decisions/ADR-014-source-batch-operations-and-lightweight-probe-pipeline.md`](docs/decisions/ADR-014-source-batch-operations-and-lightweight-probe-pipeline.md) | Accepted |
 | ADR-015 | 进程内 WebDAV 服务端选型、Basic 鉴权与最小 Class 2 锁实现 —— **已废弃：WebDAV 已删除，恢复改走浏览器直传** | [`docs/decisions/ADR-015-webdav-server-class2-minimal.md`](docs/decisions/ADR-015-webdav-server-class2-minimal.md) | Superseded |
 | ADR-016 | 本地图书（TXT/EPUB）解析引擎、虚拟书源与解析入库一体化架构 | [`docs/decisions/ADR-016-local-book-parsing-and-storage-architecture.md`](docs/decisions/ADR-016-local-book-parsing-and-storage-architecture.md) | Accepted |
+| ADR-017 | 桌面化：一期 `jlink` 精简运行时 + `jpackage app-image`（零新工具链、不改安全模型），Tauri 窗口壳降为二期且以最小尖峰为准入门槛；Electron 排除 | [`docs/decisions/ADR-017-desktop-jpackage-runtime-bundle.md`](docs/decisions/ADR-017-desktop-jpackage-runtime-bundle.md) | Proposed |
 
 ### 工作记忆与历史推演归档 (Sessions Chronicle)
 | 日期 / ID | 类型 | 标题 / 议题 | 关联文档 | 状态 |
