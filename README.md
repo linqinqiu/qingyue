@@ -4,18 +4,8 @@
 
 # 青阅
 
-**开源阅读（Legado）Headless 服务端与现代化 Web 客户端**
+把 [Legado（开源阅读）](https://github.com/LegadoTeam/legado) 的书源规则搬到服务端跑：一个 JVM 进程 + 一个浏览器界面，书架、发现、订阅、朗读、离线缓存都在自己机器上。
 
-`#legado` `#legado3` `#开源阅读` `#reader` `#novel-reader` `#book-source` `#headless` `#ktor` `#kotlin` `#react19` `#pwa` `#tts` `#docker`
-
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.1.20-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
-[![Ktor](https://img.shields.io/badge/Ktor-3.4.3-F88900?logo=ktor&logoColor=white)](https://ktor.io/)
-[![React](https://img.shields.io/badge/React-19.1.0-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6.3.5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![阿里云计算巢一键部署](https://img.shields.io/badge/阿里云计算巢-一键部署-FF6A00?logo=alibabacloud&logoColor=white)](https://computenest.console.aliyun.com/service/instance/create/cn-hangzhou?type=user&ServiceId=service-533806288add4002b02a)
 [![Build JAR](https://github.com/lukelzlz/legado-server/actions/workflows/build-jar.yml/badge.svg)](https://github.com/lukelzlz/legado-server/actions/workflows/build-jar.yml)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
@@ -23,443 +13,157 @@
 
 ---
 
-## 📌 项目定位与愿景
+## 这个仓库里有什么 / 没有什么
 
-**青阅** 是针对流行开源阅读软件 **[Legado（开源阅读 Android 端）](https://github.com/LegadoTeam/legado)** 的独立服务端重构版本。
+**有**：书源规则的解析执行器（`@xpath:` / `@json:` / `@js:` / `@regex:` 这些取值语法）、书架与阅读进度、发现页、订阅源、正文净化规则、离线缓存、朗读、手机备份包导入，以及配套的 Web 界面。
 
-本项目彻底剥离了 Android Framework 原生依赖，在纯 JVM 环境下构建了高性能**无头后端（Headless Server）**，并配套提供了基于 **React 19 + TypeScript + Vite** 的现代化**Web 阅读器与管理控制台**。用户可以在 VPS、家庭 NAS、个人电脑、Docker 容器或阿里云计算巢中快速部署属于自己的私有化阅读平台。**仓库不含、也不提供任何书源订阅源或发现源**：规则与地址由使用者自己导入，服务默认只监听 `127.0.0.1`。
+**没有**：任何书源、订阅源、发现源地址，也不内置作品。规则和站点由使用者自己导入。
 
----
+服务默认只监听 `127.0.0.1`，数据放在你自己的目录里。没有账号、密码、登录页和会话。
 
-## ✨ 核心特性
+## 技术栈
 
-### 🌐 1. 服务端无头架构（Headless & Pure JVM）
-- **零 Android 依赖**：纯 Kotlin JVM + Ktor 异步轻量级服务，运行内存低、启动迅速。
-- **沙箱化书源解析引擎**：内置 **Rhino JS 沙箱 + Jsoup + JsoupXpath + JsonPath**，深度兼容 Legado 现存的各类 JSON 书源规则与纯 JavaScript 自定义脚本源。
-- **健壮的数据存储**：采用 SQLite 持久化存储，启用 WAL（Write-Ahead Logging）高性能并发写入模式与连接生命周期治理。
+Kotlin JVM 17 + Ktor 3.4 + SQLite（WAL）。前端 React 19 + TypeScript + Vite，构建产物打进同一个 jar，可当 PWA 装到桌面。规则里的 `@js:` 段跑在 Rhino 沙箱里，HTML / XML / JSON 取值分别用 Jsoup、JsoupXpath、JsonPath。
 
-### ⚡ 2. 高并发流式搜索（Streaming Search）
-- **WebSocket 实时流式推送**：搜索请求通过 WebSocket (`/api/search/stream`) 进行各书源并发检索，书籍信息边搜边出（界面有逐源进度行与停止按钮）。
-- **非阻塞式解析**：封面解析与候选源校验异步化处理，极大降低网络级联阻塞。
+## 能力
 
-### 📖 3. 现代化沉浸式 Web 阅读器
-- **超大目录虚拟化滚动**：内置 `VirtualChapterList` 虚拟化渲染引擎，5,000+ 章目录只挂载视口内的行（实测 DOM 行数恒定在视口量级），滚动时自动定位当前章节。
-- **单书源直连开卷**：开卷只请求主书源（详情 / 目录 / 正文各一次），候选书源懒加载，不再对几十个源级联发请求。
-- **多书源无缝切换**：书架支持实时换源与同名匹配，平滑迁移阅读进度。
-- **自适应与阅读定制**：深色/浅色/护眼三档主题、五种字体、字号与字距、行间距与段间距、**首行缩进三档（不缩进 / 1 字 / 2 字，默认 2 字）**、左右边距与版心宽度、连续滚动或平移分页、宽屏双栏；阅读进度双向自动同步。
+- **搜索**：WebSocket 流式返回（`/api/search/stream`），各书源并发检索，边搜边出，中途可停。开书只请求主书源，候选源按需再取。
+- **阅读**：连续滚动与平移分页两种模式，分页支持宽屏双栏。字号、行距、段距、首行缩进、左右边距、版心宽度、五种字体、三档皮肤可调；进度自动记录。
+- **目录**：虚拟列表渲染，几千章的目录只挂视口内的行。
+- **离线**：按「后 50 章 / 后 100 章 / 全本 / 自定义区间」缓存到服务端，协程信号量限并发，已缓存的章节跳过，任务可中断可续。另有「下载到本设备」把正文写进浏览器 IndexedDB，断网可读。
+- **朗读**：系统 TTS 或自建 HTTP 音频接口，支持章节自动续读与定时停止；播放条可长按挪位置，位置记在本机。
+- **书源管理**：JSON 文本 / 文件 / URL 三种导入，按分组与关键字筛选，批量启停与打标签，长按拖动排序；体检是带关键词实跑一次搜索，按能否解析出条目分档。
+- **本地书**：TXT / EPUB 导入，26 条分章规则可选、可新建、可编辑，也能让程序读文件头打分自动挑一条；已经在读的那本可以换规则重切目录。
+- **书签**：框选一段或几段，或整章收藏，可写批注；按「书名 + 作者」归拢，同一本书换书源后还在。
+- **手机备份包**：见下面单独一节。
+- **写操作保护**：浏览器发出的跨站写请求一定带 `Origin`，与本机 Host 不一致就 403。抓取侧对重定向后的地址复验，拒绝内网与链路本地目标；正文进界面前做净化，图片走代理。
 
-### 💾 4. 离线书籍缓存与封面代理
-- **受限并发下载**：基于 Kotlin 协程信号量（`Semaphore`）调度后台全本/分卷缓存任务，防止触发目标站点限流。
-- **断点续传与 $O(1)$ 快速跳过**：智能判定已缓存章节，支持任务中断后无缝恢复。
-- **封面防盗链穿透与本地缓存**：内置封面缓存与防盗链代理，书籍海报展示稳定快速。
+## 怎么跑起来
 
-### 🔄 5. 书源管理与订阅中心
-- **多渠道导入**：支持书源 JSON 批量文本导入、文件上传、网络 URL 导入。
-- **源订阅自动同步**：支持添加书源订阅源，自动定时拉取更新与手动一键同步。
-- **源规则在线校验**：实时分析书源有效性、字段完整性与语法告警。
-
-### 🔒 6. 生产级安全防护
-- **本机优先，不设身份**：默认只绑 `127.0.0.1`，没有账号、密码、登录页与会话 —— 打开就能用。
-- **写操作同源闸门**：浏览器发出的跨站写请求一定带 `Origin`，与本机 Host 不一致就 403，任何网页都无法驱动你的浏览器改这个库。
-- **抓取侧防护**：SSRF 逐跳复验（重定向后重新判地址）、拒绝内网与链路本地目标、正文净化与图片代理、脚本沙箱带超时。
-
-### 🗂️ 7. 手机备份包一键恢复
-- **浏览器直传**：顶部导航「备份」页选一个手机 Legado 导出的 zip 就恢复，不需要 WebDAV、网盘或额外部署。
-- **恢复范围**：书源、替换净化规则、书架与阅读进度、RSS 订阅源、分组、包内登录凭据（加密条目填备份密码即可解开）。
-- **不冲掉本机选择**：已存在的书源保留你在本机启用/停用的状态，包里的启用位不会把架上筛好的状态刷掉。
-- **包不落盘**：服务端写临时文件、读完即删；备份密码只在内存里用一次，绝不进日志。
-- **承接不了的条目如实上报**：TTS、字典、主题等条目名会在导入结果里念出来，不静默丢弃。
-
----
-
-## 🏗️ 架构设计
-
-```mermaid
-flowchart TD
-    subgraph Client ["Web 客户端 (React 19 + TypeScript + Vite)"]
-        UI["阅读界面 & 书架 / 书源管理"]
-        VList["VirtualChapterList 虚拟目录"]
-        WSClient["WebSocket 流式搜索客户端"]
-    end
-
-    subgraph Server ["Headless 服务端 (Ktor + Kotlin JVM)"]
-        Router["Ktor 路由与 API 网关"]
-        Guard["写操作同源闸门（无账号 / 无会话）"]
-        
-        subgraph CoreEngine ["核心引擎模块"]
-            Runner["RuleRunner 沙箱解析器<br/>(Rhino JS + Jsoup + JsonPath)"]
-            CacheSvc["BookCacheService 离线缓存<br/>(Coroutines Semaphore)"]
-            CoverSvc["CoverCache 封面代理服务"]
-            SubSvc["SubscriptionService 订阅管理"]
-        end
-        
-        DB[("SQLite 数据库<br/>(WAL 模式 + 连接复用)")]
-    end
-
-    UI -->|REST API（同源写请求）| Router
-    WSClient -->|WebSocket /api/search/stream| Router
-    Router --> CoreEngine
-    CoreEngine --> DB
-    Runner -->|HTTP/HTTPS 请求| Sources["互联网网络书源"]
-```
-
----
-
-## 🚀 快速开始与部署
-
-### ☁️ 方式一：阿里云计算巢部署（云端 · 需要公网访问时用）
-
-无需手动购买/配置 VPS 或安装 Docker 环境，通过阿里云计算巢即可一键自动化拉起专属的云原生 Legado Server 服务实例（弹性容器实例 ECI + NAS 持久化文件存储 + 独立公网 IP）。
-
-[![Deploy to Alibaba Cloud](https://img.shields.io/badge/Deploy%20to-阿里云计算巢-FF6A00?logo=alibabacloud&logoColor=white&style=for-the-badge)](https://computenest.console.aliyun.com/service/instance/create/cn-hangzhou?type=user&ServiceId=service-533806288add4002b02a)
-
-- **一键直达链接**：[前往阿里云计算巢一键部署 Legado Server](https://computenest.console.aliyun.com/service/instance/create/cn-hangzhou?type=user&ServiceId=service-533806288add4002b02a)
-- **部署步骤**：
-  1. 点击上方部署按钮直达计算巢创建页。
-  2. 选择可用区与容器规格（1 核 2G 起步即可），其余保持默认 —— 服务**不设身份**，没有任何密码要填。
-  3. ⚠️ 这条路径会给出一个**公网可达、无鉴权**的 URL：谁拿到地址就能读改这台服务上的整个库（书源、书架、凭据）。只适合临时体验；要长期用，请在前面加反代鉴权 / IP 白名单 / 隧道，或干脆只在本机跑。
-  4. 点击 **立即创建**，等待自动化部署完成。
-  5. 部署成功后在实例详情页点击 **`WebUrl`**（如 `http://<公网IP>:8080`）直接进入 Web 阅读器。
-- **计费说明**：本仓库软件本身免费（GPL-3.0）；云资源由阿里云按量计费，金额与所选规格相关，请以创建页的费用预估为准。
-
----
-
-### ⚡ 方式二：Docker CLI 启动
-
-无需克隆代码仓库，直接运行以下命令即可拉取多架构镜像（支持 x86_64 / ARM64）并启动服务。
-
-> [!TIP]
-> **镜像地址说明：**
-> - 🇨🇳 **国内加速镜像（阿里云容器镜像服务，推荐国内环境使用）**：
->   `crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest`
-> - 🌍 **GitHub 官方镜像（GHCR）**：
->   `ghcr.io/lukelzlz/legado-server:latest`
-
-#### 🇨🇳 国内环境推荐（阿里云镜像源）
+### 直接跑 jar（需要 Java 17+）
 
 ```bash
-docker run -d \
-  --name legado-server \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  -v ./ls_data:/data \
-  crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest
+java -jar legado-server-<版本>-all.jar
 ```
 
-> **单行复制版：**
-> ```bash
-> docker run -d --name legado-server --restart unless-stopped -p 8080:8080 -v ./ls_data:/data crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest
-> ```
-
-#### 🌍 海外 / 国际环境（GitHub Packages GHCR）
+浏览器打开 `http://127.0.0.1:8080`。数据落在当前目录的 `data/`。换端口或数据目录：
 
 ```bash
-docker run -d \
-  --name legado-server \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  -v ./ls_data:/data \
+LEGADO_PORT=9000 LEGADO_DATA_DIR=/srv/qingyue/data java -jar legado-server-<版本>-all.jar
+```
+
+产物名带版本号（取自 `server/build.gradle` 的 `version`）。去 Releases 下载现成的，或者自己构建：
+
+```bash
+npm --prefix web run build
+./gradlew :server:fatJar      # → server/build/libs/legado-server-<版本>-all.jar
+```
+
+### Docker
+
+镜像同时发到 GHCR 和一个阿里云个人版镜像仓库（国内拉后者更快）：
+
+```bash
+docker run -d --name legado-server --restart unless-stopped \
+  -p 8080:8080 -v ./ls_data:/data \
   ghcr.io/lukelzlz/legado-server:latest
 ```
 
-> **单行复制版：**
-> ```bash
-> docker run -d --name legado-server --restart unless-stopped -p 8080:8080 -v ./ls_data:/data ghcr.io/lukelzlz/legado-server:latest
-> ```
+容器内要把 `LEGADO_HOST` 设成 `0.0.0.0` 才接得住宿主机映射（镜像里已经这么设）。仓库带了一份 `compose.server.yml`。
 
-- **访问 Web 端**：浏览器打开 `http://127.0.0.1:8080` 即可使用；默认只绑回环，局域网访问不到。
+### 从源码跑
 
----
-
-### 📦 方式三：Docker Compose 编排部署
-
-#### 选项 A：使用预编译镜像直接部署（无需源码）
-
-新建 `docker-compose.yml` 文件：
-
-```yaml
-services:
-  legado-server:
-    # 国内环境推荐阿里云镜像；海外可替换为 ghcr.io/lukelzlz/legado-server:latest
-    image: crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest
-    container_name: legado-server
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-    volumes:
-      - ./ls_data:/data
-```
-
-启动服务：
 ```bash
-docker compose up -d
+cd web && npm install && npm run dev     # 前端开发服务器（热重载）
+./gradlew :server:run                    # 服务端
 ```
 
-#### 选项 B：克隆仓库源码构建
+## 环境变量
 
-1. **克隆代码仓库**
-   ```bash
-   git clone https://github.com/lukelzlz/legado-server.git
-   cd legado-server
-   ```
-
-2. **配置环境变量**
-   ```bash
-   cp .env.example .env
-   ```
-   编辑 `.env` 文件按需改端口与数据目录（服务不设身份，没有密码要填）：
-   ```env
-# 服务不设身份：没有密码、没有登录
-   ```
-
-3. **构建并启动容器**
-   ```bash
-   docker compose --env-file .env -f compose.server.yml up -d --build
-   ```
-
-4. **访问服务**
-不需要登录，打开即用
-
-
-### 📍 本机 jar 部署：安装与数据位置全部可自定义
-
-整个文件夹可以随意改名或搬到任何盘 —— 启动器以**自己所在目录**为安装根（也可用 `LEGADO_HOME` 显式指定），
-不再写死绝对路径。所有位置走环境变量，优先级 `.env` > 进程环境 > 默认值：
-
-| 变量 | 默认 | 作用 |
+| 变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `LEGADO_HOME` | 启动器所在目录 | 安装根 |
-| `LEGADO_ENV` | `<安装根>/.env` | 配置文件位置 |
-数据库、封面缓存、本地书都从这里派生
-| `LEGADO_DATABASE` | `<数据目录>/legado.sqlite` | 单独指定库文件 |
-| `LEGADO_LOG_FILE` | `<安装根>/server.log` | 日志 |
-| `LEGADO_TMP_DIR` | `<安装根>/tmp` | **JVM 临时目录**（`-Djava.io.tmpdir`） |
-| `LEGADO_HOST` / `LEGADO_PORT` | `127.0.0.1` / `1234` | 监听地址与端口（`stop.mjs` 读同一份配置） |
+| `LEGADO_HOST` | `127.0.0.1` | 绑定地址。改成 `0.0.0.0` 就局域网可达，见下一节 |
+| `LEGADO_PORT` | `8080` | HTTP 与 WebSocket 端口 |
+| `LEGADO_DATA_DIR` | `data` | 数据根目录，封面缓存与本地书都从它下面派生 |
+| `LEGADO_DATABASE` | `$LEGADO_DATA_DIR/legado.sqlite` | 单独指定库文件位置 |
+| `LEGADO_LOG_FILE` | `<安装根>/server.log` | 运行日志 |
+| `LEGADO_TMP_DIR` | `<安装根>/tmp` | JVM 临时目录。不指定的话 SQLite 的原生库每次启动都往系统盘 `Temp` 解一份 |
+| `LEGADO_REPO` | 空 | `owner/repo` 形状，供「关于」页检查更新；不设就没这个入口 |
 
-**不写系统盘**：JVM 临时目录不指定的话会落到 `C:\Users\<用户>\AppData\Local\Temp`，SQLite 的本地库
-（`sqlite-3.x-…-sqlitejdbc.dll`）每次启动都要往那儿解包一份。现在默认指向 `<安装根>/tmp`，实测：
-一轮完整流量（搜索 + 目录 + 正文 + 封面）
-备份包直传的临时文件写在系统临时目录、读完即删，
-（构建期的 Gradle / npm 缓存不在本节范围内 —— 那是开发机自己的事。）
+`start.mjs` / `stop.mjs` 是可选封装（后台拉起、按端口停进程），以脚本自己所在目录为安装根，整个文件夹可以改名或搬盘。
 
-> [!TIP]
-> 生产环境建议通过 Nginx / Caddy 配置 HTTPS 反向代理，并开启 WebSocket 升级支持。
+## 想给手机用之前
 
----
+这个服务不设身份，绑定地址就是唯一的门。默认只绑回环，所以手机连不上是设计如此。要跨设备用，设 `LEGADO_HOST=0.0.0.0` 重启 —— 同时清楚这意味着同一张网里任何人都能读改这个库（书源、书架、登录凭据）。要认真做就在前面放一层带鉴权的反向代理，或者走隧道，别把服务直接暴露出去。
 
-### ☕ 方式四：独立可执行 JAR 运行（无需 Docker）
+阿里云计算巢那份模板会给出一个公网可达、无鉴权的 URL，只适合临时体验。云资源按量计费，金额以创建页的预估为准；软件本身免费（GPL-3.0）。
 
-本项目配置了 **GitHub Actions 自动化流水线**，每次代码推送或发布 Release 时均会自动构建开箱即用的 Standalone Fat JAR（内嵌完整 Web 前端与后端引擎）。
+## 手机备份包
 
-#### 1. 获取 JAR 文件
-- **GitHub 自动构建产物**：前往仓库的 **Actions** 页面下载最新构建生成的 `legado-server-binaries` Artifacts，或在 **Releases** 页面下载 `legado-server.jar`。
-- **本地直接编译**：
-  ```bash
-  # 编译 Web 前端与服务端独立 JAR
-  npm --prefix web run build
-  ./gradlew :server:fatJar
-  # 产物名带版本号，取自 server/build.gradle 的 version（当前形如 legado-server-<版本>-all.jar）
-  ```
-
-#### 2. 启动服务
-运行环境需安装 **Java 17+**（推荐 JDK 21）：
-```bash
-# 极简启动（默认端口 8080，数据持久化在 ./data）
-java -jar legado-server.jar
-
-# 自定义端口与数据目录
-LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data java -jar legado-server.jar
-```
-
-#### 3. CLI 工具（启动与停止）
-```bash
-node start.mjs      # 后台拉起，写 server.log
-node stop.mjs       # 按端口找进程并停掉
-```
-
----
-
-### 🛠️ 方式五：本地源码编译与开发运行
-
-#### 环境要求
-- **Java**: JDK 17+（推荐 JDK 21）
-- **Node.js**: Node.js 20+ / npm 10+
-
-#### 1. 前端构建 / 开发模式
-```bash
-cd web
-npm install
-
-# 启动 Vite 开发服务器 (热重载)
-npm run dev
-
-# 执行前端类型检查与单元测试
-npm run check
-npx tsx test/run-all.ts
-
-# 打包生产静态资源到 web/dist
-npm run build
-```
-
-#### 2. 服务端运行与测试
-```bash
-# 根目录下运行服务端测试
-./gradlew :server:test
-
-# 启动 Ktor 本地服务端
-./gradlew :server:run
-
-# 打包独立分发产物
-./gradlew :server:installDist
-```
-
----
-
-## ⚙️ 环境变量配置
-
-服务端支持通过环境变量进行定制化配置：
-
-| 环境变量 | 默认值 | 说明 |
-|---|---|---|
-| `LEGADO_HOST` | `0.0.0.0` | **容器内**的绑定地址（宿主机侧仍只映射 `127.0.0.1:8080`，见 `compose.server.yml`） |
-| `LEGADO_PORT` | `8080` | 服务端 HTTP / WebSocket 监听端口 |
-数据持久化根目录（存放数据库 `legado.sqlite`、封面 `covers/` 与本地书
-| `LEGADO_DATABASE` | `$LEGADO_DATA_DIR/legado.sqlite` | SQLite 数据库文件绝对路径 |
-
----
-
-## 🗂️ 手机备份包恢复
-
-手机上「我的 → 备份与恢复 → 备份到本地」会产出一个 Legado 备份包（zip）。
-把它选进本项目的「备份」页（`#backup`）即可恢复，全程只在本机与这台服务之间传输。
+手机上「我的 → 备份与恢复 → 备份到本地」产出的 zip，选进「备份」页（`#backup`）即可导入，全程只在本机与这个服务之间传输。
 
 | 项目 | 说明 |
 | --- | --- |
-| 入口 | 顶部导航「备份」→「选择备份包导入」 |
 | 接口 | `POST /api/backup/import`（multipart：`file` + 可选 `password`） |
 | 恢复内容 | 书源 / 替换净化规则 / 书架与阅读进度 / RSS 订阅源 / 分组 / 登录凭据 |
-| 启用位 | 已存在的书源**保留本机启用/停用选择**，只更新规则内容；新入库的源按包内值启用 |
-| 分组号 | 包内 `bookGroup.json` 的组号按**组名**映射到本机现有组，同名只留一个 |
+| 启用位 | 已存在的书源保留本机启用/停用状态，只更新规则内容；新入库的按包内值启用 |
+| 分组 | 包内 `bookGroup.json` 的组号按组名映射到本机现有组，同名只留一个 |
 | 加密条目 | 包内 `cookies.json` 用备份密码加密（口径同上游：`AES(MD5(password)[:16])`），填密码才解得开 |
-| 临时文件 | 写完即删，不留在数据目录；日志里只有文件名与条数 |
+| 临时文件 | 读完即删，不留在数据目录；日志里只有文件名与条数 |
+| 承接不了的条目 | 条目名会在导入结果里念出来，不静默丢弃 |
 
 > [!NOTE]
-> 本项目不提供"把服务器上的文件当网盘用"的能力：以前内置的 WebDAV 文件服务已删除 ——
-> 它只绑回环时手机推不上来，能推上来的场景又要求你把数据目录暴露给局域网。
+> 不提供"把服务器上的文件当网盘用"的能力。以前内置的 WebDAV 文件服务已删除：只绑回环时手机推不上来，能推上来的场景又要求你把数据目录暴露给局域网。
 
-## 📁 代码目录结构
+## 目录结构
 
 ```text
-.
-├── server/                      # Ktor 服务端模块 (Kotlin JVM)
-│   ├── src/main/kotlin/io/legado/server/
-│   │   ├── Application.kt       # 服务启动入口与 Ktor 特性装配
-├── Guard.kt             # 写操作同源闸门（服务不设身份）
-│   │   ├── BookCacheService.kt  # 离线书籍章节并发缓存调度引擎
-│   │   ├── CoverCache.kt        # 封面拉取、本地存储与防盗链代理
-│   │   ├── Database.kt          # SQLite 数据层持久化与 WAL 模式连接池
-│   │   ├── Models.kt            # 服务端核心领域数据模型
-│   │   ├── Routes.kt            # REST API 与 WebSocket 路由分发
-│   │   ├── RuleRunner.kt        # Legado 规则执行器 (Rhino JS + Jsoup)
-│   │   ├── SubscriptionService.kt # 书源订阅定时与批量同步
-│   └── src/test/kotlin/         # 服务端单元测试与端到端场景测试
-├── web/                         # Web 前端模块 (React 19 + TypeScript + Vite)
-│   ├── src/
-│   │   ├── ReaderScreen.tsx     # 沉浸式阅读器界面 & 虚拟大目录
-│   │   ├── api.ts               # API 客户端封装与 WebSocket 流式通信
-│   │   ├── main.tsx             # 应用程序根路由、书架与书源管理页
-│   │   ├── readerSettings.ts    # 阅读器偏好设置持久化
-│   │   └── styles.css           # 响应式排版与主题样式表
-│   └── test/                    # 前端虚拟列表与性能场景回归测试集
-├── compose.server.yml           # Docker Compose 编排文件
-└── Dockerfile.server            # 多阶段 Dockerfile (Web 构建 + Server 打包)
+server/                     Ktor 服务端（Kotlin JVM）
+  src/main/kotlin/io/legado/server/
+    Application.kt          启动入口与 Ktor 特性装配
+    ServerConfig.kt         环境变量到默认值
+    Guard.kt                写操作同源闸门
+    Routes.kt               REST 与 WebSocket 路由
+    RuleRunner.kt           书源规则执行器（Rhino + Jsoup + JsonPath）
+    SourceHealth.kt         体检：带关键词实跑一次搜索再分档
+    TxtTocRule.kt           本地书分章规则表与打分选规则
+    BookCacheService.kt     离线缓存调度
+    CoverCache.kt           封面拉取、存储与防盗链代理
+    SubscriptionService.kt  订阅源定时与批量同步
+    Database.kt             SQLite 数据层与连接生命周期
+web/                        前端（React 19 + TS + Vite，构建产物进同一个 jar）
+  src/                      界面与逻辑
+  test/                     单元与静态判据
+tools/verify/               在真实浏览器和真实服务上跑的门禁脚本
+docs/                       实现说明、会话记录、部署文档
+compose.server.yml          Docker Compose 编排
+Dockerfile.server           多阶段构建（前端 + 服务端）
 ```
 
----
+## 测试
 
-## 🌐 Nginx 反向代理配置示例
-
-如需通过公网 HTTPS 访问，推荐在前端部署 Nginx 进行反向代理：
-
-```nginx
-server {
-    listen 80;
-    server_name reader.example.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name reader.example.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket 支持
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 300s;
-    }
-}
+```bash
+./gradlew :server:test             # 服务端：规则解析、数据库生命周期、缓存并发、端到端链路
+npm --prefix web test              # 前端：静态判据 + 组件渲染，一条命令跑全部
+node tools/verify/selfcheck.mjs    # 对着跑着的服务过一遍：搜索 → 详情 → 目录 → 正文 → 净化
 ```
 
----
+`tools/verify/` 下还有按功能划分的门禁（`toc-rule-check`、`source-health-check`、`shelf-layout-check`、`reader-flow-check`、`version-check` 等），都是开真浏览器量，不打桩。判据口径记在 [`AGENTS.md`](AGENTS.md)。
 
-## 🧪 测试与质量保证
+## 参照与协议边界
 
-本项目包含完整的后端与前端自动化测试套件：
-
-- **服务端测试**：
-  ```bash
-  ./gradlew :server:test
-  ```
-  涵盖规则解析引擎测试 (`RuleRunnerTest`)、数据库 WAL 与连接生命周期测试 (`DatabaseLifecycleTest`)、离线缓存并发与断点续传测试 (`BookCacheServiceTest`) 以及端到端完整业务链路测试 (`E2EScenariosTest`)。
-
-- **Web 端测试**：
-  ```bash
-  cd web && npx tsx test/run-all.ts
-  ```
-  涵盖 5,000+ 章节虚拟目录渲染与滚动测试 (`VirtualChapterList.test.ts`)、换源与懒加载逻辑验证 (`LazySourceLoading.test.ts`) 及高压场景测试。
-
----
-
-## 🤝 鸣谢与致敬
-
-本项目深度依托并致敬以下优秀的开源项目：
-
-- **[Legado (开源阅读 Android 版)](https://github.com/LegadoTeam/legado)**：卓越的书源生态设计与开源贡献。
-- **[Ktor](https://ktor.io/)**：灵活高性能的 Kotlin 异步 Web 框架。
-- **[React](https://react.dev/) & [Vite](https://vitejs.dev/)**：现代高效的前端构建与开发体验。
-- **[Jsoup](https://jsoup.org/) & [JsoupXpath](https://github.com/zhegexiaohuozi/JsoupXpath)**：强大的 HTML/XML 解析与提取器。
-- **[Rhino](https://github.com/mozilla/rhino)**：纯 Java 实现的 JavaScript 执行引擎沙箱。
-- **[Jayway JsonPath](https://github.com/json-path/JsonPath)**：JSON 数据提取利器。
-
----
-
-## 🧭 参照与协议边界
-
-本仓库**不是**下列任何仓库的 GitHub fork（`origin` 指向本项目自身），代码全部自写，只借鉴其语义与信息架构：
+本仓库不是下列任何仓库的 fork（`origin` 指向本项目自身），代码全部自写，只借鉴语义与信息架构：
 
 | 参照对象 | 借鉴了什么 | 协议 | 是否拷过代码 |
 | --- | --- | --- | --- |
-| **[LegadoTeam/legado](https://github.com/LegadoTeam/legado)** | 代码基准：书源规则 DSL 的求值语义、`checkKeyWord` 体检、书架版式编号 `bookshelfLayout`、书源编辑字段分组（`modules/web/src/config/bookSourceEditConfig.ts`） | GPL-3.0 | 否，按 Kotlin 源码逐条自实现 |
-| **[hectorqin/reader](https://github.com/hectorqin/reader)** | 仅交互与信息架构（Web 端布局最接近的同类） | **AGPL-3.0** | **否**。AGPL 的网络服务条款与本项目 GPL-3.0 不等价，其代码不得引入本仓库 |
-| **[gedoor/legado_web_source_editor](https://github.com/gedoor/legado_web_source_editor)** | 书源编辑器的字段分栏形式（已停更，且本身是第三方并入） | MIT | 否 |
+| [LegadoTeam/legado](https://github.com/LegadoTeam/legado) | 代码基准：书源规则 DSL 的求值语义、`checkKeyWord` 体检、书架版式编号、书源编辑字段分组 | GPL-3.0 | 否，按 Kotlin 源码逐条自实现 |
+| [hectorqin/reader](https://github.com/hectorqin/reader) | 仅交互与信息架构 | **AGPL-3.0** | **否**。AGPL 的网络服务条款与本项目 GPL-3.0 不等价，其代码不得引入本仓库 |
+| [gedoor/legado_web_source_editor](https://github.com/gedoor/legado_web_source_editor) | 书源编辑器的字段分栏形式 | MIT | 否 |
 
-因此：任何后续贡献都**不得**从 `hectorqin/reader`（AGPL-3.0）复制源码到本仓库的 `server/` 或 `web/`；可以照它做交互设计，但实现必须自己写。
+后续贡献同样适用这条：**不能**把 `hectorqin/reader` 的源码复制进 `server/` 或 `web/`；可以参考它的交互，实现必须自己写。
 
----
+上游 `gedoor/legado` 已于 2026-05 下架，现在读源码去 `LegadoTeam/legado`。
 
-## 📄 开源许可证
+## 许可
 
-本项目基于 **[GPL-3.0 License](LICENSE)** 开源。
-
+GPL-3.0，见 [LICENSE](LICENSE)。

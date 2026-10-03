@@ -94,6 +94,7 @@ local-patches.diff
 !/tools/verify/local-image-check.mjs
 !/tools/verify/specified-source-search-check.mjs
 !/tools/verify/zip-make.mjs
+!/tools/verify/md-table-check.mjs
 # AGENTS.md 与 docs 里点名引用到的这几份也放出来：门禁与工具"文档里写着、仓库里没有"，
 # 别人 clone 下来照着跑只会得到一条 ENOENT（开源前对账引用面时抓到的 7 份）。
 !/tools/verify/external-login-check.mjs
