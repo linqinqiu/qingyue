@@ -56,6 +56,52 @@ export function TocRulesModal({
       .catch(error => toast.error(error instanceof Error ? error.message : '这条规则没开关成功'))
   }
 
+  /**
+   * 新建 / 编辑（用户 2026-10-03：「txt目录规则可新建可编辑」）。
+   * `key === null` 是新建；就地展开在这一行下面，不再套一层弹窗 ——
+   * 规则表本身已经在一个弹窗里了，弹窗上叠弹窗会让人不知道自己在改哪一条。
+   */
+  const [draft, setDraft] = useState<{ key: string | null; name: string; rule: string; example: string; enable: boolean } | null>(null)
+  const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const saveDraft = () => {
+    if (!draft) return
+    if (!draft.name.trim() || !draft.rule.trim()) {
+      setFormError('名字与正则都得填：只有名字的那条规则切不出章。')
+      return
+    }
+    setBusy(true)
+    setFormError('')
+    void api.saveTocRule({
+      key: draft.key ?? undefined,
+      name: draft.name.trim(),
+      rule: draft.rule.trim(),
+      example: draft.example.trim() || undefined,
+      enable: draft.enable,
+    })
+      .then(async () => {
+        setRules(await api.tocRules())
+        setDraft(null)
+        toast.success(draft.key ? '这条规则改好了' : '新建的规则已经能选')
+      })
+      .catch(error => setFormError(error instanceof Error ? error.message : '这条规则没存进去'))
+      .finally(() => setBusy(false))
+  }
+
+  const removeRule = (key: string, label: string) => {
+    if (!window.confirm(`删掉自己建的这条「${label}」？随包那 26 条不受影响。`)) return
+    setBusy(true)
+    void api.deleteTocRule(key)
+      .then(async result => {
+        if (!result.removed) throw new Error('这条不是本机自建的规则，删不掉')
+        setRules(await api.tocRules())
+        toast.success(`已删掉「${label}」`)
+      })
+      .catch(error => toast.error(error instanceof Error ? error.message : '这条没删掉'))
+      .finally(() => setBusy(false))
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="toc-rules-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="本地书分章规则">
@@ -97,9 +143,21 @@ export function TocRulesModal({
                 手机上改过启用勾选的话，到「备份包」把包导进来，在「包里收下的条目」里对 TXT 分章规则点「套用」。
               </p>
 
+              <div className="toc-rules-head-row">
+                <span>下面这些勾只管「自动」打分；名字与正则都能改</span>
+                <button
+                  type="button"
+                  className="subtle-button"
+                  disabled={busy || draft !== null}
+                  onClick={() => { setFormError(''); setDraft({ key: null, name: '', rule: '', example: '', enable: true }) }}
+                >
+                  新建一条
+                </button>
+              </div>
+
               <div className="toc-rules-list">
                 {rows.map(rule => (
-                  <div key={rule.key} className={`toc-rule${rule.broken ? ' is-broken' : ''}`}>
+                  <div key={rule.key} className={`toc-rule${rule.broken ? ' is-broken' : ''}${draft?.key === rule.key ? ' is-editing' : ''}`}>
                     <label className="toc-rule-switch">
                       <input
                         type="checkbox"
@@ -116,8 +174,89 @@ export function TocRulesModal({
                       {rule.example && <small>例：{rule.example}</small>}
                       {rule.broken && <small className="toc-rule-broken">正则在本机编译不出来，选了也切不出章</small>}
                     </div>
+                    <div className="toc-rule-actions">
+                      <button
+                        type="button"
+                        className="toc-rule-btn"
+                        aria-label={`编辑 ${rule.label}`}
+                        title="改这条规则（改的是本机这一份，「恢复随包那份」能整张还原）"
+                        disabled={busy}
+                        onClick={() => {
+                          setFormError('')
+                          setDraft(current => (current?.key === rule.key
+                            ? null
+                            : { key: rule.key, name: rule.label, rule: rule.rule ?? '', example: rule.example ?? '', enable: rule.enable !== false }))
+                        }}
+                      >
+                        <Icon name="edit" />
+                      </button>
+                      {!!rule.removable && (
+                        <button
+                          type="button"
+                          className="toc-rule-btn is-danger"
+                          aria-label={`删除 ${rule.label}`}
+                          title="这条是自己建的，可以删"
+                          disabled={busy}
+                          onClick={() => removeRule(rule.key, rule.label)}
+                        >
+                          <Icon name="trash" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
+                {draft && (
+                  <div className="toc-rule-editor">
+                    <label className="customize-field">
+                      <span>名字</span>
+                      <input
+                        type="text"
+                        value={draft.name}
+                        maxLength={40}
+                        placeholder="例如：第N节（自己写的）"
+                        onChange={event => setDraft({ ...draft, name: event.target.value })}
+                      />
+                    </label>
+                    <label className="customize-field">
+                      <span>正则（Java 语法，按整行找章节标题）</span>
+                      <textarea
+                        className="customize-css"
+                        rows={2}
+                        spellCheck={false}
+                        value={draft.rule}
+                        onChange={event => setDraft({ ...draft, rule: event.target.value })}
+                      />
+                    </label>
+                    <label className="customize-field">
+                      <span>示例（可空，只是列表里给你看一眼）</span>
+                      <input
+                        type="text"
+                        value={draft.example}
+                        maxLength={60}
+                        placeholder="第一节 起风了"
+                        onChange={event => setDraft({ ...draft, example: event.target.value })}
+                      />
+                    </label>
+                    <label className="toc-rule-editor-enable">
+                      <input
+                        type="checkbox"
+                        checked={draft.enable}
+                        onChange={event => setDraft({ ...draft, enable: event.target.checked })}
+                      />
+                      <span>参与「自动」打分</span>
+                    </label>
+                    {!!formError && <p className="customize-error" role="alert">{formError}</p>}
+                    <div className="customize-actions">
+                      <button type="button" className="primary-button" disabled={busy} onClick={saveDraft}>
+                        {busy ? '正在存…' : draft.key ? '保存这一条' : '存为新的规则'}
+                      </button>
+                      <button type="button" className="subtle-button" disabled={busy} onClick={() => { setDraft(null); setFormError('') }}>
+                        取消
+                      </button>
+                      <small className="customize-note">正则在本机编不出来时，服务端直接退回原因，不会存进表里。</small>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {rules.overridden && (

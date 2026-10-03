@@ -98,10 +98,36 @@ try {
   // 「更新日志」「快捷键」两条从菜单里收掉了（用户 2026-10-03：「顶栏『我的』菜单堆太多」）：
   // 前者有顶栏版本芯片 + 「关于」两条路，后者改由「关于」进。这里按新的分法判。
   check('②菜单里有「关于」入口', menu.labels.some(l => l.includes('关于')), menu.labels.join(' / '))
-  check('②菜单不再堆着「更新日志」「快捷键」',
-    !menu.labels.some(l => l === '更新日志') && !menu.labels.some(l => l === '快捷键'),
+  check('②菜单不再堆着「更新日志」「快捷键」，也不堆「备份包/运行日志/替换净化规则/本地离线缓存管理」',
+    !menu.labels.some(l => ['更新日志', '快捷键', '备份包', '运行日志', '替换净化规则', '本地离线缓存管理'].includes(l)),
     menu.labels.join(' / '))
   check('②色片是 22px 那一套（v2 的 9px 小点不该留下来）', menu.swatchSize === '22px', `实测 ${menu.swatchSize || '(取不到)'}`)
+
+  // 收进「设置」的四条要真的还在：点一行开得开原弹窗，才算"换了分类"而不是"删了功能"。
+  // 这一段放在色片检查之后 —— 点「设置」会把菜单关掉，插在中间会让上面那条读不到浮层。
+  check('②「设置」点得开这一页', await clickIn(page, '.header-menu-dropdown', '设置'), '')
+  await page.waitForSelector('.settings-page', { timeout: 8000 })
+  await sleep(400)
+  const settings = await page.evaluate(() => ({
+    groups: [...document.querySelectorAll('.settings-section h2')].map(n => (n.textContent ?? '').trim()),
+    rows: [...document.querySelectorAll('.settings-row')].map(row => ({
+      title: row.querySelector('.settings-row-main strong')?.textContent?.trim() ?? '',
+      hint: row.querySelector('.settings-row-main small')?.textContent?.trim() ?? '',
+      action: row.querySelector('button')?.textContent?.trim() ?? '',
+    })),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }))
+  check('②「设置」分了组，每行都说得出它管什么（不是一排光秃秃的按钮）',
+    settings.groups.length >= 4 && settings.rows.length >= 6
+    && settings.rows.every(row => row.title && row.action && row.hint.length >= 8),
+    `${settings.groups.join('/')} · ${settings.rows.length} 行`)
+  check('②这一页 1440 宽不横向溢出', settings.overflow <= 1, `溢出 ${settings.overflow}px`)
+  check('②「设置 → 看日志」真的开得出运行日志弹窗（收进去的功能没坏）',
+    await clickIn(page, '.settings-page', '看日志'), '')
+  await page.waitForSelector('.logs-modal', { timeout: 8000 })
+  await page.evaluate(() => document.querySelector('.logs-modal .logs-btn[aria-label="关闭"]')?.click())
+  await sleep(300)
+  check('②日志弹窗关得掉', await page.evaluate(() => !document.querySelector('.logs-modal')), '')
 
   // ─────────────────────── ③ 应用内「更新日志」 ───────────────────────
   const api = await page.evaluate(async () => {
@@ -112,7 +138,8 @@ try {
     api.status === 200 && api.type.startsWith('text/markdown') && api.length > 200,
     `HTTP ${api.status} · ${api.type} · ${api.length} 字符`)
   check('③从「关于」进「更新日志」（菜单里那条已收掉，这一条走的是新路径）',
-    await clickIn(page, '.header-menu-dropdown', '关于'), '')
+    await clickIn(page, '.app-page-header', '我的')
+    && (await sleep(250), await clickIn(page, '.header-menu-dropdown', '关于')), '')
   await page.waitForSelector('.about-page', { timeout: 8000 })
   const about = await page.evaluate(() => ({
     actions: [...document.querySelectorAll('.about-actions button, .about-actions a')].map(n => (n.textContent ?? '').trim()),

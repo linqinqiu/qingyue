@@ -133,7 +133,11 @@ try {
   await page.waitForSelector('.header-menu-dropdown', { timeout: 8000 })
   await sleep(200)
   const openedByMenu = takingLogs(page)
-  check('①菜单里有「运行日志」入口', await clickByText(page, '.header-menu-dropdown', '运行日志'), '')
+  // 「运行日志」从「我的」菜单收进了「设置」（用户 2026-10-03：菜单堆太多）。
+  // 入口换了位置，判的还是同一件事：点得到、开得出、开出来是真日志。
+  check('①「我的」里有「设置」入口', await clickByText(page, '.header-menu-dropdown', '设置'), '')
+  await page.waitForSelector('.settings-page', { timeout: 8000 })
+  check('①「设置」里那一行「看日志」点得开弹窗', await clickByText(page, '.settings-page', '看日志'), '')
   await page.waitForSelector('.logs-modal .logs-list', { timeout: 10000 })
   await openedByMenu
   await sleep(350)

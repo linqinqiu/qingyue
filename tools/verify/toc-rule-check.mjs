@@ -207,6 +207,69 @@ try {
     restored.status < 400 && afterReset.overridden === false
       && keysRestored.includes(String(target.id)) && !keysRestored.includes(customKey),
     `overridden=${afterReset.overridden} · 原规则回来了=${keysRestored.includes(String(target.id))} · 自造规则已清=${!keysRestored.includes(customKey)}`)
+  // ─────────── ⑦ 新建 / 编辑 / 删除自建（用户 2026-10-03：「txt目录规则可新建可编辑」）───────────
+  // 这一段跑在 ⑥ 的"恢复随包那份"之后，所以起点是干净的默认表；收尾再还原一次。
+  const created = await api('/api/books/toc-rules/save', {
+    method: 'POST',
+    body: JSON.stringify({ name: `门禁自造-${STAMP}`, rule: '^\\s*第[0-9]+话', example: '第1话 起', enable: true }),
+  })
+  const newKey = String(created.body?.id ?? '')
+  const withNew = (await api('/api/books/toc-rules')).body ?? {}
+  const newOption = (withNew.options ?? []).find(option => option.key === newKey)
+  check('⑦新建一条：id 落在自建段（不撞随包那 26 条）、马上出现在清单里、并且标成可删',
+    created.status === 200 && Number(newKey) >= 10000 && !!newOption && newOption.removable === true
+      && withNew.total === (afterReset.total ?? 0) + 1,
+    `${created.status} id=${newKey} · 表里 ${withNew.total} 条`)
+
+  const broken = await api('/api/books/toc-rules/save', {
+    method: 'POST', body: JSON.stringify({ name: '门禁坏括号', rule: '^(\\d+' }),
+  })
+  const afterBroken = (await api('/api/books/toc-rules')).body ?? {}
+  check('⑦编不出来的正则进不了表：400 + 说清原因，表大小不变（不是存进去再让解析层静默跳过）',
+    broken.status === 400 && broken.body?.code === 'rule_uncompilable' && afterBroken.total === withNew.total,
+    `${broken.status} ${JSON.stringify(broken.body)}`)
+
+  const edited = await api('/api/books/toc-rules/save', {
+    method: 'POST',
+    body: JSON.stringify({ key: newKey, name: `门禁改过-${STAMP}`, rule: '^\\s*第[0-9]+话.*', enable: false }),
+  })
+  const afterEdit = (await api('/api/books/toc-rules')).body ?? {}
+  const editedOption = (afterEdit.options ?? []).find(option => option.key === newKey)
+  check('⑦改一条：只多这一条改动，取消勾选后它退出「自动」但仍手动选得到',
+    edited.status === 200 && editedOption?.label === `门禁改过-${STAMP}` && editedOption.enable === false
+      && afterEdit.total === withNew.total && afterEdit.enabled < withNew.enabled + 1,
+    `名字="${editedOption?.label}" enable=${editedOption?.enable} · 共 ${afterEdit.total} 条`)
+
+  const packagedTarget = (afterEdit.options ?? []).find(option => option.builtIn !== true && option.key !== 'auto' && Number(option.key) < 10000)
+  const deletePackaged = await api('/api/books/toc-rules/delete', {
+    method: 'POST', body: JSON.stringify({ key: packagedTarget.key, enable: true }),
+  })
+  check('⑦随包那条删不掉：回一句"可以取消勾选"，而不是静默成功',
+    deletePackaged.status === 400 && deletePackaged.body?.code === 'packaged_rule'
+      && (await api('/api/books/toc-rules')).body?.total === afterEdit.total,
+    `${deletePackaged.status} ${JSON.stringify(deletePackaged.body)}`)
+
+  const deleted = await api('/api/books/toc-rules/delete', { method: 'POST', body: JSON.stringify({ key: newKey, enable: true }) })
+  const afterDelete = (await api('/api/books/toc-rules')).body ?? {}
+  check('⑦自建的这条删得掉，表回到删之前的条数',
+    deleted.status === 200 && deleted.body?.removed === true && afterDelete.total === afterEdit.total - 1
+      && !(afterDelete.options ?? []).some(option => option.key === newKey),
+    `${JSON.stringify(deleted.body)}`)
+
+  const editedPackaged = await api('/api/books/toc-rules/save', {
+    method: 'POST',
+    body: JSON.stringify({ key: packagedTarget.key, name: `门禁临时改名-${STAMP}`, rule: packagedTarget.rule, enable: packagedTarget.enable !== false }),
+  })
+  const afterPackagedEdit = (await api('/api/books/toc-rules')).body ?? {}
+  const restoredAgain = await api('/api/books/toc-rules/reset', { method: 'POST' })
+  const finalList = (await api('/api/books/toc-rules')).body ?? {}
+  check('⑦随包那条也能改（改的是本机这份），「恢复随包那份」把名字与整张表一起还原',
+    editedPackaged.status === 200
+      && (afterPackagedEdit.options ?? []).some(option => option.key === packagedTarget.key && option.label.startsWith('门禁临时改名'))
+      && restoredAgain.status === 200 && finalList.overridden === false
+      && (finalList.options ?? []).some(option => option.key === packagedTarget.key && option.label === packagedTarget.label),
+    `改过=${(afterPackagedEdit.options ?? []).find(o => o.key === packagedTarget.key)?.label} · 还原后="${(finalList.options ?? []).find(o => o.key === packagedTarget.key)?.label}"`)
+
   if (keptBefore) fs.writeFileSync(keptFile, keptBefore)
   else fs.rmSync(keptFile, { force: true })
   check('收尾把 data/backup_kept 恢复原样（探针不在用户数据目录里留文件）',

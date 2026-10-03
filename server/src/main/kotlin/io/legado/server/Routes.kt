@@ -1153,6 +1153,7 @@ fun Route.apiRoutes(
                         // 随包那张表里 id -100 就是"内置逐行匹配"：没有正则不等于坏，别标成编译失败
                         builtIn = rule.id == TocRules.PACKAGED_BUILTIN_ID,
                         broken = !TocRules.compiles(rule.id),
+                        removable = TocRules.removable(rule.id),
                     )
                 },
                 enabled = TocRules.all.count { it.enable },
@@ -1171,6 +1172,50 @@ fun Route.apiRoutes(
             val updated = TocRules.setEnable(id, request.enable)
                 ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("rule_missing", "没有这条规则"))
             call.respond(TocRuleToggleResult(updated.id, updated.name, updated.enable))
+        }
+        /*
+         * 新建 / 修改一条分章规则（用户 2026-10-03：「txt目录规则可新建可编辑」）。
+         * 正则编不出来时回的是这条规则自己的错，不是 500 —— 界面上要能就地说明"哪一列不行"。
+         */
+        post("/books/toc-rules/save") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = runCatching { call.receive<TocRuleSaveRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
+            }
+            if (request.name.isBlank() || request.rule.isBlank()) {
+                return@post call.respond(HttpStatusCode.BadRequest, ApiError("rule_incomplete", "名字与正则都得填"))
+            }
+            if (!TocRules.patternUsable(request.rule.trim())) {
+                return@post call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiError("rule_uncompilable", "这条正则在本机编译不出来，存进去会切不出章；先改到能编译"),
+                )
+            }
+            // 不填 key = 新建；填了但不是数字要顶回去 —— 当成新建会把"改一条"变成"多一条"
+            val id = when {
+                request.key.isNullOrBlank() -> null
+                else -> request.key.trim().toIntOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_rule", "key 要么不填（新建），要么是规则 id"))
+            }
+            val saved = TocRules.save(id, request.name, request.rule, request.example, request.enable)
+                ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("rule_missing", "没有这条规则（或它不属于本机规则表）"))
+            call.respond(TocRuleSaveResult(saved.id, saved.name, saved.rule, saved.enable, TocRules.all.size))
+        }
+        post("/books/toc-rules/delete") {
+            if (!call.requireSameOriginWrite()) return@post
+            val request = runCatching { call.receive<TocRuleToggleRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
+            }
+            val id = request.key.toIntOrNull()
+                ?: return@post call.respond(HttpStatusCode.BadRequest, ApiError("invalid_rule", "只有具体规则能删"))
+            if (TocRules.packaged.any { it.id == id }) {
+                return@post call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiError("packaged_rule", "随包那条规则不能删，可以取消它的「自动」勾选；要整张还原用「恢复随包那份」"),
+                )
+            }
+            val removed = TocRules.remove(id)
+            call.respond(TocRuleDeleteResult(removed, TocRules.all.size))
         }
         /*
          * 撤掉本机改动，回到随包那 26 条（套用过之后要能反悔，门禁也要能还原用户的规则表）。

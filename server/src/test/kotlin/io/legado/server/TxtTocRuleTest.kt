@@ -240,4 +240,79 @@ class TxtTocRuleTest {
         }
         assertTrue("倒回之后又回到随包那份", TocRules.byId(target.id)!!.enable)
     }
+
+    /**
+     * 「txt目录规则可新建可编辑」（用户 2026-10-03）。三条口径各有一条断言：
+     * 新建要拿到一个没占过的 id；改随包那条只动本机这份、能被「恢复随包那份」还原；
+     * 编不出来的正则不许入库（入库就等于界面上留一条"选了切不出章"的骗人选项）。
+     */
+    @Test
+    fun `新建与修改分章规则都落在文件里，坏正则进不来`() {
+        val dir = java.nio.file.Files.createTempDirectory("legado-toc-save")
+        val store = dir.resolve("txt_toc_rules.json")
+        val packaged = TocRules.packaged.first { it.enable }
+        try {
+            TocRules.useStore(store)
+            val before = TocRules.all.size
+
+            val created = TocRules.save(null, "自造：第N话", """^\s*第[0-9]+话.*""", "第1话 起", true)
+            assertNotNull("新建要回一条带 id 的规则", created)
+            assertTrue("id 是自建段（10000 起），不会撞上随包那 26 条", created!!.id >= 10_000)
+            assertEquals("表里多了一条", before + 1, TocRules.all.size)
+            assertTrue("新建的这条能选", TocRules.selectable.any { it.id == created.id })
+            assertTrue("新建的这条能参与打分", TocRules.candidates.any { it.id == created.id })
+
+            // 改随包那一条：只改本机这一份
+            val renamed = TocRules.save(packaged.id, "改过的名字", packaged.rule, packaged.example, false)
+            assertNotNull("随包那条也能改（改的是覆盖文件里的这一份）", renamed)
+            assertEquals("名字改了", "改过的名字", TocRules.byId(packaged.id)?.name)
+            assertFalse("启用位跟着存", TocRules.byId(packaged.id)!!.enable)
+            assertEquals("改一条不会多出一条", before + 1, TocRules.all.size)
+
+            TocRules.useStore(store)
+            assertEquals("重启进程之后改动还在", "改过的名字", TocRules.byId(packaged.id)?.name)
+            assertNotNull("自建那条也在文件里", TocRules.byId(created.id))
+
+            assertNull("空名字不收", TocRules.save(null, "   ", """^\d+""", null, true))
+            assertNull("空正则不收（那等于整本一章）", TocRules.save(null, "空的", "  ", null, true))
+            assertNull("编不出来的正则不收", TocRules.save(null, "坏括号", """^(\d+""", null, true))
+            assertEquals("三次失败都没往表里写", before + 1, TocRules.all.size)
+            assertNull("不认识的 id 不当成新建", TocRules.save(424242, "别处来的", """^\d+""", null, true))
+        } finally {
+            TocRules.clearOverrides()
+            TocRules.useStore(dir.resolve("nothing-here.json"))
+            java.nio.file.Files.deleteIfExists(store)
+            java.nio.file.Files.deleteIfExists(dir)
+        }
+        assertEquals("清掉本机改动就回到随包那份", TocRules.packaged.size, TocRules.all.size)
+        assertEquals("随包那条的名字也还原了", packaged.name, TocRules.byId(packaged.id)?.name)
+    }
+
+    @Test
+    fun `只有自建的规则能删，随包那 26 条删不掉`() {
+        val dir = java.nio.file.Files.createTempDirectory("legado-toc-remove")
+        val store = dir.resolve("txt_toc_rules.json")
+        try {
+            TocRules.useStore(store)
+            val packagedId = TocRules.packaged.first().id
+            assertFalse("随包条目不可删（要还原用「恢复随包那份」）", TocRules.removable(packagedId))
+            assertFalse("remove 也拒绝", TocRules.remove(packagedId))
+            assertEquals("表一条没少", TocRules.packaged.size, TocRules.all.size)
+
+            val created = TocRules.save(null, "要删掉的这条", """^\s*第[0-9]+回""", null, true)!!
+            assertTrue("自建的可以删", TocRules.removable(created.id))
+            val total = TocRules.all.size
+            assertTrue("remove 回报成功", TocRules.remove(created.id))
+            assertEquals("删掉之后少一条", total - 1, TocRules.all.size)
+            assertNull("表里真没了", TocRules.byId(created.id))
+            TocRules.useStore(store)
+            assertNull("文件里也没了（重启不复活）", TocRules.byId(created.id))
+            assertFalse("删一条不存在的要说没删", TocRules.remove(424242))
+        } finally {
+            TocRules.clearOverrides()
+            TocRules.useStore(dir.resolve("nothing-here.json"))
+            java.nio.file.Files.deleteIfExists(store)
+            java.nio.file.Files.deleteIfExists(dir)
+        }
+    }
 }

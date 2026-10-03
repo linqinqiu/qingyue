@@ -37,6 +37,7 @@ import { ShortcutHelp } from './ShortcutHelp'
 import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, shortcutFor } from './shortcuts'
 import { SourceHealthModal } from './SourceHealthModal'
 import { TocRulesModal } from './TocRulesModal'
+import { SettingsPage, type SettingsSection } from './SettingsPage'
 import { useHealthRun } from './sourceHealthRun'
 import { SourceEditor } from './SourceEditorPanel'
 import { SourceGroupModal } from './SourceGroupModal'
@@ -74,9 +75,9 @@ const splitSourceGroups = (raw?: string) =>
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 
-type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'bookmarks'
+type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'bookmarks' | 'settings'
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : location.hash === '#bookmarks' ? 'bookmarks' : 'library'
+const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : location.hash === '#bookmarks' ? 'bookmarks' : location.hash === '#settings' ? 'settings' : 'library'
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -2247,11 +2248,14 @@ function ShelfPage({
   sources,
   txtTocRule,
   onTxtTocRuleChange,
+  tocRulesSignal,
 }: {
   onOpen: (item: BookshelfItem) => void
   sources: SourceSummary[]
   txtTocRule: string
   onTxtTocRuleChange: (value: string) => void
+  /** 从「设置 → TXT 分章规则」过来的"去开一下"信号（0 = 还没人点过）。 */
+  tocRulesSignal: number
 }) {
   const [items, setItems] = useState<BookshelfItem[]>([])
   const [message, setMessage] = useState('')
@@ -2364,6 +2368,10 @@ function ShelfPage({
   const [dragOver, setDragOver] = useState(false)
   /** 「本地书分章规则」弹窗：从书架的导入动作旁边打开，不在「自定义」里。 */
   const [showTocRules, setShowTocRules] = useState(false)
+  // 「设置」页那一行点过来时信号会 +1；第一次挂载（0）不弹，否则刷新一下页面就跳出弹窗
+  useEffect(() => {
+    if (tocRulesSignal > 0) setShowTocRules(true)
+  }, [tocRulesSignal])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const previousStateRef = useRef<Map<string, string>>(new Map())
 
@@ -3168,6 +3176,11 @@ function App() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   /** 「自定义」弹窗：只有皮肤那一档（界面布局随 v2 一起撤掉了）。 */
   const [showCustomize, setShowCustomize] = useState(false)
+  /**
+   * 「设置 → TXT 分章规则」点下去的意图。规则弹窗连同它那颗「按这条导入本地书」都住在
+   * 书架里（导书的动作在那边），所以这里只发一个"去开一下"的信号，不复制一份弹窗。
+   */
+  const [tocRulesSignal, setTocRulesSignal] = useState(0)
   /** 发现页点中的书：先进详情弹窗（与搜索页同一套），点「开始阅读」才进阅读器。 */
   const [explorePick, setExplorePick] = useState<{ result: SearchResult; book: OpenBook } | null>(null)
   const search = useSearchStore()
@@ -3370,6 +3383,80 @@ function App() {
     void api.sources().then(setSources).catch(() => undefined)
   }
 
+  /**
+   * 「设置」这一页的内容（用户 2026-10-03：「在我的里面新加一个设置，把一些 txt 目录规则、备份、
+   * 替换净化之类的放进去」）。每行只做一件事：说清它管什么，然后打开**原来那一份**实现。
+   * 这里不建第二套编辑器 —— 两处都能改，迟早两处不一样。
+   */
+  const settingsSections: SettingsSection[] = [
+    {
+      title: '界面',
+      rows: [{
+        title: '皮肤与配色',
+        hint: '晓白 / 护眼 / 夜读三档，外加一条只存在这台浏览器里的自定义 CSS。',
+        also: '顶栏「我的」里也能直接切',
+        action: '打开自定义',
+        onClick: () => setShowCustomize(true),
+      }],
+    },
+    {
+      title: '阅读',
+      rows: [
+        {
+          title: '快捷键',
+          hint: '阅读器与全局的按键表；表与真正生效的键是同一份定义。',
+          also: '阅读器里按 ? 直接出这张表',
+          action: '看按键表',
+          onClick: () => setShowShortcuts(true),
+        },
+        {
+          title: '离线缓存',
+          hint: '已下载到这台电脑浏览器里的章节；朗读的引擎与语速在任意一本书的阅读设置里改。',
+          action: '管理离线缓存',
+          onClick: () => setShowOfflineCache(true),
+        },
+      ],
+    },
+    {
+      title: '本地书',
+      rows: [{
+        title: 'TXT 分章规则',
+        hint: '下一本导入的 TXT 按哪条切目录，以及哪几条参与「自动」打分。',
+        also: '书架「导入本地」旁边那颗「分章规则」可以选完直接导书',
+        action: '打开规则表',
+        onClick: () => setTocRulesSignal(value => value + 1),
+      }],
+    },
+    {
+      title: '内容',
+      rows: [{
+        title: '替换净化规则',
+        hint: '正文里要替换或删掉的东西（广告、站点水印、乱码行）。',
+        also: '阅读器设置抽屉里能就地打开这一页',
+        action: '去管理',
+        onClick: () => navigate('rules'),
+      }],
+    },
+    {
+      title: '数据与诊断',
+      rows: [
+        {
+          title: '备份包',
+          hint: '导入导出书源、书架、替换规则，以及手机阅读导出的那些个性化条目。',
+          action: '去备份页',
+          onClick: () => navigate('backup'),
+        },
+        {
+          title: '运行日志',
+          hint: '这台服务自己写了什么：级别、失败原因、同类合并后的计数。',
+          also: '全局快捷键 L',
+          action: '看日志',
+          onClick: () => setShowLogs(true),
+        },
+      ],
+    },
+  ]
+
   return (
     <div className={`app-shell ${skinClasses}`}>
       <SkinStyle settings={settings} />
@@ -3382,9 +3469,6 @@ function App() {
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
-        onOpenReplaceRules={() => setShowReplaceRules(true)}
-        onOpenOfflineCache={() => setShowOfflineCache(true)}
-        onOpenLogs={() => setShowLogs(true)}
         onOpenChangelog={() => navigate('changelog')}
         onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
@@ -3404,6 +3488,8 @@ function App() {
           onOpenChangelog={() => navigate('changelog')}
           onOpenShortcuts={() => setShowShortcuts(true)}
         />
+      ) : page === 'settings' ? (
+        <SettingsPage sections={settingsSections} />
       ) : page === 'bookmarks' ? (
         <BookmarksPage onOpen={item => void openShelfItem(item)} />
       ) : page === 'shelf' ? (
@@ -3412,6 +3498,7 @@ function App() {
           onOpen={item => void openShelfItem(item)}
           txtTocRule={settings.txtTocRule}
           onTxtTocRuleChange={value => setSettings({ ...settings, txtTocRule: value })}
+          tocRulesSignal={tocRulesSignal}
         />
       ) : page === 'explore' ? (
         <ExplorePage onOpen={openExploreDetail} />

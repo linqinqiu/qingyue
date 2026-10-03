@@ -421,6 +421,8 @@ data class CachedBookRequest(
     val enable: Boolean = true,
     /** 正则编不出来（备份里带来的坏规则）：界面上要标出来，而不是悄悄不出现。 */
     val broken: Boolean = false,
+    /** 只有自建的规则能删（随包那 26 条不可删，界面上按它决定摆不摆删除键）。 */
+    val removable: Boolean = false,
 )
 @Serializable data class TocRuleList(
     val options: List<TocRuleOption>,
@@ -433,6 +435,17 @@ data class CachedBookRequest(
 )
 @Serializable data class TocRuleToggleRequest(val key: String, val enable: Boolean)
 @Serializable data class TocRuleToggleResult(val id: Int, val name: String, val enable: Boolean)
+
+/** 新建/修改一条分章规则。`key` 省略或不是数字 = 新建（id 由服务端分配）。 */
+@Serializable data class TocRuleSaveRequest(
+    val key: String? = null,
+    val name: String,
+    val rule: String,
+    val example: String? = null,
+    val enable: Boolean = true,
+)
+@Serializable data class TocRuleSaveResult(val id: Int, val name: String, val rule: String, val enable: Boolean, val total: Int)
+@Serializable data class TocRuleDeleteResult(val removed: Boolean, val total: Int)
 
 /** 撤掉本机改动的回报（这里不许回 `Map<String, Any>`：Ktor 的序列化直接 500，第一版就栽在这一点上）。 */
 @Serializable data class TocRuleResetResult(val cleared: Boolean, val total: Int)

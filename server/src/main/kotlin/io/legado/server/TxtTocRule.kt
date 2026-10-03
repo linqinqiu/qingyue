@@ -90,7 +90,18 @@ object TocRules {
         if (overrides.isEmpty()) return packaged
         val packagedIds = packaged.map { it.id }.toSet()
         val merged = packaged.map { rule ->
-            overrides.firstOrNull { it.id == rule.id }?.let { rule.copy(enable = it.enable, serialNumber = it.serialNumber) } ?: rule
+            // 本机改动带的是**整条**（名字、正则、示例、启用都可能被改过 —— 用户 2026-10-03
+            // 要「可新建可编辑」），但 id 与 replacement 仍以随包那条为准：id 是引用，
+            // replacement 目前没人写。空字段回落到随包那份，避免旧覆盖文件把名字抹成空串。
+            overrides.firstOrNull { it.id == rule.id }?.let { over ->
+                rule.copy(
+                    enable = over.enable,
+                    serialNumber = over.serialNumber,
+                    name = over.name.ifBlank { rule.name },
+                    rule = over.rule.ifBlank { rule.rule },
+                    example = over.example ?: rule.example,
+                )
+            } ?: rule
         }
         // 备份里带来的、随包没有的那几条（用户在手机上自己写的规则）：收下，能选能用
         return merged + overrides.filter { it.id !in packagedIds && it.rule.isNotBlank() }
@@ -181,14 +192,67 @@ object TocRules {
         val file = storeFile ?: return null
         val current = all
         if (current.none { it.id == id }) return null
-        java.nio.file.Files.createDirectories(file.parent)
-        java.nio.file.Files.writeString(
-            file,
-            json.encodeToString(current.map { if (it.id == id) it.copy(enable = enable) else it }),
-            Charsets.UTF_8,
-        )
-        reload()
+        writeTable(file, current.map { if (it.id == id) it.copy(enable = enable) else it })
         return byId(id)
+    }
+
+    /** 覆盖文件写的是"这一台机器上的整张表"，所以任何一处改动都走同一个写入口。 */
+    private fun writeTable(file: java.nio.file.Path, table: List<TxtTocRule>) {
+        java.nio.file.Files.createDirectories(file.parent)
+        java.nio.file.Files.writeString(file, json.encodeToString(table), Charsets.UTF_8)
+        reload()
+    }
+
+    /** 一条正则在这台机器上编不编得出来 —— 保存之前先问，别把"选了切不出章"留给用户。 */
+    fun patternUsable(pattern: String): Boolean =
+        runCatching { Regex(pattern, RegexOption.MULTILINE) }.isSuccess
+
+    /**
+     * 新建或改一条规则（用户 2026-10-03：「txt目录规则可新建可编辑」）。三条口径：
+     * ① 随包那 26 条**也允许改** —— 改的是本机这一份，「恢复随包那份规则表」整张还原。
+     *    不让改的话用户只能"另建一条同名的"，两条同名规则比一条改过的更难懂。
+     * ② 名字与正则都要非空，且正则必须在服务端编译得出来才落盘：坏正则入库会让
+     *    "选了这条却一章切不出"变成随机现象（解析层是跳过并记日志，可界面上它仍然可选，
+     *    那就是骗人）。
+     * ③ `id == null` 才是新建。**不能拿 -1 之类的数字当"新建"哨兵** —— 随包表的 id
+     *    本来就是负数（-1 是「目录(去空白)」），第一版这么写，"新建一条"把 -1 那条改了名
+     *    （门禁 ⑦ 当场抓到：表还是 26 条，只是多了个"门禁改过-"的名字）。
+     *    返回 null = 没改成，由路由层翻成一句人话。
+     */
+    fun save(id: Int?, name: String, rule: String, example: String?, enable: Boolean): TxtTocRule? {
+        val file = storeFile ?: return null
+        val trimmed = name.trim()
+        val pattern = rule.trim()
+        if (trimmed.isBlank() || pattern.isBlank() || !patternUsable(pattern)) return null
+        val current = all
+        val existing = id?.let { want -> current.firstOrNull { it.id == want } }
+        if (id != null && existing == null) return null
+        val next = existing?.copy(name = trimmed, rule = pattern, example = example?.trim(), enable = enable)
+            ?: TxtTocRule(
+                id = nextCustomId(current),
+                name = trimmed,
+                rule = pattern,
+                example = example?.trim(),
+                serialNumber = (current.maxOfOrNull { it.serialNumber } ?: 0) + 1,
+                enable = enable,
+            )
+        val replaced = current.map { if (it.id == next.id) next else it }
+        writeTable(file, if (existing == null) replaced + next else replaced)
+        return byId(next.id)
+    }
+
+    /** 这条能不能删（界面按它决定摆不摆删除键）。随包条目不可删，见 [remove]。 */
+    fun removable(id: Int): Boolean = all.any { it.id == id } && packaged.none { it.id == id }
+
+    /**
+     * 删掉一条**自建**的规则。随包那 26 条删不掉：它们是上游给的默认表，
+     * 不想用可以取消「自动」勾选；给它们开删除洞，「恢复随包那份」就没有参照了。
+     */
+    fun remove(id: Int): Boolean {
+        val file = storeFile ?: return false
+        if (!removable(id)) return false
+        writeTable(file, all.filterNot { it.id == id })
+        return true
     }
 
     private fun nextCustomId(existing: List<TxtTocRule>): Int =

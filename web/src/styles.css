@@ -5311,7 +5311,26 @@ input[type=range] { min-height: 24px; }
 .toc-rules-loading { margin: 0; color: var(--muted); font-size: 13px; }
 /* 分章规则清单：一条一行，正则原文必须露出来 —— 不写出来没人判断得了它适不适合自己的书 */
 .toc-rules-list { display: grid; gap: 1px; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); }
-.toc-rule { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 10px; background: var(--surface); }
+.toc-rule { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px 10px; background: var(--surface); }
+.toc-rule.is-editing { background: var(--surface-muted); }
+/* 一行一个动作：编辑（随包那条也能改，改的是本机这份）与删除（只有自建的能删） */
+.toc-rule-actions { display: flex; align-items: center; gap: 4px; }
+.toc-rule-btn {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.toc-rule-btn:hover { border-color: var(--line); background: var(--surface-muted); color: var(--ink); }
+.toc-rule-btn:disabled { opacity: .45; cursor: not-allowed; }
+.toc-rule-btn svg { width: 15px; height: 15px; }
+.toc-rule-btn.is-danger:hover { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
+.toc-rules-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.toc-rules-head-row > span { color: var(--muted); font-size: var(--t-xs); }
+/* 就地展开的编辑器：规则表本身已经在弹窗里，再叠一层弹窗就没人知道自己在改哪一条 */
+.toc-rule-editor { display: grid; gap: 10px; padding: 12px 10px; background: var(--surface-muted); border-top: 1px solid var(--line); }
+.toc-rule-editor-enable { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: var(--t-sm); }
+.toc-rule-editor-enable input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
 .toc-rule-switch { display: flex; align-items: center; gap: 5px; padding-top: 2px; color: var(--muted); font-size: var(--t-xs); cursor: pointer; }
 .toc-rule-switch input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
 .toc-rule.is-broken { opacity: .62; }
@@ -5377,6 +5396,23 @@ input[type=range] { min-height: 24px; }
 
 /* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
 .about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+/* —— 「设置」页：一行一件事，右侧一个动作。它不重复实现编辑器，只负责分类与跳转 —— */
+.settings-page { max-width: 760px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+.settings-section { margin-top: 30px; }
+.settings-section h2 { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; }
+.settings-rows { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
+.settings-row { display: flex; align-items: center; gap: 16px; padding: 13px 16px; background: var(--surface); }
+.settings-row:hover { background: var(--surface-muted); }
+.settings-row-main { display: grid; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.settings-row-main strong { font-size: var(--t-md); font-weight: 600; }
+.settings-row-main small { color: var(--muted); font-size: var(--t-sm); line-height: 1.6; }
+.settings-row-also { color: color-mix(in srgb, var(--muted) 78%, var(--ink)); font-size: var(--t-xs); }
+.settings-row .subtle-button { flex: none; }
+@media (max-width: 720px) {
+  .settings-page { padding: 32px 18px 44px; }
+  /* 窄屏把"就近在哪儿"收掉：那是一句提示，不该把动作按钮挤到下一行 */
+  .settings-row-also { display: none; }
+}
 .about-hero { display: grid; gap: 12px; }
 .about-hero h1 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 30px; font-weight: 600; }
 .about-hero > p { margin: 0; max-width: 62ch; color: var(--muted); font-size: var(--t-md); line-height: 1.75; }

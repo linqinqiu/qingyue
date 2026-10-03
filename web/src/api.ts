@@ -57,7 +57,17 @@ export type LocalBookImportResponse = { total: number; imported: number; failed:
  * 一条可选的分章规则。`enable` 只表示"参与自动打分"，**不表示能不能手动选** ——
  * 曾经服务端只发启用的 12 条，另外 12 条（章回体「第N回」这类）于是既看不见也选不了。
  */
-export type TocRuleOption = { key: string; label: string; example?: string; builtIn?: boolean; rule?: string; enable?: boolean; broken?: boolean }
+export type TocRuleOption = {
+  key: string
+  label: string
+  example?: string
+  builtIn?: boolean
+  rule?: string
+  enable?: boolean
+  broken?: boolean
+  /** 只有自建的规则能删（随包那 26 条不可删）。 */
+  removable?: boolean
+}
 export type TocRuleList = {
   options: TocRuleOption[]
   /** 本机启用几条 / 表里共几条 / 其中几条是从手机备份收下来的。界面上要报得出，不能只给下拉。 */
@@ -558,6 +568,12 @@ export const api = {
   /** 开关一条规则是否参与「自动」打分（手动选不受它限制）。 */
   toggleTocRule: (key: string, enable: boolean) =>
     request<{ id: number; name: string; enable: boolean }>('/api/books/toc-rules/toggle', { method: 'POST', body: JSON.stringify({ key, enable }) }),
+  /** 新建（key 省略）或改一条分章规则；正则编不出来服务端会 400 并说清原因。 */
+  saveTocRule: (rule: { key?: string; name: string; rule: string; example?: string; enable: boolean }) =>
+    request<{ id: number; name: string; rule: string; enable: boolean; total: number }>('/api/books/toc-rules/save', { method: 'POST', body: JSON.stringify(rule) }),
+  /** 删掉一条自建的规则（随包那条不可删）。 */
+  deleteTocRule: (key: string) =>
+    request<{ removed: boolean; total: number }>('/api/books/toc-rules/delete', { method: 'POST', body: JSON.stringify({ key, enable: true }) }),
   /** 换规则重切一本本地书的目录。失败时服务端会说清是"这条切不出第二章"还是"原文件不在了"。 */
   reparseLocalBook: (sourceId: string, bookUrl: string, ruleKey: string) =>
     request<LocalBookReparseResult>('/api/books/reparse-local', {

@@ -4,7 +4,7 @@ import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from './readerSettings'
 
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'bookmarks'
+export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'bookmarks' | 'settings'
 
 export interface AppHeaderProps {
   page: AppPage
@@ -12,9 +12,6 @@ export interface AppHeaderProps {
   searching?: boolean
   onSettingsChange: (next: ReaderSettings) => void
   onNavigate: (page: AppPage) => void
-  onOpenReplaceRules?: () => void
-  onOpenOfflineCache?: () => void
-  onOpenLogs?: () => void
   /** 顶栏那颗版本号芯片点开的「更新日志」页（菜单里不再重复列一条）。 */
   onOpenChangelog?: () => void
   onOpenCustomize?: () => void
@@ -31,9 +28,6 @@ export function AppHeader({
   searching,
   onSettingsChange,
   onNavigate,
-  onOpenReplaceRules,
-  onOpenOfflineCache,
-  onOpenLogs,
   onOpenChangelog,
   onOpenCustomize,
   version = '',
@@ -259,61 +253,26 @@ export function AppHeader({
                     <span>安装到桌面</span>
                   </button>
                 )}
-                {onOpenOfflineCache && (
-                  <button
-                    type="button"
-                    className="menu-logout-btn"
-                    style={{ color: 'var(--ink)' }}
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      onOpenOfflineCache()
-                    }}
-                  >
-                    <Icon name="book" />
-                    <span>本地离线缓存管理</span>
-                  </button>
-                )}
+                {/*
+                  「本地离线缓存管理」「替换净化规则」「运行日志」「备份包」这四条收进「设置」
+                  （用户 2026-10-03：「在我的里面新加一个设置，把一些 txt 目录规则、备份、替换净化
+                  之类的放进去」+「顶栏『我的』菜单堆太多」）。菜单这一栏从 7 条回到 4 条：
+                  设置 / 书签 / 关于（+ 装了 PWA 时才出现的"安装到桌面"）。
+                  四条功能一条都没少 —— 它们在「设置」里各有一行，说的还是同一份实现。
+                */}
                 <button
                   type="button"
                   className="menu-logout-btn"
                   style={{ color: 'var(--ink)' }}
                   role="menuitem"
+                  aria-current={page === 'settings' ? 'page' : undefined}
                   onClick={() => {
                     setMenuOpen(false)
-                    onNavigate('rules')
+                    onNavigate('settings')
                   }}
                 >
-                  <Icon name="edit" />
-                  <span>替换净化规则</span>
-                </button>
-                {onOpenLogs && (
-                  <button
-                    type="button"
-                    className="menu-logout-btn"
-                    style={{ color: 'var(--ink)' }}
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      onOpenLogs()
-                    }}
-                  >
-                    <Icon name="activity" />
-                    <span>运行日志</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="menu-logout-btn"
-                  style={{ color: 'var(--ink)' }}
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onNavigate('backup')
-                  }}
-                >
-                  <Icon name="folder" />
-                  <span>备份包</span>
+                  <Icon name="settings" />
+                  <span>设置</span>
                 </button>
                 <button
                   type="button"

@@ -78,6 +78,35 @@ test('阅读设置抽屉里那一档只对着手上这本', () => {
 })
 
 /**
+ * 「txt目录规则可新建可编辑」（用户 2026-10-03）。判的是三件事：
+ * 写接口有、坏正则被服务端挡在门外（不是存进去再让解析层跳过）、删除只对自己建的条目开。
+ */
+test('分章规则可新建可编辑：接口、就地编辑、删除键的可见性', () => {
+  const api = read('../src/api.ts')
+  assert.match(api, /saveTocRule: \(rule: \{ key\?: string; name: string; rule: string/, '有新建/修改这一条')
+  assert.match(api, /deleteTocRule: \(key: string\)/, '有删除这一条')
+  assert.match(api, /removable\?: boolean/, '清单要报得出"这条能不能删"，界面不能猜')
+
+  const routes = read('../../server/src/main/kotlin/io/legado/server/Routes.kt')
+  assert.match(routes, /post\("\/books\/toc-rules\/save"\)/)
+  assert.match(routes, /post\("\/books\/toc-rules\/delete"\)/)
+  assert.match(routes, /rule_uncompilable/, '编不出来的正则回 400 并说清原因，而不是存进去')
+  assert.match(routes, /packaged_rule/, '删随包那条要回一句"删不掉，可以取消勾选"')
+  const model = read('../../server/src/main/kotlin/io/legado/server/TxtTocRule.kt')
+  assert.match(model, /fun patternUsable\(pattern: String\): Boolean/, '保存前自己编译一遍，不依赖解析层的静默跳过')
+  assert.match(model, /fun removable\(id: Int\): Boolean = all\.any \{ it\.id == id \} && packaged\.none/,
+    '可删 = 在表里 且 不是随包那条')
+
+  const modal = read('../src/TocRulesModal.tsx')
+  assert.match(modal, /新建一条/)
+  assert.match(modal, /aria-label=\{`编辑 \$\{rule\.label\}`\}/, '编辑就在这一行上，不套第二层弹窗')
+  assert.match(modal, /\{!!rule\.removable && \(/, '随包那 26 条不摆删除键')
+  assert.match(modal, /window\.confirm\(/, '删除要先问一句：这是不可逆的')
+  assert.match(modal, /key: draft\.key \?\? undefined/,
+    '新建时 key 传 undefined（服务端按"没有 key"分配 10000 段的 id，前端不自己编 id）')
+})
+
+/**
  * 「txt目录规则没有做好」（用户 2026-10-03）。根因不是规则不够，是一个旗标兼了两件事：
  * 选择清单只发"启用的"那 12 条，于是另外 12 条（章回体「第N回」这类都在里面）
  * 既看不见也选不了，而界面上根本没有启用开关。
@@ -97,7 +126,8 @@ test('手动可选 与 参与自动打分 是两件事，界面和服务端都�
 
   const api = read('../src/api.ts')
   assert.match(api, /toggleTocRule: \(key: string, enable: boolean\)/)
-  assert.match(api, /enable\?: boolean; broken\?: boolean/, '选项要带得上"参不参与自动"和"正则坏没坏"')
+  assert.match(api, /enable\?: boolean/, '选项要带得上"参不参与自动"')
+  assert.match(api, /broken\?: boolean/, '以及"正则坏没坏"')
 
   const modal = read('../src/TocRulesModal.tsx')
   assert.match(modal, /pickable = options\.filter\(option => !option\.broken\)/,
