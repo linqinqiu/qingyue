@@ -49,6 +49,7 @@ local-patches.diff
 /tools/*
 !/tools/verify/
 /tools/verify/*
+!/tools/verify/baselines/
 !/tools/verify/authfixes.mjs
 !/tools/verify/backup-cookie-import-check.mjs
 !/tools/verify/backup-kept-check.mjs

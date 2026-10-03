@@ -83,7 +83,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/index.html
 
 > **Windows 本机执行注意（详见 [`docs/sessions/SESSION-HIST-008`](docs/sessions/SESSION-HIST-008-windows-environment-and-verification-baseline.md)）**：
 > - 编译与测试走**当前 `JAVA_HOME`**（本机实测是 `E:\Apps\DevTools\Eclipse Adoptium\jdk-17.0.19.10-hotspot`；早期归档里写的 Corretto 21 已经不是现状）。JDK 17+ 就够，`gradlew` 加 `--offline` 走本地缓存最稳；
-> - `./gradlew :server:test` 在本机**长期固定 47 个失败**（2026-10-01 实测；测试删不掉被占用的 SQLite，macOS 不暴露）。**判定回归必须与基线的「失败集合」逐条比对，禁止只看失败数量** —— 本轮就是靠"基线 47、跑出 53"这 6 条增量抓到一个让整条本地书导入死掉的正则笔误（`tools/verify/out/baseline-n.txt` 与 `testreport.mjs`）；
+> - `./gradlew :server:test` 在本机**长期固定 47 个失败**（2026-10-01 实测；测试删不掉被占用的 SQLite，macOS 不暴露）。**判定回归必须与基线的「失败集合」逐条比对，禁止只看失败数量** —— 本轮就是靠"基线 47、跑出 53"这 6 条增量抓到一个让整条本地书导入死掉的正则笔误（基线在库内 `tools/verify/baselines/server-test-failures-47.txt`，**不是** gitignore 的 `out/` —— 参照物一旦不进版本库，"逐条比对"就不可验证）；
 > - 前端依赖缺失时先 `npm --prefix web install --ignore-scripts`（esbuild 的 postinstall 会被拦截），再跑 `check` / `tsx test/run-all.ts`；
 
 ---
@@ -239,6 +239,7 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 | PROPOSAL-015 | 内置 WebDAV 服务端与数据目录 webdav 存储区（含 Web 端「文件」设置页面）——**已废弃：该服务与页面已于 2026-09-29 删除** | [`docs/proposals/PROPOSAL-015-webdav-storage-server.md`](docs/proposals/PROPOSAL-015-webdav-storage-server.md) | Superseded |
 | PROPOSAL-016 | 本地图书导入与无缝阅读（TXT/EPUB 解析、智能分章与书架集成） | [`docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md`](docs/proposals/PROPOSAL-016-local-book-import-txt-epub.md) | Tested |
 | PROPOSAL-017 | 桌面化封装 —— 把「青阅」打成一个能双击的 Windows 程序（含"同源闸门决定壳只能开到回环 URL"这条约束） | [`docs/proposals/PROPOSAL-017-desktop-packaging-windows-app.md`](docs/proposals/PROPOSAL-017-desktop-packaging-windows-app.md) | Draft（§6 五件待拍板） |
+| PROPOSAL-018 | 框架脉络重整 —— 书库冻结为基准、浮层系统一次定死、九页归成四种版面原型（用户拍板：结构 + 版面一起重做） | [`docs/proposals/PROPOSAL-018-framework-consolidation-and-layout-rework.md`](docs/proposals/PROPOSAL-018-framework-consolidation-and-layout-rework.md) | Draft（§6 三件待拍板；W1 起可开工） |
 
 ### 架构决策记录 (ADR)
 | 编号 | 决策标题 | 关联文档 | 状态 |

@@ -21,7 +21,7 @@ const VIEWPORTS = [
   { name: 'desk-1180', width: 1180, height: 800 },
   { name: 'mobile-390', width: 390, height: 844 },
 ]
-const ROUTES = ['#library', '#shelf', '#sources', '#explore', '#subscriptions', '#rules', '#backup']
+const ROUTES = ['#library', '#shelf', '#sources', '#explore', '#subscriptions', '#rules', '#backup', '#settings', '#about']
 
 const collect = () => {
   const px = v => Math.round(parseFloat(v) || 0)
