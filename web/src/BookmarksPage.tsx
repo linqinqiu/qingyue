@@ -13,14 +13,17 @@ import { Icon } from './icons'
 export function BookmarksPage({ onOpen }: { onOpen: (item: BookshelfItem) => void }) {
   const [marks, setMarks] = useState<BookMark[]>([])
   const [shelf, setShelf] = useState<BookshelfItem[]>([])
+  const [shelfFailed, setShelfFailed] = useState(false)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
-    // 书架是"这条能不能真的打开"的依据，取不到就当都不在架上：宁可少给一个按钮，不给一个点了没反应的
-    void api.bookshelf().then(setShelf).catch(() => setShelf([]))
+    // 书架是"这条能不能真的打开"的依据。取不到时不能当"都不在架上" —— 那会给每一条
+    // 书签都贴上「不在书架」，而真实情况只是这一次请求没成（2026-10-03 审计）。
+    void api.bookshelf().then(rows => { setShelf(rows); setShelfFailed(false) })
+      .catch(() => { setShelf([]); setShelfFailed(true) })
     return api.marks().then(setMarks).catch(error => {
       setNotice(error instanceof Error ? error.message : '书签读取失败')
     }).finally(() => setLoading(false))
@@ -82,7 +85,9 @@ export function BookmarksPage({ onOpen }: { onOpen: (item: BookshelfItem) => voi
                   <div className="bookmarks-row-actions">
                     {target
                       ? <button type="button" className="subtle-button" onClick={() => onOpen(target)}>打开</button>
-                      : <span className="bookmarks-noop" title="这本书不在书架上，书签仍然留着">不在书架</span>}
+                      : <span className="bookmarks-noop" title={shelfFailed ? '书架列表没取到，判断不了它在不在架上' : '这本书不在书架上，书签仍然留着'}>
+                        {shelfFailed ? '书架未取到' : '不在书架'}
+                      </span>}
                     <button
                       type="button"
                       className="subtle-button"

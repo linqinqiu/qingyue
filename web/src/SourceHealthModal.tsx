@@ -6,6 +6,8 @@ import { Icon } from './icons'
 
 interface SourceHealthModalProps {
   sources: SourceSummary[]
+  /** 清单到没到手：`sources` 空数组既可能是"还在路上"也可能是"库里真没有"，界面不能都写成 0。 */
+  sourcesState: 'loading' | 'ready' | 'failed'
   onClose: () => void
   onSourcesChange: () => void
   onToast: (message: string, type?: 'info' | 'success' | 'error') => void
@@ -33,6 +35,7 @@ type TabFilter = 'all' | 'valid' | 'slow' | 'pending' | 'unconfigured' | 'dead'
 
 export function SourceHealthModal({
   sources,
+  sourcesState,
   onClose,
   onSourcesChange,
   onToast,
@@ -245,7 +248,11 @@ export function SourceHealthModal({
                     + (run.autoTagged > 0 ? ` · 过程中已给 ${run.autoTagged} 个不能正常使用的打上体检标签` : '')
                     + ' · 收起窗口不会打断，只有「停止体检」会'
                   : stats.total === 0
-                    ? `还没开始：下面那一次会探测「${includeDisabled ? '全部' : '启用中'}」的 ${scoped.length} 个书源，中途可以停`
+                    ? sourcesState === 'loading'
+                      ? '书源清单还在取：取回来才知道这一次要探测多少个，先稍等'
+                      : sourcesState === 'failed'
+                        ? '书源清单没取到：关掉这个窗口，回书源页看那句错误，别在这里等体检'
+                        : `还没开始：下面那一次会探测「${includeDisabled ? '全部' : '启用中'}」的 ${scoped.length} 个书源，中途可以停`
                     : `本轮检测 ${stats.total} 个书源 · 用时 ${(durationMs / 1000).toFixed(1)}s`}
               </small>
             </div>
@@ -411,13 +418,15 @@ export function SourceHealthModal({
               type="button"
               className="subtle-button"
               onClick={() => void startCheck()}
-              disabled={running || busyAction !== null}
+              disabled={running || busyAction !== null || sourcesState !== 'ready' || scoped.length === 0}
             >
               <Icon name="refresh" className={running ? 'spin' : ''} />
               <span>
                 {running
                   ? '体检中…'
-                  : `${results.length > 0 ? '重新体检' : '开始体检'}（${scoped.length} 个${includeDisabled ? '' : '启用中的'}）`}
+                  : sourcesState !== 'ready'
+                    ? sourcesState === 'loading' ? '正在读书源清单…' : '书源清单没取到'
+                    : `${results.length > 0 ? '重新体检' : '开始体检'}（${scoped.length} 个${includeDisabled ? '' : '启用中的'}）`}
               </span>
             </button>
             {stats.dead > 0 && !running && (
@@ -457,7 +466,9 @@ export function SourceHealthModal({
         <div className="health-results-list">
           {filteredResults.length === 0 ? (
             <div className="health-empty-state">
-              <p>{running ? '体检进行中…' : '无符合筛选条件的结果'}</p>
+              <p>{running ? '体检进行中…'
+                : sourcesState !== 'ready' ? '书源清单还没取到，这里暂时是空的'
+                  : '无符合筛选条件的结果'}</p>
             </div>
           ) : (
             filteredResults.map(item => {

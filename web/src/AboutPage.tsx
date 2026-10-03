@@ -79,7 +79,8 @@ export function AboutPage({
         <h1>{info?.title ?? '青阅'}</h1>
         <p>把 Legado 书源规则跑在服务端的本地阅读库：书架、发现、订阅、朗读与离线缓存都在自己的机器上。</p>
         <dl className="about-facts">
-          <div><dt>版本</dt><dd>{info?.version ?? '载入中…'}</dd></div>
+          {/* 取失败时不能一直挂着「载入中…」：那行字会永远停在屏幕上（notice 在旁边，但版本这一格在说谎） */}
+          <div><dt>版本</dt><dd>{info?.version ?? (notice ? '没取到' : '载入中…')}</dd></div>
           <div><dt>运行位置</dt><dd>{window.location.host}</dd></div>
           <div><dt>开发者</dt><dd>{repository || '未署名'}</dd></div>
         </dl>

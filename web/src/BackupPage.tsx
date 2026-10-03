@@ -65,10 +65,13 @@ export function BackupPage() {
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [kept, setKept] = useState<KeptBackupEntry[]>([])
+  // 取失败与"确实没导过包"要分开：以前 catch 成空数组，整块面板直接消失，
+  // 用户读到的是"这个服务没收下任何东西"，而真实情况可能是那一次请求没成。
+  const [keptFailed, setKeptFailed] = useState(false)
   const backupInputRef = useRef<HTMLInputElement>(null)
 
   const loadKept = useCallback(async () => {
-    try { setKept(await api.keptBackupEntries()) } catch { /* 还没导过包时这里本来就是空的，不报错打扰 */ }
+    try { setKept(await api.keptBackupEntries()); setKeptFailed(false) } catch { setKeptFailed(true) }
   }, [])
   useEffect(() => { void loadKept() }, [loadKept])
 
@@ -196,6 +199,13 @@ export function BackupPage() {
           ))}
         </dl>
       </section>
+
+      {keptFailed && kept.length === 0 && (
+        <p className="backup-hint" role="status">
+          「包里收下的其余条目」这一次没读到 —— 下面没有列出来不代表服务器没收下什么。
+          <button type="button" className="subtle-button" onClick={() => void loadKept()}>再取一次</button>
+        </p>
+      )}
 
       {kept.length > 0 && (
         <section className="backup-panel">

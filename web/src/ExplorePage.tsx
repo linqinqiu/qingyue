@@ -12,6 +12,9 @@ export interface ExplorePageProps {
 /** 「发现」页：读取书源的 exploreUrl 分栏，按 Legado 语义列出推荐书籍。 */
 export function ExplorePage({ onOpen }: ExplorePageProps) {
   const [sources, setSources] = useState<SourceSummary[]>([])
+  // 「没取到」和「取到了但是空的」必须分开：以前只有 sources=[] 一种状态，
+  // 于是列表请求失败时界面照样写着「加载中…」+「0 个书源配了发现页」—— 两句都是谎话。
+  const [sourcesFailed, setSourcesFailed] = useState(false)
   const [sourceId, setSourceId] = useState('')
   const [tabs, setTabs] = useState<ExploreTab[]>([])
   const [tab, setTab] = useState<ExploreTab | null>(null)
@@ -49,8 +52,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
   useEffect(() => {
     void api.exploreSources().then(list => {
       setSources(list)
+      setSourcesFailed(false)
       setSourceId(current => current || list[0]?.id || '')
-    }).catch(() => setMessage('发现书源列表加载失败'))
+    }).catch(() => { setSourcesFailed(true); setMessage('发现书源列表没取到 —— 下面显示 0 个不是"没有书源"，是这一次请求失败了') })
   }, [])
 
   useEffect(() => {
@@ -151,7 +155,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
       if (list.length === 0 || added.length === 0) setHasMore(false)
       else setPage(next)
     } catch {
-      setHasMore(false)
+      // 以前这里 setHasMore(false)：一次翻页失败就把「加载更多」按钮永久收掉，
+      // 界面读起来像"这一页就是最后一屏"。失败要留在原地让人能再点一次。
+      setMessage('这一页没取到，可以再点一次「加载更多」')
     } finally {
       clearTimeout(timer)
       setLoadingMore(false)
@@ -189,14 +195,14 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
           )}
           <Select
             ariaLabel="搜索并选择发现页书源"
-            placeholder={sources.length ? (pickable.length ? '按名称或分组搜书源' : '这个分组里没有书源') : '加载中…'}
+            placeholder={sourcesFailed ? '书源列表没取到' : sources.length ? (pickable.length ? '按名称或分组搜书源' : '这个分组里没有书源') : '加载中…'}
             value={sourceId}
             onChange={setSourceId}
             searchable
             options={pickable.map(item => ({ value: item.id, label: item.name, hint: item.group?.trim() || undefined }))}
           />
           <small className="explore-source-count">
-            {group ? `${pickable.length} / ${sources.length}` : sources.length} 个书源配了发现页
+            {sourcesFailed ? '没取到书源列表' : `${group ? `${pickable.length} / ${sources.length}` : sources.length} 个书源配了发现页`}
           </small>
         </div>
       </header>

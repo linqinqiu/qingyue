@@ -24,6 +24,19 @@ const EDGE = 8
 
 export type BarPosition = { x: number; y: number }
 
+/**
+ * 窄屏底部那条导航（`.mobile-reader-nav`）是固定高度、盖在正文上的，
+ * 朗读条停在它上面就等于把「目录 / 书签 / 换源 / 朗读 / 设置 / 夜读」六颗键糊住。
+ * 所以夹下边界时要按导航**实测高度**留位（`@media (max-width:640px)` 里那条
+ * `bottom: 74px` 只在没拖过时生效 —— 拖过之后内联 `bottom:auto` 把它覆盖了）。
+ */
+function bottomReserve(): number {
+  const nav = document.querySelector<HTMLElement>('.mobile-reader-nav')
+  if (!nav) return EDGE
+  if (getComputedStyle(nav).display === 'none') return EDGE
+  return nav.getBoundingClientRect().height + EDGE
+}
+
 type Drag = {
   pointerId: number
   startX: number
@@ -51,7 +64,7 @@ function readStored(): BarPosition | null {
 /** 把左上角夹进视口：bar 尺寸用实测的，不猜常量。 */
 export function clampPosition(pos: BarPosition, size: { width: number; height: number }): BarPosition {
   const maxX = Math.max(EDGE, window.innerWidth - size.width - EDGE)
-  const maxY = Math.max(EDGE, window.innerHeight - size.height - EDGE)
+  const maxY = Math.max(EDGE, window.innerHeight - size.height - bottomReserve())
   return {
     x: Math.min(maxX, Math.max(EDGE, Math.round(pos.x))),
     y: Math.min(maxY, Math.max(EDGE, Math.round(pos.y))),
@@ -77,9 +90,14 @@ export function useTtsBarPosition(getElement: () => HTMLElement | null) {
   const holdTimer = useRef<number | null>(null)
   const suppressClick = useRef(false)
 
-  /** 视口变化（含手机转屏）后重新夹一次：拖到右下角再转成竖屏，bar 不能留在屏幕外。 */
+  /**
+   * 视口变化（含手机转屏）后重新夹一次，**挂载时也要夹**：
+   * 存进去的坐标是在另一块屏上量的 —— 宽屏拖到右下角、再用 390px 的手机打开，
+   * 只夹 resize 的话这一次没人触发，bar 连同抓手一起留在视口外，用户"再也拖不回来"
+   * （2026-10-03 审计查出来的，正是这个文件开头注释里承诺要避免的事）。
+   */
   useEffect(() => {
-    const onResize = () => {
+    const clampNow = () => {
       setPosition(current => {
         if (!current) return current
         const element = getElement()
@@ -89,8 +107,9 @@ export function useTtsBarPosition(getElement: () => HTMLElement | null) {
         return next.x === current.x && next.y === current.y ? current : next
       })
     }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    clampNow()
+    window.addEventListener('resize', clampNow)
+    return () => window.removeEventListener('resize', clampNow)
   }, [getElement])
 
   useEffect(() => {

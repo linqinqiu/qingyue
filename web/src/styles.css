@@ -44,7 +44,9 @@ svg { width: 18px; height: 18px; flex: none; }
 .app-page-header {
   position: sticky;
   top: 0;
-  z-index: 100;
+  /* 40 而不是 100：挡片是 100，同值就变成"谁在 DOM 里靠后谁赢"，
+     今天恰好挡片在后所以看着对。顶栏只要压过正文（正文最高 30）就够了。 */
+  z-index: 40;
   height: calc(62px + var(--safe-top));
   padding-top: var(--safe-top);
   padding-left: max(clamp(16px, 4vw, 48px), var(--safe-left));
@@ -796,6 +798,45 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 /* Book Manage Modal Sheet */
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, .45); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 18px; animation: fadeIn .18s ease; }
+
+/*
+ * 弹窗共用的壳。此前一个都没有：`SourceHealthModal` 与 `SourceGroupModal` 挂着
+ * `.modal-card` / `.modal-header` / `.close-button` 三个类名，而样式表里**一条规则都不存在**
+ * （2026-10-03 审计查出），于是它们的标题栏没有内边距、`h2` 吃浏览器默认的 2em 粗体、
+ * 关闭键是一个没有尺寸的裸按钮。同一批还有 `.icon-btn`、`.shelf-remove`、`.source-login-footer`。
+ * 这里补上基础档，新弹窗请复用这一套，不要再抄第 15 份几何值。
+ */
+.modal-card {
+  width: min(560px, 100%); max-height: min(88vh, 760px);
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .25); overflow: hidden;
+  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.modal-header {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+}
+.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.modal-header small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--t-xs); }
+/* 弹窗右上角那颗关闭键的统一档（30×30、无边框、hover 才有底色） */
+.close-button, .icon-btn, .shelf-remove {
+  width: 30px; height: 30px; flex: none;
+  /* 4496 那条全局 `button { min-height: 34px }` 排在后面，会把 30px 的方键悄悄拉成 30×34。
+     可点面积仍然在"30–34"这一档内，但要的是方的。 */
+  min-height: 30px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.close-button:hover, .icon-btn:hover, .shelf-remove:hover { background: var(--surface-muted); color: var(--ink); }
+.close-button svg, .icon-btn svg, .shelf-remove svg { width: 16px; height: 16px; }
+/* 弹窗底部动作条：上边框 + 淡底，动作靠右。OfflineCacheModal 一直在挂这个类名，之前也是空的。 */
+.source-login-footer {
+  flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px; border-top: 1px solid var(--line); background: var(--surface-muted);
+}
+
 .book-manage-sheet { width: min(440px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 48px rgba(0, 0, 0, .22); overflow: hidden; animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1); }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -1273,7 +1314,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
     padding-right: max(0px, var(--safe-right));
     box-sizing: border-box;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* 六颗键（目录 / 书签 / 换源 / 朗读 / 设置 / 夜读）挤在四列里：后两颗被推到第二行，
+       而容器高度是写死的 `calc(58px + safe-bottom)`，于是它们在手机上根本看不见
+       （2026-10-03 审计）。列数按实际按钮数写。 */
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(16px);
@@ -2057,7 +2101,13 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 950;
+  /*
+    原来 950：比 `.reader-drawer`(30)、`.reader-drawer-backdrop`(28)、`.modal-backdrop`(100) 都高，
+    所以朗读时一打开目录/书签/设置抽屉或换源、朗读设置弹窗，这条 bar 就浮在最上层，
+    压住抽屉标题栏与弹窗内容（2026-10-03 审计）。它只需要盖住正文 —— 26 高于
+    `.reader-boundary-message`(25)、低于抽屉与弹窗。
+  */
+  z-index: 26;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -3915,7 +3965,9 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  z-index: 150;
+  /* 原来是 150，压着挡片（100）：弹窗开着时这条批量操作栏还亮着、还点得动，
+     "现在只看这一件事"的契约就破了。它属于页面 chrome，必须在挡片之下。 */
+  z-index: 90;
   animation: slideUpFloat 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
 }
@@ -4425,6 +4477,20 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 .primary-button:hover:not(:disabled) { background: var(--accent-solid-hover); color: var(--on-accent); border-color: transparent; }
 .subtle-button, .ghost-button { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
 .subtle-button:hover:not(:disabled), .ghost-button:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+/*
+  `.secondary-button` 与 `.rules-setting-btn` 之前**没有全局档**：前者只在 `.batch-bar-right`
+  作用域里定义过，所以「一键停用连不上的源」和书源批量条外的「完成」渲染成无边框裸文字；
+  后者只在 `.toc-repick` 里有一条 `flex:none`，于是阅读设置抽屉里那颗「按这条规则重新识别目录」
+  同样是裸按钮，而隔壁「内容净化」那颗却挂着 12 条内联样式 —— 同一个类名两种长相。
+  都并进次级档，内联样式随后删掉。
+*/
+.secondary-button, .rules-setting-btn { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.secondary-button:hover:not(:disabled), .rules-setting-btn:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.rules-setting-btn { display: inline-flex; align-items: center; gap: 7px; border-radius: 6px; padding: 0 12px; font-size: 13px; }
+/* 通栏那一档：左边图标+名称，右边箭头（阅读设置抽屉里的「内容净化」入口） */
+.rules-setting-btn.is-wide { width: 100%; justify-content: space-between; padding: 10px 14px; font-size: var(--t-md); }
+.rules-setting-btn-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.rules-setting-btn svg { width: 15px; height: 15px; flex: none; }
 .danger-button { background: transparent; color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); }
 .danger-button:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
 button.danger-solid, .danger-solid { background: var(--danger-solid); color: var(--on-danger); border: 1px solid transparent; }

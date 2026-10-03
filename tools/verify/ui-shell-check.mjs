@@ -278,7 +278,19 @@ try {
   check('⑤加了一颗按钮之后 1440 宽仍不横向溢出', shelfBar.overflow <= 1, `溢出 ${shelfBar.overflow}px`)
   check('⑤「分章规则」点得开弹窗', await clickIn(page, '.shelf-header-actions', '分章规则'), '')
   await page.waitForSelector('.toc-rules-modal', { timeout: 8000 })
-  await sleep(400)
+  // 弹窗先渲染「正在读取规则表…」，规则是随后一次请求回来的 —— 固定 sleep 在冷 JVM 上
+  // 会量到 0 行（假红），而 0 行又让"每行都露出正则"那条判据空过（假绿）。等它落地或报错。
+  const tocLoaded = await page.evaluate(async () => {
+    const deadline = Date.now() + 15000
+    while (Date.now() < deadline) {
+      const modal = document.querySelector('.toc-rules-modal')
+      if (!modal) return 'gone'
+      if (modal.querySelector('.toc-rule')) return 'rows'
+      if (modal.querySelector('.toc-rules-failed')) return modal.querySelector('.toc-rules-failed').textContent
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+    return 'timeout'
+  })
   const toc = await page.evaluate(() => {
     const modal = document.querySelector('.toc-rules-modal')
     const cs = modal ? getComputedStyle(modal) : null
@@ -296,10 +308,12 @@ try {
       overflow: modal ? modal.scrollWidth - modal.clientWidth : -1,
     }
   })
+  check('⑤规则表真的取回来了（不是停在"正在读取"或报错上）',
+    tocLoaded === 'rows' && toc.rows > 0, `落地=${tocLoaded} · ${toc.rows} 行`)
   check('⑤弹窗列出全部规则（26 条里编得出正则的那些），不是只列启用的 12 条',
     toc.rows >= 20 && toc.switches === toc.rows, `${toc.rows} 行 · ${toc.switches} 个开关`)
   check('⑤每行把正则原文露出来（不写出来没人判断得了适不适合自己的书）',
-    toc.regexShown >= toc.rows - 2, `${toc.regexShown}/${toc.rows} 行有正则`)
+    toc.rows > 0 && toc.regexShown >= toc.rows - 2, `${toc.regexShown}/${toc.rows} 行有正则`)
   check('⑤一屏给齐三样：默认规则选择器、接着导书的按钮、把两件事分开讲的说明',
     toc.defaultSelect && toc.importBtn && toc.note, '')
   check('⑤弹窗有壳、能滚、不横向溢出（样式表里那个类名是真的）',

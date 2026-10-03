@@ -12,14 +12,24 @@ import { clampPosition } from '../src/ttsBarPosition'
  */
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
 
-function withViewport(width: number, height: number, run: () => void) {
-  const previous = (globalThis as { window?: unknown }).window
-  ;(globalThis as { window: unknown }).window = { innerWidth: width, innerHeight: height }
+/**
+ * `clampPosition` 会去量窄屏底部导航的实测高度（`bottomReserve`），所以这里要连带桩一个
+ * `document`。`navHeight` 不给 = 页面上没有那条导航（宽屏就是这种情况），下边界只留边距。
+ */
+function withViewport(width: number, height: number, run: () => void, navHeight?: number) {
+  const g = globalThis as { window?: unknown; document?: unknown; getComputedStyle?: unknown }
+  const previous = { window: g.window, document: g.document, getComputedStyle: g.getComputedStyle }
+  const nav = navHeight === undefined ? null : { getBoundingClientRect: () => ({ height: navHeight }) }
+  g.window = { innerWidth: width, innerHeight: height }
+  g.document = { querySelector: () => nav }
+  g.getComputedStyle = () => ({ display: nav ? 'flex' : 'none' })
   try {
     run()
   } finally {
-    if (previous === undefined) delete (globalThis as { window?: unknown }).window
-    else (globalThis as { window: unknown }).window = previous
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete g[key as keyof typeof g]
+      else (g as Record<string, unknown>)[key] = value
+    }
   }
 }
 
@@ -32,6 +42,17 @@ test('clampPosition - 拖出视口会被夹回来，永远留 8px 边距（不�
     assert.deepEqual(clampPosition({ x: 500, y: 99999 }, { width: 600, height: 48 }), { x: 500, y: 844 })
     // 视口比 bar 还窄时也不能给出负的最大值（那会让 bar 从左边消失）
     assert.deepEqual(clampPosition({ x: 4000, y: 4000 }, { width: 2000, height: 48 }).x, 8)
+  })
+})
+
+test('clampPosition - 窄屏要给底部导航让位，不然六颗键被糊住', () => {
+  // 有 56px 高的导航时，下边界 = 900 - 48 - 56 - 8
+  withViewport(390, 900, () => {
+    assert.deepEqual(clampPosition({ x: 8, y: 99999 }, { width: 300, height: 48 }), { x: 8, y: 788 })
+  }, 56)
+  // 没那条导航（宽屏）时回到只留边距，两档差 56px
+  withViewport(390, 900, () => {
+    assert.deepEqual(clampPosition({ x: 8, y: 99999 }, { width: 300, height: 48 }), { x: 8, y: 844 })
   })
 })
 

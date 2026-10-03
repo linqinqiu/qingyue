@@ -120,7 +120,7 @@ function ReaderSettingsControls({
         <span className="setting-label">本地书目录</span>
         <small className="setting-hint">
           这本《{localBook.name}》现在用的是「{ruleLabelOf(localBook.tocRule)}」。
-          换规则会重切目录并清掉正文缓存，阅读进度按新章数夹住。
+          换规则会重切目录并清掉正文缓存，读到的位置会回到第 1 章（章号整个变了，没法照原样挪过去）。
         </small>
         {!!onReparseLocal && (
           <div className="toc-repick">
@@ -147,28 +147,10 @@ function ReaderSettingsControls({
     {onOpenReplaceRules && (
       <section className="setting-section">
         <span className="setting-label">内容净化</span>
-        <button
-          type="button"
-          className="rules-setting-btn"
-          onClick={onOpenReplaceRules}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            padding: '10px 14px',
-            border: '1px solid var(--line)',
-            borderRadius: '8px',
-            background: 'var(--surface-muted)',
-            color: 'var(--ink)',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="edit" />
-            <span>替换净化规则管理</span>
-          </div>
+        {/* 之前这颗挂着 12 条内联样式，而隔壁「按这条规则重新识别目录」用同一个类名却是裸按钮
+            —— 类名不管用、样式写在 JSX 里，改一处漏一处。现在两边都走 .rules-setting-btn。 */}
+        <button type="button" className="rules-setting-btn is-wide" onClick={onOpenReplaceRules}>
+          <span className="rules-setting-btn-label"><Icon name="edit" />替换净化规则管理</span>
           <Icon name="arrowRight" />
         </button>
         <small className="setting-hint">针对当前书籍/书源过滤广告与特定字符</small>
@@ -1949,7 +1931,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             onClick={() => onSettingsChange({ ...settings, sidebarPinned: !settings.sidebarPinned })}
           />
           <IconButton
-            label="关闭目录"
+            // 固定态下抽屉由 `pinned` 类撑着，光 setActiveDrawer(null) 关不掉 —— 这颗必须顺带解除固定。
+            // 审计把它报成"一个控件兼两个职务"，核了 :1917 的 className 才确认是必需的；
+            // 该修的是标签：它得说自己按下去会发生什么。
+            label={settings.sidebarPinned ? '取消固定并关闭目录' : '关闭目录'}
             icon="close"
             onClick={() => {
               if (settings.sidebarPinned) {

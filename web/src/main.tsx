@@ -883,6 +883,11 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   const [loginModalSource, setLoginModalSource] = useState<SourceSummary | null>(null)
   const [shareIds, setShareIds] = useState<string[] | null>(null)
   const [creating, setCreating] = useState(false)
+  /**
+   * 书源清单到没到手。体检弹窗要读这个：清单还在路上时 `sources` 是空数组，
+   * 于是界面会一本正经地写「探测『启用中』的 0 个书源」—— 把"还没取到"说成"一个都没有"。
+   */
+  const [sourcesState, setSourcesState] = useState<'loading' | 'ready' | 'failed'>('loading')
 
   // 从别处（书籍详情的换源行）右键跳过来时，把目标填进搜索框并选中它
   useEffect(() => {
@@ -896,8 +901,10 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
     try {
       const values = await api.sources(query)
       setSources(values)
+      setSourcesState('ready')
       onSourcesChange(values)
     } catch (error) {
+      setSourcesState('failed')
       setNotice(error instanceof Error ? error.message : '无法载入书源')
     }
   }, [onSourcesChange, query])
@@ -1473,6 +1480,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
       {showHealthModal && (
         <SourceHealthModal
           sources={sources}
+          sourcesState={sourcesState}
           onClose={() => setShowHealthModal(false)}
           onSourcesChange={() => void load()}
           onToast={(msg, type) => {

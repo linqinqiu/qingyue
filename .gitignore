@@ -59,6 +59,7 @@ local-patches.diff
 !/tools/verify/controls-audit.mjs
 !/tools/verify/env.mjs
 !/tools/verify/explore-detail-check.mjs
+!/tools/verify/icon-square-census.mjs
 !/tools/verify/index-selector-census.mjs
 !/tools/verify/multipart.mjs
 !/tools/verify/opensource-hygiene-check.mjs
