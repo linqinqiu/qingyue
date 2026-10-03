@@ -25,9 +25,9 @@
 
 ## 📌 项目定位与愿景
 
-**Legado Server** 是针对流行开源阅读软件 **[Legado（开源阅读 Android 端）](https://github.com/LegadoTeam/legado)** 的独立服务端重构版本。
+**青阅** 是针对流行开源阅读软件 **[Legado（开源阅读 Android 端）](https://github.com/LegadoTeam/legado)** 的独立服务端重构版本。
 
-本项目彻底剥离了 Android Framework 原生依赖，在纯 JVM 环境下构建了高性能**无头后端（Headless Server）**，并配套提供了基于 **React 19 + TypeScript + Vite** 的现代化**Web 阅读器与管理控制台**。用户可以在 VPS、家庭 NAS、个人电脑、Docker 容器或阿里云计算巢中快速部署属于自己的私有化云端书源中心与跨平台阅读平台。
+本项目彻底剥离了 Android Framework 原生依赖，在纯 JVM 环境下构建了高性能**无头后端（Headless Server）**，并配套提供了基于 **React 19 + TypeScript + Vite** 的现代化**Web 阅读器与管理控制台**。用户可以在 VPS、家庭 NAS、个人电脑、Docker 容器或阿里云计算巢中快速部署属于自己的私有化阅读平台。**仓库不含、也不提供任何书源订阅源或发现源**：规则与地址由使用者自己导入，服务默认只监听 `127.0.0.1`。
 
 ---
 

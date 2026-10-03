@@ -94,5 +94,14 @@ local-patches.diff
 !/tools/verify/local-image-check.mjs
 !/tools/verify/specified-source-search-check.mjs
 !/tools/verify/zip-make.mjs
+# AGENTS.md 与 docs 里点名引用到的这几份也放出来：门禁与工具"文档里写着、仓库里没有"，
+# 别人 clone 下来照着跑只会得到一条 ENOENT（开源前对账引用面时抓到的 7 份）。
+!/tools/verify/external-login-check.mjs
+!/tools/verify/external-login-ui-check.mjs
+!/tools/verify/portal-theme-check.mjs
+!/tools/verify/preview.mjs
+!/tools/verify/snapshot.mjs
+!/tools/verify/testreport.mjs
+!/tools/verify/tts-custom-engine-check.mjs
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，
 # 不再含任何本机绝对路径，所以从忽略名单里放出来随仓库分发。
