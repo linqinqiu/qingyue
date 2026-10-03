@@ -66,4 +66,29 @@ class SourceHealthTest {
         assertEquals("invalid", result.statusCategory)
         assertEquals(0, calls)
     }
+
+    /**
+     * 「书源的体检当前出了问题」（用户 2026-10-03）。本机实测：5,574 个源里 652 个顶层
+     * `searchUrl` 是空的（`ruleSearch.url` 全库皆空 —— Legado 把搜索地址放在顶层），
+     * 以前让 `runner.search()` 抛「该书源未配置 searchUrl」，`classify()` 落到 else → `broken`
+     * → 界面「连不上」→ 被「一键停用 / 一键删除」圈走。一个请求都没发过的源不该叫"连不上"。
+     */
+    @Test
+    fun `a source without a search url is not reported as unreachable`() = runBlocking {
+        var calls = 0
+        val health = SourceHealth(RuleRunner { calls++; hits })
+
+        val exploreOnly = health.probe(
+            "https://source.example", "只有发现页",
+            """{"bookSourceUrl":"https://source.example","exploreUrl":"分类::/cat/{{cat}}"}""", "都市",
+        )
+        assertEquals("explore_only", exploreOnly.statusCategory)
+        assertFalse(exploreOnly.ok)
+        assertTrue("要说清它还能浏览: ${exploreOnly.error}", exploreOnly.error!!.contains("发现页"))
+
+        val useless = health.probe("https://source.example", "什么都没配", """{"bookSourceUrl":"https://source.example"}""", "都市")
+        assertEquals("no_search", useless.statusCategory)
+
+        assertEquals("两类都不该发出网络请求", 0, calls)
+    }
 }

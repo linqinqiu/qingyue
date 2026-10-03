@@ -1,10 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  autoTagBatches,
   buildGroupingPlan,
   currentTiers,
   HEALTH_TAGS,
   tagPlan,
+  tierCounts,
   tierOf,
 } from '../src/sourceGrouping'
 
@@ -73,4 +75,54 @@ test('分组计划 - 空档位不占一行，没结果时整个面板不出现',
   const onlyGood = buildGroupingPlan([{ id: 'a', name: 'A', statusCategory: 'valid', latencyMs: 1 }], {})
   assert.deepEqual(onlyGood.map(plan => plan.tier), ['good'])
   assert.deepEqual(buildGroupingPlan([], {}), [])
+})
+
+/**
+ * 「书源的体检当前出了问题」（用户 2026-10-03）。实测根因：库里 5,574 个源有 652 个
+ * 顶层 `searchUrl` 是空（`ruleSearch.url` 全库皆空 —— Legado 的搜索地址本来就在顶层），
+ * 服务端让 `runner.search()` 抛「该书源未配置 searchUrl」，落进 `classify()` 的 else
+ * → `broken`「规则失效」→ 计入「连不上」→ 被「一键停用 / 一键删除」圈走。
+ * 一个从没发出请求的源被说成"连不上"，还是整库 12% 都这样，体检结论就没法用了。
+ * 拍板：拆成单独一档，不算坏。
+ */
+test('没配搜索地址 ≠ 连不上：单独一档，且不进危险按钮的口径', () => {
+  assert.equal(tierOf('explore_only'), 'unconfigured', '配了发现页的：能浏览不能搜')
+  assert.equal(tierOf('no_search'), 'unconfigured', '两样都没配的：在本服务里做不了任何事')
+  // 危险按钮（一键停用/删除）数的是 `bad` 那一档，这两类绝不能落进去
+  assert.notEqual(tierOf('explore_only'), 'bad')
+  assert.notEqual(tierOf('no_search'), 'bad')
+  assert.equal(HEALTH_TAGS.unconfigured, '未配搜索')
+})
+
+test('tierCounts - 完成提示按四档报数，不用服务端的 failedCount（= !ok，会把两类混成一个数）', () => {
+  const counts = tierCounts([
+    { statusCategory: 'valid' }, { statusCategory: 'slow' },
+    { statusCategory: 'needs_login' },
+    { statusCategory: 'explore_only' }, { statusCategory: 'no_search' },
+    { statusCategory: 'unreachable' },
+  ])
+  assert.deepEqual(counts, { good: 2, pending: 1, unconfigured: 2, bad: 1 })
+})
+
+test('自动打标不碰「未配搜索」：那是源写死的属性，每轮都一样，打标只会把分组字符串改脏', () => {
+  const rows = [
+    { id: 'a', statusCategory: 'unreachable' },
+    { id: 'b', statusCategory: 'needs_login' },
+    { id: 'c', statusCategory: 'explore_only' },
+    { id: 'd', statusCategory: 'no_search' },
+    { id: 'e', statusCategory: 'valid' },
+  ]
+  const buckets = autoTagBatches(rows, {}, new Set<string>())
+  const tiers = buckets.map(bucket => bucket.tier).sort()
+  assert.deepEqual(tiers, ['bad', 'pending'], '只自动打"确认有问题"与"待确认"两档')
+  assert.deepEqual(buckets.find(bucket => bucket.tier === 'bad')!.ids, ['a'])
+})
+
+test('分组面板列得出「未配搜索」这一行（人可以显式点一次打标签，但不自动打）', () => {
+  const plans = buildGroupingPlan([
+    { id: 'c', name: 'C源', statusCategory: 'explore_only', latencyMs: 0 },
+    { id: 'd', name: 'D源', statusCategory: 'no_search', latencyMs: 0 },
+  ], {})
+  assert.deepEqual(plans.map(plan => plan.tier), ['unconfigured'])
+  assert.deepEqual(plans[0].ids, ['c', 'd'])
 })

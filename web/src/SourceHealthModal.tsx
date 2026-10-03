@@ -19,13 +19,17 @@ interface SourceHealthModalProps {
 export const HEALTH_LABELS: Record<string, string> = {
   valid: '正常', slow: '迟缓', empty: '零结果', blocked: '访问受限', needs_login: '需登录',
   needs_webview: '需渲染JS', unreachable: '连不上', tls: '证书问题', broken: '规则失效', invalid: '结构错误',
+  // 这两类是"这个源在本服务里做不了搜索"，不是"这个站连不上"：服务端一个请求都没发（见 SourceHealth.probe）
+  explore_only: '仅发现', no_search: '未配搜索',
 }
 const DEAD_STATES = ['unreachable', 'tls', 'broken', 'invalid']
 const PENDING_STATES = ['empty', 'blocked', 'needs_login', 'needs_webview']
+const UNCONFIGURED_STATES = ['explore_only', 'no_search']
 const isDead = (state: string) => DEAD_STATES.includes(state)
 const isPending = (state: string) => PENDING_STATES.includes(state)
+const isUnconfigured = (state: string) => UNCONFIGURED_STATES.includes(state)
 
-type TabFilter = 'all' | 'valid' | 'slow' | 'pending' | 'dead'
+type TabFilter = 'all' | 'valid' | 'slow' | 'pending' | 'unconfigured' | 'dead'
 
 export function SourceHealthModal({
   sources,
@@ -64,14 +68,16 @@ export function SourceHealthModal({
     let valid = 0
     let slow = 0
     let pending = 0
+    let unconfigured = 0
     let dead = 0
     for (const r of results) {
       if (r.statusCategory === 'valid') valid++
       else if (r.statusCategory === 'slow') slow++
       else if (isDead(r.statusCategory)) dead++
+      else if (isUnconfigured(r.statusCategory)) unconfigured++
       else pending++
     }
-    return { total: results.length, valid, slow, pending, dead }
+    return { total: results.length, valid, slow, pending, unconfigured, dead }
   }, [results])
 
   const filteredResults = useMemo(() => {
@@ -80,6 +86,7 @@ export function SourceHealthModal({
       if (activeTab === 'slow' && item.statusCategory !== 'slow') return false
       if (activeTab === 'dead' && !isDead(item.statusCategory)) return false
       if (activeTab === 'pending' && !isPending(item.statusCategory)) return false
+      if (activeTab === 'unconfigured' && !isUnconfigured(item.statusCategory)) return false
       if (filterQuery) {
         const q = filterQuery.toLowerCase()
         return item.name.toLowerCase().includes(q) || item.id.toLowerCase().includes(q)
@@ -256,12 +263,13 @@ export function SourceHealthModal({
                   type="checkbox"
                   checked={includeDisabled}
                   disabled={running}
-                  onChange={event => {
-                    const next = event.target.checked
-                    setIncludeDisabled(next)
-                    startCheck((next ? sources : sources.filter(source => source.enabled)).map(source => source.id))
-                  }}
+                  onChange={event => setIncludeDisabled(event.target.checked)}
                 />
+                {/*
+                  勾选**只改范围，不发起扫描**。以前这里跟着一次 startCheck()，
+                  于是"手滑勾一下"就对着 5,574 个源开了一轮几十分钟的扫描（还会顺手打标签）。
+                  扫描的发起动作归下面那颗「开始体检」，它的括号里实时写着会探多少个。
+                */}
                 连停用的一起体检（{disabledCount}）
               </label>
             )}
@@ -319,6 +327,14 @@ export function SourceHealthModal({
             >
               待确认 ({stats.pending})
             </button>
+            {/* 这一档单独列出来：它们一个请求都没发过，混进「连不上」就是体检最大的假数（652 / 5,574） */}
+            <button
+              type="button"
+              className={`health-tab-btn tab-unconfigured ${activeTab === 'unconfigured' ? 'active' : ''}`}
+              onClick={() => setActiveTab('unconfigured')}
+            >
+              未配搜索 ({stats.unconfigured})
+            </button>
             <button
               type="button"
               className={`health-tab-btn tab-failed ${activeTab === 'dead' ? 'active' : ''}`}
@@ -357,14 +373,24 @@ export function SourceHealthModal({
                   {plan.ids.length} 个{plan.alreadyApplied > 0 ? ` · ${plan.alreadyApplied} 个已打过` : ''}
                 </span>
                 <span className="health-grouping-examples" title={plan.examples.join('、')}>{plan.examples.join('、')}</span>
-                <button
-                  type="button"
-                  className="subtle-button health-grouping-apply"
-                  disabled={busyAction !== null || plan.alreadyApplied === plan.ids.length}
-                  onClick={() => void applyTier(plan.tier, plan.ids)}
-                >
-                  打标签
-                </button>
+                {/*
+                  体检过程中就自动打过标签了（sourceHealthRun 的那一半），所以跑完之后这一行常常是
+                  "全部已打过"。以前那情况下仍然摆一颗**点不动的「打标签」**，用户读到的就是"按钮坏了"
+                  （source-health-check 第 27 条一直红在这上面）。既然没有可打的，就不摆按钮，
+                  改说一句状态；能撤销这件事仍然给得出来。
+                */}
+                {plan.alreadyApplied === plan.ids.length ? (
+                  <span className="health-grouping-applied">已打好</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="subtle-button health-grouping-apply"
+                    disabled={busyAction !== null}
+                    onClick={() => void applyTier(plan.tier, plan.ids)}
+                  >
+                    {plan.alreadyApplied > 0 ? `补打剩下 ${plan.ids.length - plan.alreadyApplied} 个` : '打标签'}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="ghost-button health-grouping-undo"

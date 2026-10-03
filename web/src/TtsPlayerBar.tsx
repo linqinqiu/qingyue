@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { Icon } from './icons'
 import { TtsPlayState } from './ttsEngine'
 import { SleepTimerOption } from './TtsSettingsModal'
+import { useTtsBarPosition } from './ttsBarPosition'
 
 export interface TtsPlayerBarProps {
   playState: TtsPlayState
@@ -53,8 +54,13 @@ export const TtsPlayerBar: React.FC<TtsPlayerBarProps> = ({
 
   const timerLabel = formatTimerLabel()
 
+  // 长按可拖、位置存本机、双击「朗读本章」复位 —— 见 ttsBarPosition.ts 那段
+  const barRef = useRef<HTMLElement>(null)
+  const { style, handlers } = useTtsBarPosition(() => barRef.current)
+
   return (
-    <aside className="tts-floating-bar" aria-label="朗读播放控制器">
+    <aside ref={barRef} className="tts-floating-bar" style={style} aria-label="朗读播放控制器" {...handlers}>
+      <span className="tts-bar-grip" aria-hidden="true" title="按住不放可以拖动，双击工具栏的「朗读本章」回到默认位置" />
       {/* Progress & Live Text Snippet */}
       <div className="tts-bar-info" onClick={onOpenSettings} title="点击展开朗读设置">
         <div className="tts-bar-status-dot-wrap">

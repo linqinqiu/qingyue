@@ -12,21 +12,30 @@
  *    把它们和"连不上"混成一档去停用，就是上一轮把 4,874 个源停成 2 个的那类事故。
  */
 
-export type HealthTier = 'good' | 'pending' | 'bad'
+export type HealthTier = 'good' | 'pending' | 'unconfigured' | 'bad'
 
-/** 三档标签名。写进 `bookSourceGroup` 里，与用户自己的标签并列。 */
+/** 四档标签名。写进 `bookSourceGroup` 里，与用户自己的标签并列。 */
 export const HEALTH_TAGS: Record<HealthTier, string> = {
   good: '体检可用',
   pending: '体检待确认',
+  unconfigured: '未配搜索',
   bad: '体检异常',
 }
 
 const GOOD = new Set(['valid', 'slow'])
+/**
+ * 「确认可用性有问题」的四类才算坏（可以被一键停用/删除）。
+ * `explore_only` / `no_search` 不在这里 —— 它们**一个请求都没发过**，说成"连不上"是谎话，
+ * 圈进危险按钮里就是又一次整库误伤（用户 2026-10-03：「书源的体检当前出了问题」）。
+ */
 const BAD = new Set(['unreachable', 'tls', 'broken', 'invalid'])
+/** 没配搜索地址（其中 `explore_only` 那些还能按发现页浏览）：单独一档，不算坏。 */
+const UNCONFIGURED = new Set(['explore_only', 'no_search'])
 
 /** 体检状态 → 档位。没见过的状态一律算"待确认"，不许凭猜测判源已死。 */
 export function tierOf(statusCategory: string): HealthTier {
   if (GOOD.has(statusCategory)) return 'good'
+  if (UNCONFIGURED.has(statusCategory)) return 'unconfigured'
   if (BAD.has(statusCategory)) return 'bad'
   return 'pending'
 }
@@ -66,13 +75,27 @@ export function autoTagBatches(
   const buckets = new Map<HealthTier, string[]>()
   for (const row of rows) {
     const tier = tierOf(row.statusCategory)
-    if (tier === 'good') continue
+    // `good` 不在这里自动打（"可用"是一次完整体检的结论）；`unconfigured` 也不打 ——
+    // "没配搜索地址"是源写死的属性，每轮体检都一样，打成标签只是把 652 条分组字符串改脏，
+    // 想按它筛的人可以在结果里看「未配搜索」那一档，或到面板上显式点一次「打标签」。
+    if (tier === 'good' || tier === 'unconfigured') continue
     if (alreadyTagged.has(row.id) || currentTiers(currentGroups[row.id] ?? '').includes(tier)) continue
     const ids = buckets.get(tier) ?? []
     ids.push(row.id)
     buckets.set(tier, ids)
   }
   return [...buckets.entries()].map(([tier, ids]) => ({ tier, ids }))
+}
+
+/**
+ * 四档各多少个。完成提示用它而不是服务端的 `failedCount`：
+ * `failedCount = !ok` 把"没配搜索"（一个请求都没发）和"真连不上"算成一个数，
+ * 报出来就是"5,574 个里 4,900 个有问题"这种没法用的结论。
+ */
+export function tierCounts(rows: Array<{ statusCategory: string }>): Record<HealthTier, number> {
+  const counts: Record<HealthTier, number> = { good: 0, pending: 0, unconfigured: 0, bad: 0 }
+  for (const row of rows) counts[tierOf(row.statusCategory)] += 1
+  return counts
 }
 
 /** 某源当前带着哪几档我们的标签。 */
@@ -97,7 +120,7 @@ export type GroupingPlan = {
  */
 export function buildGroupingPlan(rows: GroupingRow[], currentGroups: Record<string, string>): GroupingPlan[] {
   const buckets = new Map<HealthTier, GroupingPlan>()
-  for (const tier of ['good', 'pending', 'bad'] as HealthTier[]) {
+  for (const tier of ['good', 'pending', 'unconfigured', 'bad'] as HealthTier[]) {
     buckets.set(tier, { tier, tag: HEALTH_TAGS[tier], ids: [], alreadyApplied: 0, examples: [] })
   }
   for (const row of rows) {

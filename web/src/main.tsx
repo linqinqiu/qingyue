@@ -2912,7 +2912,7 @@ function ShelfPage({
       ) : (
         <section
           ref={gridRef}
-          className={`shelf-grid shelf-mode-${layout.mode} ${sort === 'custom' ? 'shelf-sortable' : ''}`}
+          className={`shelf-grid shelf-mode-${layout.mode} ${sort === 'custom' ? 'shelf-sortable' : ''}${batchMode ? ' is-batching' : ''}`}
         >
           {visibleItems.map((item, index) => {
             const isCaching = item.cacheState === 'caching'

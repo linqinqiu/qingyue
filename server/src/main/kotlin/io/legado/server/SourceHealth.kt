@@ -33,11 +33,31 @@ class SourceHealth(private val runner: RuleRunner) {
         val root = rawJson.objectValue()
         val searchUrl = root.string("searchUrl").orEmpty()
         val loginUrl = root.string("loginUrl").orEmpty()
+        // 发现页地址在**顶层 exploreUrl**（`ruleExplore` 里只有条目规则），与 searchUrl 同一层。
+        val exploreUrl = root.string("exploreUrl").orEmpty()
         // checkKeyWord 是 ruleSearch 的成员（库内 1,162 个声明它的源全都在这一层），不是顶层字段
         val checkKeyWord = root["ruleSearch"]?.let { (it as? JsonObject)?.string("checkKeyWord") }
         val keyword = (checkKeyWord ?: fallbackKeyword).take(24)
         // webView 由参数解析器如实给出，不再靠对原文做字符串嗅探
         val wantsWebView = runner.splitUrlOptions(searchUrl).second?.webView == true
+
+        /*
+         * 没配搜索地址的源**一次网络都不发**，单独定档（用户 2026-10-03：「书源的体检当前出了问题」）。
+         * 本机实测：库里 5,574 个源有 652 个顶层 `searchUrl` 与 `ruleSearch.url` 都是空（后者全库皆空，
+         * Legado 的搜索地址本来就在顶层），其中 58 个配了发现页、能正常按分类浏览。
+         * 以前这一步是让 `runner.search()` 抛「该书源未配置 searchUrl」，落进 `classify()` 的 else
+         * → broken「规则失效」→ 计入界面的「连不上」→ 被「一键停用连不上的源 / 一键删除」圈走。
+         * 一个从没发出请求的源被说成"连不上"，而且整库 12% 都这样，体检结论就没法看了。
+         */
+        if (searchUrl.isBlank()) {
+            val exploreOnly = exploreUrl.isNotBlank()
+            return item(
+                id, name, ok = false, 0L,
+                category = if (exploreOnly) "explore_only" else "no_search",
+                error = if (exploreOnly) "没配搜索地址，但配了发现页：只能按分类浏览，不参与关键词搜索。"
+                else "既没配搜索地址也没配发现页，这个源在本服务里做不了任何事（没有发出请求）。",
+            )
+        }
 
         val started = System.nanoTime()
         val outcome = withContext(Dispatchers.IO) { runCatching { runner.search(rawJson, keyword) } }

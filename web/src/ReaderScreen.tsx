@@ -14,6 +14,7 @@ import { processChapterForTts, TtsChapterData } from './ttsTextProcessor'
 import { ITtsEngine, WebSpeechEngine, HttpAudioTtsEngine, TtsPlayState, TtsSpeakMode, isPlayInterruptedError } from './ttsEngine'
 import { TtsSettingsModal, SleepTimerOption } from './TtsSettingsModal'
 import { TtsPlayerBar } from './TtsPlayerBar'
+import { resetTtsBarPosition } from './ttsBarPosition'
 import { isTypingTarget, normalizeKey, READER_SHORTCUTS, shortcutFor } from './shortcuts'
 import { ReplaceRulesModal } from './ReplaceRulesModal'
 import { OfflineCacheModal } from './OfflineCacheModal'
@@ -37,8 +38,8 @@ const themes = [
   ['light', '晓白'], ['paper', '护眼'], ['dark', '夜读'],
 ] as const
 
-function IconButton({ label, icon, onClick, className = '' }: { label: string; icon: Parameters<typeof Icon>[0]['name']; onClick: () => void; className?: string }) {
-  return <button className={`reader-icon-button ${className}`} title={label} aria-label={label} onClick={onClick}><Icon name={icon} /></button>
+function IconButton({ label, icon, onClick, className = '', onDoubleClick, hint }: { label: string; icon: Parameters<typeof Icon>[0]['name']; onClick: () => void; className?: string; onDoubleClick?: () => void; hint?: string }) {
+  return <button className={`reader-icon-button ${className}`} title={hint ? `${label} · ${hint}` : label} aria-label={label} onClick={onClick} onDoubleClick={onDoubleClick}><Icon name={icon} /></button>
 }
 
 function SettingRange({ label, value, min, max, step, onChange, display }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; display: string }) {
@@ -1899,6 +1900,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           label={!ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
           icon={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'}
           onClick={toggleTts}
+          onDoubleClick={resetTtsBarPosition}
+          hint="双击可把朗读悬浮条放回默认位置"
         />
       </div>
     </header>
@@ -2005,6 +2008,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             </div>
           ) : (
             <div className="drawer-cache-idle">
+              <span className="drawer-action-group-label">离线缓存</span>
               <div className="cache-range-btn-grid">
                 <button
                   type="button"
@@ -2083,6 +2087,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
         {/* Action Buttons */}
         <div className="drawer-footer-actions">
+          <span className="drawer-action-group-label">这本书</span>
           <button className="shelf-button switch-source-btn" onClick={() => { setActiveDrawer(null); setShowSourceSwitch(true) }}>
             <Icon name="sliders" />换源
           </button>

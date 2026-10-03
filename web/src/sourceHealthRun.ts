@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api, type SourceHealthCheckItem } from './api'
-import { autoTagBatches, HEALTH_TAGS } from './sourceGrouping'
+import { autoTagBatches, HEALTH_TAGS, tierCounts } from './sourceGrouping'
 
 /**
  * 书源体检的"跑在组件外面"的那一半（用户 2026-10-02：
@@ -107,7 +107,6 @@ export function startHealthRun(options: HealthRunStart): void {
   void (async () => {
     const alreadyTagged = new Set<string>()
     let pendingTag: SourceHealthCheckItem[] = []
-    let tallied = { ok: 0, slow: 0, failed: 0 }
     let autoTagged = 0
     try {
       for (let offset = 0; offset < options.ids.length; offset += HEALTH_CHUNK) {
@@ -115,11 +114,6 @@ export function startHealthRun(options: HealthRunStart): void {
         const chunk = options.ids.slice(offset, offset + HEALTH_CHUNK)
         const response = await api.healthCheckSources(chunk, 5000)
         for (const item of response.results) merged.set(item.id, item)
-        tallied = {
-          ok: tallied.ok + response.successCount,
-          slow: tallied.slow + response.slowCount,
-          failed: tallied.failed + response.failedCount,
-        }
         pendingTag = pendingTag.concat(response.results)
         if (pendingTag.length >= TAG_FLUSH_AT) {
           autoTagged += await tagFailing(pendingTag, options.groupsOf, alreadyTagged, options.onSourcesChange)
@@ -139,8 +133,12 @@ export function startHealthRun(options: HealthRunStart): void {
         durationMs: Date.now() - startedAt,
         results: Array.from(merged.values()),
       })
+      // 结论按本轮点到的那些源算（`merged` 里可能还留着上一轮别的范围的源）。
+      // 不再用服务端的 failedCount：它等于 `!ok`，把"没配搜索"和"真连不上"混成一个数。
+      const tiers = tierCounts(options.ids.map(id => merged.get(id)).filter(Boolean) as SourceHealthCheckItem[])
       options.onToast(
-        `体检完成：${tallied.ok + tallied.slow} 个能搜到书（${tallied.slow} 个迟缓），${tallied.failed} 个有问题`
+        `体检完成：${tiers.good} 个能搜到书，${tiers.bad} 个确认有问题，`
+        + `${tiers.pending} 个待确认，${tiers.unconfigured} 个没配搜索地址（没发过请求，不算坏）`
         + (autoTagged > 0 ? `；过程中已给 ${autoTagged} 个分好体检标签` : ''),
         'info',
       )
