@@ -270,6 +270,44 @@ try {
       && (finalList.options ?? []).some(option => option.key === packagedTarget.key && option.label === packagedTarget.label),
     `改过=${(afterPackagedEdit.options ?? []).find(o => o.key === packagedTarget.key)?.label} · 还原后="${(finalList.options ?? []).find(o => o.key === packagedTarget.key)?.label}"`)
 
+  // ─────────── ⑧ 标题带前导空白时，正文里不许混进标题的字 ───────────
+  // 上游把 `matcher.group()` **原样**当标题，并按**原样长度**把标题从正文里切掉
+  // （TextFile.kt:212 / :278 / :305）。我们显示的是 trim 过的标题 —— 那没问题，
+  // 但正文起点也必须按命中的**原始末尾**算：差几个前导空白字符，就有几个字从标题漏进正文。
+  // 随包那条 `-2 目录` 明写允许 `^[ \t　]{0,4}`，所以这不是刁钻输入，是默认规则的正常路径
+  // （2026-10-04 实测：三章正文开头各多出一个「甲/乙/丙」）。
+  const bodyLine = '这一段正文应当一个字都不少地落在自己那一章里。'
+  const indentedText = ['　　第一章 甲', bodyLine.repeat(4), '　　第二章 乙', bodyLine.repeat(4),
+    '　　第三章 丙', bodyLine.repeat(4)].join('\n')
+  const indentedForm = new FormData()
+  indentedForm.append('file', new Blob([indentedText], { type: 'text/plain; charset=utf-8' }), `标题前导空白-${STAMP}.txt`)
+  const indentedUpload = await fetch(`${BASE}/api/bookshelf/import-local?tocRule=-2`, { method: 'POST', body: indentedForm })
+  const indentedBook = (await indentedUpload.json())?.results?.[0] ?? {}
+  const indentedUrl = indentedBook.bookUrl ?? ''
+  try {
+    const indentedChapters = (await api('/api/books/chapters', {
+      method: 'POST', body: JSON.stringify({ sourceId: 'loc_book', bookUrl: indentedUrl }),
+    })).body ?? []
+    const residue = []
+    for (const chapter of indentedChapters) {
+      const content = (await api('/api/books/content', {
+        method: 'POST', body: JSON.stringify({ sourceId: 'loc_book', chapterUrl: chapter.url, bookUrl: indentedUrl }),
+      })).body?.content ?? ''
+      const lastChar = (chapter.title ?? '').slice(-1)
+      if (lastChar && content.startsWith(lastChar)) residue.push(`「${chapter.title}」开头混进「${content.slice(0, 3)}」`)
+      if (content && !content.startsWith('这一段正文')) residue.push(`「${chapter.title}」开头不是正文首字：${content.slice(0, 6)}`)
+    }
+    check('⑧标题带前导全角空格时，切出来的章数与标题都对（trim 只作用在显示上）',
+      indentedChapters.length === 3 && indentedChapters.every(chapter => /^第[一二三]章 /.test(chapter.title ?? '')),
+      `${indentedChapters.length} 章：${indentedChapters.map(chapter => chapter.title).join(' / ')}`)
+    check('⑧正文一个字都不许从标题里漏过来（偏移按命中的原始末尾算，不是 trim 后的长度）',
+      residue.length === 0, residue.join(' ｜ ') || '三章开头都是正文首字')
+  } finally {
+    if (indentedUrl) {
+      await api(`/api/bookshelf?sourceId=loc_book&bookUrl=${encodeURIComponent(indentedUrl)}`, { method: 'DELETE' })
+    }
+  }
+
   if (keptBefore) fs.writeFileSync(keptFile, keptBefore)
   else fs.rmSync(keptFile, { force: true })
   check('收尾把 data/backup_kept 恢复原样（探针不在用户数据目录里留文件）',

@@ -365,30 +365,34 @@ object TocRules {
     }
 
     /**
-     * 用给定规则把正文切成章。标题取命中本身（与上游一致），正文取到下一个命中之前。
+     * 用给定规则把正文切成章。标题取命中本身，正文取到下一个命中之前。
      * 返回空列表表示"这条规则在这本书上切不出章"，调用方该回落而不是硬用。
+     *
+     * 偏移一律用命中的**原始末尾**：上游标题不 trim，所以它按 `matcher.group()` 的长度切正文
+     * （TextFile.kt:212 / :278 / :305）。我们显示的是 trim 过的标题（前导空白在 TXT 里是排版，不是标题的一部分），
+     * 但那是显示层的事 —— 拿 trim 后的长度去推末尾，差几个空白字符就有几个字从标题漏进上一章的正文。
      */
     fun split(text: String, regex: Regex): List<ParsedChapter> {
         val hits = regex.findAll(text)
-            .map { it.range.first to it.value.trim() }
-            .filter { it.second.isNotEmpty() }
+            .map { Triple(it.range.first, it.range.last + 1, it.value.trim()) }
+            .filter { it.third.isNotEmpty() }
             .toList()
         if (hits.isEmpty()) return emptyList()
         val chapters = mutableListOf<ParsedChapter>()
-        hits.first().let { (offset, title) ->
-            val prologue = text.substring(0, offset).trim()
-            // 第一章之前还散着内容：与内置路径同一处理，不丢字。
-            if (prologue.isNotBlank()) chapters.add(ParsedChapter("前言", prologue.take(2000)))
-            chapters.add(ParsedChapter(title, ""))
-        }
+        val prologue = text.substring(0, hits.first().first).trim()
+        // 第一章之前还散着内容：与内置路径同一处理，不丢字。
+        if (prologue.isNotBlank()) chapters.add(ParsedChapter("前言", prologue.take(2000)))
+        chapters.add(ParsedChapter(hits.first().third, ""))
         for (index in 1 until hits.size) {
-            val (from, title) = hits[index]
-            val previous = chapters.last()
-            val body = text.substring(hits[index - 1].first + hits[index - 1].second.length, from).trim()
-            chapters[chapters.lastIndex] = ParsedChapter(previous.title, body)
+            val title = hits[index].third
+            val body = text.substring(hits[index - 1].second, hits[index].first).trim()
+            chapters[chapters.lastIndex] = ParsedChapter(chapters.last().title, body)
             chapters.add(ParsedChapter(title, ""))
         }
-        chapters[chapters.lastIndex] = ParsedChapter(chapters.last().title, text.substring(hits.last().first + hits.last().second.length).trim())
+        chapters[chapters.lastIndex] = ParsedChapter(
+            chapters.last().title,
+            text.substring(hits.last().second).trim(),
+        )
         return chapters.filter { it.title.isNotBlank() }
     }
 
