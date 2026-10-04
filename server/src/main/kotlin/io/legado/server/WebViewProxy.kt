@@ -114,11 +114,31 @@ class WebViewProxy(private val database: Database) {
         return ProxiedPayload(response.statusCode(), "text/html; charset=utf-8", rewritten.toByteArray(Charsets.UTF_8))
     }
 
-    /** 子资源（CSS/JS/图片/字体）二进制透传。 */
-    fun openResource(sourceId: String, token: String, target: String): ProxiedPayload {
+    /**
+     * 子资源与站点自己发出的请求（CSS/JS/图片/字体，以及 fetch/XHR —— 包括**登录那一次 POST**）。
+     *
+     * 原来这里只有 GET，而注入脚本把**所有方法**的 fetch/XHR 一律改写到 `/res`（只换 URL、保留方法）。
+     * 于是 SPA 那种"登录走 `fetch('/login', {method:'POST'})`"的站点，请求根本没被发出去（405 落在我们这里），
+     * 服务端也就永远吸不到那条 `Set-Cookie` —— 用户报的「登录抓取 cookie 还是失败」就是这一条。
+     * 表单那条路（`/submit`）一直带 POST，所以只有走 XHR/fetch 的源中招，看起来像"有的源行有的源不行"。
+     */
+    fun openResource(
+        sourceId: String,
+        token: String,
+        target: String,
+        method: String = "GET",
+        contentType: String? = null,
+        body: ByteArray = ByteArray(0),
+    ): ProxiedPayload {
         val ticket = resolveTicket(token, sourceId)
         val uri = validateTarget(ticket, target, enforceDomain = false)
-        val response = requestFollowing(uri, "GET", null, null, sourceId, ticket, referer = refererFor(uri))
+        val carriesBody = method.equals("POST", true) || method.equals("PUT", true) || method.equals("PATCH", true)
+        val response = requestFollowing(
+            uri, method.uppercase(),
+            if (carriesBody) body else null,
+            if (carriesBody) contentType else null,
+            sourceId, ticket, referer = refererFor(uri),
+        )
         val contentType = response.headers().firstValue("content-type").orElse("application/octet-stream")
         val raw = response.body()
         val mime = contentType.substringBefore(';').trim().lowercase()
@@ -304,8 +324,27 @@ class WebViewProxy(private val database: Database) {
     private fun harvestCookies(sourceId: String, uri: URI, response: HttpResponse<*>) {
         val setCookies = response.headers().allValues("set-cookie")
         if (setCookies.isEmpty()) return
+        var stored = 0
         setCookies.forEach { header ->
-            runCatching { database.setCookieFromSetCookie(uri.toString(), header) }
+            runCatching { if (database.setCookieFromSetCookie(uri.toString(), header)) stored += 1 }
+                .onFailure { error ->
+                    // 原来这里 `runCatching {}` 一句都不说：抓取失败在界面上与"站点压根没发 cookie"
+                    // 长得一模一样，用户只能反复试、我们也无从判断（AGENTS：没有发生过的事不能进失败桶，
+                    // 反过来：真失败了必须留一条能追溯的记录）。
+                    logSystem(
+                        "内置浏览器抓到 Cookie 但存不下",
+                        mapOf("书源" to sourceId, "域名" to (uri.host ?: ""), "条数" to setCookies.size.toString()),
+                        error,
+                        LogLevel.WARN,
+                    )
+                }
+        }
+        if (stored > 0) {
+            logSystem(
+                "内置浏览器吸收了登录 Cookie",
+                mapOf("书源" to sourceId, "域名" to (uri.host ?: ""), "存下" to "$stored/${setCookies.size}"),
+                level = LogLevel.WARN,
+            )
         }
     }
 

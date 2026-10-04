@@ -538,15 +538,31 @@ fun Route.apiRoutes(
                         call.respond(HttpStatusCode.BadRequest, ApiError("inline_page_failed", error.message ?: "内置页面无法打开"))
                     }
                 }
-                get("/res") {
-                    val sourceId = call.parameters["id"]!!
-                    val token = call.request.queryParameters["t"]
-                    val target = call.request.queryParameters["u"]
-                    if (token.isNullOrBlank() || target.isNullOrBlank()) {
-                        call.respond(HttpStatusCode.BadRequest, ApiError("missing_parameter", "缺少 token 或 u 参数"))
-                        return@get
+                /*
+                  子资源与站点自己发的请求走这一个口。原来只注册了 GET，而注入脚本把**所有方法**的
+                  fetch/XHR 都改写到 `/res` —— 于是"登录 = fetch POST /login"的站点，POST 落在 405 上
+                  根本没发出去，那条 Set-Cookie 也就永远吸不到（用户：「登录抓取 cookie 还是失败」）。
+                  表单那条路（/submit）一直有 POST，所以只有走 XHR 的源中招。
+                */
+                route("/res") {
+                    // Ktor 的 `method` 不收变长参数，逐个注册；处理体只有一份，免得五份里改一份忘四份
+                    for (verb in listOf(HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete)) {
+                        method(verb) {
+                            handle {
+                                val sourceId = call.parameters["id"]!!
+                                val token = call.request.queryParameters["t"]
+                                val target = call.request.queryParameters["u"]
+                                if (token.isNullOrBlank() || target.isNullOrBlank()) {
+                                    call.respond(HttpStatusCode.BadRequest, ApiError("missing_parameter", "缺少 token 或 u 参数"))
+                                    return@handle
+                                }
+                                val requestMethod = call.request.httpMethod.value
+                                val body = if (requestMethod == "GET") ByteArray(0) else call.receiveStream().readBytes()
+                                val contentType = call.request.headers[HttpHeaders.ContentType]
+                                call.respondProxied { webView.openResource(sourceId, token, target, requestMethod, contentType, body) }
+                            }
+                        }
                     }
-                    call.respondProxied { webView.openResource(sourceId, token, target) }
                 }
                 get("/submit") {
                     val sourceId = call.parameters["id"]!!
