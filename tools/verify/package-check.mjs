@@ -15,7 +15,13 @@ import zlib from 'node:zlib'
 
 const ROOT = path.resolve(import.meta.dirname, '../..')
 const BASE = (process.env.LEGADO_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '')
-const ZIP = process.env.LEGADO_PACKAGE || path.join(ROOT, 'dist/qingyue-0.6.0.zip')
+/**
+ * 默认包名从 `server/build.gradle` 的 version 推出来 —— 原来这里写死 `qingyue-0.6.0.zip`，
+ * 于是下一次发版若忘了带 `LEGADO_PACKAGE`，这条门禁会**去验上一版的包**并且照样全绿
+ * （version-check 当年就是靠"build/libs 里留着旧号包"逮到人挑错包的，同一个入口）。
+ */
+const PACKAGE_VERSION = (fs.readFileSync(path.join(ROOT, 'server/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1] ?? ''
+const ZIP = process.env.LEGADO_PACKAGE || path.join(ROOT, `dist/qingyue-${PACKAGE_VERSION}.zip`)
 
 const results = []
 const check = (name, ok, detail = '') => {
