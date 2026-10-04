@@ -3,6 +3,7 @@ import { api, BookDetails, BookMark, Chapter, ReadingProgress, SearchResult, Toc
 import { BookmarkDrawer } from './BookmarkDrawer'
 import { MarkSelection, readSelection, resolveChapter, WHOLE_CHAPTER } from './bookmarks'
 import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
@@ -481,6 +482,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [customRangeStart, setCustomRangeStart] = useState(1)
   const [customRangeEnd, setCustomRangeEnd] = useState(50)
   const [offlineTtsConfirmOpen, setOfflineTtsConfirmOpen] = useState(false)
+  // 这一层是"要不要改用本地朗读"的确认弹窗，原来只认点击、不认 Esc
+  useEscapeClose(() => setOfflineTtsConfirmOpen(false))
 
   const [cacheStatus, setCacheStatus] = useState<{ state: string; cached: number; total: number; error?: string }>({
     state: 'idle',
@@ -2127,7 +2130,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         {/* Action Buttons */}
         <div className="drawer-footer-actions">
           <span className="drawer-action-group-label">这本书</span>
-          <button className="shelf-button switch-source-btn" onClick={() => { setActiveDrawer(null); setShowSourceSwitch(true) }}>
+          <button className="shelf-button" onClick={() => { setActiveDrawer(null); setShowSourceSwitch(true) }}>
             <Icon name="sliders" />换源
           </button>
           <button className="shelf-button" onClick={() => void toggleShelf()}>
@@ -2185,7 +2188,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 {flowTail.map((item, tailIndex) => (
                   <Fragment key={item.chapter.url}>
                     {(pageFillers[tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
-                    <section className="reader-page-chapter reader-page-tail" data-chapter-index={item.chapter.index}>
+                    <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
                       <h1>{item.chapter.title}</h1>
                       {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
                     </section>
@@ -2348,8 +2351,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         >
           <header className="source-login-header">
             <div className="source-login-title">
-              <span className="source-login-icon"><Icon name="volume2" /></span>
-              <div className="source-login-heading">
+              <span><Icon name="volume2" /></span>
+              <div>
                 <h2>离线朗读提示</h2>
                 <small>当前设备处于离线状态</small>
               </div>

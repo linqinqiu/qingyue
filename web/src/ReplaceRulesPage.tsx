@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { api, ReplaceRule, ReplaceRulePreviewResponse } from './api'
 import { toast } from './Toast'
-import { Icon } from './icons'
+import { Icon } from './icons'import { useEscapeClose } from './useEscapeClose'
+
 
 export function ReplaceRulesPage() {
   const [rules, setRules] = useState<ReplaceRule[]>([])
@@ -210,6 +211,12 @@ export function ReplaceRulesPage() {
     setIsEditModalOpen(true)
   }
 
+  // Esc 一次只关一层：里层弹窗开着时先关里层，都关了才轮到外面这一层
+  useEscapeClose(() => {
+    if (isImportModalOpen) { setIsImportModalOpen(false); return }
+    if (isEditModalOpen) { setIsEditModalOpen(false); return }
+    
+  })
   return (
     <main className="rules-page-container">
       {/* 侧边栏（桌面端列表 / 移动端折叠卡片列表） */}
@@ -521,7 +528,7 @@ export function ReplaceRulesPage() {
             )}
           </div>
         ) : (
-          <div className="source-detail-card" style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
+          <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--muted)' }}>
             在左侧选择一条规则查看详情，或点击「新建规则」配置错字与反爬清洗
           </div>
         )}
@@ -579,7 +586,7 @@ export function ReplaceRulesPage() {
       {/* 编辑/新建规则弹窗 */}
       {isEditModalOpen && editingRule && (
         <div className="modal-backdrop" onClick={() => setIsEditModalOpen(false)}>
-          <div className="rule-modal-card" onClick={e => e.stopPropagation()}>
+          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="编辑替换规则" onClick={e => e.stopPropagation()}>
             <header className="source-login-header">
               <h3 className="source-login-title">{editingRule.id ? '编辑替换规则' : '新建替换规则'}</h3>
               <button type="button" className="icon-btn" onClick={() => setIsEditModalOpen(false)}>
@@ -702,7 +709,7 @@ export function ReplaceRulesPage() {
       {/* 导入订阅弹窗 */}
       {isImportModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
-          <div className="rule-modal-card" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="导入替换规则" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
             <header className="source-login-header">
               <h3 className="source-login-title">导入替换规则</h3>
               <button type="button" className="icon-btn" onClick={() => setIsImportModalOpen(false)}>

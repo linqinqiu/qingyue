@@ -819,8 +819,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 }
 .modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .modal-header small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--t-xs); }
-/* 弹窗右上角那颗关闭键的统一档（30×30、无边框、hover 才有底色） */
-.close-button, .icon-btn, .shelf-remove {
+/* 弹窗右上角那颗关闭键的统一档（30×30、无边框、hover 才有底色）。
+   `.shortcut-close` 原来只挂在 TSX 上、样式表 0 命中，于是「快捷键」那张表的关闭键
+   是按浏览器默认长相画的裸按钮 —— 界面没说错，但它是唯一一个没有尺寸的关闭键。 */
+.close-button, .icon-btn, .shelf-remove, .shortcut-close {
   width: 30px; height: 30px; flex: none;
   /* 4496 那条全局 `button { min-height: 34px }` 排在后面，会把 30px 的方键悄悄拉成 30×34。
      可点面积仍然在"30–34"这一档内，但要的是方的。 */
@@ -829,7 +831,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   border: 0; border-radius: 6px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
-.close-button:hover, .icon-btn:hover, .shelf-remove:hover { background: var(--surface-muted); color: var(--ink); }
+.close-button:hover, .icon-btn:hover, .shelf-remove:hover, .shortcut-close:hover { background: var(--surface-muted); color: var(--ink); }
 .close-button svg, .icon-btn svg, .shelf-remove svg { width: 16px; height: 16px; }
 /* 弹窗底部动作条：上边框 + 淡底，动作靠右。OfflineCacheModal 一直在挂这个类名，之前也是空的。 */
 .source-login-footer {
@@ -3212,6 +3214,17 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
   height: 28px;
   background: var(--line);
 }
+/* 离线缓存弹窗的空态。原来 `.empty-notice` 只挂在 TSX 上、样式表 0 命中，
+   于是这一段按浏览器默认长相画：16px 纯黑、上下各 1em 外边距，压在 13px 淡字的面板里。 */
+.empty-notice {
+  margin: 0;
+  padding: 14px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-1);
+  color: var(--muted);
+  font-size: var(--t-md);
+  line-height: 1.6;
+}
 .offline-books-header {
   display: flex;
   align-items: center;
@@ -4409,6 +4422,9 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 
 /* 发现页 */
 .explore-page { width: min(1240px, 100%); display: grid; gap: 22px; padding: clamp(26px, 4vw, 56px) clamp(18px, 4vw, 44px); margin: 0 auto; }
+/* grid 子项默认 min-width: auto —— 页头里那颗不换行的「N 个书源配了发现页」芯片会把轨道顶宽，
+   390 的屏上整页横向溢出 13px（实测 right=403）。跟 09-30 书架 dd 顶出封面是同一个形状的病。 */
+.explore-page > * { min-width: 0; }
 .explore-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
 .explore-header h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(26px, 3vw, 34px); font-weight: 600; line-height: 1.2; }
 .explore-header p { margin-top: 6px; color: var(--muted); font-size: 14px; }
@@ -5116,10 +5132,12 @@ input[type=range] { min-height: 24px; }
 .ui-select-trigger svg { width: 15px; height: 15px; color: var(--muted); transition: transform .14s ease; }
 .ui-select[data-open] .ui-select-trigger svg { transform: rotate(180deg); }
 .ui-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-select-menu { position: fixed; z-index: 400; display: grid; gap: 4px; max-height: 340px; padding: 6px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow); outline: none; }
+/* 浮层的高度档（总高 340 / 列表 288 / 行 34）只在 Select.tsx 里有一份 ——
+   原来这里也写一遍，而那里写的是行 34，于是"两份数值互相矛盾"，改一处另一处照旧生效。 */
+.ui-select-menu { position: fixed; z-index: 400; display: grid; gap: 4px; padding: 6px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow); outline: none; }
 .ui-select-search { width: 100%; min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface-muted); color: var(--ink); font-size: var(--t-md); outline: none; }
-.ui-select-options { position: relative; max-height: 288px; overflow-y: auto; overscroll-behavior: contain; }
-.ui-select-option { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); width: 100%; min-height: 32px; padding: 5px 9px; box-sizing: border-box; border: 0; border-radius: var(--r-1); background: transparent; color: var(--ink); font-size: var(--t-md); text-align: left; }
+.ui-select-options { position: relative; overflow-y: auto; overscroll-behavior: contain; }
+.ui-select-option { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); width: 100%; padding: 5px 9px; box-sizing: border-box; border: 0; border-radius: var(--r-1); background: transparent; color: var(--ink); font-size: var(--t-md); text-align: left; }
 .ui-select-option > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-select-option small { color: var(--muted); font-size: var(--t-xs); white-space: nowrap; }
 .ui-select-option svg { width: 14px; height: 14px; color: var(--accent); }
@@ -5241,8 +5259,12 @@ input[type=range] { min-height: 24px; }
 .explore-source-picker .explore-group-select { min-width: 148px; max-width: 208px; }
 .explore-source-count { color: var(--muted); font-size: var(--t-xs); white-space: nowrap; }
 @media (max-width: 640px) {
-  .explore-source-picker { width: 100%; }
-  .explore-source-picker .ui-select { min-width: 0; width: 100%; }
+  /* 原来两条选择器各写 width: 100%，同一行里两个 100% 加一颗不换行的计数芯片，
+     行本身就被顶到视口外。窄屏让它们分这一行，装不下就整体换行，不是各要一整行。 */
+  .explore-source-picker { width: 100%; flex-wrap: wrap; }
+  .explore-source-picker .ui-select { min-width: 0; width: auto; flex: 1 1 150px; }
+  .explore-source-picker .explore-group-select { flex: 0 1 150px; }
+  .explore-source-count { flex: 0 1 auto; }
 }
 
 /* =============================================================================

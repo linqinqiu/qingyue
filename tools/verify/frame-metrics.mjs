@@ -5,6 +5,7 @@
 //
 //   node tools/verify/frame-metrics.mjs before            # 写 out/frame-metrics-before.json
 //   node tools/verify/frame-metrics.mjs after --compare   # 与 before 逐页比，超阈值判红
+//   node tools/verify/frame-metrics.mjs now --frozen      # 书库与 baselines/frame-frozen-20261003.json 比，出界即红
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -20,8 +21,9 @@ const VIEWPORTS = [
   { name: 'desk-1440', width: 1440, height: 900 },
   { name: 'desk-1180', width: 1180, height: 800 },
   { name: 'mobile-390', width: 390, height: 844 },
-]
+].filter(vp => !process.env.FRAME_VP || process.env.FRAME_VP.split(',').includes(vp.name))
 const ROUTES = ['#library', '#shelf', '#sources', '#explore', '#subscriptions', '#rules', '#backup', '#settings', '#about']
+  .filter(route => !process.env.FRAME_ROUTES || process.env.FRAME_ROUTES.split(',').includes(route))
 
 const collect = () => {
   const px = v => Math.round(parseFloat(v) || 0)
@@ -104,6 +106,44 @@ const collect = () => {
     bottomDeadPx: bottomDead,
     bottomDeadPct: Math.round(bottomDead / vh * 100),
     overflowX: document.documentElement.scrollWidth > vw + 1,
+    /**
+     * 溢出必须**指名道姓**：只报"这页溢出了"就还得人再去点一遍 DevTools。
+     * 取"伸出视口且没有子元素也伸出"的最深节点 —— 父容器只是被撑大的，改它没用。
+     */
+    overflowCulprits: (() => {
+      const out = []
+      for (const el of document.querySelectorAll('body *')) {
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.right <= vw + 1) continue
+        const worse = Array.from(el.children).some(child => {
+          const cr = child.getBoundingClientRect()
+          return cr.width > 0 && cr.right > r.right - 1
+        })
+        if (worse) continue
+        const s = getComputedStyle(el)
+        // 只报最伸出的那一个还不够：伸出常常是**祖先**给的宽度不对，
+        // 所以把四层祖先链一起量出来（宽度、右边、左右内边距），当场就能看出是谁撑的。
+        const chain = []
+        for (let p = el.parentElement; p && chain.length < 4; p = p.parentElement) {
+          const pr = p.getBoundingClientRect()
+          if (pr.width === 0) continue
+          const ps = getComputedStyle(p)
+          chain.push({
+            path: p.tagName.toLowerCase() + (typeof p.className === 'string' && p.className ? '.' + p.className.trim().split(/\s+/).join('.') : ''),
+            width: Math.round(pr.width), right: Math.round(pr.right),
+            padding: `${ps.paddingLeft}/${ps.paddingRight}`, maxWidth: ps.maxWidth,
+          })
+        }
+        out.push({
+          path: el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).join('.') : ''),
+          right: Math.round(r.right), width: Math.round(r.width),
+          cssWidth: s.width, minWidth: s.minWidth, whiteSpace: s.whiteSpace,
+          text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 24),
+          chain,
+        })
+      }
+      return out.sort((a, b) => b.right - a.right).slice(0, 4)
+    })(),
     gridColumns: gridStyle ? (gridStyle.gridTemplateColumns.split(' ').filter(Boolean).length) : 0,
     buttonHeights: { min: controlHeights[0] || 0, median: controlHeights[Math.floor(controlHeights.length / 2)] || 0, max: controlHeights[controlHeights.length - 1] || 0, count: controlHeights.length, cardMax: heights[heights.length - 1] || 0 },
     cards,
@@ -150,6 +190,12 @@ for (const vp of VIEWPORTS) {
     const data = await page.evaluate(collect)
     result.screens.push({ vp: vp.name, route, ...data })
     console.log(`${vp.name.padEnd(10)} ${route.padEnd(16)} ink=${String(data.contentWidth).padStart(4)}x${String((data.inkBox.bottom || 0) - (data.inkBox.top || 0)).padStart(4)} cover=${String(data.coveragePct).padStart(2)}% masthead=${String(data.mastheadCost).padStart(3)}px side=${String(data.sideDeadPct).padStart(2)}% bottom=${String(data.bottomDeadPct).padStart(2)}% cols=${data.gridColumns} btnH=${data.buttonHeights.median} h1=${data.h1 ? data.h1.size + 'px' : '-'} kicker=${data.kickerCount} prose=${data.proseCount}${data.overflowX ? ' OVERFLOW-X' : ''}`)
+    for (const c of data.overflowCulprits || []) {
+      console.log(`           ↳ 伸出视口到 ${c.right}px：${c.path}（宽 ${c.width}px，width:${c.cssWidth} min-width:${c.minWidth}${c.text ? `，「${c.text}」` : ''}）`)
+      if (c === data.overflowCulprits[0]) {
+        for (const p of c.chain || []) console.log(`             ↑ 祖先 ${p.path} 宽 ${p.width}px 右 ${p.right}px padding ${p.padding} max-width ${p.maxWidth}`)
+      }
+    }
   }
 }
 await browser.close()
@@ -158,6 +204,34 @@ const file = path.join(OUT, `frame-metrics-${TAG}.json`)
 fs.mkdirSync(OUT, { recursive: true })
 fs.writeFileSync(file, JSON.stringify(result, null, 1))
 console.log(`\nwrote ${file}`)
+
+/**
+ * 冻结模式（PROPOSAL-018 §1）：书库是锚，数字出界就是事故；其余页只报差值、不判红。
+ * 判的是"数字没变"，不是"我看着没变"。
+ */
+if (process.argv.includes('--frozen')) {
+  const frozenFile = path.join(ROOT, 'tools', 'verify', 'baselines', 'frame-frozen-20261003.json')
+  if (!fs.existsSync(frozenFile)) { console.error(`冻结基线不在：${frozenFile}`); process.exit(1) }
+  const frozen = JSON.parse(fs.readFileSync(frozenFile, 'utf8')).screens
+  let fails = 0
+  const note = (ok, msg) => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`) }
+  for (const a of result.screens) {
+    const b = frozen.find(x => x.vp === a.vp && x.route === a.route)
+    if (!b) { console.log(`SKIP  ${a.vp} ${a.route} 冻结基线里没有这一屏`); continue }
+    if (a.route !== '#library') {
+      console.log(`NOTE  ${a.vp} ${a.route}（非冻结页）内容宽 ${b.contentWidth}→${a.contentWidth} · 两侧死白 ${b.sideDeadPct}%→${a.sideDeadPct}% · 底部死白 ${b.bottomDeadPct}%→${a.bottomDeadPct}% · 控件中位高 ${b.buttonHeights.median}→${a.buttonHeights.median}`)
+      continue
+    }
+    note(Math.abs(a.contentWidth - b.contentWidth) <= 2, `${a.vp} ${a.route} 内容实占宽 ${b.contentWidth} → ${a.contentWidth}px（±2）`)
+    note(Math.abs(a.sideDeadPct - b.sideDeadPct) <= 1, `${a.vp} ${a.route} 两侧死白 ${b.sideDeadPct}% → ${a.sideDeadPct}%（±1）`)
+    note(Math.abs(a.bottomDeadPct - b.bottomDeadPct) <= 1, `${a.vp} ${a.route} 底部死白 ${b.bottomDeadPct}% → ${a.bottomDeadPct}%（±1）`)
+    note(a.mastheadCost === b.mastheadCost, `${a.vp} ${a.route} 页头代价 ${b.mastheadCost}px → ${a.mastheadCost}px（冻结页要同一个数）`)
+    note(a.buttonHeights.median === b.buttonHeights.median, `${a.vp} ${a.route} 控件中位高 ${b.buttonHeights.median}px → ${a.buttonHeights.median}px（冻结页要同一个数）`)
+    note(!a.overflowX, `${a.vp} ${a.route} 无横向溢出`)
+  }
+  console.log(`\n冻结页 ${fails === 0 ? '零漂移' : fails + ' 项出界'}`)
+  process.exit(fails === 0 ? 0 : 1)
+}
 
 if (COMPARE) {
   const beforeFile = path.join(OUT, 'frame-metrics-before.json')

@@ -1,22 +1,37 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './icons'
+import { OVERLAY_EDGE, clampOverlay } from './overlayGeometry'
 
 export type SelectOption = { value: string; label: string; hint?: string; disabled?: boolean }
 
 /**
  * 站内下拉控件。
  *
- * 换掉原生 `<select>` 的原因不是好看：原生弹层的字号、选中态、滚动条都跟系统走，
+ * 换掉原生 `<select>` 的原因不是好看：原生弹层的字号、选中态、系统滚动条都跟系统走，
  * 和全站控件不同形；而且选项一多（书源几千条）原生只有首字母跳转，没法按名字过滤。
  * 所以这里选项超过 `SEARCH_THRESHOLD` 条时浮层自带一个过滤框。
+ *
+ * 下面这几个几何数是**唯一的一份**：样式表里不再重复声明（原来 `.ui-select-menu` 写 340、
+ * `.ui-select-options` 写 288、`.ui-select-option` 写 32，而这里是 340/288/34 —— 34 与 32
+ * 互相矛盾，改一处另一处照样生效，没人发现）。夹进视口那条算式与右键菜单共用一份。
  */
 const SEARCH_THRESHOLD = 12
+/** 打开时最多露出几行（再多就滚）。 */
+const VISIBLE_ROWS = 8
+/** 浮层总高上限，决定"往下开还是往上开"。 */
 const MENU_MAX_HEIGHT = 340
-/** 单行高度（与 .ui-select-option 的 min-height 对齐），虚拟滚动按它切窗口。 */
+/** 单行高度（虚拟滚动按它切窗口，行本身靠内联高度）。 */
 const ROW_H = 34
-/** 选项列表可视高度上限（与 .ui-select-options 的 max-height 对齐）。 */
+/** 选项列表可视高度上限。 */
 const LIST_MAX_H = 288
+/** 浮层内边距（上下各 6）与过滤框那一档，只为算开向，不参与布局。 */
+const MENU_PADDING = 12
+const SEARCH_BOX_H = 44
+/** 浮层与触发器之间那一条缝。 */
+const TRIGGER_GAP = 4
+/** 触发器再窄也不小于这一档，否则两个字的选择器没法读。 */
+const TRIGGER_MIN_WIDTH = 180
 const OVERSCAN = 6
 
 type SelectProps = {
@@ -65,14 +80,18 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = '请
     if (!open) return
     const rect = triggerRef.current?.getBoundingClientRect()
     if (!rect) return
-    const height = Math.min(MENU_MAX_HEIGHT, (wantSearch ? 44 : 0) + Math.max(1, Math.min(shown.length, 8)) * 34 + 12)
-    const below = window.innerHeight - rect.bottom
-    const width = Math.max(rect.width, 180)
-    setPlacement({
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
-      top: rect.bottom + (below > height + 8 ? 4 : -(Math.min(height, rect.top - 8) + 4)),
-      width,
-    })
+    const root = document.documentElement
+    // clientWidth/clientHeight 而不是 innerWidth/innerHeight：后者把经典滚动条算进来，
+    // position: fixed 的包含块本来不含滚动条，用错一个数就是"夹到 8px"实际压在滚动条上。
+    const viewport = { width: root.clientWidth, height: root.clientHeight }
+    const width = Math.max(rect.width, TRIGGER_MIN_WIDTH)
+    const wanted = Math.min(MENU_MAX_HEIGHT,
+      (wantSearch ? SEARCH_BOX_H : 0) + Math.max(1, Math.min(shown.length, VISIBLE_ROWS)) * ROW_H + MENU_PADDING)
+    const below = viewport.height - rect.bottom - OVERLAY_EDGE
+    const openUp = below < wanted && rect.top - OVERLAY_EDGE > below
+    const top = openUp ? rect.bottom - Math.min(wanted, rect.top - OVERLAY_EDGE) - TRIGGER_GAP : rect.bottom + TRIGGER_GAP
+    const at = clampOverlay({ left: rect.left, top, width, height: wanted }, viewport)
+    setPlacement({ left: at.left, top: at.top, width })
     setActive(Math.max(0, shown.findIndex(option => option.value === value)))
   }, [open])
 

@@ -80,7 +80,7 @@ export function CustomizeModal({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    className={`customize-skin theme-option-${skin.builtin ? skin.id : 'custom'} ${selected ? 'selected' : ''}`}
+                    className={`customize-skin ${selected ? 'selected' : ''}`}
                     onClick={() => onChange({ ...settings, theme: skin.id })}
                   >
                     <span className={`theme-swatch theme-swatch-${skin.builtin ? skin.id : 'custom'}`} />
@@ -133,7 +133,7 @@ export function CustomizeModal({
                     type="button"
                     role="radio"
                     aria-checked={settings.customSkinBase === base.id}
-                    className={`customize-base theme-option-${base.id} ${settings.customSkinBase === base.id ? 'selected' : ''}`}
+                    className={`customize-base ${settings.customSkinBase === base.id ? 'selected' : ''}`}
                     onClick={() => onChange({ ...settings, customSkinBase: base.id })}
                   >
                     <span className={`theme-swatch theme-swatch-${base.id}`} />

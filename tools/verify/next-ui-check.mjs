@@ -69,9 +69,82 @@ check('B 主从原型：书源列表真的取回来了（走 /next 下的同源�
 check('列表里那一行有名字与分组（不是 undefined 占位）', await page.$eval('.md-list .row .row-title',
   node => (node.textContent ?? '').trim().length > 1 && !/undefined/.test(node.textContent ?? '')))
 
-await page.click('.md-list .row')
-check('点一行，详情面板跟着换', await waitFor('.md-detail h2') &&
-  (await page.$eval('.md-detail h2', node => node.textContent?.trim().length ?? 0)) > 1)
+/**
+ * ── 详情栏不许是空面板（用户 2026-10-04 指出：没选中源时这里只有一行灰字）──
+ *
+ * 原来那条"点一行，详情面板跟着换"很弱：默认态只要有个 h2 就算过，所以把它换成
+ * 下面这几条真判据 —— 默认是源库概况、概况那几行**点得动且真的在筛**、点一行之后详情
+ * 说的是这一个源、启停那颗键**真的写进服务端**。
+ * 顺序有讲究：概况那一段必须在"点行之前"跑，点过一次之后界面就进入单源详情了（第一版就栽在这）。
+ * 启停只翻一条**探针源**（名字以 000 起头，服务端按名称排序时它就在第一行），不碰用户真库里的源，
+ * 并且收尾放在 finally 里 —— 中途崩了也不能把探针留在库里。
+ */
+const STAMP = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 12)
+const PROBE = { id: `https://000probe-next-${STAMP}.example`, name: `000新骨架探针 ${STAMP}` }
+const detailTitle = () => page.$eval('.md-detail h2', node => (node.textContent ?? '').trim()).catch(() => '(没有标题)')
+const metaNumerator = async () => Number(((await metaText()).match(/(\d+)\s*\//) ?? [])[1] ?? -1)
+const clickOverviewRow = needle => page.evaluate(text => {
+  [...document.querySelectorAll('.md-detail .detail-rows .ctl-row')]
+    .find(node => node.textContent?.includes(text))?.click()
+}, needle)
+const enabledOf = id => page.evaluate(async target => (await (await fetch('/api/sources')).json())
+  .find(item => item.id === target)?.enabled ?? null, id)
+
+const overviewRows = await page.$$('.md-detail .detail-rows .ctl-row')
+check('默认详情是源库概况，且有可点的档位行（不许是一行灰字占满一张卡）',
+  (await detailTitle()) === '源库概况' && overviewRows.length >= 2, `${overviewRows.length} 行 · 标题「${await detailTitle()}」`)
+const loginCount = await page.evaluate(() => fetch('/api/sources').then(r => r.json()).then(list => list.filter(s => s.hasLogin).length))
+await clickOverviewRow('需要登录')
+await new Promise(resolve => setTimeout(resolve, 400))
+const filteredCount = await metaNumerator()
+check('概况那一行真的在筛这一档（页头分子要对得上接口的 hasLogin 数）',
+  filteredCount === loginCount && loginCount > 0, `页头 ${filteredCount} · 接口 ${loginCount}`)
+await clickOverviewRow('全部源')
+await new Promise(resolve => setTimeout(resolve, 400))
+check('再点一次「全部源」把这一档松开（点一次是筛，再点一次是回全量）',
+  await metaNumerator() === total, `页头 ${await metaNumerator()} / ${total}`)
+
+try {
+  const probeUp = await page.evaluate(async id => {
+    const response = await fetch('/api/sources/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sources: [JSON.stringify({ bookSourceUrl: id, bookSourceName: `000新骨架探针 ${id.slice(-6)}`, enabled: true })] }),
+    })
+    return response.status
+  }, PROBE.id)
+  check('探针源建得出来（POST /api/sources/import，收尾会删）', probeUp === 200, `HTTP ${probeUp}`)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await gotoPage('书源')
+  await waitFor('.md-list .row')
+  const probeTitle = await page.$eval('.md-list .row .row-title', node => (node.textContent ?? '').trim())
+  await page.click('.md-list .row')
+  check('点一行，详情说的就是这一个源（标题必须等于那一行的名字，也不是"源库概况"）',
+    (await detailTitle()) === probeTitle && probeTitle !== '源库概况', `行「${probeTitle}」· 详情「${await detailTitle()}」`)
+  const fields = await page.$$eval('.md-detail .detail-fields dd', nodes => nodes.map(node => node.textContent?.trim()))
+  check('详情里的字段是真值（五档且没有 undefined 混进去）',
+    fields.length >= 5 && !fields.some(value => /undefined|null|NaN/.test(value ?? '')), fields.join(' / '))
+  const before = await enabledOf(PROBE.id)
+  await page.click('.md-detail .detail-actions .ctl-button')
+  await new Promise(resolve => setTimeout(resolve, 900))
+  const after = await enabledOf(PROBE.id)
+  const notice = await page.$eval('.md-detail .detail-notice', node => (node.textContent ?? '').trim()).catch(() => '')
+  check('详情里那颗启停键真的写进服务端（不是只改了界面）',
+    before === true && after === false && notice.includes('停用'), `接口 ${before} → ${after} · 界面「${notice}」`)
+  await page.click('.md-detail .detail-actions .ctl-button')
+  await new Promise(resolve => setTimeout(resolve, 900))
+  check('再点一次换回来（这一档必须可逆）', (await enabledOf(PROBE.id)) === true, `接口 ${(await enabledOf(PROBE.id))}`)
+} finally {
+  const cleaned = await page.evaluate(async () => {
+    const ids = (await (await fetch('/api/sources')).json()).filter(item => item.id.includes('probe-next-')).map(item => item.id)
+    if (ids.length) await fetch('/api/sources/batch', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', ids }),
+    })
+    return { deleted: ids.length, left: (await (await fetch('/api/sources')).json()).filter(item => item.id.includes('probe-next-')).length }
+  })
+  check('探针源已回收（库里不再留 probe-next- 的东西）', cleaned.left === 0, `删了 ${cleaned.deleted} 条 · 残留 ${cleaned.left}`)
+}
 
 await gotoPage('设置')
 await waitFor('.list-body .ctl-row')

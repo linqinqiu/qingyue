@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { api, ReplaceRule, ReplaceRulePreviewResponse } from './api'
 import { toast } from './Toast'
 import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
 
 interface Props {
   isOpen: boolean
@@ -216,11 +217,20 @@ export const ReplaceRulesModal: React.FC<Props> = ({
 
   if (!isOpen) return null
 
+  // Esc 一次只关一层：里层弹窗开着时先关里层，都关了才轮到外面这一层
+  useEscapeClose(() => {
+    if (isImportModalOpen) { setIsImportModalOpen(false); return }
+    if (isEditModalOpen) { setIsEditModalOpen(false); return }
+    onClose()
+  })
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="rule-modal-card"
         style={{ width: 'min(820px, 94vw)', maxHeight: '90vh' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="替换规则"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -425,7 +435,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
       {/* Edit / Create Rule Dialog */}
       {isEditModalOpen && editingRule && (
         <div className="modal-backdrop top-layer-modal-backdrop" onClick={() => setIsEditModalOpen(false)}>
-          <div className="rule-modal-card" onClick={e => e.stopPropagation()}>
+          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="编辑替换规则" onClick={e => e.stopPropagation()}>
             <header className="source-login-header">
               <h3 className="source-login-title">
                 {editingRule.id ? '编辑替换净化规则' : '新建替换净化规则'}
@@ -595,7 +605,7 @@ export const ReplaceRulesModal: React.FC<Props> = ({
       {/* Import Dialog */}
       {isImportModalOpen && (
         <div className="modal-backdrop top-layer-modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
-          <div className="rule-modal-card" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="导入替换规则" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
             <header className="source-login-header">
               <h3 className="source-login-title">导入替换净化规则</h3>
               <button

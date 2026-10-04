@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { api, TtsVoice } from './api'
 import { Icon } from './icons'
 import { ReaderSettings, TtsEngineType } from './readerSettings'
-import { Select } from './Select'
+import { Select } from './Select'import { useEscapeClose } from './useEscapeClose'
+
 
 export type SleepTimerOption = 'off' | '15' | '30' | '45' | '60' | 'chapter'
 
@@ -83,9 +84,10 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`
   }
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="tts-settings-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="tts-settings-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="朗读设置">
         <header className="source-login-header">
           <div className="source-login-title-group">
             <h3 className="source-login-title"><Icon name="volume2" /> 听书朗读设置</h3>
@@ -287,7 +289,7 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
 
           {/* Custom HTTP TTS Settings */}
           {settings.ttsEngine === 'custom' && (
-            <div className="tts-setting-section tts-custom-section">
+            <div className="tts-setting-section">
               <label className="tts-section-label">自定义 HTTP 源参数</label>
               <p className="tts-hint">
                 可用占位符：<code>&#123;&#123;speakText&#125;&#125;</code>, <code>&#123;&#123;speakSpeed&#125;&#125;</code>, <code>&#123;&#123;speakVoice&#125;&#125;</code>, <code>&#123;&#123;speakPitch&#125;&#125;</code>

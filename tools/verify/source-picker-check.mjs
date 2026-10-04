@@ -180,14 +180,15 @@ try {
   await page.goto(`${BASE}/#explore`, { waitUntil: 'domcontentloaded' })
   await sleep(3500)
   const exploreList = await page.evaluate(async () => (await (await fetch('/api/explore/sources')).json()))
-  const exploreHeader = await page.evaluate(() => ({
+  const SOURCE_TRIGGER = '.explore-source-picker .ui-select-trigger[aria-label="搜索并选择发现页书源"]'
+  const exploreHeader = await page.evaluate(trigger => ({
     label: document.querySelector('.explore-source-picker > span')?.textContent?.trim() ?? '',
-    aria: document.querySelector('.explore-source-picker .ui-select-trigger')?.getAttribute('aria-label') ?? '',
+    aria: document.querySelector(trigger)?.getAttribute('aria-label') ?? '',
     count: document.querySelector('.explore-source-count')?.textContent?.trim() ?? '',
-    value: document.querySelector('.explore-source-picker .ui-select-value')?.textContent?.trim() ?? '',
+    value: document.querySelector(`${trigger} .ui-select-value`)?.textContent?.trim() ?? '',
     hasInSourceForm: !!document.querySelector('.explore-search'),
     mentionsInSource: document.body.innerText.includes('在这个源里搜'),
-  }))
+  }), SOURCE_TRIGGER)
   // 措辞判据跟着框架 v2 改口（AGENTS §3 ④：判据措辞会过期，别为了刷绿删断言）：
   // 页头那行「搜书源」的小标签并进了页头条，选择口的身份现在由 aria-label 与占位文案承担，
   // 用户在意的事实没变 —— 这是一个**搜书源**的口，且总数如实报出来。
@@ -213,7 +214,7 @@ try {
       return original(...args)
     }
   })
-  await page.click('.explore-source-picker .ui-select-trigger')
+  await page.click(SOURCE_TRIGGER)
   await page.waitForSelector('.ui-select-menu', { timeout: 15000 })
   await sleep(400)
   const explorePickerShape = await page.evaluate(() => ({
@@ -252,7 +253,7 @@ try {
     // 选中它：换源必须真的按新书源重取发现页配置，而不是只把按钮文字改了
     await page.evaluate(() => document.querySelector('.ui-select-option')?.click())
     await sleep(1500)
-    const pickedName = await page.evaluate(() => document.querySelector('.explore-source-picker .ui-select-value')?.textContent?.trim() ?? '')
+    const pickedName = await page.evaluate(trigger => document.querySelector(`${trigger} .ui-select-value`)?.textContent?.trim() ?? '', SOURCE_TRIGGER)
     check('点选项后回显所选书源', pickedName === filtered[0]?.name, `${pickedName} ← 期望 ${filtered[0]?.name ?? ''}`)
     // 同名源可能有好几个（聚合包常见），按名字回查 id 集合，别拿"第一个同名"当唯一答案
     const wantedIds = new Set(exploreList.filter(item => item.name === pickedName).map(item => item.id))
@@ -266,10 +267,10 @@ try {
   } else {
     skip('源下拉的按名过滤与换源', '接口没返回可发现的书源，无从取关键字')
   }
-  const exploreGroupHint = await page.evaluate(() => {
-    const node = document.querySelector('.explore-source-picker .ui-select-trigger')
+  const exploreGroupHint = await page.evaluate(trigger => {
+    const node = document.querySelector(trigger)
     return node ? node.getAttribute('aria-label') : ''
-  })
+  }, SOURCE_TRIGGER)
   check('选源口的无障碍名点明这是"搜索并选择"，读屏用户也知道能打字',
     (exploreGroupHint ?? '').includes('搜索'), exploreGroupHint)
   await page.screenshot({ path: path.join(SHOTS, 'picker-explore-source-search.png') })

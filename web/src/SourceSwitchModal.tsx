@@ -3,7 +3,8 @@ import { api, Chapter, SearchResult, SearchStreamEvent, streamSearch } from './a
 import { cleanTitle } from './searchFilters'
 import { sourceLabel } from './sourceOrder'
 import { Icon } from './icons'
-import { toast } from './Toast'
+import { toast } from './Toast'import { useEscapeClose } from './useEscapeClose'
+
 
 export type SourceCandidate = {
   result: SearchResult
@@ -294,6 +295,7 @@ export function SourceSwitchModal({
     ? Math.round((searchProgress.completedSources / searchProgress.totalSources) * 100)
     : 0
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div

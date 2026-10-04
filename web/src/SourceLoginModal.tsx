@@ -398,7 +398,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
 
     if (type === 'button') {
       return (
-        <div key={`${key}-${index}`} style={flexStyle} className="login-ui-item-btn">
+        <div key={`${key}-${index}`} style={flexStyle}>
           <button
             type="button"
             className="source-login-btn primary-subtle"
@@ -487,7 +487,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="source-login-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="source-login-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="书源登录">
         <div className="source-login-header">
           <div className="source-login-title-group">
             <h3 className="source-login-title">登录 {sourceName}</h3>
@@ -811,7 +811,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
 
         {headerEditOpen && (
           <div className="modal-backdrop top-layer-modal-backdrop" onClick={() => setHeaderEditOpen(false)}>
-            <div className="source-login-dialog" style={{ width: 'min(500px, 94vw)' }} onClick={e => e.stopPropagation()}>
+            <div className="source-login-dialog" style={{ width: 'min(500px, 94vw)' }} role="dialog" aria-modal="true" aria-label="编辑登录请求头" onClick={e => e.stopPropagation()}>
               <div className="source-login-header">
                 <h3>编辑 / 填入登录头 (Login Header)</h3>
                 <button type="button" className="source-login-action-btn" onClick={() => setHeaderEditOpen(false)} aria-label="关闭"><Icon name="close" /></button>

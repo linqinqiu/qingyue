@@ -403,7 +403,7 @@ async function runE2E() {
       assert.strictEqual(healthCards.length, 4, 'Should show 4 checked sources')
 
       // Check stats tabs (🟢 正常, 🟡 迟缓, 🔴 失效)
-      const tabFailed = await page.waitForSelector('.health-tab-btn.tab-failed')
+      const tabFailed = await page.waitForSelector('[data-tier="dead"]')
       await tabFailed?.click()
       await new Promise((r) => setTimeout(r, 200))
       const failedCards = await page.$$('.health-item-card')

@@ -8,7 +8,8 @@ import {
   OfflineBookStat,
   OfflineStorageStats,
 } from './offlineStorage'
-import { toast } from './Toast'
+import { toast } from './Toast'import { useEscapeClose } from './useEscapeClose'
+
 
 interface OfflineCacheModalProps {
   onClose: () => void
@@ -66,6 +67,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
     }
   }
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -77,8 +79,8 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
       >
         <header className="source-login-header">
           <div className="source-login-title">
-            <span className="source-login-icon"><Icon name="book" /></span>
-            <div className="source-login-heading">
+            <span><Icon name="book" /></span>
+            <div>
               <h2>离线缓存</h2>
               <small>存在这台电脑的浏览器里，断网也能读已下载的部分</small>
             </div>
@@ -90,12 +92,11 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
 
         <div className="source-login-body">
           {loading ? (
-            <div className="source-login-loading">
-              <span className="source-login-spinner" />
+            <div>
               <span>正在统计设备存储占用…</span>
             </div>
           ) : (
-            <div className="offline-cache-content">
+            <div>
               <div className="cache-overview-card">
                 <div className="overview-item">
                   <span className="overview-label">已离线书籍</span>
@@ -113,7 +114,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
                 </div>
               </div>
 
-              <div className="offline-books-section">
+              <div>
                 <div className="offline-books-header">
                   <span>已离线书籍列表</span>
                   <small>断网时可继续读</small>

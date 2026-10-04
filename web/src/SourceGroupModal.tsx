@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Icon } from './icons'
+import { Icon } from './icons'import { useEscapeClose } from './useEscapeClose'
+
 
 interface SourceGroupModalProps {
   selectedCount: number
@@ -33,9 +34,10 @@ export function SourceGroupModal({
     }
   }
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card source-group-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-card source-group-modal" role="dialog" aria-modal="true" aria-label="批量设置分组" onClick={e => e.stopPropagation()}>
         <header className="modal-header">
           <div>
             <h2>批量设置分组</h2>
@@ -70,7 +72,7 @@ export function SourceGroupModal({
 
           {!isClear && (
             <>
-              <div className="form-group">
+              <div>
                 <label htmlFor="groupNameInput">分组名称</label>
                 <input
                   id="groupNameInput"
@@ -102,7 +104,7 @@ export function SourceGroupModal({
             </>
           )}
 
-          <div className="modal-actions">
+          <div>
             <button type="button" className="subtle-button" onClick={onClose} disabled={busy}>
               取消
             </button>

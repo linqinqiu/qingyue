@@ -224,7 +224,7 @@ export function AppHeader({
                       <button
                         key={skin.id}
                         type="button"
-                        className={`menu-theme-btn theme-option-${skin.builtin ? skin.id : 'custom'} ${isSelected ? 'selected' : ''}`}
+                        className={`menu-theme-btn ${isSelected ? 'selected' : ''}`}
                         role="radio"
                         aria-checked={isSelected}
                         onClick={() => handleThemeChange(skin.id)}

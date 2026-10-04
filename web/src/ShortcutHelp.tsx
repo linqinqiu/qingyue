@@ -1,5 +1,10 @@
+// 这张表在 `web/test` 里是被 `renderToStaticMarkup` 静态渲染的，那条链路走 classic JSX
+// （`React.createElement`），Vite 构建才走 automatic runtime。删掉这行"没在用的导入"
+// 只会让套件里这一条红，页面与构建都看不出问题（AGENTS §5，PageBar/Notice 撞过同一坑）。
+import React from 'react'
 import { SHORTCUT_TABLES } from './shortcuts'
 import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
 
 /**
  * 「快捷键」这张表（用户 2026-10-02：「加入一些快捷键快捷方式」）。
@@ -8,6 +13,7 @@ import { Icon } from './icons'
  * 与真的能按的键不可能各说一套。
  */
 export function ShortcutHelp({ onClose }: { onClose: () => void }) {
+  useEscapeClose(onClose)
   return <div className="modal-backdrop" onClick={onClose}>
     <div className="source-login-modal shortcut-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="快捷键">
       <div className="shortcut-modal-header">

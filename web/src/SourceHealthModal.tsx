@@ -3,6 +3,7 @@ import { api, type SourceSummary } from './api'
 import { buildGroupingPlan, HEALTH_TAGS, type HealthTier } from './sourceGrouping'
 import { dropHealthResults, getHealthRun, startHealthRun, stopHealthRun, useHealthRun } from './sourceHealthRun'
 import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
 
 interface SourceHealthModalProps {
   sources: SourceSummary[]
@@ -234,9 +235,10 @@ export function SourceHealthModal({
     void startCheck([id])
   }
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card source-health-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-card source-health-modal" role="dialog" aria-modal="true" aria-label="书源体检" onClick={e => e.stopPropagation()}>
         <header className="modal-header">
           <div className="health-modal-title">
             <Icon name="activity" />
@@ -308,6 +310,7 @@ export function SourceHealthModal({
           <div className="health-tabs">
             <button
               type="button"
+              data-tier="all"
               className={`health-tab-btn ${activeTab === 'all' ? 'active' : ''}`}
               onClick={() => setActiveTab('all')}
             >
@@ -315,21 +318,24 @@ export function SourceHealthModal({
             </button>
             <button
               type="button"
-              className={`health-tab-btn tab-valid ${activeTab === 'valid' ? 'active' : ''}`}
+              data-tier="valid"
+              className={`health-tab-btn ${activeTab === 'valid' ? 'active' : ''}`}
               onClick={() => setActiveTab('valid')}
             >
               正常 ({stats.valid})
             </button>
             <button
               type="button"
-              className={`health-tab-btn tab-slow ${activeTab === 'slow' ? 'active' : ''}`}
+              data-tier="slow"
+              className={`health-tab-btn ${activeTab === 'slow' ? 'active' : ''}`}
               onClick={() => setActiveTab('slow')}
             >
               迟缓 ({stats.slow})
             </button>
             <button
               type="button"
-              className={`health-tab-btn tab-failed ${activeTab === 'pending' ? 'active' : ''}`}
+              data-tier="pending"
+              className={`health-tab-btn ${activeTab === 'pending' ? 'active' : ''}`}
               onClick={() => setActiveTab('pending')}
             >
               待确认 ({stats.pending})
@@ -337,14 +343,16 @@ export function SourceHealthModal({
             {/* 这一档单独列出来：它们一个请求都没发过，混进「连不上」就是体检最大的假数（652 / 5,574） */}
             <button
               type="button"
-              className={`health-tab-btn tab-unconfigured ${activeTab === 'unconfigured' ? 'active' : ''}`}
+              data-tier="unconfigured"
+              className={`health-tab-btn ${activeTab === 'unconfigured' ? 'active' : ''}`}
               onClick={() => setActiveTab('unconfigured')}
             >
               未配搜索 ({stats.unconfigured})
             </button>
             <button
               type="button"
-              className={`health-tab-btn tab-failed ${activeTab === 'dead' ? 'active' : ''}`}
+              data-tier="dead"
+              className={`health-tab-btn ${activeTab === 'dead' ? 'active' : ''}`}
               onClick={() => setActiveTab('dead')}
             >
               连不上 ({stats.dead})
@@ -497,10 +505,10 @@ export function SourceHealthModal({
                     </div>
                     {item.error && <p className="health-item-error">{item.error}</p>}
                   </div>
-                  <div className="health-item-actions">
+                  <div>
                     <button
                       type="button"
-                      className="subtle-button icon-only"
+                      className="subtle-button"
                       title="单独重测"
                       onClick={() => handleRetrySingle(item.id)}
                       disabled={running}

@@ -207,7 +207,7 @@ export function PwaManager() {
       {showBanner && (
         <div className="pwa-install-banner" role="region" aria-label="安装应用提示">
           <div className="pwa-banner-left">
-            <div className="pwa-banner-logo">
+            <div>
               <Logo size={28} />
             </div>
             <div className="pwa-banner-info">

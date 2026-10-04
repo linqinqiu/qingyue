@@ -3,6 +3,7 @@ import { api, type LogEntry } from './api'
 import { Icon } from './icons'
 import { Select } from './Select'
 import { toast } from './Toast'
+import { useEscapeClose } from './useEscapeClose'
 
 /**
  * 「运行日志」弹窗：把服务端 LogService 收集的结构化日志摊开给人看。
@@ -138,6 +139,7 @@ export function LogsModal({ onClose }: { onClose: () => void }) {
     })
   }
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div

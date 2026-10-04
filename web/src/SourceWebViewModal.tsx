@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
-import { Icon } from './icons'
+import { Icon } from './icons'import { useEscapeClose } from './useEscapeClose'
+
 
 interface SourceWebViewModalProps {
   sourceId: string
@@ -265,9 +266,10 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
           ? { cls: 'is-none', text: '未检测到登录凭据' }
           : { cls: 'is-unknown', text: cookieCount !== null ? `已捕获 ${cookieCount} 域` : '检测中' }
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop modal-backdrop--webview" onClick={onClose}>
-      <div className="source-webview-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div className="source-webview-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="内置浏览器">
         <div className="source-webview-toolbar">
           <div className="source-webview-nav-group">
             <button
@@ -355,7 +357,7 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
 
         <div className="source-webview-body">
           {error ? (
-            <div className="source-webview-placeholder error">
+            <div className="source-webview-placeholder">
               <div className="source-webview-placeholder-title">无法打开内置浏览器</div>
               <div className="source-webview-placeholder-text">{error}</div>
               <div className="source-webview-placeholder-text">

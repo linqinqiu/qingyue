@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, type DebugStep } from './api'
-import { Icon } from './icons'
+import { Icon } from './icons'import { useEscapeClose } from './useEscapeClose'
+
 
 export interface SourceDebugModalProps {
   sourceId: string
@@ -69,6 +70,7 @@ export function SourceDebugModal({ sourceId, sourceName, onClose }: SourceDebugM
   const reached = new Set(steps.map(step => step.stage))
   const failedAt = steps.find(step => !step.ok)?.stage
 
+  useEscapeClose(onClose)
   return (
     <div className="modal-backdrop top-layer-modal-backdrop" onClick={onClose}>
       <div className="source-debug-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={`调试书源 ${sourceName}`}>
@@ -83,7 +85,7 @@ export function SourceDebugModal({ sourceId, sourceName, onClose }: SourceDebugM
         <div className="source-debug-form">
           <label><span>关键词</span><input value={keyword} onChange={event => setKeyword(event.target.value)} placeholder="用来跑搜索阶段" /></label>
           <label><span>书籍地址（留空用第一条命中）</span><input value={bookUrl} onChange={event => setBookUrl(event.target.value)} placeholder="https://…" /></label>
-          <label className="source-debug-chapter"><span>第几章</span>
+          <label><span>第几章</span>
             <input type="number" min={0} value={chapterIndex} onChange={event => setChapterIndex(Math.max(0, Number(event.target.value) || 0))} />
           </label>
           {running

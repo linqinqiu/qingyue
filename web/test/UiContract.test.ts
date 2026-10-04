@@ -27,7 +27,9 @@ test('弹窗壳与关闭键都有真实规则（不是靠 UA 默认长相）', (
   for (const prop of ['max-height', 'border-radius', 'box-shadow', 'overflow']) {
     assert.match(shell, new RegExp(prop), `.modal-card 少了 ${prop}`)
   }
-  const close = /\.close-button, \.icon-btn, \.shelf-remove \{([^}]*)\}/.exec(css)?.[1] ?? ''
+  // 四颗关闭键必须共用**同一档**（`.shortcut-close` 原来是挂在 TSX 上而样式表 0 命中的裸按钮）
+  const close = /\.close-button, \.icon-btn, \.shelf-remove, \.shortcut-close \{([^}]*)\}/.exec(css)?.[1] ?? ''
+  assert.ok(close, '关闭键那一档被拆开了 —— 四颗键必须共用同一条规则，否则又会各长各的')
   assert.match(close, /width: 30px/)
   assert.match(close, /height: 30px/)
 })
@@ -93,3 +95,280 @@ test('移动端底部导航的列数与真实按钮数对得上', () => {
   const columns = Number(/\.mobile-reader-nav \{[\s\S]*?grid-template-columns: repeat\((\d+)/.exec(css)?.[1] ?? '0')
   assert.equal(columns, buttons, `导航渲染 ${buttons} 颗但样式只给 ${columns} 列 —— 多出来的会被固定高度裁掉`)
 })
+
+/**
+ * 「TSX 挂着类名、样式表 0 命中」从人工发现变成常驻扫描（PROPOSAL-018 §5.3）。
+ *
+ * 2026-10-03 一次审计抓出 29 个，其中六个是真坏（弹窗标题吃 UA 的 2em、关闭键没有尺寸）。
+ * 这类东西不会报错，只会安静地按浏览器默认长相画出来，所以必须每次跑。
+ *
+ * 只取**字符串字面量**里的 token：数组写法 `className={['a', cond && 'b']}` 里 `cond` 是标识符不是类名，
+ * 模板串里的 `${…}` 会被换掉，剩下的尾带 `-` 的是动态前缀（真实类名要拼上去），按前缀查样式表。
+ * 这两条不处理的话，扫描器会报出一堆 `.index`、`.value`、`.swatch-` 这种根本不存在的类名 ——
+ * 一条会误报的判据，最后就是被人整体关掉。
+ */
+const MARKER_CLASSES: Record<string, string> = {
+  'menu-header-title': '顶栏「我的」菜单里那行状态文字，版本门禁 version-check 按它定位',
+  'health-stop-btn': '体检弹窗的「停止体检」，source-health-check 按它点键',
+  'health-grouping-apply': '体检结论那三行「打标签」的按钮，source-health-check 按它点（删掉它门禁会点到空处）',
+  'health-grouping-undo': '同一行的「撤销」，source-health-check 按它点',
+  'source-login-entry-btn': '书源编辑器里那颗「登录」入口，source-editor-check 与 webview-login-probe 按它定位',
+  'reader-flow-tail': '滚动模式章末提示条，reader-transition-check 按它判断"接不上下一章时有没有给提示"',
+}
+
+/**
+ * 浮层的三件事实：有挡片就得接 Esc、有 `role="dialog"` 就得有名字、
+ * 每一层 `modal-backdrop` 都得有一档语义。抽成纯函数是为了能被**注入反扫** ——
+ * 一条永远为真的判据等于没有判据（这条判据自己坏过一次：`rows > 0` 那种空判）。
+ */
+function auditOverlays(files: { name: string; src: string }[]) {
+  const problems: string[] = []
+  for (const { name, src } of files) {
+    const layers = (src.match(/className="modal-backdrop/g) ?? []).length
+    if (layers === 0) continue
+    const hooks = (src.match(/useEscapeClose\(/g) ?? []).length
+    if (hooks === 0) problems.push(`${name}：${layers} 层挡片却一次 Esc 都没接（Esc 关不掉）`)
+    const dialogs = (src.match(/role="dialog"/g) ?? []).length
+    if (dialogs < layers) problems.push(`${name}：${layers} 层挡片只有 ${dialogs} 处 role="dialog"（读屏软件找不到这一层）`)
+    for (const match of src.matchAll(/role="dialog"[\s\S]{0,200}/g)) {
+      if (!/aria-label[=:]|aria-labelledby/.test(match[0])) {
+        problems.push(`${name}：有一处 role="dialog" 在 200 字内没有 aria-label（弹窗没有名字）`)
+        break
+      }
+    }
+  }
+  return problems
+}
+
+test('浮层尺寸只有一处来源：菜单不许在 TSX 里写像素，夹取算式不许各写一份', () => {
+  const dir = path.resolve(import.meta.dirname, '../src')
+  // 只扫代码：注释里写"以前是 210 / 34，样式表是 196 / 32+2"是这段历史唯一的去处，
+  // 判据若把它也算成违规，下一次就没人肯写注释了。
+  const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  const menu = code(fs.readFileSync(path.join(dir, 'ContextMenu.tsx'), 'utf8'))
+  const select = code(fs.readFileSync(path.join(dir, 'Select.tsx'), 'utf8'))
+  const geo = fs.readFileSync(path.join(dir, 'overlayGeometry.ts'), 'utf8')
+
+  // 菜单的宽高由样式表定（min-width:196 / 行 32 + 间隙 2），位置由挂载后量出来的真实矩形夹
+  assert.match(menu, /useClampOverlay/, '右键菜单要用量出来的矩形夹进视口，不能再估宽高')
+  assert.ok(!/\b(?:19[0-9]|2[0-9]{2}|3[0-9]{2})\b/.test(menu.replace(/z-index[^\n]*/g, '')),
+    'ContextMenu.tsx 里不许出现像素常量 —— 原来写着 width=210、行=34，与样式表的 196 / 32+2 互相矛盾')
+  assert.match(select, /clampOverlay\(/, 'Select 的夹取要走同一份算式')
+  assert.match(geo, /OVERLAY_EDGE = 8/, '视口留白这一档只许在 overlayGeometry.ts 出现一次')
+  assert.ok(!/Math\.max\(8, Math\.min\(/.test(select), 'Select 不能再手写一份"夹进 8px"')
+  // 这三对是**同一件事的两个名字**：JS 里算的档，样式表又写了一遍。
+  // 逐对查选择器与属性，不能拿"任何 .ui-select* 的 34px"去判 —— 触发器那一档本来就是 34px，与选项行高无关。
+  assert.deepEqual(duplicateOverlayGeometry(css, select), [],
+    'Select 的行高/上限档在 TSX 与样式表各写了一份 —— 这就是改版前"两份数值互相矛盾"的形状')
+})
+
+/** JS 常量与样式表里同一档像素的重复清单（抽成纯函数是为了能被注入反扫）。 */
+function duplicateOverlayGeometry(cssText: string, selectText: string) {
+  const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  const bare = code(selectText)
+  const owned: [string, string, string][] = [
+    ['MENU_MAX_HEIGHT', '.ui-select-menu', 'max-height'],
+    ['LIST_MAX_H', '.ui-select-options', 'max-height'],
+    ['ROW_H', '.ui-select-option', 'min-height'],
+  ]
+  const problems: string[] = []
+  for (const [name, selector, prop] of owned) {
+    const value = Number(new RegExp(`const ${name} = (\\d+)`).exec(bare)?.[1])
+    if (!value) { problems.push(`${name} 在 Select.tsx 里没有定义`); continue }
+    const block = new RegExp(`\\${selector} \\{([^}]*)\\}`).exec(cssText)?.[1]
+    if (block === undefined) { problems.push(`样式表里找不到 ${selector} 这一档`); continue }
+    if (new RegExp(`${prop}: ${value}px`).test(block)) {
+      problems.push(`${selector} 写了 ${prop}: ${value}px，与 Select.tsx 的 ${name} 是同一件事的两份数值`)
+    }
+  }
+  return problems
+}
+
+test('几何重复判据会红：把 340 塞回样式表，必须报出 MENU_MAX_HEIGHT 这一对', () => {
+  const dir = path.resolve(import.meta.dirname, '../src')
+  const select = fs.readFileSync(path.join(dir, 'Select.tsx'), 'utf8')
+  const injected = css.replace('.ui-select-menu { position: fixed;', '.ui-select-menu { max-height: 340px; position: fixed;')
+  const problems = duplicateOverlayGeometry(injected, select)
+  assert.ok(problems.some(p => p.includes('.ui-select-menu') && p.includes('MENU_MAX_HEIGHT')),
+    '注入一份重复数值而判据不红，等于这条判据不存在')
+  assert.deepEqual(duplicateOverlayGeometry(css, select), [], '把注入撤掉之后应当是干净的')
+})
+
+
+test('每个弹窗都接了 Esc、有 role="dialog" 与名字', () => {
+  const dir = path.resolve(import.meta.dirname, '../src')
+  const files = fs.readdirSync(dir).filter(n => n.endsWith('.tsx'))
+    .map(n => ({ name: n, src: fs.readFileSync(path.join(dir, n), 'utf8') }))
+  assert.deepEqual(auditOverlays(files), [], '浮层的 Esc / role / 名字不许再靠自觉（PROPOSAL-018 W1 ②④）')
+})
+
+test('浮层判据自己会红：注入一处缺 Esc、一处缺 role、一处缺名字，三条都要报出来', () => {
+  const synthetic = [
+    { name: 'NoEsc.tsx', src: '<div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-label="x">' },
+    { name: 'NoRole.tsx', src: '<div className="modal-backdrop" onClick={onClose}><div onClick={stop} /></div>', },
+    { name: 'Unnamed.tsx', src: '<div className="modal-backdrop"><div role="dialog" aria-modal="true">useEscapeClose(onClose)', },
+  ]
+  const problems = auditOverlays(synthetic)
+  assert.ok(problems.some(p => p.includes('NoEsc') && p.includes('Esc')), '缺 Esc 必须报')
+  assert.ok(problems.some(p => p.includes('NoRole')), '缺 role="dialog" 必须报')
+  assert.ok(problems.some(p => p.includes('Unnamed') && p.includes('aria-label')), '缺名字必须报')
+})
+
+/**
+ * 门禁用的类名必须真的长在界面上（PROPOSAL-018 W1 ③ 的配套判据）。
+ *
+ * 这一条是自己踩出来的：把"样式表 0 命中"的类名当死代码删掉时，`health-grouping-apply` /
+ * `health-grouping-undo` 一起删了 —— 它们没有样式是对的，但 `source-health-check` 一直靠它们
+ * 点「打标签 / 撤销」，于是 5 条判据当场红在探针上而不是产品上。
+ * **"没有样式"不等于"没有用处"**：还有一类用处是当定位锚点。
+ *
+ * 三条口径不然这条判据就是一堆假红（第一版就是这么报了 28 个）：
+ * ① 选择器串里的**逗号是"或"** —— `.a, .b` 命中一个就有效，必须整串一起判；
+ * ② `next-*` 那两份门禁打的是**另一个仓库**（qingyue 的新骨架），不许拿旧界面的源码判它；
+ * ③ v2 外壳回滚后 ui-shell-check 是在**断言那些类名不存在**，那种锚点天生该找不到，逐条写清是谁在钉。
+ */
+const GATE_ANCHOR_EXEMPT: Record<string, string> = {
+  'app-rail': 'v2 侧栏外壳已整体回滚，ui-shell-check 判的是"它不许存在"',
+  'page-bar': '同上（回滚钉桩）',
+  'app-frame': '同上（回滚钉桩）',
+  'rail-tabs': '同上（回滚钉桩）',
+  'rail-item': '同上（回滚钉桩）',
+  'shelf-density': '书架密度切换器已删，shelf-layout-check 断言 densityControl === false',
+  'explore-search': '发现页那格"在这个源里搜书名"已按用户要求删除，source-picker-check 断言它不许回来',
+  'ui-select-more': '选项截断提示已随虚拟滚动删除，source-picker / source-scale 两条都写成"没有也算过"',
+  'source-webview-viewport-picker': '内置浏览器的手机/平板/铺满切换器已删，source-editor-check 断言 picker === false',
+  'shelf-card-read-track': '封面下沿的阅读进度条已删（用户 2026-10-03），shelf-layout-check 判的是"它不许回来"',
+  'shelf-card-read-fill': '同上（那条带的填充）',
+}
+
+/** 只报数不判红的一次性审计脚本 —— 它们不是门禁，选择器过期不会让任何人误判产品 */
+const AUDIT_ONLY = /^(overlay-audit|controls-audit|uiaudit|icon-square-census|index-selector-census|context-dialect-census|replace-regex-census|.*-measure|.*-census)$/
+
+function gateAnchorProblems(gates: { name: string; src: string }[], appText: string) {
+  const missing: string[] = []
+  for (const { name, src } of gates) {
+    const bare = name.replace(/\.mjs$/, '')
+    if (AUDIT_ONLY.test(bare)) continue
+    // 只认引号里的选择器串：querySelector('...') / waitForSelector('...') / $('...') / clickByText('...')
+    for (const match of src.matchAll(/(?:querySelector(?:All)?|waitForSelector|\$+|clickByText)\s*\(\s*['"`]([^'"`]+)['"`]/g)) {
+      const alternatives = match[1].split(',').map(part => part.trim()).filter(Boolean)
+      // 整串里只要有一档整体活着，这条锚点就还有效
+      if (alternatives.some(part => segmentGaps(part, appText).length === 0)) continue
+      for (const part of alternatives) {
+        for (const token of segmentGaps(part, appText)) {
+          if (GATE_ANCHOR_EXEMPT[token]) continue
+          missing.push(`${name} 的「${match[1].trim()}」这一档 .${token} 在界面源码与样式表里都没有`)
+        }
+      }
+    }
+  }
+  return [...new Set(missing)]
+}
+
+/** 一个候选里"这一档找不到"的类名；一档全都有就返回空数组。 */
+function segmentGaps(selector: string, appText: string): string[] {
+  const gaps: string[] = []
+  for (const segment of selector.split(/[\s>+~]+/).filter(Boolean)) {
+    const tokens = classesIn(segment)
+    if (tokens.length === 0) continue
+    const alive = tokens.find(token => appText.includes(token))
+    if (!alive) gaps.push(...tokens.filter(token => !appText.includes(token)))
+  }
+  return [...new Set(gaps)]
+}
+
+function classesIn(selector: string): string[] {
+  return (selector.match(/\.[a-z][a-z0-9_-]{2,}/gi) ?? []).map(c => c.slice(1)).filter(t => !t.includes('$'))
+}
+
+test('门禁里的选择器锚点都还长在界面上（删类名要先查门禁）', () => {
+  const verifyDir = path.resolve(import.meta.dirname, '../../tools/verify')
+  // next-* 打的是 qingyue 那份新骨架（另一个仓库），env/zip-make/… 是工具不是门禁
+  const gates = fs.readdirSync(verifyDir).filter(n => n.endsWith('.mjs') && !AUDIT_ONLY.test(n) && !/^(next-|env|multipart|zip-make|make-ico|render-icons|preview|snapshot|commit-pending|extract-|testreport|test-failure|chaincheck|archive-verify|md-table-check|frame-metrics)/.test(n))
+    .map(n => ({ name: n, src: fs.readFileSync(path.join(verifyDir, n), 'utf8') }))
+  const dir = path.resolve(import.meta.dirname, '../src')
+  const appText = fs.readdirSync(dir).map(n => fs.readFileSync(path.join(dir, n), 'utf8')).join('\n')
+  assert.deepEqual(gateAnchorProblems(gates, appText), [],
+    '门禁点的东西在旧界面里不存在 —— 要么是被当死类名删了，要么是界面改了口而门禁没跟')
+})
+
+test('回滚钉桩的豁免不腐：每一项都还得真的被某份门禁引着', () => {
+  const verifyDir = path.resolve(import.meta.dirname, '../../tools/verify')
+  const all = fs.readdirSync(verifyDir).filter(n => n.endsWith('.mjs')).map(n => fs.readFileSync(path.join(verifyDir, n), 'utf8')).join('\n')
+  for (const token of Object.keys(GATE_ANCHOR_EXEMPT)) {
+    assert.ok(all.includes(token), `豁免里的 .${token} 已经没有任何门禁引用了，条目该删`)
+  }
+})
+
+test('锚点判据自己会红：抹掉 anchor 必须报，逗号备选里还剩一个就不许报', () => {
+  const probe = [{ name: 'x-check.mjs', src: "page.waitForSelector('.health-grouping-apply')" }]
+  assert.deepEqual(gateAnchorProblems(probe, '完全没有那个类名的源码'),
+    ['x-check.mjs 的「.health-grouping-apply」这一档 .health-grouping-apply 在界面源码与样式表里都没有'])
+  assert.deepEqual(gateAnchorProblems(probe, '<button className="health-grouping-apply">'), [])
+  // 逗号是"或"：一个候选没了、另一个还在，选择器照样有效 —— 这条不处理就是 28 个假红里的 majority
+  const either = [{ name: 'y-check.mjs', src: "document.querySelector('.gone-anchor, .explore-tab')" }]
+  assert.deepEqual(gateAnchorProblems(either, '.explore-tab { color: red }'), [])
+  assert.deepEqual(gateAnchorProblems(either, '两个候选都没有'), [
+    'y-check.mjs 的「.gone-anchor, .explore-tab」这一档 .gone-anchor 在界面源码与样式表里都没有',
+    'y-check.mjs 的「.gone-anchor, .explore-tab」这一档 .explore-tab 在界面源码与样式表里都没有',
+  ])
+})
+
+function classNamesIn(src: string): string[] {
+  const patterns = [
+    /className="([^"]*)"/g,
+    /className=\{`([^`]*)`\}/g,
+    /className=\{\[([\s\S]*?)\]\.join/g,
+  ]
+  const tokens: string[] = []
+  for (const pattern of patterns) {
+    for (const match of src.matchAll(pattern)) {
+      const arrayForm = pattern === patterns[2]
+      const cleaned = match[1].replace(/\$\{[^}]*\}/g, ' ')
+      // 数组写法只认引号里的内容：引号外的是表达式标识符（`index === active ? 'active' : ''` 里的 index 不是类名）
+      const text = arrayForm
+        ? (cleaned.match(/['"`]([^'"`]*)['"`]/g) ?? []).map(s => s.slice(1, -1)).join(' ')
+        : cleaned
+      tokens.push(...text.split(/[\s,]+/).filter(Boolean))
+    }
+  }
+  return tokens
+}
+
+test('界面类名不再有"挂着而样式表 0 命中"的新增项', () => {
+  const dir = path.resolve(import.meta.dirname, '../src')
+  const used = new Map<string, string>()
+  for (const file of fs.readdirSync(dir).filter(name => name.endsWith('.tsx'))) {
+    const src = fs.readFileSync(path.join(dir, file), 'utf8')
+    for (const token of classNamesIn(src)) {
+      if (!/^[a-z][a-z0-9_-]*$/i.test(token)) continue
+      if (!used.has(token)) used.set(token, file)
+    }
+  }
+  const offenders: string[] = []
+  for (const [token, file] of used) {
+    if (MARKER_CLASSES[token]) continue
+    // 动态前缀（`swatch-`、`tier-`）：真实类名是拼出来的，按前缀查
+    const hit = token.endsWith('-')
+      ? css.includes(`.${token}`)
+      : hasRule(token)
+    if (!hit) offenders.push(`.${token}（${file}）`)
+  }
+  assert.deepEqual(offenders, [], `这些类名挂在界面上而样式表里一条规则都没有，控件会退回浏览器默认长相：\n  ${offenders.join('\n  ')}`)
+})
+
+test('标记类白名单不腐：每一项都还要被界面用着，并且真的有门禁在引它', () => {
+  const dir = path.resolve(import.meta.dirname, '../src')
+  const srcTokens = fs.readdirSync(dir).filter(n => n.endsWith('.tsx'))
+    .flatMap(n => classNamesIn(fs.readFileSync(path.join(dir, n), 'utf8')))
+  const gatesDir = path.resolve(import.meta.dirname, '../../tools/verify')
+  const testsDir = path.resolve(import.meta.dirname, './')
+  const gates = [gatesDir, testsDir].flatMap(folder => fs.readdirSync(folder)
+    .filter(n => /\.(mjs|ts)$/.test(n))
+    .map(n => fs.readFileSync(path.join(folder, n), 'utf8'))).join('\n')
+  for (const token of Object.keys(MARKER_CLASSES)) {
+    assert.ok(srcTokens.includes(token), `白名单里的 .${token} 已经没人用了，条目和那个类名都该删`)
+    assert.ok(gates.includes(token), `.${token} 没有任何门禁引用，它不是锚点就是死类名 —— 应该补样式或直接删掉`)
+  }
+})
+

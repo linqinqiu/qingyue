@@ -1205,7 +1205,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
           <div className="source-sidebar-top-actions">
             <button
               type="button"
-              className={`subtle-button icon-button health-probe-btn ${healthRun.running ? 'is-running' : ''}`}
+              className={`subtle-button health-probe-btn ${healthRun.running ? 'is-running' : ''}`}
               title={healthRun.running
                 ? `体检正在后台跑：已检测 ${healthRun.checked} / ${healthRun.total}，途中已给 ${healthRun.autoTagged} 个不能正常使用的打上标签。点开看进度，收起不会停。`
                 : '批量联网体检：每个源拿关键词试搜一次，只看能不能出条目。想先确认 JSON 写没写坏用编辑器里的「校验」（不联网），要看搜索→详情→目录→正文每一步用「调试」。'}
@@ -2797,7 +2797,6 @@ function ShelfPage({
           <div className="shelf-sort">
             <Select
               ariaLabel="书架排序"
-              className="shelf-sort-select"
               value={sort}
               onChange={value => chooseSort(value as ShelfSort)}
               options={[
@@ -2811,7 +2810,7 @@ function ShelfPage({
             {sort === 'custom' && items.some(item => item.sortOrder != null) && (
               <button
                 type="button"
-                className="subtle-button shelf-order-clear"
+                className="subtle-button"
                 title="把全架的自定义位置清空，回到「从没拖过」的状态（切到别的排序档不会清，那一档只是不看它）"
                 onClick={() => void clearOrder()}
               >

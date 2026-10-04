@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon, type IconName } from './icons'
+import { useClampOverlay } from './overlayGeometry'
 
 export type ContextMenuItem = {
   label: string
@@ -29,41 +30,46 @@ export function ContextMenuLayer() {
     return () => { publish = () => {} }
   }, [])
 
+  if (!menu) return null
+  return <ContextMenuPopup menu={menu} onClose={() => setMenu(null)} />
+}
+
+/**
+ * 菜单的宽高由样式表决定（`min-width: 196`、行 32 + 间隙 2），位置由**挂载后量出来的真实矩形**
+ * 夹进视口 —— 这里以前写着 `width = 210 / 行 = 34`，与样式表那两份数值互相矛盾，
+ * 谁也不报错，菜单贴到视口下沿时就是被裁掉的那一个。
+ */
+function ContextMenuPopup({ menu, onClose }: { menu: OpenMenu; onClose: () => void }) {
+  const ref = useClampOverlay<HTMLDivElement>({ x: menu.x, y: menu.y })
+
   useEffect(() => {
-    if (!menu) return
-    const close = () => setMenu(null)
-    // 捕获阶段拦下这一次的 pointerdown，避免「右键→菜单刚出现就被自己关掉」
+    const node = ref.current
     const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return
-      close()
+      // 捕获阶段拦下这一次的 pointerdown，避免「右键→菜单刚出现就被自己关掉」
+      if (node?.contains(event.target as Node)) return
+      onClose()
     }
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     addEventListener('pointerdown', onPointerDown, true)
-    addEventListener('blur', close)
-    addEventListener('resize', close)
-    addEventListener('scroll', close, true)
+    addEventListener('blur', onClose)
+    addEventListener('resize', onClose)
+    addEventListener('scroll', onClose, true)
     addEventListener('keydown', onKey)
     return () => {
       removeEventListener('pointerdown', onPointerDown, true)
-      removeEventListener('blur', close)
-      removeEventListener('resize', close)
-      removeEventListener('scroll', close, true)
+      removeEventListener('blur', onClose)
+      removeEventListener('resize', onClose)
+      removeEventListener('scroll', onClose, true)
       removeEventListener('keydown', onKey)
     }
-  }, [menu])
+  }, [menu, onClose])
 
-  if (!menu) return null
-  const width = 210
-  const height = menu.items.length * 34 + 12
   return (
     <div
-      ref={node => { menuRef.current = node }}
+      ref={ref}
       className="context-menu"
       role="menu"
-      style={{
-        left: Math.max(8, Math.min(menu.x, innerWidth - width - 8)),
-        top: Math.max(8, Math.min(menu.y, innerHeight - height - 8)),
-      }}
+      style={{ left: menu.x, top: menu.y }}
       onContextMenu={event => event.preventDefault()}
     >
       {menu.items.map(item => (
@@ -72,7 +78,7 @@ export function ContextMenuLayer() {
           type="button"
           role="menuitem"
           className={item.danger ? 'context-menu-danger' : ''}
-          onClick={() => { setMenu(null); item.onSelect() }}
+          onClick={() => { onClose(); item.onSelect() }}
         >
           {item.icon && <Icon name={item.icon} />}
           <span>{item.label}</span>
@@ -81,5 +87,3 @@ export function ContextMenuLayer() {
     </div>
   )
 }
-
-const menuRef: { current: HTMLDivElement | null } = { current: null }
