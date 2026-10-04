@@ -11,6 +11,18 @@ import path from 'node:path'
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
 const page = read('../src/AboutPage.tsx')
 
+/**
+ * 判"某句话不许出现在界面上"要先把注释摘掉。
+ * 注释里为了讲清"为什么以前是错的"必然会写出那个词，不摘就是判据逮住自己的说明文字
+ * （`opensource-hygiene-check` 扫 WebDAV 残留时扫到"断言没有 WebDAV"的那份测试，同一个病）。
+ */
+const withoutComments = (source: string) => source
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n')
+  .filter(line => !/^\s*\/\/\s/.test(line))
+  .join('\n')
+  .replace(/(^|[^:])\/\/[^'"`\n]*$/g, '$1')
+
 test('七样点名要的东西都在这一页上', () => {
   for (const [label, pattern] of [
     ['名称', /info\?\.title/],
@@ -49,6 +61,25 @@ test('许可那一栏说的是真话：运行时依赖与协议都列出来', ()
   }
   // 借鉴过语义的上游必须点名，尤其 AGPL 那条：不写出来就会被后来人当成可以拷
   assert.match(page, /LegadoTeam\/legado/)
+})
+
+test('许可那一栏不许说"未拷代码"：随包的上游数据要认下来', () => {
+  // 2026-10-05 实测：`server/src/main/resources/assets/txtTocRule.json` 与上游那份 `cmp` **逐字节相同**。
+  // 这一句"借鉴设计，未拷代码"因此是假话 —— 同协议（GPL-3.0）分发没问题，撒谎才是问题。
+  const shown = withoutComments(page)
+  assert.doesNotMatch(shown, /未拷代码|不拷代码/)
+  assert.match(shown, /分章规则表/)
+  assert.match(shown, /原样副本|语义参照与随包的上游数据/)
+})
+
+test('开发者那一格不许兜底成别人的仓库', () => {
+  // 原来 `UpdateCheck.repository` 硬写着别人家的 slug（这份代码 clone 来的地方），
+  // 于是「关于」页把那名字当成本项目的开发者、项目主页与检查更新的目标。
+  // 用户 2026-10-05：「GitHub 上我是 linqinqiu，不要将仓库放到别人手里」。
+  const shown = withoutComments(page)
+  assert.doesNotMatch(shown, /lukelzlz/)
+  assert.match(shown, /未配置仓库地址/)
+  assert.doesNotMatch(withoutComments(read('../../server/src/main/kotlin/io/legado/server/UpdateCheck.kt')), /lukelzlz\/legado-server/)
 })
 
 test('路由与样式都接上了', () => {

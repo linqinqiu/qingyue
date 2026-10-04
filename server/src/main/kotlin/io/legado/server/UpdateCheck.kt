@@ -17,13 +17,26 @@ import java.time.Duration
  * 就是一个开在 127.0.0.1 上的 SSRF 门，而这个服务本来就不设身份。
  */
 object UpdateCheck {
-    val repository: String = System.getenv("LEGADO_REPO")?.trim()?.takeIf { it.isNotBlank() }
-        ?: "lukelzlz/legado-server"
+    /**
+     * 仓库 slug 只有一个来源：环境变量 `LEGADO_REPO`。
+     *
+     * 原来这里硬写着 `lukelzlz/legado-server` —— 那是这份代码当初 clone 来的地方，**不是本项目的归属**，
+     * 于是「关于」页把别人家名字当成开发者写给用户看（用户 2026-10-05：「GitHub 上我是 linqinqiu，
+     * 不要将仓库放到别人手里」+「这些内容也不对啊」）。没配就如实说没配，界面上也不给「项目主页」那条链接。
+     */
+    val repository: String = System.getenv("LEGADO_REPO")?.trim()?.takeIf { it.isNotBlank() } ?: ""
 
     private val client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(8))
         .followRedirects(HttpClient.Redirect.NEVER)
         .build()
+
+    /**
+     * 请求头前缀，**只能是 ASCII**：JDK 的 HttpClient 在建请求时就拒掉非 ISO-8859-1 的头值。
+     * 原来这里拼的是 `${BuildInfo.title}/版本`（「青阅/0.6.3」），于是「检查更新」每次抛
+     * `invalid header value`，而那几行写在 runCatching 外面 → 接口 500 → 界面念成「检查请求没有发出去」。
+     */
+    val userAgentPrefix: String = "legado-server/"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -47,13 +60,20 @@ object UpdateCheck {
     }
 
     fun check(current: String): UpdateCheckResult {
-        val request = HttpRequest.newBuilder(URI.create("https://api.github.com/repos/$repository/releases/latest"))
-            .timeout(Duration.ofSeconds(12))
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "${BuildInfo.title}/${current}")
-            .GET()
-            .build()
+        if (repository.isBlank()) {
+            return UpdateCheckResult(current, repository = "", status = "not_configured",
+                message = "这个构建没有配置仓库地址（环境变量 LEGADO_REPO），所以没有可查的发布记录")
+        }
         return runCatching {
+            // User-Agent 必须是 ASCII：JDK 的 HttpClient 在建请求时就拒掉非 ISO-8859-1 的头值，
+            // 而原来 `${BuildInfo.title}/0.6.3`（「青阅/0.6.3」）正好撞上 —— 更糟的是建请求那几行
+            // 写在 runCatching 外面，异常直接冲出路由，接口回 500，界面上念成「检查请求没有发出去」。
+            val request = HttpRequest.newBuilder(URI.create("https://api.github.com/repos/$repository/releases/latest"))
+                .timeout(Duration.ofSeconds(12))
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", userAgentPrefix + current)
+                .GET()
+                .build()
             val response = client.send(request, HttpResponse.BodyHandlers.ofString())
             if (response.statusCode() != 200) {
                 return UpdateCheckResult(current, repository = repository, status = "not_found",

@@ -25,9 +25,15 @@ const THIRD_PARTY: Array<[string, string, string]> = [
   ['Vite + Workbox', '前端构建与离线缓存', 'MIT'],
 ]
 
-/** 参照过语义的上游项目：借鉴设计，不拷代码。口径与 README 同一份。 */
+/**
+ * 参照过语义的上游项目。**不许写"未拷代码"这种一概而论的话**：
+ * 随包的 TXT 分章规则表 `assets/txtTocRule.json`（26 条）与上游那份 `cmp` 逐字节相同（2026-10-05 实测），
+ * 那是人家的 GPL-3.0 数据，跟着我们的 GPL-3.0 一起分发是兼容的，但"没拷代码"就是假话。
+ * 口径与 README 同一份。
+ */
 const REFERENCED: Array<[string, string, string]> = [
   ['LegadoTeam/legado', '书源规则 DSL 的求值语义、体检口径、书架版式与书源编辑字段分组', 'GPL-3.0'],
+  ['LegadoTeam/legado（随包数据）', 'TXT 分章规则表 26 条：原样副本，不是重抄', 'GPL-3.0'],
   ['gedoor/legado_web_source_editor', '书源编辑器的字段分栏形式', 'MIT'],
 ]
 
@@ -66,7 +72,9 @@ export function AboutPage({
     setChecking(true)
     setCheck(null)
     void api.checkUpdate().then(setCheck).catch(() => {
-      setCheck({ current: info?.version ?? '', repository: info?.repository ?? '', status: 'unreachable', message: '检查请求没有发出去' })
+      // 这句原来写的是「检查请求没有发出去」—— 而真相往往是**发出去了、服务端 500 了**
+      // （User-Agent 里塞中文应用名把 JDK 惹炸那次就是），话说明错了方向，排查的人就去查网络了。
+      setCheck({ current: info?.version ?? '', repository: info?.repository ?? '', status: 'unreachable', message: '检查接口没回话：服务端报错或本机连不上 GitHub（看运行日志里那条异常）' })
     }).finally(() => setChecking(false))
   }
 
@@ -82,10 +90,14 @@ export function AboutPage({
           {/* 取失败时不能一直挂着「载入中…」：那行字会永远停在屏幕上（notice 在旁边，但版本这一格在说谎） */}
           <div><dt>版本</dt><dd>{info?.version ?? (notice ? '没取到' : '载入中…')}</dd></div>
           <div><dt>运行位置</dt><dd>{window.location.host}</dd></div>
-          <div><dt>开发者</dt><dd>{repository || '未署名'}</dd></div>
+          {/* 「开发者」这一格原来印的是仓库 slug，而 slug 的兜底值硬写着别人家的仓库
+              （`lukelzlz/legado-server`，这份代码 clone 来的地方，不是本项目的归属）。
+              现在没配仓库地址就直说没配，绝不替谁署名。 */}
+          <div><dt>开发者</dt><dd>{repository || '未配置仓库地址（LEGADO_REPO）'}</dd></div>
         </dl>
         <div className="about-actions">
-          <button type="button" className="primary-button" onClick={runCheck} disabled={checking || !repository}>
+          {/* 没配仓库时按钮照旧可点：点了服务端会回一句"没配置"，比一颗点不动的按钮说得清 */}
+          <button type="button" className="primary-button" onClick={runCheck} disabled={checking}>
             {checking ? '正在检查…' : '检查更新'}
           </button>
           <button type="button" className="ghost-button" onClick={onOpenChangelog}>更新日志</button>
@@ -100,7 +112,7 @@ export function AboutPage({
             {check.status === 'available' && <>有新版本 <strong>{check.latest}</strong>（当前 {check.current}）
               {check.url && <> · <a href={check.url} target="_blank" rel="noreferrer">查看这一版</a></>}</>}
             {check.status === 'latest' && <>已经是最新的 {check.current}（{check.repository} 上没有更新的发布）</>}
-            {(check.status === 'not_found' || check.status === 'unreachable') && <>{check.message}</>}
+            {(check.status === 'not_found' || check.status === 'unreachable' || check.status === 'not_configured') && <>{check.message}</>}
           </p>
         )}
       </header>
@@ -115,7 +127,7 @@ export function AboutPage({
           <thead><tr><th>依赖</th><th>用途</th><th>协议</th></tr></thead>
           <tbody>{THIRD_PARTY.map(([name, purpose, license]) => <tr key={name}><td>{name}</td><td>{purpose}</td><td>{license}</td></tr>)}</tbody>
         </table>
-        <h3>语义参照（借鉴设计，未拷代码）</h3>
+        <h3>语义参照与随包的上游数据</h3>
         <table className="about-table">
           <thead><tr><th>项目</th><th>借鉴了什么</th><th>协议</th></tr></thead>
           <tbody>{REFERENCED.map(([name, purpose, license]) => <tr key={name}><td>{name}</td><td>{purpose}</td><td>{license}</td></tr>)}</tbody>
