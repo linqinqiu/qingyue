@@ -1,3 +1,5 @@
+import { DEFAULT_GRIDS, sanitizeGrid, type TapGrid } from './tapZones'
+
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
 /** 内置那三档的 id（自定义皮肤要叠在其中一档之上，所以这个集合要能被类型化地表达）。 */
@@ -54,6 +56,11 @@ export type ReaderSettings = {
    * 这是**下一本**的默认值；已经进来的书以自己记着的那条为准（`BookshelfItem.tocRule`）。
    */
   txtTocRule: string
+  /**
+   * 点击分区（用户 2026-10-04：「可以自定义点击区域范围并设置，自定义管理」）。
+   * 两种翻页方式各一张格子表 —— 默认值就是改动前那三区，不改不漂移。
+   */
+  tapZones: { paginate: TapGrid; scroll: TapGrid }
 }
 
 const storageKey = 'legado-reader-settings-v2'
@@ -85,6 +92,7 @@ export const defaultReaderSettings: ReaderSettings = {
   ttsCustomVoice: '',
   ttsCustomHeader: '',
   txtTocRule: 'auto',
+  tapZones: { paginate: DEFAULT_GRIDS.paginate, scroll: DEFAULT_GRIDS.scroll },
 }
 
 export function clampScrollPosition(value: number): number {
@@ -256,6 +264,11 @@ export function loadReaderSettings(): ReaderSettings {
       ttsCustomVoice: typeof saved.ttsCustomVoice === 'string' ? saved.ttsCustomVoice : '',
       ttsCustomHeader: typeof saved.ttsCustomHeader === 'string' ? saved.ttsCustomHeader : '',
       txtTocRule: parseTocRuleKey(saved.txtTocRule),
+      // 缺项/写错都回落到出厂那张表（不清洗就会点到 undefined 上，表现为"这一格没反应"）
+      tapZones: {
+        paginate: sanitizeGrid((saved.tapZones as Record<string, unknown> | undefined)?.paginate, DEFAULT_GRIDS.paginate),
+        scroll: sanitizeGrid((saved.tapZones as Record<string, unknown> | undefined)?.scroll, DEFAULT_GRIDS.scroll),
+      },
     }
   } catch {
     return defaultReaderSettings

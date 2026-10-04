@@ -3359,6 +3359,9 @@ function App() {
     return (
       <div className={`app-shell ${skinClasses}`}>
         <ToastContainer />
+        {/* 阅读器这一支是自己那层 app-shell，浮层要自己挂一遍：
+            不挂 ContextMenuLayer，卸载主壳时 publish 已被清成空函数，阅读器里右键就"什么都没发生"。 */}
+        <ContextMenuLayer />
         <ReaderScreen
           openBook={reader.book}
           startIndex={reader.index}

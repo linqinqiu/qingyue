@@ -1005,6 +1005,16 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .page-modes.column-modes { grid-template-columns: repeat(3, 1fr); }
 .page-modes button { height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-muted); color: var(--muted); font-size: 12px; cursor: pointer; }
 .page-modes button.selected { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+/* 点击区域编辑（阅读设置抽屉里那一档）：按钮复用 .page-modes 的形状，格子表随行列数走 */
+.tap-zone-config { display: grid; gap: 8px; }
+.tap-zone-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tap-zone-presets button { min-height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-muted); color: var(--muted); font-size: 12px; cursor: pointer; }
+.tap-zone-presets button:hover { border-color: var(--accent); color: var(--accent); }
+.tap-zone-size { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: 12px; }
+.tap-zone-size button { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-muted); color: var(--muted); font-size: 12px; cursor: pointer; }
+.tap-zone-size button:disabled { opacity: .42; cursor: not-allowed; }
+.tap-zone-size strong { color: var(--ink); font-weight: 600; }
+.tap-zone-grid { display: grid; gap: 6px; }
 /* 首行缩进：与 .setting-range 同构（标题一行、控件一行），三档按钮复用 .page-modes 的形状 */
 .text-indent-choice { display: grid; gap: 6px; color: var(--ink); font-size: 12px; }
 .text-indent-choice .indent-modes { grid-template-columns: repeat(3, 1fr); gap: 6px; }

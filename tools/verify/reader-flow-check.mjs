@@ -299,6 +299,33 @@ try {
     screen.anchorIndex >= lastIndex && screen.sections === 1 && !screen.hint,
     `锚点第 ${screen.anchorIndex + 1} 章 · 挂着 ${screen.sections} 节`)
 
+  // ─────────── 右键不许动正文（用户 2026-10-04：「鼠标右键点击正文页面取消后正文莫名向上移动」）───────────
+  // 原来 `onPointerDown/onPointerUp` 不判鼠标按钮，右键也走"上/中/下"那三区 ——
+  // 于是"叫出菜单再取消"之后页面已经往上滚了一屏。挑最坏那一格判（上三分之一 = 上一页）。
+  const screenState = () => ({
+    y: Math.round(window.scrollY),
+    top: (document.querySelector('.reading-content')?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 40),
+    menu: !!document.querySelector('.context-menu'),
+  })
+  const beforeRight = await page.evaluate(screenState)
+  const spot = await page.evaluate(() => {
+    const rect = document.querySelector('.reading-content').getBoundingClientRect()
+    return { x: Math.round(rect.left + rect.width * 0.5), y: Math.round(rect.top + rect.height * 0.12) }
+  })
+  await page.mouse.click(spot.x, spot.y, { button: 'right' })
+  await new Promise(resolve => setTimeout(resolve, 700))
+  const onRight = await page.evaluate(screenState)
+  check('右键点正文上三分之一那一格：页面不许动（旧版会往上滚一屏）',
+    onRight.y === beforeRight.y && onRight.top === beforeRight.top,
+    `scrollY ${beforeRight.y} → ${onRight.y} · 首屏文字「${beforeRight.top.slice(0, 12)}…」→「${onRight.top.slice(0, 12)}…」`)
+  check('右键出的是应用内菜单，不是没反应', onRight.menu, `菜单挂到 DOM 上=${onRight.menu}`)
+  await page.keyboard.press('Escape')
+  await new Promise(resolve => setTimeout(resolve, 500))
+  const afterClose = await page.evaluate(screenState)
+  check('菜单关得掉，且关掉之后正文仍然没动过',
+    !afterClose.menu && afterClose.y === beforeRight.y && afterClose.top === beforeRight.top,
+    `菜单还在=${afterClose.menu} · scrollY=${afterClose.y}`)
+
   // ─────────────── 兜底：续接取不到时，章末提示条要回来 ───────────────
   // 连续流把"下一章"从按钮变成了挂在下面的内容，那"取不到下一章"这条路径就必须还在：
   // 否则用户滚到章末就是死路一条（没得点、也没得滚）。

@@ -53,6 +53,7 @@ import './UiContract.test.ts'
 import './SourceHealthRun.test.ts'
 import './Bookmarks.test.ts'
 import './SourceOrder.test.ts'
+import './TapZones.test.ts'
 /*
   下面几份曾经**存在但没被 import**（`run-all.ts` 是逐个 import 的，不是 glob 扫描）：
   文件在、名字像测试、跑起来一片绿，其实一条都没执行 —— 这是最难发现的假绿。

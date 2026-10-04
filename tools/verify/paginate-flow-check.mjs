@@ -264,6 +264,61 @@ try {
     negative.underLegacy !== 'column' && negative.recovered === 'column',
     `注入后=${negative.underLegacy} · 撤掉后=${negative.recovered}`)
 
+  // ④ 往回翻（用户 2026-10-04：「你只是在两章之间起作用了，往回怎么办」）。
+  // 前进那一侧②已经盯住了，这一侧原来没人管：走到窗口第一页再按上一页，正确做法是把上一章
+  // **接到窗口前面**、页码整体后移它的页数 —— 眼前那一页一个字都不该动。
+  // 旧实现是"换锚点 + 跳到最后一页"，而页数是当时量的（尾章还没挂上来），实测落到 `4/15`，
+  // 也就是上一章的中间：往回翻一次，位置就丢了。
+  const backward = await page.evaluate(async () => {
+    const read = () => {
+      const spans = [...document.querySelectorAll('.reader-paginated-footer span')].map(node => node.textContent?.trim())
+      const match = /(\d+) \/ (\d+)/.exec(spans[1] ?? '')
+      const viewport = document.querySelector('.reader-paginated-viewport')
+      const rect = viewport.getBoundingClientRect()
+      const body = document.querySelector('.reader-paginated-column-body')
+      let node = document.elementFromPoint(rect.left + rect.width * 0.25, rect.top + rect.height * 0.5)
+      for (let hop = 0; node && hop < 8; hop += 1) {
+        if (body?.contains(node) && (node.dataset?.paragraphIndex !== undefined || node.tagName === 'P')) break
+        node = node.parentElement
+      }
+      return {
+        page: Number(match?.[1] ?? -1),
+        total: Number(match?.[2] ?? -1),
+        sections: document.querySelectorAll('.reader-page-chapter').length,
+        text: (node?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 24),
+      }
+    }
+    const settle = async () => {
+      for (let frame = 0; frame < 14; frame += 1) await new Promise(resolve => requestAnimationFrame(resolve))
+      await new Promise(resolve => setTimeout(resolve, 260))
+    }
+    const press = async key => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+      await settle()
+    }
+    // 先走到"窗口的第一页"（往回退到窗口开头，最多 40 次，避免死循环）
+    for (let guard = 0; guard < 40 && read().page > 1; guard += 1) await press('PageUp')
+    const atStart = read()
+    await press('PageUp')
+    const afterPrepend = read()
+    await press('PageUp')
+    const afterStepBack = read()
+    return { atStart, afterPrepend, afterStepBack }
+  })
+  check('④窗口第一页上按上一页：上一章被接到窗口前面（章数加一，页数不缩）',
+    backward.atStart.page === 1
+      && backward.afterPrepend.sections === backward.atStart.sections + 1
+      && backward.afterPrepend.total >= backward.atStart.total,
+    `${backward.atStart.page}/${backward.atStart.total} ${backward.atStart.sections} 章 → `
+    + `${backward.afterPrepend.page}/${backward.afterPrepend.total} ${backward.afterPrepend.sections} 章`)
+  check('④接上之后眼前这一页不许动（页码后移了，看到的还是同一栏字）',
+    backward.afterPrepend.text !== '' && backward.afterPrepend.text === backward.atStart.text,
+    `接之前「${backward.atStart.text}」 vs 之后「${backward.afterPrepend.text}」`)
+  check('④再按一次就真的往回一页：页码减一、字往前退了一栏',
+    backward.afterStepBack.page === backward.afterPrepend.page - 1
+      && backward.afterStepBack.text !== backward.afterPrepend.text,
+    `${backward.afterPrepend.page} → ${backward.afterStepBack.page}，「${backward.afterPrepend.text}」→「${backward.afterStepBack.text}」`)
+
   check('全程没有页面异常', errors.length === 0, errors.slice(0, 2).join(' | '))
 } catch (error) {
   check(`门禁自身出错：${error.message}`, false)

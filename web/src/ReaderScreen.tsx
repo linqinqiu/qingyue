@@ -1,11 +1,14 @@
-import { CSSProperties, Fragment, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, BookDetails, BookMark, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
 import { BookmarkDrawer } from './BookmarkDrawer'
 import { MarkSelection, readSelection, resolveChapter, WHOLE_CHAPTER } from './bookmarks'
+import { ContextMenuItem, showContextMenu } from './ContextMenu'
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import { Select } from './Select'
-import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateTapZone, scrollTapZone, swipeDirection, ViewportBounds } from './readerInteractions'
+import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, swipeDirection, ViewportBounds } from './readerInteractions'
+import { TapAction, zoneAt } from './tapZones'
+import { TapZoneConfig } from './TapZoneConfig'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, sectionAtPage, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
@@ -108,6 +111,14 @@ function ReaderSettingsControls({
       <SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} />
     </section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
+    <TapZoneConfig
+      grid={settings.pageMode === 'paginate' ? settings.tapZones.paginate : settings.tapZones.scroll}
+      modeLabel={settings.pageMode === 'paginate' ? '平移分页' : '连续滚动'}
+      onGrid={grid => update({ tapZones: settings.pageMode === 'paginate'
+        ? { ...settings.tapZones, paginate: grid }
+        : { ...settings.tapZones, scroll: grid } })}
+      onPreset={(paginate, scroll) => update({ tapZones: { paginate, scroll } })}
+    />
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
     {/*
       这一档只管**手上这一本**（用户 2026-10-03：「抽屉里只留『这本用的哪条 + 重切』」）。
@@ -352,6 +363,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 滚动回调是长期存在的闭包，读续接窗口要经 ref（与 currentChapterUrlRef 同一手法）
   const flowTailRef = useRef<{ chapter: Chapter; content: string }[]>([])
   flowTailRef.current = flowTail
+  /**
+   * 续接窗口的**前面一半**（用户 2026-10-04：「你只是在两章之间起作用了，往回怎么办」）。
+   *
+   * 原来窗口只有尾巴：往回翻到第 0 页就 `changeChapter(-1,'last')` —— 换锚点、清空窗口、
+   * 再按"当时量到的页数"跳到最后一页。而那一刻尾章还没挂上来、垫栏还没补上，页数还在变，
+   * 于是落点算的是**旧窗口**的页码。实测（双栏、书「像素游戏成真了…」）：
+   * 前进是 `8/15 → 1/16`（一步一页），后退一步却落到 `4/15` —— 第 11 章在这一窗里占 1–8 页，
+   * 该回的是 8，落在中间就是"往回翻不知道自己在哪"。
+   *
+   * 现在改成与前进对称：往回翻到窗口开头时，把上一章**接到窗口前面**，页码整体加上它的页数，
+   * 眼前这一页一个字都不动，"上一页"就真的只是上一页。不需要任何"猜最后一页"的算术。
+   */
+  const [flowHead, setFlowHead] = useState<{ chapter: Chapter; content: string }[]>([])
+  const flowHeadRef = useRef<{ chapter: Chapter; content: string }[]>([])
+  flowHeadRef.current = flowHead
+  /** 刚把某一章接到窗口前面：先记着是哪一章，量完 DOM 才知道它占几页、页码要后移多少。 */
+  const pendingPrependRef = useRef<string | null>(null)
   /** 分页模式下每一章占的页区间（量自排版后的 DOM），以及顶窗口之后该落到第几页。 */
   const pageSpansRef = useRef<{ start: number; end: number }[]>([])
   /** 屏幕上真的对齐了吗（按 DOM 量出来的，不是按算术推的）—— 挪窗口的闸门看这个。 */
@@ -400,7 +428,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   /** 选区只在正文容器里才算数；顺带记下它当时落在哪一章，续接窗口里那是下一章的段落。 */
   useEffect(() => {
     const onUpdate = () => {
+      // 两种模式各有各的正文容器：只找 `.reading-content` 的话，翻页模式里选段永远"没有选中"，
+      // 左栏那颗「把选中 N 段加入书签」就一直是灰的。
       const container = document.querySelector<HTMLElement>('.reading-content')
+        ?? document.querySelector<HTMLElement>('.reader-paginated-column-body')
       const found = readSelection(container)
       setSelection(found)
       if (found) {
@@ -413,8 +444,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     return () => document.removeEventListener('selectionchange', onUpdate)
   }, [])
 
-  const submitMark = (paragraphFrom: number, paragraphTo: number, quote: string, note: string) => {
-    const chapter = currentBook.chapters[chapterIndexRef.current]
+  const submitMark = (paragraphFrom: number, paragraphTo: number, quote: string, note: string, chapterAt?: number) => {
+    // 书签要标在**选区真正所在的那一章**上：续接窗口里选中的常常是下一章的段落，
+    // 按锚点章存就会把下一章的句子挂到上一章名下（jumpToMark 按标题回找，找回来是错的地方）。
+    const wanted = chapterAt ?? chapterIndexRef.current
+    const chapter = currentBook.chapters.find(item => item.index === wanted) ?? currentBook.chapters[chapterIndexRef.current]
     void api.createMark({
       sourceId: currentBook.details.sourceId,
       bookUrl: currentBook.bookUrl,
@@ -656,6 +690,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 标题是新的、正文是旧的，比两者都旧更容易让人以为串了章。
   const shownChapterTitle = isStaleContent ? (currentRef.current?.chapter.title || chapter?.title) : chapter?.title
   /**
+   * 窗口里现在挂着哪些章 —— 顺序必须和 DOM 里 `.reader-page-chapter` 的顺序一致，
+   * 因为量出来的 `pageSpansRef` 是按 DOM 排的。前面接的章、锚点、后面续的章三段拼成一条。
+   */
+  const windowChapters = useMemo(() => [
+    ...flowHead.map(item => item.chapter), chapter, ...flowTail.map(item => item.chapter),
+  ].filter((item): item is Chapter => !!item), [chapter, flowHead, flowTail])
+  const windowChaptersRef = useRef<Chapter[]>(windowChapters)
+  windowChaptersRef.current = windowChapters
+  /**
    * 页脚那一格要说的是**你眼前这一页属于哪一章**，不是"这一窗口锚在哪一章"。
    * 窗口里挂着两三章，用锚点名就会连着几页都写着上一章的名字 —— 用户截图里
    * 「第4章 生活」配着满屏的「第5章 片刻喘息」就是这一条（2026-10-03）。
@@ -663,9 +706,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const paginatedFooterTitle = (() => {
     const spans = pageSpansRef.current
     if (spans.length <= 1) return shownChapterTitle ?? ''
-    const index = sectionAtPage(spans, pageIndex)
-    if (index === 0) return shownChapterTitle ?? ''
-    return flowTail[index - 1]?.chapter.title ?? shownChapterTitle ?? ''
+    return windowChapters[sectionAtPage(spans, pageIndex)]?.title ?? shownChapterTitle ?? ''
   })()
   const incomingChapterTitle = isStaleContent ? chapter?.title : ''
   // 章末那条「下一章」提示要写出真实章名，跳过卷分组头与没有地址的条目（与预载走同一套判据）。
@@ -1059,7 +1100,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     flowAdvanceRef.current = false
     pendingKeepRef.current = null
     // 续接窗口跟着跳：留着旧位置后面那几章的话，这一帧会在新的锚点下面挂出毫不相干的章节。
+    // 前面接的那些同理 —— 主动跳章就是"换地方重新看"，不保留窗口两侧。
     setFlowTail([])
+    setFlowHead([])
+    pendingPrependRef.current = null
     if (!keepContainer) setFlowKey(currentBook.chapters[nextIndex]?.url ?? `jump-${nextIndex}`)
   }, [chapterIndex, currentBook.chapters.length, persist, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
 
@@ -1372,9 +1416,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     if (!pageAlignedRef.current) return
     const shift = pageWindowShift(pageSpansRef.current, pageIndex)
     if (!shift) return
-    const target = flowTailRef.current[shift.lead - 1]
+    // 窗口现在是「前面接的章 + 锚点 + 后面续的章」，所以要按整条窗口找第 lead 节是哪一章，
+    // 不能再假设 sections[0] 就是锚点（往前翻过之后它是某个 head）。
+    const target = windowChaptersRef.current[shift.lead]
     if (!target) return
-    const targetIndex = currentBook.chapters.findIndex(item => item.url === target.chapter.url)
+    const targetIndex = currentBook.chapters.findIndex(item => item.url === target.url)
     if (targetIndex <= chapterIndexRef.current) return
     pendingPageRef.current = shift.pageIndex
     setChapterIndex(targetIndex)
@@ -1445,6 +1491,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           ? Math.round(starts[index + 1] / columnsPerPage)
           : layout.pageCount,
       }))
+      // 刚往前接了一章：页码由下面那个专门的 layout effect 补（它同步量、同步补，不靠这里的时机）
       // 刚把窗口往前挪过：页码要落到"摘掉前面那几章之后"的那一页上，否则画面跳回窗口开头
       if (pendingPageRef.current !== null) {
         const next = Math.min(layout.pageCount - 1, Math.max(0, pendingPageRef.current))
@@ -1490,6 +1537,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     settings.pageMode,
     content,
     loading,
+    // 往前接一章之后必须重量一次。分栏容器的高度不变、宽度才变，而 ResizeObserver 观察的是
+    // 元素盒子 —— 内容变宽而盒子没变时它一次都不回调（AGENTS §5「分页/测量」那条同一个病），
+    // 只挂 flowTail 的话新接进来的那一章永远算不进页数，页码就不会后移。
+    flowHead,
     flowTail,
     // 垫栏本身要再量一次：首屏只挂上锚点那一章时"章末那一栏"还没有地方渲染，
     // 等下一张预览挂上来才补得上 —— 不重量的话第一次跨章那一下仍会重复一栏。
@@ -1507,6 +1558,32 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     measurePagination,
   ])
 
+  /**
+   * 往前接进来的那一章占掉几页，立刻把页码补上 —— 画面就停在原来那一页，"上一页"才真的只是上一页。
+   *
+   * 单独一个 layout effect、并且自己调 `measurePagination()`：原来这段写在 measurePagination 里面，
+   * 依赖"别的那个 effect 会因 flowHead 变了而重跑"，实测（双栏、书「像素游戏成真了…」）
+   * 接进来的那一章确实挂上了（62 段、文档宽度从 ~14.4k 涨到 17510px），页码却一动不动 ——
+   * 时机不该由两个 effect 互相指望。这里同步量、同步补，量不到就下一帧再试，不静默吞掉。
+   */
+  useLayoutEffect(() => {
+    const url = pendingPrependRef.current
+    if (!url || settings.pageMode !== 'paginate' || loading || !content) return
+    // 这一章还没成为窗口最上面那一节（React 还没提交，或提交到一半）：等它成为再说
+    if (windowChaptersRef.current[0]?.url !== url) return
+    measurePagination()
+    const sections = windowChaptersRef.current.length
+    if (pageSpansRef.current.length !== sections) return
+    // 章末垫的那一栏是"量完再渲染"的：没对齐之前这一章的起始页还会挪半栏，
+    // 这时候补页码就会差半页（实测：接上之后眼前那一栏字变成了往后一栏）。
+    // 不对齐就留着标记，等 pageFillers 落地后那一轮重量再来 —— 与前进侧"只在真对齐时挪窗口"同一条闸门。
+    if (!pageAlignedRef.current) return
+    const span = pageSpansRef.current[0]
+    const pages = span ? span.end - span.start : 0
+    pendingPrependRef.current = null
+    if (pages > 0) setPageIndex(prev => prev + pages)
+  }, [content, loading, measurePagination, settings.pageMode, windowChapters])
+
   const goNextPage = useCallback(() => {
     if (pageIndex < pageCount - 1) {
       setPageIndex(p => p + 1)
@@ -1519,13 +1596,55 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
   }, [chapterIndex, changeChapter, pageCount, pageIndex, settings.pageMode])
 
+  /**
+   * 往回翻到窗口开头时，把**上一章接到窗口最前面**。
+   *
+   * 不做"换锚点 + 跳到最后一页"那一套：那要等尾章挂上来、垫栏补完才知道总页数，
+   * 而它是在旧窗口的页数上算的，实测就会落到上一章的中间（这正是用户问的"往回怎么办"）。
+   * 接进来之后眼前这一页一个字都不动，只是页码整体涨了那一章的页数 —— 与前进完全对称。
+   * 返回 false 表示前面真的没有章了（调用方去说"已是第一章"）。
+   */
+  const prependPreviousChapter = useCallback(async () => {
+    const oldest = flowHeadRef.current[0]?.chapter ?? chapter
+    const oldestIndex = oldest ? currentBook.chapters.findIndex(item => item.url === oldest.url) : -1
+    let target = oldestIndex - 1
+    while (target >= 0 && (currentBook.chapters[target]?.isVolume || !currentBook.chapters[target]?.url)) target -= 1
+    if (oldestIndex < 1 || target < 0) return false
+    const candidate = currentBook.chapters[target]
+    const cached = preloadedContentRef.current.get(candidate.url)
+    let text = cached ?? null
+    if (text === null) {
+      const result = await api.content(currentBook.details.sourceId, candidate.url, currentBook.bookUrl).catch(() => null)
+      if (!result) return false
+      text = result.content
+      preloadedContentRef.current.set(candidate.url, result.content)
+    }
+    pendingPrependRef.current = candidate.url
+    setFlowHead(prev => (prev.some(item => item.chapter.url === candidate.url) ? prev : [{ chapter: candidate, content: text ?? '' }, ...prev]))
+    return true
+  }, [chapter, currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
+
   const goPrevPage = useCallback(() => {
     if (pageIndex > 0) {
       setPageIndex(p => p - 1)
-    } else {
-      changeChapter(chapterIndex - 1, 'last', settings.pageMode === 'paginate')
+      return
     }
-  }, [chapterIndex, changeChapter, pageIndex, settings.pageMode])
+    // 窗口开头：往前接一章，而不是跳去"上一章的最后一页"。接的过程中不重复触发。
+    if (pendingPrependRef.current !== null) {
+      // 那一章其实已经挂上来了、只是页码还没补上（标记卡在量之前）：主动再量一次，
+      // 不然一次错过就把"往回翻"永久锁死在这里。
+      if (flowHeadRef.current[0]?.chapter.url === pendingPrependRef.current) measurePagination()
+      return
+    }
+    void prependPreviousChapter().then(ok => {
+      // 成了就不清这个标记：它要活到量出页数那一刻（由 measurePagination 消费）。
+      // 没成就清掉，否则一次失败会永久卡住往回翻。
+      if (!ok) {
+        pendingPrependRef.current = null
+        showBoundaryNotice('已是第一章')
+      }
+    })
+  }, [pageIndex, prependPreviousChapter, showBoundaryNotice])
 
   // Sync scroll / page progress
   useEffect(() => {
@@ -1849,13 +1968,54 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   // Pointer & Gesture interactions
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    // 只认主键。右键是"叫出上下文菜单"的手势，不是翻页：原来这里没判 button，
+    // 右键点正文会一路走到 `paginateTapZone` / `scrollTapZone`，于是"右键 → 取消菜单"之后
+    // 页面已经翻了一页 / 正文往上滚了一屏（用户 2026-10-04：「鼠标右键点击正文页面取消后正文莫名向上移动」）。
+    if (event.button !== 0) return
     if (loading || activeDrawer || isInteractiveReaderTarget(event.target)) return
     pointerStartRef.current = { x: event.clientX, y: event.clientY, target: event.target }
   }
 
+  /**
+   * 点在一格里该干什么（用户 2026-10-04：「可以自定义点击区域范围并设置」）。
+   * 格子表在 `settings.tapZones`，出厂那张与改动前逐字一致；这里只负责"动作 → 行为"。
+   */
+  const runTapAction = useCallback((action: TapAction) => {
+    const paginate = settings.pageMode === 'paginate'
+    if (action === 'previous') {
+      if (paginate) {
+        goPrevPage()
+        return
+      }
+      if (isAtTopBoundary(window.scrollY)) changeChapter(chapterIndex - 1, 'last')
+      else window.scrollBy({ top: -window.innerHeight * 0.85, behavior: 'smooth' })
+      return
+    }
+    if (action === 'next') {
+      if (paginate) {
+        goNextPage()
+        return
+      }
+      if (isAtBottomBoundary(window.scrollY, document.documentElement.scrollHeight, window.innerHeight)) changeChapter(chapterIndex + 1, 'first')
+      else window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' })
+      return
+    }
+    if (action === 'toc' || action === 'marks' || action === 'settings') {
+      setActiveDrawer(drawer => (drawer === action ? null : action))
+      return
+    }
+    if (action === 'addMark') {
+      submitMark(WHOLE_CHAPTER, WHOLE_CHAPTER, '', '')
+      return
+    }
+    if (action === 'none') return
+    setToolbarsVisible(visible => !visible)
+  }, [chapterIndex, changeChapter, goNextPage, goPrevPage, settings.pageMode])
+
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const start = pointerStartRef.current
     pointerStartRef.current = null
+    if (event.button !== 0) return
     if (!start || loading || isInteractiveReaderTarget(event.target) || isInteractiveReaderTarget(start.target) || window.getSelection()?.toString()) return
 
     if (activeDrawer) {
@@ -1874,31 +2034,51 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         return
       }
       if (isTapGesture(start.x, start.y, event.clientX, event.clientY)) {
-        const zone = paginateTapZone(event.clientX, window.innerWidth)
-        if (zone === 'previous') goPrevPage()
-        else if (zone === 'next') goNextPage()
-        else setToolbarsVisible(visible => !visible)
+        runTapAction(zoneAt(settings.tapZones.paginate, event.clientX, event.clientY, window.innerWidth, window.innerHeight))
       }
     } else {
       if (isTapGesture(start.x, start.y, event.clientX, event.clientY)) {
-        const zone = scrollTapZone(event.clientY, window.innerHeight)
-        if (zone === 'previous') {
-          if (isAtTopBoundary(window.scrollY)) {
-            changeChapter(chapterIndex - 1, 'last')
-          } else {
-            window.scrollBy({ top: -window.innerHeight * 0.85, behavior: 'smooth' })
-          }
-        } else if (zone === 'next') {
-          if (isAtBottomBoundary(window.scrollY, document.documentElement.scrollHeight, window.innerHeight)) {
-            changeChapter(chapterIndex + 1, 'first')
-          } else {
-            window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' })
-          }
-        } else {
-          setToolbarsVisible(visible => !visible)
-        }
+        runTapAction(zoneAt(settings.tapZones.scroll, event.clientX, event.clientY, window.innerWidth, window.innerHeight))
       }
     }
+  }
+
+  /**
+   * 正文上的右键（用户 2026-10-04：「书签加载章节目录，选定段落，右击功能你还没有添加」）。
+   *
+   * 上游在手机上是"长按选句 → 一条 9 项的菜单"（复制/书签/朗读/替换/站内搜索…），
+   * 桌面这边对应物就是右键。第一条永远是**手上正选着的那几段** —— 人右键的时候多半刚选好，
+   * 让他再去左栏里找那颗按钮，等于没有这个功能。
+   * 书签要标在选区真正所在的那一章（续接窗口里可能是下一章），所以这里把章号一起传下去。
+   */
+  const onBodyContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    if (settings.pageMode === 'paginate' && activeDrawer) return
+    const selected = readSelection(event.currentTarget)
+    const section = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-chapter-index]')
+    const chapterAt = Number(section?.dataset.chapterIndex ?? chapterIndexRef.current)
+    const items: ContextMenuItem[] = []
+    if (selected) {
+      const span = selected.to === selected.from ? `第 ${selected.from + 1} 段` : `第 ${selected.from + 1}–${selected.to + 1} 段`
+      items.push({
+        label: `把选中的书签成「${span}」`,
+        icon: 'bookmark',
+        onSelect: () => submitMark(selected.from, selected.to, selected.text, '', chapterAt),
+      })
+      items.push({
+        label: '复制',
+        icon: 'copy',
+        onSelect: () => {
+          void navigator.clipboard?.writeText(selected.text).then(
+            () => toast.success('已复制'),
+            () => toast.warning('浏览器没让复制，手动选一次再试'),
+          )
+        },
+      })
+    }
+    items.push({ label: '给这一整章加书签', icon: 'checkSquare', onSelect: () => submitMark(WHOLE_CHAPTER, WHOLE_CHAPTER, '', '', chapterAt) })
+    items.push({ label: '章节目录', icon: 'list', onSelect: () => setActiveDrawer('toc') })
+    items.push({ label: marks.length ? `书签 ${marks.length}` : '书签', icon: 'bookmark', onSelect: () => setActiveDrawer('marks') })
+    showContextMenu(event, items)
   }
 
   const onWheelPaginate = (event: React.WheelEvent) => {
@@ -2164,7 +2344,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     {/* Central Reading Canvas */}
     <section className="reader-main">
       {settings.pageMode === 'paginate' ? (
-        <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate}>
+        <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate} onContextMenu={onBodyContextMenu}>
           <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}`}>
             <div className="reader-paginated-track" style={{ transform: `translateX(-${pageIndex * stride}px)` }}>
               {/*
@@ -2178,6 +2358,21 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   这一章占了奇数栏时，不垫的话下一章的第一栏正好是上一页的右半格（用户已经看过），
                   翻页窗口一挪、页码归零，同一栏又挪回左半格 —— 用户 2026-10-03 的"不要这样的跳转"。
                 */}
+                {/*
+                  窗口前面接进来的那些章，排在锚点章**之前**（往回翻就是往这里加一章）。
+                  垫栏的下标是"这一章在窗口里的绝对位置"：head 占 0..K-1、锚点 K、尾巴 K+1..，
+                  所以接进 head 之后，尾巴那些的垫栏下标要整体往后挪 —— 不挪就是把空白垫错章。
+                */}
+                {flowHead.map((item, headIndex) => (
+                  <Fragment key={item.chapter.url}>
+                    {headIndex > 0 && (pageFillers[headIndex - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
+                    <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
+                      <h1>{item.chapter.title}</h1>
+                      {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+                    </section>
+                  </Fragment>
+                ))}
+                {flowHead.length > 0 && (pageFillers[flowHead.length - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
                 <section className="reader-page-chapter" data-chapter-index={chapter?.index ?? 0}>
                   <h1>{shownChapterTitle}</h1>
                   {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
@@ -2187,7 +2382,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 </section>
                 {flowTail.map((item, tailIndex) => (
                   <Fragment key={item.chapter.url}>
-                    {(pageFillers[tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
+                    {(pageFillers[flowHead.length + tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
                     <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
                       <h1>{item.chapter.title}</h1>
                       {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
@@ -2203,7 +2398,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           </footer>
         </div>
       ) : (
-        <article className={`reading-content chapter-enter${isStaleContent ? ' is-stale' : ''}`} key={flowKey} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
+        <article className={`reading-content chapter-enter${isStaleContent ? ' is-stale' : ''}`} key={flowKey} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onContextMenu={onBodyContextMenu}>
           {/*
             滚动模式是一篇连续文档（用户 2026-10-02：「怎么能跳转呢，不是一体的吗」）：
             锚点章之后把后续章节续接在同一棵容器里，读完一章是"顶上来"，不是"跳过去"。
