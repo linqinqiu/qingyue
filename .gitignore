@@ -44,10 +44,11 @@ web/coverage/
 # 本机启动器产物：图标与 .lnk 快捷方式（tools/verify/make-ico.mjs 写在这里），含本机路径，不入库
 /assets/
 
+# 本机 2026-09-22 的整份本地差异快照（99 个文件），只作历史留档；
+# 里面的东西要么已进提交历史（如 JDK 17 toolchain 已在 server/build.gradle），要么早已作废，
+# 所以不随仓库分发，也不许在文档里当"现行依据"引用。
 local-patches.diff
 
-# 本机开发辅助：镜像与个人工具链，含本机绝对路径，不随开源仓库分发
-/init-mirror.gradle
 # tools/：默认忽略（顶层 dbq.mjs/Guard.java/JpTest.java + 未被文档引用的一次性探针/渲染/产物脚本，out/ 亦忽略），
 # 但放行 README/AGENTS/CHANGELOG/docs 通篇引用的门禁脚本（tools/verify/*.mjs）及其共享依赖 env/zip-make/multipart，
 # 否则文档叫贡献者跑的门禁根本不在仓库里。要增删分发件改这里逐条列。
