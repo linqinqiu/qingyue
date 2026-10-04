@@ -28,6 +28,11 @@ data/
 *.log
 tools/verify/out/
 .agents/
+# 新骨架前端（qingyue 的构建产物）按目录挂载给 /next，不烤进 jar 也不入库：
+# 它是另一个仓库的产物，进版本库就会变成"源码与产物谁新谁旧"的老问题
+/next/
+# 整合包（jar + runtime + next + start.bat）的组装目录与 zip
+/dist/
 .worktrees/
 coverage/
 web/coverage/
@@ -108,5 +113,8 @@ local-patches.diff
 !/tools/verify/snapshot.mjs
 !/tools/verify/testreport.mjs
 !/tools/verify/tts-custom-engine-check.mjs
+!/tools/verify/next-mount-check.mjs
+!/tools/verify/next-ui-check.mjs
+!/tools/verify/package-check.mjs
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，
 # 不再含任何本机绝对路径，所以从忽略名单里放出来随仓库分发。

@@ -14,6 +14,7 @@ import io.ktor.server.sessions.*
 import io.ktor.server.websocket.*
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import java.nio.file.Files
 
 fun main() {
     val config = ServerConfig.fromEnvironment()
@@ -99,6 +100,12 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     routing {
         get("/healthz") { call.respond(HealthStatus(title = BuildInfo.title, version = BuildInfo.version, status = "ok")) }
         apiRoutes(database, runner, coverCache, subscriptions, bookCache, edgeTts, ttsSessions, config.localBooksDirectory)
+        // 注册在 staticWeb 之前：根路由是 `staticResources("/")`，先摆 /next 才不必去猜路由树的优先级
+        staticNext(config.nextDirectory)
         staticWeb()
     }
+    logSystem(
+        if (Files.isRegularFile(config.nextDirectory.resolve("index.html"))) "新骨架界面已挂载 /next" else "新骨架界面未挂载（没有 next/index.html）",
+        mapOf("path" to config.nextDirectory.toAbsolutePath().toString()),
+    )
 }

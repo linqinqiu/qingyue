@@ -1,0 +1,142 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import zlib from 'node:zlib'
+
+/**
+ * 整合包门禁 —— 检查"要交给用户的那个 zip"本身。
+ *
+ * 为什么要有它：整合包是这一轮真正的交付物，而它的坏法全都是**静默**的：
+ * 把跑出来的 `data/`（含用户书架）或 `logs/` 一起打进去、`start.bat` 里写死本机绝对路径、
+ * 打包用的 jar 不是刚验过的那一份、`next/` 是旧构建。这些没有一条会让服务报错，
+ * 只会在用户机器上变成"包里怎么有别人的东西 / 双击没反应 / 界面还是旧的"。
+ *
+ * 不依赖任何第三方库（本机 npm registry 走不通代理），zip 中央目录自己解析。
+ */
+
+const ROOT = path.resolve(import.meta.dirname, '../..')
+const BASE = (process.env.LEGADO_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '')
+const ZIP = process.env.LEGADO_PACKAGE || path.join(ROOT, 'dist/qingyue-0.6.0.zip')
+
+const results = []
+const check = (name, ok, detail = '') => {
+  results.push({ name, ok })
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`)
+}
+
+/** 解析 zip 中央目录：返回 [{ name, method, compSize, uncompSize, offset }]。 */
+function readEntries(buffer) {
+  let eocd = -1
+  for (let i = buffer.length - 22; i >= Math.max(0, buffer.length - 66_000); i -= 1) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
+  }
+  if (eocd < 0) throw new Error(`${ZIP} 里没找到 zip 中央目录结束标记，这不是一个 zip`)
+  const count = buffer.readUInt16LE(eocd + 10)
+  let cursor = buffer.readUInt32LE(eocd + 16)
+  const entries = []
+  for (let index = 0; index < count; index += 1) {
+    if (buffer.readUInt32LE(cursor) !== 0x02014b50) throw new Error(`中央目录第 ${index} 条签名不对，解析器该修了`)
+    const method = buffer.readUInt16LE(cursor + 10)
+    const compSize = buffer.readUInt32LE(cursor + 20)
+    const uncompSize = buffer.readUInt32LE(cursor + 24)
+    const nameLength = buffer.readUInt16LE(cursor + 28)
+    const extraLength = buffer.readUInt16LE(cursor + 30)
+    const commentLength = buffer.readUInt16LE(cursor + 32)
+    const localOffset = buffer.readUInt32LE(cursor + 42)
+    const name = buffer.subarray(cursor + 46, cursor + 46 + nameLength).toString('utf8')
+    entries.push({ name, method, compSize, uncompSize, localOffset })
+    cursor += 46 + nameLength + extraLength + commentLength
+  }
+  return entries
+}
+
+/** 取出一个条目的字节（deflate 的当场解开）。 */
+function entryBytes(buffer, entry) {
+  const local = entry.localOffset
+  if (buffer.readUInt32LE(local) !== 0x04034b50) throw new Error(`${entry.name} 的本地头签名不对`)
+  const nameLength = buffer.readUInt16LE(local + 26)
+  const extraLength = buffer.readUInt16LE(local + 28)
+  const start = local + 30 + nameLength + extraLength
+  const raw = buffer.subarray(start, start + entry.compSize)
+  return entry.method === 0 ? Buffer.from(raw) : zlib.inflateRawSync(raw)
+}
+
+if (!fs.existsSync(ZIP)) {
+  console.log(`FAIL  整合包不存在：${ZIP}\n     先组装 dist/ 再压成 zip（这条门禁判的是产物，不是源码）`)
+  process.exit(1)
+}
+const buffer = fs.readFileSync(ZIP)
+const entries = readEntries(buffer)
+const names = entries.map(entry => entry.name.replace(/\\/g, '/'))
+const byName = new Map(entries.map(entry => [entry.name.replace(/\\/g, '/'), entry]))
+const topDir = [...new Set(names.map(name => name.split('/')[0]))]
+console.log(`包 ${ZIP} · ${(buffer.length / 1024 / 1024).toFixed(1)} MB · ${entries.length} 条 · 顶层 ${topDir.join(', ')}`)
+
+const gradleVersion = (fs.readFileSync(path.join(ROOT, 'server/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1] ?? ''
+const liveVersion = await fetch(`${BASE}/healthz`).then(response => response.json()).then(info => info.version).catch(() => '')
+// 只看包根上的 jar：runtime/lib/jrt-fs.jar 也是 .jar，把它算进来这条就永远在报"两个 jar"
+const jarEntries = names.filter(name => name.split('/').length === 2 && name.endsWith('.jar'))
+
+check('包顶层就那几样：启动脚本、说明、jar、next/、runtime/',
+  topDir.length === 1 && names.every(name => name.startsWith(topDir[0] + '/')) &&
+    ['start.bat', 'README.txt'].every(file => names.includes(`${topDir[0]}/${file}`)) &&
+    ['next', 'runtime'].every(dir => names.some(name => name.startsWith(`${topDir[0]}/${dir}/`))),
+  topDir.join(','))
+check(`jar 在包里且版本号就是 gradle 的那一个（${gradleVersion}）`,
+  jarEntries.length === 1 && jarEntries[0].includes(`-${gradleVersion}-all.jar`), jarEntries.join(','))
+check('包里的 jar 与刚验过的那一份字节数一致（不是上一次的旧包）',
+  jarEntries.length === 1 && byName.get(jarEntries[0]).uncompSize ===
+    fs.statSync(path.join(ROOT, `server/build/libs/legado-server-${gradleVersion}-all.jar`)).size,
+  `${byName.get(jarEntries[0])?.uncompSize} vs ${fs.statSync(path.join(ROOT, `server/build/libs/legado-server-${gradleVersion}-all.jar`)).size}`)
+check('运行时的 java.exe 在包里（没有它，双击就是一闪而过）',
+  names.some(name => /\/runtime\/bin\/java\.exe$/.test(name)))
+check('服务在跑的端口号与包里的 gradle 同号（部署与交付是同一版）',
+  liveVersion !== '' && liveVersion === gradleVersion, `gradle ${gradleVersion} · /healthz ${liveVersion || '(没应答)'}`)
+
+/** 交付物里不许有用户数据与运行痕迹。 */
+const FORBIDDEN = [/\/data\//, /\/logs?\//, /\.sqlite(-wal|-shm)?$/i, /\.log$/, /\/\.env$/, /\/tmp\//, /\/node_modules\//]
+const dirty = names.filter(name => FORBIDDEN.some(pattern => pattern.test(name)))
+check('包里没有 data/、logs/、*.sqlite、*.log、.env（程序与数据必须分开）', dirty.length === 0, dirty.slice(0, 4).join(' '))
+
+const readText = file => {
+  const entry = entries.find(item => item.name.replace(/\\/g, '/') === file)
+  return entry ? entryBytes(buffer, entry).toString('utf8') : ''
+}
+const startBat = readText(`${topDir[0]}/start.bat`)
+const readme = readText(`${topDir[0]}/README.txt`)
+check('start.bat 与 README.txt 都取得出来且非空', startBat.length > 40 && readme.length > 40)
+// 个人绝对路径：盘符 + 某个用户目录。交付物里出现它，别人解开就是死链
+const absolutePath = /[A-Za-z]:[\\/](?:Users|Projects|Apps|Documents)[\\/]/
+check('交付文件里不写任何人的本机绝对路径',
+  !absolutePath.test(startBat) && !absolutePath.test(readme),
+  [startBat.match(absolutePath)?.[0], readme.match(absolutePath)?.[0]].filter(Boolean).join(' '))
+check('start.bat 是 CRLF 且只用 ASCII（cmd 按 GBK 读，中文注释会变乱码）',
+  /\r\n/.test(startBat) && !/[^\x00-\x7F]/.test(startBat))
+check('start.bat 里端口与数据目录都显式给了（不依赖工作目录）',
+  /LEGADO_PORT=1234/.test(startBat) && /LEGADO_DATA_DIR=data/.test(startBat))
+
+/** 包里那份 next/index.html 必须就是服务正在返回的那一份。 */
+const packedIndex = readText(`${topDir[0]}/next/index.html`)
+const liveIndex = await fetch(`${BASE}/next/`).then(response => response.text()).catch(() => '')
+const bundleOf = html => (html.match(/\/next\/assets\/[\w.-]+\.js/) ?? ['(没找到)'])[0]
+check('包里的 next/index.html 与线上 /next/ 是同一份构建',
+  packedIndex.length > 0 && bundleOf(packedIndex) === bundleOf(liveIndex),
+  `包 ${bundleOf(packedIndex)} · 线上 ${bundleOf(liveIndex)}`)
+
+/**
+ * 反向对照：把"包里混进用户数据 / 写了本机绝对路径"这两种坏法当场演一遍，
+ * 判据必须变红。没有这一段，上面那些"干净"可能只是根本没在扫。
+ */
+if (process.argv.includes('--self-test')) {
+  console.log('\n反向对照：注入两类脏包，判据必须变红')
+  const polluted = [...names, `${topDir[0]}/data/legado.sqlite`, `${topDir[0]}/logs/legado-server-20261004.log`]
+  const caught = polluted.filter(name => FORBIDDEN.some(pattern => pattern.test(name)))
+  check('注入 data/ 与 logs/ → 脏条目判据必须抓到', caught.length === 2, caught.join(' '))
+  const leaked = `set LEGADO_DATA_DIR=E:\\Users\\someone\\reader\\data`
+  check('注入本机绝对路径 → 路径判据必须抓到', absolutePath.test(leaked), leaked)
+  const missed = names.filter(name => FORBIDDEN.some(pattern => pattern.test(name)))
+  check('正向对照：真包里的脏条目数就是 0（不是判据没跑）', missed.length === 0, `扫了 ${names.length} 条`)
+}
+
+const failed = results.filter(row => !row.ok).length
+console.log(`\n${results.length - failed}/${results.length} PASS`)
+process.exitCode = failed > 0 ? 1 : 0

@@ -70,7 +70,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2,ttf}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        // /next 是新骨架（另一份 index.html）。不放进黑名单的话，已经装了这份 SW 的浏览器
+        // 会把对 /next/ 的导航用**旧界面**的 shell 回答 —— 看着就像"挂载没生效"。
+        navigateFallbackDenylist: [/^\/api\//, /^\/next(\/|$)/],
         runtimeCaching: [
           {
             urlPattern: /^\/api\/tts\//,

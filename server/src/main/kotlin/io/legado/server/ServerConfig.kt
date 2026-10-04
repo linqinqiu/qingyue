@@ -9,6 +9,8 @@ data class ServerConfig(
     val databasePath: String,
     val coverCacheDirectory: Path,
     val localBooksDirectory: Path = coverCacheDirectory.resolveSibling("local_books"),
+    /** 新骨架前端的磁盘目录；没有这个目录就不挂 `/next`（见 [staticNext]）。 */
+    val nextDirectory: Path = Path.of("next"),
 ) {
     companion object {
 
@@ -33,6 +35,8 @@ data class ServerConfig(
                 databasePath = env["LEGADO_DATABASE"] ?: dataDir.resolve("legado.sqlite").absolutePathString(),
                 coverCacheDirectory = dataDir.resolve("covers"),
                 localBooksDirectory = dataDir.resolve("local_books"),
+                // 相对当前工作目录，与 data/ 同一套规矩：整合包解开在哪，就在哪找 next/
+                nextDirectory = Path.of(env["LEGADO_NEXT_DIR"] ?: "next"),
             )
         }
     }
