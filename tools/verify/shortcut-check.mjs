@@ -83,7 +83,14 @@ try {
   check('数字键切页（3 → 书源）', afterDigit.hash === '#sources' && globalBefore.hash !== '#sources', `${globalBefore.hash} → ${afterDigit.hash}`)
 
   await page.goto(`${BASE}/?t=${Date.now()}#library`, { waitUntil: 'domcontentloaded' })
-  await sleep(1200)
+  // 这一跳之后要按的是**全局快捷键**，而那个 keydown 处理器是 React 挂载之后才 addEventListener 上去的。
+  // 原来这里只有一句 sleep(1200)：刚清过 SW 与 caches 的首屏在冷 JVM 上不止 1.2 秒，按键时应用还没挂载，
+  // 于是 / L ? 三条一起红（2026-10-04 实测：同一套键在等到 .app-page-header 之后逐个都有效）。
+  // 挂载这件事单独成一条判据：下次再塌，报的是"探针按早了"，不会让人去查产品。
+  const mounted = await page.waitForSelector('.app-page-header', { timeout: 45000 })
+    .then(() => true).catch(() => false)
+  check('探针：#library 已挂载（没挂载时快捷键必然全空，先把这件事单独列出来）', mounted, '')
+  await sleep(600)
   await page.keyboard.press('Slash')
   await sleep(300)
   const afterSlash = await readState(page)

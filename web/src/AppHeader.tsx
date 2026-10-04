@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
+import { PRIMARY_PAGES } from './shortcuts'
 import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from './readerSettings'
@@ -119,49 +120,33 @@ export function AppHeader({
       </div>
 
       <nav aria-label="主导航">
-        <button
-          type="button"
-          className={page === 'library' ? 'active' : ''}
-          onClick={() => onNavigate('library')}
-        >
-          书库
-          {searching && (
-            <span
-              className="nav-search-indicator"
-              title="后台正在搜索…"
-              aria-label="后台正在搜索"
-            />
-          )}
-        </button>
-        <button
-          type="button"
-          className={page === 'shelf' ? 'active' : ''}
-          onClick={() => onNavigate('shelf')}
-        >
-          书架
-        </button>
-        <button
-          type="button"
-          className={page === 'sources' ? 'active' : ''}
-          onClick={() => onNavigate('sources')}
-        >
-          书源
-        </button>
-        <button
-          type="button"
-          className={page === 'explore' ? 'active' : ''}
-          onClick={() => onNavigate('explore')}
-        >
-          发现
-        </button>
-        <button
-          type="button"
-          className={page === 'subscriptions' ? 'active' : ''}
-          onClick={() => onNavigate('subscriptions')}
-        >
-          订阅
-        </button>
+        {/*
+          入口不再一个个手写：顶栏、数字键 1–8、Alt + ←/→ 的循环顺序全部取自
+          shortcuts.ts 里的 PRIMARY_PAGES（用户 2026-10-04：「优化一下主导航栏…
+          把设置里面、折叠里面的拿出来，本来是主页的样式、主页的框架」——
+          规则与备份原来只能从「设置」页点进去，设置本身收在「我的」里）。
+          手写八份 <button> 的代价已经付过一次：三份表各自漏过不同的页面。
+        */}
+        {PRIMARY_PAGES.map(item => (
+          <button
+            key={item.page}
+            type="button"
+            className={page === item.page ? 'active' : ''}
+            aria-current={page === item.page ? 'page' : undefined}
+            onClick={() => onNavigate(item.page as AppPage)}
+          >
+            {item.nav}
+            {item.page === 'library' && searching && (
+              <span
+                className="nav-search-indicator"
+                title="后台正在搜索…"
+                aria-label="后台正在搜索"
+              />
+            )}
+          </button>
+        ))}
       </nav>
+
 
       <div className="header-actions" ref={menuContainerRef}>
         <button
@@ -256,24 +241,10 @@ export function AppHeader({
                 {/*
                   「本地离线缓存管理」「替换净化规则」「运行日志」「备份包」这四条收进「设置」
                   （用户 2026-10-03：「在我的里面新加一个设置，把一些 txt 目录规则、备份、替换净化
-                  之类的放进去」+「顶栏『我的』菜单堆太多」）。菜单这一栏从 7 条回到 4 条：
-                  设置 / 书签 / 关于（+ 装了 PWA 时才出现的"安装到桌面"）。
-                  四条功能一条都没少 —— 它们在「设置」里各有一行，说的还是同一份实现。
+                  之类的放进去」+「顶栏『我的』菜单堆太多」；2026-10-04 又把「设置」提到顶栏一级）。
+                  这一栏现在只剩 书签 / 关于（+ 装了 PWA 时才出现的"安装到桌面"）：
+                  凡是一级目的地都走顶栏，菜单只放"不算一个页面"的动作。
                 */}
-                <button
-                  type="button"
-                  className="menu-logout-btn"
-                  style={{ color: 'var(--ink)' }}
-                  role="menuitem"
-                  aria-current={page === 'settings' ? 'page' : undefined}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onNavigate('settings')
-                  }}
-                >
-                  <Icon name="settings" />
-                  <span>设置</span>
-                </button>
                 <button
                   type="button"
                   className="menu-logout-btn"

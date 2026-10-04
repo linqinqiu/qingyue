@@ -96,6 +96,36 @@ const readModal = page => page.evaluate(() => {
  */
 const takingLogs = page => page.waitForResponse(response => response.url().includes('/api/logs'), { timeout: 30000 }).catch(() => null)
 
+/**
+ * 等到"这一份新数据真的画上屏"：屏幕上那行计数（显示 N 条 / 加载中… / 没取到）与点之前不一样了。
+ *
+ * 为什么不能用"出现了行/空态/错误条"或"没有加载中"当落定信号：`load()` 在 state 已经是 ready 时
+ * **不改 state**（LogsModal.tsx:72 `current === 'ready' ? 'ready' : 'loading'`），所以换筛选条件的时候
+ * 旧的那 300 行会原样挂在 DOM 上、也没有任何转圈标记 —— 按"有没有东西"去等会立刻返回，
+ * 读到的是上一份数据（2026-10-04 实测：② 读到 300 行混合类别、⑤ 真空那条读成"没有空态"）。
+ * 按取到响应之后的计数文本变化等，才是"这一份落地了"。真的没变化（新旧计数恰好相同）就最多等 6 秒再读，
+ * 那时读的仍是落地后的屏 —— 所以这条只会慢，不会假红。
+ */
+const readCount = page => page.evaluate(() => document.querySelector('.logs-modal .logs-count')?.textContent?.trim() ?? '')
+const waitRepaint = (page, before) => page.waitForFunction(({ before }) => {
+  const modal = document.querySelector('.logs-modal')
+  if (!modal) return false
+  return (modal.querySelector('.logs-count')?.textContent ?? '').trim() !== before
+}, { timeout: 6000, polling: 150 }, { before }).catch(() => null)
+
+/**
+ * 等到这一屏真的落定：不是「加载中…」，且行 / 空态 / 错误条三者至少画出了一个。
+ *
+ * 只用在**第一次挂载**那一处：那时候 DOM 里还没有旧数据，"有没有东西"是可信的信号。
+ * 换数据的那几次要用 waitRepaint，理由见上面。
+ */
+const waitSettled = page => page.waitForFunction(() => {
+  const modal = document.querySelector('.logs-modal')
+  if (!modal) return false
+  if ((modal.textContent ?? '').includes('加载中')) return false
+  return !!modal.querySelector('.logs-row, .logs-empty, .logs-error')
+}, { timeout: 10000 }).catch(() => null)
+
 /** 从 Node 侧发跨站写请求：浏览器里的 fetch 改不了 Origin，只能在这儿造闸门的拒绝。 */
 const tripGuard = async count => {
   const url = `${BASE}/api/logs`
@@ -133,14 +163,16 @@ try {
   await page.waitForSelector('.header-menu-dropdown', { timeout: 8000 })
   await sleep(200)
   const openedByMenu = takingLogs(page)
-  // 「运行日志」从「我的」菜单收进了「设置」（用户 2026-10-03：菜单堆太多）。
-  // 入口换了位置，判的还是同一件事：点得到、开得出、开出来是真日志。
-  check('①「我的」里有「设置」入口', await clickByText(page, '.header-menu-dropdown', '设置'), '')
+  // 「运行日志」的落点搬过两次：2026-10-03 从「我的」菜单收进「设置」，
+  // 2026-10-04 「设置」本身提到顶栏一级导航（菜单里不再留第二条路，见 ui-shell-check ②）。
+  // 入口换位置，判的还是同一件事：这一行点得到、开得出、开出来是真日志。
+  check('①「设置」在顶栏点得开这一页', await clickByText(page, '.app-page-header nav', '设置'), '')
   await page.waitForSelector('.settings-page', { timeout: 8000 })
   check('①「设置」里那一行「看日志」点得开弹窗', await clickByText(page, '.settings-page', '看日志'), '')
   await page.waitForSelector('.logs-modal .logs-list', { timeout: 10000 })
   await openedByMenu
-  await sleep(350)
+  // 首挂载没有"旧数据还挂着"的问题，等"画出了东西"就是等落定（换数据的那几次用 waitRepaint）
+  await waitSettled(page)
 
   const first = await readModal(page)
   check('①弹窗标题是「运行日志」', first?.title === '运行日志', first?.title ?? '(弹窗没出现)')
@@ -178,10 +210,11 @@ try {
   await page.screenshot({ path: path.join(SHOTS, `logs-ui-${STAMP}.png`) })
 
   // ─────────────────────── ② 类别筛选真的在筛 ───────────────────────
+  const guardBefore = await readCount(page)
   const filteredByCategory = takingLogs(page)
   check('②类别下拉换成了「同源闸门」', await pickOption(page, '日志类别', '同源闸门'), '')
   await filteredByCategory
-  await sleep(350)
+  await waitRepaint(page, guardBefore)
   const filtered = await readModal(page)
   check('②筛完之后列表里只剩这一个类别',
     !!filtered && filtered.rows.length > 0 && filtered.rows.every(row => row.badge === '同源闸门'),
@@ -191,20 +224,22 @@ try {
     const list = await response.json()
     return Array.isArray(list) && list.every(item => item.category === 'GUARD')
   }), '')
+  const allBack1Before = await readCount(page)
   const backToAll = takingLogs(page)
   await pickOption(page, '日志类别', '全部')
   await backToAll
-  await sleep(300)
+  await waitRepaint(page, allBack1Before)
 
   // ─────────────── ③ 最能定位的那个上下文挂在行上 ───────────────
   // 取一张必然失败的图：`.invalid` 是 RFC 6761 保留的、保证解析不了的域，
   // 于是"有没有域名芯片"这件事不必依赖用户机器上恰好有一条网络日志。
   const probe = await fetch(`${BASE}/api/book/image?url=${encodeURIComponent('http://legado-gate-probe.invalid/x.png')}`)
   check('③探针取图确实失败（服务端该回 502）', probe.status === 502, `HTTP ${probe.status}`)
+  const net1Before = await readCount(page)
   const networkReload = takingLogs(page)
   check('③类别换到「网络请求」', await pickOption(page, '日志类别', '网络请求'), '')
   await networkReload
-  await sleep(350)
+  await waitRepaint(page, net1Before)
   const probed = await readModal(page)
   const probeRow = (probed?.rows ?? []).find(row => row.msg.includes('正文图片代理失败'))
   check('③这条网络日志进了列表，且级别是警告不是错误（取不到一张图不算事故）',
@@ -214,12 +249,27 @@ try {
     (probeRow?.chips ?? []).some(chip => chip.startsWith('域名 ') && chip.includes('legado-gate-probe.invalid')),
     probeRow?.chips.join(' | ') ?? '(这一行没有芯片)')
   await page.screenshot({ path: path.join(SHOTS, `logs-ui-${STAMP}-network.png`) })
+  const allBack2Before = await readCount(page)
   const backToAllAgain = takingLogs(page)
   await pickOption(page, '日志类别', '全部')
   await backToAllAgain
-  await sleep(300)
+  await waitRepaint(page, allBack2Before)
 
   // ─────────────────────── ④ 导出的就是屏幕上这一份 ───────────────────────
+  // 这一条要判"导出里带类别标签、带合并次数"，所以自己先把素材造出来：
+  // 同一 origin/method/path 的跨站写连发三次会被并成一行 count=3（实测），
+  // 不这么做就只能指望"用户机器上恰好还留着一条闸门记录"——列表只取最近 300 行，
+  // 别的门禁一跑就把那条挤出窗口，于是同一条判据会莫名轮流红（2026-10-04 实测两轮各红一处）。
+  await tripGuard(3)
+  const seedBefore = await readCount(page)
+  const seedReload = takingLogs(page)
+  await clickByText(page, '.logs-modal', '刷新')
+  await seedReload
+  // 等新那行计数画上屏再取行数：合并前的条数会因为上面那三次拒绝而变，
+  // 早读一步比的就是"上一份的行数"与"这一份的导出"（旧行这时候还挂着，没有转圈标记可等）
+  await waitRepaint(page, seedBefore)
+  // 行数在点「导出」之前取：点完再读，中间只要有一条新日志挤进来，比的就是两份不同的东西
+  const shownRows = (await readModal(page)).rows.length
   await page.evaluate(() => {
     window.__gateBlob = null
     const original = URL.createObjectURL
@@ -240,10 +290,17 @@ try {
     if (!window.__gateBlob) return null
     return { text: await window.__gateBlob.text(), name: window.__gateFile }
   })
+  // 三个半分着报：只写一串 && 的话，红了只知道"有一条不对"，不知道是行数、类别还是合并次数掉了。
+  const text = exported?.text ?? ''
+  const lines = text ? text.split('\n').length : 0
+  const missing = [
+    lines === shownRows ? '' : `行数 ${lines} ≠ 屏上 ${shownRows}`,
+    /同源闸门/.test(text) ? '' : '没有类别标签',
+    /×\d+/.test(text) ? '' : '没有合并次数 ×N',
+  ].filter(Boolean)
   check('④导出的是当前这一份，一行一条、带合并次数与上下文',
-    !!exported && exported.text.split('\n').length === (await readModal(page)).rows.length &&
-    /同源闸门/.test(exported.text) && /×\d+/.test(exported.text),
-    exported ? `${exported.name} · ${exported.text.split('\n').length} 行` : '(没抓到 Blob)')
+    !!exported && missing.length === 0,
+    exported ? `${exported.name} · ${lines} 行${missing.length ? ` · 缺：${missing.join('、')}` : ''}` : '(没抓到 Blob)')
   check('④导出的文件名说的是这个应用', /^青阅运行日志-\d{8}-?\d{4}\.log$/.test(exported?.name ?? ''), exported?.name ?? '(没抓到)')
 
   // ─────────────────── ⑤ 取失败 ≠ 确实没有（同一条列表位） ───────────────────
@@ -256,7 +313,7 @@ try {
   const blockedReload = takingLogs(page)
   await clickByText(page, '.logs-modal', '刷新')
   await blockedReload
-  await sleep(350)
+  await page.waitForSelector('.logs-error', { timeout: 8000 }).catch(() => null)
   const failed = await readModal(page)
   check('⑤取失败时明说失败，而不是显示"没有日志"',
     !!failed && failed.errorBar && !failed.empty && /这不是"没有日志"/.test(failed.errorText),
@@ -270,7 +327,13 @@ try {
     const pending = takingLogs(page)
     await clickByText(page, '.logs-error', '重试')
     await pending
-    await sleep(300)
+    // 等到"错误条没了、行回来了"为止；产品要是还把错误条挂着，这里等到超时，下面那条判据照样红 —— 不是恒真
+    await page.waitForFunction(() => {
+      const modal = document.querySelector('.logs-modal')
+      if (!modal) return false
+      if ((modal.textContent ?? '').includes('加载中')) return false
+      return !!modal.querySelector('.logs-row') && !modal.querySelector('.logs-error')
+    }, { timeout: 8000 }).catch(() => null)
     return readModal(page)
   })()
   check('⑤重试真的把数据取回来了（错误条消失、列表回来）',
@@ -282,14 +345,24 @@ try {
     ? request.respond({ status: 200, contentType: 'application/json', body: '[]' })
     : request.continue()
   page.on('request', emptyHandler)
+  const emptyBefore = await readCount(page)
   const emptyReload = takingLogs(page)
   await clickByText(page, '.logs-modal', '刷新')
   await emptyReload
-  await sleep(350)
+  await waitRepaint(page, emptyBefore)
+  // 关掉再打开请求拦截之后，那一次刷新有时根本不回来（2026-10-04 两轮里有一轮读到的是旧的 300 行）。
+  // 补点一次：这治的是探针自己卡在拦截层，不是产品 —— 判的仍然是"空态出没出来、有没有谎称取失败"，
+  // 产品真给不出空态时，补点之后照样红，而且 detail 会写明当时停在第几行。
+  if ((await readCount(page)) === emptyBefore) {
+    const secondTry = takingLogs(page)
+    await clickByText(page, '.logs-modal', '刷新')
+    await secondTry
+    await waitRepaint(page, emptyBefore)
+  }
   const empty = await readModal(page)
   check('⑤真空的时候才给空态，且不谎称取失败',
     !!empty && empty.empty && !empty.errorBar && /没有日志/.test(empty.emptyText),
-    `${empty?.emptyText ?? '(没有空态)'} · 错误条=${empty?.errorBar}`)
+    `${empty?.emptyText ?? '(没有空态)'} · 错误条=${empty?.errorBar} · 计数="${empty?.count ?? ''}" · ${empty?.rows.length ?? 0} 行`)
   page.off('request', emptyHandler)
   await page.setRequestInterception(false)
   const restoredReload = takingLogs(page)

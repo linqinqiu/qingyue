@@ -35,6 +35,34 @@ const clickIn = (page, scope, label) => page.evaluate(({ scope, label }) => {
   return true
 }, { scope, label })
 
+/**
+ * 开「我的」菜单，并（给了 label 就）点其中一项。
+ *
+ * 为什么不是一句 `clickIn(..., '我的')` 加 `sleep`：这个菜单靠 `pointerdown` 判"点到外面去了"
+ * 再关，而 `page.evaluate` 里的 `node.click()` 只派发 click、**不派发 pointerdown**。
+ * 于是合成点击永远关不掉它 —— 上一段开着的菜单会一直挂着，下一次点「我的」就变成"反手关掉"，
+ * 接着等 `.about-page` 必然超时（2026-10-04 门禁 ③ 的 FAIL 就是这么来的，不是产品坏了：
+ * 同一套按钮在真鼠标下先收到 pointerdown，菜单先关，路径是通的）。
+ * 所以这里每次开之前先用挡片的 click 把残留收掉，开合一律按条件等，不再用固定 sleep 猜时间。
+ */
+const openUserMenu = async (page, label = '') => {
+  await page.evaluate(() => document.querySelector('.header-menu-backdrop')?.click())
+  await page.waitForFunction(() => !document.querySelector('.header-menu-dropdown'), { timeout: 8000 }).catch(() => null)
+  if (!(await clickIn(page, '.app-page-header', '我的'))) return false
+  try {
+    await page.waitForSelector('.header-menu-dropdown', { timeout: 8000 })
+  } catch {
+    return false
+  }
+  if (!label) return true
+  const clicked = await page.waitForFunction(
+    ({ label }) => [...document.querySelectorAll('.header-menu-dropdown button')]
+      .some(node => (node.textContent ?? '').trim().includes(label)),
+    { timeout: 8000 }, { label },
+  ).then(() => clickIn(page, '.header-menu-dropdown', label)).catch(() => false)
+  return clicked
+}
+
 /** React 受控输入：必须走原生 setter + input 事件，直接改 .value 界面不认。 */
 const typeInto = (page, selector, value) => page.evaluate(({ selector, value }) => {
   const el = document.querySelector(selector)
@@ -74,6 +102,11 @@ try {
     nav: [...document.querySelectorAll('.app-page-header nav button')].map(n => (n.textContent ?? '').trim()),
   }))
   check('①界面是旧版那一套顶栏外壳', shell.topbar, shell.topbar ? shell.nav.join(' / ') : '没找到 .app-page-header')
+  // 一级入口的集合与顺序（用户 2026-10-04：规则 / 备份 / 设置 从「设置」页提到顶栏）。
+  // 判"整串相等"而不是"数一下有几个"：少一项、多一项、换了顺序都要红 —— 只数条目的话，
+  // 把「书签」换成「设置」也能凑够数，等于没判。
+  check('①顶栏八个一级入口，顺序与那张表一致',
+    shell.nav.join('|') === '书库|书架|书源|发现|订阅|规则|备份|设置', shell.nav.join(' / '))
   check('①侧栏 / 页头条那套 v2 结构不在页面上',
     !shell.rail && !shell.pageBar && !shell.frame,
     `侧栏=${shell.rail} 页头条=${shell.pageBar} 框架=${shell.frame}`)
@@ -81,9 +114,8 @@ try {
     /theme-(light|paper|dark)/.test(shell.htmlClass), shell.htmlClass || '(空)')
 
   // ─────────────────── ② 「我的」菜单里的入口与皮肤 ───────────────────
-  check('②「我的」点得开', await clickIn(page, '.app-page-header', '我的'), '')
-  await page.waitForSelector('.header-menu-dropdown', { timeout: 8000 })
-  await sleep(250)
+  check('②「我的」点得开', await openUserMenu(page), '')
+  await page.waitForFunction(() => document.querySelectorAll('.header-menu-dropdown .menu-theme-btn').length >= 3, { timeout: 8000 }).catch(() => null)
   const menu = await page.evaluate(() => {
     const swatch = document.querySelector('.header-menu-dropdown .theme-swatch')
     return {
@@ -98,14 +130,19 @@ try {
   // 「更新日志」「快捷键」两条从菜单里收掉了（用户 2026-10-03：「顶栏『我的』菜单堆太多」）：
   // 前者有顶栏版本芯片 + 「关于」两条路，后者改由「关于」进。这里按新的分法判。
   check('②菜单里有「关于」入口', menu.labels.some(l => l.includes('关于')), menu.labels.join(' / '))
-  check('②菜单不再堆着「更新日志」「快捷键」，也不堆「备份包/运行日志/替换净化规则/本地离线缓存管理」',
-    !menu.labels.some(l => ['更新日志', '快捷键', '备份包', '运行日志', '替换净化规则', '本地离线缓存管理'].includes(l)),
+  // 「设置」也提到顶栏了（2026-10-04）：一级页面不在菜单里留第二条路，
+  // 否则改了顶栏忘了菜单、两边指向不同实现只是时间问题。
+  check('②菜单里不再重复一级入口（设置 / 规则 / 备份 都只在顶栏）',
+    !menu.labels.some(l => /^(设置|规则|备份|替换净化规则|备份包)$/.test(l)), menu.labels.join(' / '))
+  check('②菜单不再堆着一级入口与旧条目（设置/规则/备份 现在都在顶栏）',
+    !menu.labels.some(l => ['设置', '更新日志', '快捷键', '备份包', '运行日志', '替换净化规则', '本地离线缓存管理'].includes(l)),
     menu.labels.join(' / '))
   check('②色片是 22px 那一套（v2 的 9px 小点不该留下来）', menu.swatchSize === '22px', `实测 ${menu.swatchSize || '(取不到)'}`)
 
-  // 收进「设置」的四条要真的还在：点一行开得开原弹窗，才算"换了分类"而不是"删了功能"。
-  // 这一段放在色片检查之后 —— 点「设置」会把菜单关掉，插在中间会让上面那条读不到浮层。
-  check('②「设置」点得开这一页', await clickIn(page, '.header-menu-dropdown', '设置'), '')
+  // 「设置」现在是一级入口（2026-10-04 提到顶栏），所以从顶栏点进去；判的还是原来那件事：
+  // 收纳/搬家不许少功能 —— 每一行都要真的开得开原弹窗，才算"换了分类"而不是"删了功能"。
+  // 这一段放在色片检查之后 —— 点「设置」会离开这一屏，插在中间会让上面那条读不到浮层。
+  check('②「设置」在顶栏上点得开这一页', await clickIn(page, '.app-page-header nav', '设置'), '')
   await page.waitForSelector('.settings-page', { timeout: 8000 })
   await sleep(400)
   const settings = await page.evaluate(() => ({
@@ -118,7 +155,7 @@ try {
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }))
   check('②「设置」分了组，每行都说得出它管什么（不是一排光秃秃的按钮）',
-    settings.groups.length >= 4 && settings.rows.length >= 6
+    settings.groups.length >= 4 && settings.rows.length >= 5
     && settings.rows.every(row => row.title && row.action && row.hint.length >= 8),
     `${settings.groups.join('/')} · ${settings.rows.length} 行`)
   check('②这一页 1440 宽不横向溢出', settings.overflow <= 1, `溢出 ${settings.overflow}px`)
@@ -138,8 +175,7 @@ try {
     api.status === 200 && api.type.startsWith('text/markdown') && api.length > 200,
     `HTTP ${api.status} · ${api.type} · ${api.length} 字符`)
   check('③从「关于」进「更新日志」（菜单里那条已收掉，这一条走的是新路径）',
-    await clickIn(page, '.app-page-header', '我的')
-    && (await sleep(250), await clickIn(page, '.header-menu-dropdown', '关于')), '')
+    await openUserMenu(page, '关于'), '')
   await page.waitForSelector('.about-page', { timeout: 8000 })
   const about = await page.evaluate(() => ({
     actions: [...document.querySelectorAll('.about-actions button, .about-actions a')].map(n => (n.textContent ?? '').trim()),
@@ -153,9 +189,8 @@ try {
   const shortcutRows = await page.evaluate(() => document.querySelectorAll('.shortcut-row, .shortcut-table tr').length)
   check('③那张表真的列出了按键（不是空弹窗）', shortcutRows > 0, `实测 ${shortcutRows} 行`)
   await page.evaluate(() => document.querySelector('.shortcut-close')?.click())
-  await sleep(250)
   check('③那张表关得掉（不留一层挡住「关于」的挡片）',
-    await page.evaluate(() => !document.querySelector('.shortcut-modal')), '')
+    await page.waitForFunction(() => !document.querySelector('.shortcut-modal'), { timeout: 5000 }).then(() => true).catch(() => false), '')
   check('③「更新日志」点得动', await clickIn(page, '.about-actions', '更新日志'), '')
   await page.waitForSelector('.changelog-page', { timeout: 8000 })
   await page.waitForFunction(() => !!document.querySelector('.changelog-release') || !!document.querySelector('.changelog-empty'), { timeout: 15000 })
@@ -183,11 +218,10 @@ try {
   // ────────────────────── ④ 自定义皮肤真的生效 ──────────────────────
   await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.app-page-header', { timeout: 30000 })
-  check('④「我的」再点得开', await clickIn(page, '.app-page-header', '我的'), '')
-  await page.waitForSelector('.header-menu-dropdown', { timeout: 8000 })
-  check('④「自定义」点得开弹窗', await clickIn(page, '.header-menu-dropdown', '自定义'), '')
+  check('④「我的」→「自定义」点得开弹窗', await openUserMenu(page, '自定义'), '')
   await page.waitForSelector('.customize-dialog', { timeout: 8000 })
-  await sleep(250)
+  await page.waitForFunction(() => !!document.querySelector('.customize-skin-editor input[type=text]')
+    && !!document.querySelector('.customize-css'), { timeout: 8000 }).catch(() => null)
   const canvas = '#0f1213'
   const typed = await typeInto(page, '.customize-skin-editor input[type=text]', 'gateMidnight!!')
     && await typeInto(page, '.customize-css', `.theme-gatemidnight { --canvas: ${canvas}; }`)
@@ -248,11 +282,11 @@ try {
     `类 ${persisted.classes || '(空)'} · 注入=${persisted.style}`)
   await page.screenshot({ path: path.join(SHOTS, `ui-custom-skin-${STAMP}.png`) }).catch(() => null)
 
-  check('④「我的」→「自定义」再开一次（清除入口要点得到）',
-    await clickIn(page, '.app-page-header', '我的') && (await sleep(200), await clickIn(page, '.header-menu-dropdown', '自定义')), '')
+  check('④「我的」→「自定义」再开一次（清除入口要点得到）', await openUserMenu(page, '自定义'), '')
   await page.waitForSelector('.customize-dialog', { timeout: 8000 })
   check('④「清除自定义皮肤」点得动', await clickIn(page, '.customize-actions', '清除'), '')
-  await sleep(400)
+  // 等到注入的 <style> 真的摘掉再读数：这一条只等"动作生效"，判据（回到三档、类被摘掉）仍在下面实测
+  await page.waitForFunction(() => !document.getElementById('legado-custom-skin'), { timeout: 5000 }).catch(() => null)
   const clearedSkin = await page.evaluate(() => ({
     style: !!document.getElementById('legado-custom-skin'),
     classes: document.documentElement.className,
@@ -265,7 +299,6 @@ try {
   // ─────────── ⑤ 分章规则的落点（搬出「自定义」，长在书架导入旁边） ───────────
   // ④ 收场时「自定义」弹窗还开着：不关掉就点下一颗按钮，点到的其实是挡片底下的控件。
   await page.evaluate(() => document.querySelector('.customize-close')?.click())
-  await sleep(250)
   await page.goto(`${BASE}/#shelf`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.shelf-bar', { timeout: 30000 })
   const shelfBar = await page.evaluate(() => ({
@@ -321,11 +354,10 @@ try {
     `壳=${toc.mounted} 可滚=${toc.scrollable} 溢出 ${toc.overflow}px`)
   await page.screenshot({ path: path.join(SHOTS, `toc-rules-modal-${STAMP}.png`) }).catch(() => null)
   check('⑤这颗关闭按钮关得掉弹窗（挡片不留在那儿挡住后面的操作）',
-    await page.evaluate(() => { document.querySelector('.toc-rules-close')?.click(); return true })
-    && (await sleep(250), await page.evaluate(() => !document.querySelector('.toc-rules-modal'))), '')
+    await page.evaluate(() => { document.querySelector('.toc-rules-close')?.click(); return !!document.querySelector('.toc-rules-modal') })
+    && await page.waitForFunction(() => !document.querySelector('.toc-rules-modal'), { timeout: 5000 }).then(() => true).catch(() => false), '')
   // 「自定义」这一边：搬走了就必须在界面上真的看不见，不只是代码里删了
-  check('⑤「自定义」弹窗还开得住（搬空之后不是空壳）',
-    await clickIn(page, '.app-page-header', '我的') && (await sleep(200), await clickIn(page, '.header-menu-dropdown', '自定义')), '')
+  check('⑤「自定义」弹窗还开得住（搬空之后不是空壳）', await openUserMenu(page, '自定义'), '')
   await page.waitForSelector('.customize-dialog', { timeout: 8000 })
   const customize = await page.evaluate(() => {
     const dialog = document.querySelector('.customize-dialog')
@@ -355,11 +387,13 @@ try {
     !fs.existsSync(path.join(srcDir, 'AppRail.tsx')) && !fs.existsSync(path.join(srcDir, 'PageBar.tsx')),
     [fs.existsSync(path.join(srcDir, 'AppRail.tsx')) && 'AppRail.tsx', fs.existsSync(path.join(srcDir, 'PageBar.tsx')) && 'PageBar.tsx'].filter(Boolean).join('、') || '干净')
   const css = fs.readFileSync(path.join(srcDir, 'styles.css'), 'utf8')
-  check('⑥样式表里没有 v2 的类名残留',
-    !/\.app-rail|\.rail-item|\.page-bar|\.app-frame|\.rail-tabs/.test(css), '命中了 v2 选择器')
+  // 「判代码有没有残留」这一类，通过时不许打印那句"命中了…"：
+  // 一行写着 PASS、后面跟着 [命中了 v2 选择器]，读的人只会当成红了 —— 判据写得再对也没人信。
+  const v2Left = ['.app-rail', '.rail-item', '.page-bar', '.app-frame', '.rail-tabs'].filter(name => css.includes(name))
+  check('⑥样式表里没有 v2 的类名残留', v2Left.length === 0, v2Left.length ? `还留着 ${v2Left.join('、')}` : '干净')
+  const tocBack = fs.readFileSync(path.join(srcDir, 'CustomizeModal.tsx'), 'utf8').includes('tocRules')
   check('⑥「自定义」弹窗的代码里没有分章规则那一段（判代码，不只是判界面）',
-    !fs.readFileSync(path.join(srcDir, 'CustomizeModal.tsx'), 'utf8').includes('tocRules'),
-    'CustomizeModal.tsx 又长回了 tocRules')
+    !tocBack, tocBack ? 'CustomizeModal.tsx 又长回了 tocRules' : '干净')
 
   check('全程没有页面异常', errors.length === 0, errors.slice(0, 2).join(' | '))
 } catch (error) {

@@ -41,23 +41,30 @@ test('这一页只是路由：它自己不含任何编辑器实现', () => {
   assert.doesNotMatch(page, /useState/, '它没有自己的状态：状态仍在原来那一处')
 })
 
-test('菜单收进「设置」，四条功能一条都没少', () => {
+test('一级目的地在顶栏，设置页只留真偏好 —— 收放改了，功能一条没少', () => {
+  // 2026-10-03 的分法是「菜单收进设置」，2026-10-04 用户改口：
+  // 「把设置里面、折叠里面的拿出来，本来是主页的样式、主页的框架」。
+  // 判的仍然是同一件事的两种分法之一：**不许有功能只剩下一个找不到的入口**。
   const header = read('../src/AppHeader.tsx')
-  assert.match(header, /<span>设置<\/span>/)
-  assert.match(header, /onNavigate\('settings'\)/)
-  // 判的是"渲染出来的那一条"，不是注释里提到过这个名字（那段注释正是在解释为什么收掉它们）
-  for (const moved of ['本地离线缓存管理', '替换净化规则', '运行日志', '备份包']) {
-    assert.ok(!header.includes(`<span>${moved}</span>`), `「${moved}」应该已经从菜单收进「设置」了`)
+  assert.match(header, /PRIMARY_PAGES\.map/, '顶栏入口由那张表渲染（手写一排按钮迟早漏一项）')
+  assert.ok(!/<span>设置<\/span>/.test(header), '「设置」已经是一级入口，不该再在「我的」菜单里留第二条路')
+  assert.ok(!/<span>规则<\/span>|<span>备份<\/span>/.test(header), '同理：规则 / 备份不在菜单里重复')
+
+  const table = read('../src/shortcuts.ts')
+  for (const page of ['rules', 'backup', 'settings']) {
+    assert.ok(table.includes(`'${page}'`), `一级页面那张表里少了 ${page} —— 它现在既不在菜单也不在设置页，等于消失了`)
   }
-  // 收掉不等于删功能：四条都要在「设置」那几行的动作里出现
+
+  // 真偏好与诊断仍然在设置页，且仍然指向原来那一处实现（这一页只做路由）
   const main = read('../src/main.tsx')
   const block = /const settingsSections: SettingsSection\[\] = \[[\s\S]*?\r?\n  \]\r?\n/.exec(main)?.[0] ?? ''
-  assert.ok(block.length > 800, '要真的取到 settingsSections 那一段（取空串下面几条对什么都成立）')
-  assert.match(block, /setShowOfflineCache\(true\)/)
-  assert.match(block, /navigate\('rules'\)/)
-  assert.match(block, /setShowLogs\(true\)/)
-  assert.match(block, /navigate\('backup'\)/)
+  assert.ok(block.length > 400, '要真的取到 settingsSections 那一段（取空串下面几条对什么都成立）')
+  assert.match(block, /setShowOfflineCache\(true\)/, '离线缓存仍是设置页的一行')
+  assert.match(block, /setShowLogs\(true\)/, '运行日志仍是设置页的一行')
   assert.match(block, /setTocRulesSignal\(value => value \+ 1\)/, '分章规则那行要真的能开弹窗')
+  // 反向对照：一级化之后还留着重复路由，就是"两条路迟早各改各的"
+  assert.ok(!/navigate\('rules'\)/.test(block), '「替换净化规则」已是一级入口，设置页不该再有第二条路')
+  assert.ok(!/navigate\('backup'\)/.test(block), '「备份包」已是一级入口，设置页不该再有第二条路')
 })
 
 test('路由与"去书架开弹窗"的信号接上了', () => {

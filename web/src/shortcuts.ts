@@ -70,16 +70,30 @@ export const READER_SHORTCUTS: Shortcut[] = [
   { action: 'font-wheel', keys: [], display: 'Ctrl / ⌘ + 滚轮', label: '直接调字号（不用先开设置）', group: '排版' },
 ]
 
-/** 数字键切页：顺序 = 顶栏里从左到右（规则与备份收在「我的」里，接在后面）。 */
-const PAGE_KEYS: [string, string, string][] = [
-  ['1', 'library', '库'],
-  ['2', 'shelf', '书架'],
-  ['3', 'sources', '书源'],
-  ['4', 'explore', '发现'],
-  ['5', 'subscriptions', '订阅'],
-  ['6', 'rules', '替换净化规则'],
-  ['7', 'backup', '备份包'],
+/**
+ * 一级页面**只在这里列一次**：顶栏从左到右的按钮、数字键 1–8、`Alt + ← / →` 的循环顺序，
+ * 三处都从这一张表取。
+ *
+ * 原来它是三份：顶栏在 `AppHeader.tsx` 里手写五个、`main.tsx` 里 `NAV` 一份七个
+ * （而且 发现 与 书源 的顺序和顶栏相反）、这张表又一份 —— 用户 2026-10-04 把规则/备份/设置
+ * 提回一级导航时，三份就会各自漏掉不同的那个。AGENTS §5「按键表与处理器必须同源」同一个病。
+ *
+ * `nav` 是顶栏上那两个字，`label` 是这张表里说全的名字（「替换净化规则」而不是「规则」）。
+ */
+export const PRIMARY_PAGES: { page: string; nav: string; label: string }[] = [
+  { page: 'library', nav: '书库', label: '书库' },
+  { page: 'shelf', nav: '书架', label: '书架' },
+  { page: 'sources', nav: '书源', label: '书源' },
+  { page: 'explore', nav: '发现', label: '发现' },
+  { page: 'subscriptions', nav: '订阅', label: '订阅' },
+  { page: 'rules', nav: '规则', label: '替换净化规则' },
+  { page: 'backup', nav: '备份', label: '备份包' },
+  { page: 'settings', nav: '设置', label: '设置' },
 ]
+
+/** 数字键切页：键 = 表里的位置，标签 = 说全的那个名字。 */
+const PAGE_KEYS: [string, string, string][] = PRIMARY_PAGES.map((item, index) =>
+  [String(index + 1), item.page, item.label])
 
 export const GLOBAL_SHORTCUTS: Shortcut[] = [
   { action: 'search', keys: ['/'], display: '/', label: '聚焦当前这一页的搜索 / 筛选框', group: '全局' },

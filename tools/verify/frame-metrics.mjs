@@ -180,16 +180,56 @@ const goto = async url => {
   throw new Error('三次导航都失败')
 }
 
+/**
+ * 等版面"长定了"再量，而不是睡固定毫秒。
+ *
+ * 原来这里睡 2200ms，实测同一页两次跑出 `1020×720 底部死白0% 控件58px` 与
+ * `960×480 底部死白30% 控件34px` —— 后一次是**列表还没出行**，中位数于是去量了工具栏按钮。
+ * 一个自己不可复现的版面判据，既能假红也能漏红（AGENTS §3：靠固定 sleep 读界面必然偶发假红）。
+ * 判据：先等**网络静默**，再等"连续四帧墨迹包围盒与可见元素数不变"。
+ * 只用"像素不变"会停在加载态上 —— 实测 `#sources` 冷启动时列表还没到，那一屏的像素
+ * 本来就是静止的，于是量出 `960×480 / 控件中位高 34`（34 是工具栏按钮，58 才是行），
+ * 而热服务上是 `1020×720 / 58`。一个把"还没数据"当成"版面板结"的判据，会同时假红和漏红。
+ */
+async function waitForLayout(page, { timeoutMs = 20000, stepMs = 400 } = {}) {
+  const started = Date.now()
+  await page.waitForNetworkIdle({ idleTime: 500, timeout: 15000 }).catch(() => undefined)
+  let last = ''
+  let stable = 0
+  while (Date.now() - started < timeoutMs) {
+    const now = await page.evaluate(() => {
+      const leaves = [...document.querySelectorAll('body *')].filter(el => {
+        const r = el.getBoundingClientRect()
+        return r.width > 0 && r.height > 0 && !el.children.length
+      })
+      let top = Infinity; let bottom = -Infinity; let left = Infinity; let right = -Infinity
+      for (const el of leaves) {
+        const r = el.getBoundingClientRect()
+        if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) continue
+        top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom)
+        left = Math.min(left, r.left); right = Math.max(right, r.right)
+      }
+      return `${Math.round(bottom - top)}x${Math.round(right - left)}:${leaves.length}`
+    })
+    if (now === last) { if (++stable >= 4) return { waitedMs: Date.now() - started, settled: true, box: now } } else stable = 0
+    last = now
+    await new Promise(r => setTimeout(r, stepMs))
+  }
+  return { waitedMs: Date.now() - started, settled: false, box: last }
+}
+
 const result = { base: BASE, takenAt: new Date().toISOString(), screens: [] }
 for (const vp of VIEWPORTS) {
   await setViewport(vp)
   for (const route of ROUTES) {
     await goto(`${BASE}/?${Date.now()}${route}`)
     await page.waitForSelector('header', { timeout: 20000 }).catch(() => undefined)
-    await new Promise(r => setTimeout(r, 2200))
+    const settle = await waitForLayout(page)
+    result.settles = result.settles ?? {}
+    result.settles[`${vp.name} ${route}`] = settle
     const data = await page.evaluate(collect)
     result.screens.push({ vp: vp.name, route, ...data })
-    console.log(`${vp.name.padEnd(10)} ${route.padEnd(16)} ink=${String(data.contentWidth).padStart(4)}x${String((data.inkBox.bottom || 0) - (data.inkBox.top || 0)).padStart(4)} cover=${String(data.coveragePct).padStart(2)}% masthead=${String(data.mastheadCost).padStart(3)}px side=${String(data.sideDeadPct).padStart(2)}% bottom=${String(data.bottomDeadPct).padStart(2)}% cols=${data.gridColumns} btnH=${data.buttonHeights.median} h1=${data.h1 ? data.h1.size + 'px' : '-'} kicker=${data.kickerCount} prose=${data.proseCount}${data.overflowX ? ' OVERFLOW-X' : ''}`)
+    console.log(`${vp.name.padEnd(10)} ${route.padEnd(16)} ink=${String(data.contentWidth).padStart(4)}x${String((data.inkBox.bottom || 0) - (data.inkBox.top || 0)).padStart(4)} cover=${String(data.coveragePct).padStart(2)}% masthead=${String(data.mastheadCost).padStart(3)}px side=${String(data.sideDeadPct).padStart(2)}% bottom=${String(data.bottomDeadPct).padStart(2)}% cols=${data.gridColumns} btnH=${data.buttonHeights.median} h1=${data.h1 ? data.h1.size + 'px' : '-'} kicker=${data.kickerCount} prose=${data.proseCount}${data.overflowX ? ' OVERFLOW-X' : ''}  等稳定 ${settle.waitedMs}ms${settle.settled ? '' : ' ← 没等定，这一屏的数字不可信'}`)
     for (const c of data.overflowCulprits || []) {
       console.log(`           ↳ 伸出视口到 ${c.right}px：${c.path}（宽 ${c.width}px，width:${c.cssWidth} min-width:${c.minWidth}${c.text ? `，「${c.text}」` : ''}）`)
       if (c === data.overflowCulprits[0]) {

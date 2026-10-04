@@ -34,7 +34,7 @@ import { BackupPage } from './BackupPage'
 import { OfflineCacheModal } from './OfflineCacheModal'
 import { LogsModal } from './LogsModal'
 import { ShortcutHelp } from './ShortcutHelp'
-import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, shortcutFor } from './shortcuts'
+import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, PRIMARY_PAGES, shortcutFor } from './shortcuts'
 import { SourceHealthModal } from './SourceHealthModal'
 import { TocRulesModal } from './TocRulesModal'
 import { SettingsPage, type SettingsSection } from './SettingsPage'
@@ -3219,7 +3219,7 @@ function App() {
   // 桌面手感（借鉴悦读）+ 全局快捷键（表在 web/src/shortcuts.ts，「快捷键」那张表渲染同一份）。
   // 阅读器里不抢 Ctrl+F —— 在长正文里找字，浏览器原生查找更好用。
   useEffect(() => {
-    const NAV: Page[] = ['library', 'shelf', 'explore', 'sources', 'subscriptions', 'rules', 'backup']
+    const NAV: Page[] = PRIMARY_PAGES.map(item => item.page as Page)
     const focusSearch = () => {
       // 这一页上的"搜索框"措辞不统一（输入书名或作者 / 筛选书名或作者 / 筛选书源），
       // 只按"搜索"两个字找会一条都找不到 —— Ctrl+F 原来就是这么哑着的。
@@ -3419,24 +3419,8 @@ function App() {
       }],
     },
     {
-      title: '内容',
-      rows: [{
-        title: '替换净化规则',
-        hint: '正文里要替换或删掉的东西（广告、站点水印、乱码行）。',
-        also: '阅读器设置抽屉里能就地打开这一页',
-        action: '去管理',
-        onClick: () => navigate('rules'),
-      }],
-    },
-    {
       title: '数据与诊断',
       rows: [
-        {
-          title: '备份包',
-          hint: '导入导出书源、书架、替换规则，以及手机阅读导出的那些个性化条目。',
-          action: '去备份页',
-          onClick: () => navigate('backup'),
-        },
         {
           title: '运行日志',
           hint: '这台服务自己写了什么：级别、失败原因、同类合并后的计数。',

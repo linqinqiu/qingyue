@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { GLOBAL_SHORTCUTS, READER_SHORTCUTS, SHORTCUT_TABLES, isTypingTarget, normalizeKey, shortcutFor } from '../src/shortcuts'
+import { GLOBAL_SHORTCUTS, PRIMARY_PAGES, READER_SHORTCUTS, SHORTCUT_TABLES, isTypingTarget, normalizeKey, shortcutFor } from '../src/shortcuts'
 import { ShortcutHelp } from '../src/ShortcutHelp'
 
 /**
@@ -98,6 +98,26 @@ test('处理器引用的动作必须都在表里（改了键忘了改表，这�
   const globalActions = new Set(GLOBAL_SHORTCUTS.map(item => item.action))
   for (const match of appSource.matchAll(/hit\.action === '([a-z-]+)'/g)) {
     assert.ok(globalActions.has(match[1]), `main.tsx 里处理了「${match[1]}」，可这张表里没有它`)
+  }
+})
+
+test('一级入口只有一张表：顶栏、数字键、Alt 循环都从 PRIMARY_PAGES 取', () => {
+  // 用户 2026-10-04 把 规则 / 备份 / 设置 提回顶栏。改之前是三份表：顶栏手写八个 <button>、
+  // main.tsx 的 NAV 一份（且 发现/书源 顺序与顶栏相反）、这张表又一份 —— 三份各自漏过不同的页面。
+  const header = fs.readFileSync(new URL('../src/AppHeader.tsx', import.meta.url), 'utf8')
+  assert.match(header, /PRIMARY_PAGES\.map/, '顶栏不再渲染这张表，就是有人手写了一排按钮')
+  assert.match(appSource, /const NAV: Page\[\] = PRIMARY_PAGES\.map/, 'Alt + ←/→ 的循环顺序必须与顶栏同一份来源')
+  // 顶栏里不许再出现手写的入口按钮（品牌位点回书库是另一件事）
+  const handWritten = (header.match(/onNavigate\('(shelf|sources|explore|subscriptions|rules|backup|settings)'\)/g) ?? [])
+  assert.deepEqual(handWritten, [], `顶栏里又出现手写的入口按钮：${handWritten.join(' / ')}`)
+  // 数字键必须连续覆盖这张表（1..N，不缺号、不多写）
+  const digitLabels = GLOBAL_SHORTCUTS.filter(item => item.action === 'navigate').map(item => item.display)
+  assert.deepEqual(digitLabels, PRIMARY_PAGES.map((_, index) => String(index + 1)),
+    '数字键与一级页面的条数不一致 —— 加了一页就得能按到它')
+  // 表里的每一页都得是 AppHeader 认得的页面名（拼错一个字母就是点了没反应）
+  const knownPages = (header.match(/export type AppPage = ([^\n]+)/) ?? [])[1] ?? ''
+  for (const item of PRIMARY_PAGES) {
+    assert.ok(knownPages.includes(`'${item.page}'`), `PRIMARY_PAGES 里的「${item.page}」不在 AppPage 里`)
   }
 })
 
