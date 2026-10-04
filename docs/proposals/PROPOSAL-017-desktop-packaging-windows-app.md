@@ -116,7 +116,7 @@ B 作为二期，且以"先做一个能开能关能读的最小尖峰"为准入�
 
 ---
 
-## 7. 验收判据（规划阶段就把"怎么算做完了"写死）
+## 7. 验收判据（规划阶段就把“怎么算做完了”写死）
 
 1. 全新解压目录、**不装 Java**、不开任何命令行：双击 `青阅.exe` → 出现界面、书架有书、能搜索能读。
    （判据要真的用 `-Djava.home` 之外的干净 PATH 环境跑，别拿开发机现装的 Java 蒙过去。）
@@ -131,3 +131,32 @@ B 作为二期，且以"先做一个能开能关能读的最小尖峰"为准入�
    以及"产物与文档里都没有个人绝对路径"继续由 `opensource-hygiene-check.mjs` 兜。
 7. 旧路径不许坏：`node start.mjs` / `stop.mjs` / Docker / 裸 jar 四条启动方式在改动后仍然可用
    （桌面化是**加一条路**，不是换一条路）。
+
+---
+
+## 8. 借鉴 `changexbc/workbuddy-switch` 的封装与构建思路（2026-10-04）
+
+用户让参考那份仓库"怎么封装、怎么构建"。它是 **Tauri（Rust workspace + React）**，
+形态与我们不同，但**构建与分发的骨架**有八条能对照，逐条写明落点：
+
+| 他的做法（实测自 `origin/main`） | 为什么这么做 | 青阅的落点 |
+| --- | --- | --- |
+| workspace 三成员：`crates/wb-switch-core`（业务）/ `crates/wb-switch-server`（无头 webui 形态）/ `src-tauri`（桌面壳） | 桌面壳**骑在**同一份产物上，不另起一套打包 | 与 §3B「复用关系：B 的壳应当骑在 A 的产物上」同形，作为佐证保留；我们的 core+webui 那一格就是那个 fat jar |
+| 前端产物 `rust-embed` 进二进制，一个文件能跑 | 分发面只有一个文件 | **等价已实现**：`processResources` 把 `web/dist` 烤进 `static/`（两边 bundle 哈希一致），不换路线 |
+| 产物命名只有一处出处：CI 的 `select-matrix` 生成一张 JSON 表（target / cli_bin / bundles / update_* / archive_name），构建、发包、更新器都读它 | 名字散在多处必然漂 | **已落地**：`scripts/package.mjs` 里包名/jar 名/顶层目录全部从 `server/build.gradle` 的 version 派生；`package-check.mjs` 的默认包名同样跟着 gradle 走（此前写死 `qingyue-0.6.0.zip`，等于下一次发版会去验上一版的包） |
+| tag 触发才建 Release；`workflow_dispatch` 手选平台出的是**试装包**，不建 Release、不 publish；`vars.PUBLISH_NPM=false` 是 kill switch，脚本幂等可重跑 | 试装与发版严格分开；一条通道坏了不阻塞另一条 | 建议照搬进桌面 CI（等 §6 第 4 件拍板后做）；我们现在根本没有桌面 CI 步骤 |
+| 构建层兼容修复**就地写明去向**：`[patch.crates-io] indexmap = { path = "vendor-patched/indexmap" }` 上面一整段注释解释 1.98 上 autocfg 探测失败导致 E0107、只改 build.rs 不碰库代码、"工具链正常就整段删除" | 构建层的妥协最容易被后人当成业务逻辑 | 我们的 `init-mirror.gradle`（镜像）与 `local-patches.diff` 现在**没有**这种说明 —— 该补；两个新脚本已按同一写法注释 |
+| 门禁分层：发版构建 `rustflags: ""`（并注释说明默认 `-D warnings` 会把 vendored 快照的 dead_code 升级成错误），自有代码的告警由 `test.yml` 的 lint job 把关 | 发版通道不承担评审职责 | 我们三个 workflow（`ci` / `build-jar` / `docker`）照这个分工重排：判据归判据，出包归出包 |
+| 签名私钥在**用户数据目录**（`$HOME/.wb-switch/wb-switch-updater.key`），不进仓库；更新器 archive 名进那张平台表 | 密钥与产物分离 | 二期若做自动更新照此，且 §5 的"产物里不许出现个人绝对路径"同样适用 |
+| 「第二份前端」纳入构建链：`scripts/prepare-agent-companion.mjs {dev,build,copy}`，`build:desktop` = prep → build → copy | 靠人记得拷一次，一定会拷错 | **已落地**：`scripts/prepare-next.mjs`，把今天手工 `cp -r` 的那一步换成带三条硬断言的脚本（`/next/` 前缀、资源真的存在、旧前端 SW 黑名单含 `/next`） |
+
+**为什么现在就把这两条脚本做出来**（不是提前工程，是今天真踩了）：0.6.1 发版时整合包是手工组装的，
+一次踩中两个只有独立解析器才会逮到的坑 ——
+① `Compress-Archive` 压出的条目用反斜杠且不带顶层目录，`package-check` 认不出 `next/index.html`，
+表面"包做好了"而解开是残缺的；② 用 `sed` 改 `start.bat` 把 CRLF 变成 LF，cmd 的读法就变了。
+现在 `scripts/package.mjs` 自己写 zip（deflate + 正斜杠 + 单一顶层目录 + 拒绝 `data/`、`logs/`、`*.sqlite`、`.env`），
+产物同时被 `package-check`（自研解析）与 `unzip -t`（第三方）验过：11/11、无 CRC 错误。
+
+**没借鉴的一条**：他的 npm 分发通道（`npm/platform/workbuddy-switch-<tag>` 带 `bin/`）对我们没有对应物 ——
+我们的产物是单个 jar + 一个自带运行时的包，塞进 npm 只会多一条要维护的发布路径。
+将来若真要做"一条命令装好"，再单开一份提案讨论，不改本文件的结论。
