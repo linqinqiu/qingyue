@@ -108,10 +108,7 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
       <header className="page-title">
         <div>
           <h1>更新日志</h1>
-          <p>
-            {serverVersion ? `当前运行的是 ${serverVersion}。` : '版本号以服务端报回的为准。'}
-            这一页读的就是随包发出的 <code>CHANGELOG.md</code>，不是界面现编的一段话。
-          </p>
+          <p>{serverVersion ? `当前运行的是 ${serverVersion}。` : '版本号以服务端报回的为准。'}</p>
         </div>
       </header>
       {loading && <p className="changelog-loading">正在读取…</p>}

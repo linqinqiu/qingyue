@@ -27,7 +27,6 @@ export function SettingsPage({ sections }: { sections: SettingsSection[] }) {
     <main className="settings-page">
       <header className="page-title">
         <h1>设置</h1>
-        <p>这台机器上的偏好都从这里进。改的仍然是原来那一处，这一页只是把它们分好类。</p>
       </header>
       {sections.map(section => (
         <section key={section.title} className="settings-section">
