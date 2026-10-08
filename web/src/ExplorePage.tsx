@@ -4,6 +4,7 @@ import { Icon } from './icons'
 import { Select } from './Select'
 import { filterByGroup, sourceGroups, UNGROUPED } from './exploreGroups'
 import { sanitizeImageUrl } from './sourceImport'
+import { DeferredCover } from './Cover'
 
 export interface ExplorePageProps {
   onOpen: (book: SearchResult) => Promise<void>
@@ -169,7 +170,6 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
       <header className="explore-header">
         <div>
           <h1>发现</h1>
-          <p>读取书源自带的发现页分栏（榜单、分类、专题），点书先看详情，再决定读不读。</p>
         </div>
         {/*
           用户 2026-09-30：「我发现页也用不到这个在这个源里搜书名，需要的是搜对应书源」。
@@ -236,11 +236,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
           <div className="explore-grid">
             {books.map((book, index) => (
               <button type="button" key={`${book.sourceId}::${book.bookUrl}::${index}`} className="explore-card" onClick={() => void open(book)}>
-                {coverOf(book) ? (
-                  <img className="explore-cover" src={coverOf(book)!} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.visibility = 'hidden' }} />
-                ) : (
-                  <span className="explore-cover explore-cover-empty">{book.name.slice(0, 1)}</span>
-                )}
+                <span className="explore-cover">
+                  <DeferredCover cover={coverOf(book) ?? null} name={book.name} author={book.author} />
+                </span>
                 <strong title={book.name}>{book.name}</strong>
                 <small>{book.author || '未知作者'}</small>
                 {(book.kind || book.lastChapter || book.wordCount) && (

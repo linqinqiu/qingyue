@@ -8,6 +8,7 @@ import { readSearchLayout, readShelfLayout, readShelfSort, ShelfLayout, ShelfSor
 import { compareCustomSort } from './shelfOrder'
 import { useDragSort } from './dragSort'
 import { Logo } from './Logo'
+import { BookCover, CoverFallback, SearchCover } from './Cover'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
 import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
 import { AppHeader } from './AppHeader'
@@ -636,42 +637,6 @@ function BookDetailModal({
 
 
 
-
-/**
- * 书籍封面。封面文件可能已经不在（换源、缓存清理、抓取失败），
- * 原来这种情况会留一个浏览器破图角标在封面上，这里回落到书名首字块。
- */
-/**
- * 搜索结果封面。源站给的封面地址经常是失效链接或防盗链图，
- * 以前图片报错只是 `visibility:hidden`，留下的就是一块没有字的灰板 —— 这里回落到文字占位。
- */
-/**
- * 占位封面。网格卡上是 138~153px 宽的一张"书封"，只写两个字等于把封面浪费掉 ——
- * 所以默认封面就是**文字版书封**：书名（可换行）+ 作者，仍只用一种墨色。
- * 46px 以下的小封面（继续阅读、书籍管理）字放不下，且旁边就写着书名作者，才退回两字。
- */
-function CoverFallback({ name, author, compact }: { name: string; author?: string; compact?: boolean }) {
-  const title = cleanTitle(name) || name
-  if (compact) return <span className="cover-fallback cover-fallback-compact"><span>{title.slice(0, 2)}</span></span>
-  return (
-    <span className="cover-fallback">
-      <span className="cover-fallback-title">{title}</span>
-      <span className="cover-fallback-author">{author?.trim() || '佚名'}</span>
-    </span>
-  )
-}
-
-function SearchCover({ cover, name, author }: { cover: string | null; name: string; author?: string }) {
-  const [broken, setBroken] = useState(false)
-  if (!cover || broken) return <CoverFallback name={name} author={author} />
-  return <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
-}
-
-function BookCover({ coverKey, name, author, compact }: { coverKey?: string; name: string; author?: string; compact?: boolean }) {
-  const [broken, setBroken] = useState(false)
-  if (!coverKey || broken) return <CoverFallback name={name} author={author} compact={compact} />
-  return <img src={api.cover(coverKey)} alt="" loading="lazy" onError={() => setBroken(true)} />
-}
 
 function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
   onSourcesChange: () => void

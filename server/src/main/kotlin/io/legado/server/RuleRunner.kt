@@ -101,6 +101,22 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     }
 
     /**
+     * `ruleExplore` 与 `ruleSearch` 逐字段合并：前者非空的字段用它，空的取后者的。
+     * 两个都缺时返回 null（调用方报错）。
+     */
+    private fun mergeExploreRule(explore: JsonObject?, search: JsonObject?): JsonObject? {
+        if (explore == null) return search
+        if (search == null) return explore
+        val merged = LinkedHashMap<String, JsonElement>()
+        for (key in explore.keys + search.keys) {
+            val own = explore[key]
+            val value = if (own is JsonPrimitive && !own.contentOrNull.isNullOrBlank()) own else search[key] ?: own
+            if (value != null) merged[key] = value
+        }
+        return JsonObject(merged)
+    }
+
+    /**
      * 解析书源的 `exploreUrl`（Legado 的「发现」页配置）：
      * 既支持 `标题::URL` 换行或 `&#` 分隔的普通写法，也支持 `@js:` 返回 `[{title,url}]` 的聚合源写法。
      */
@@ -124,7 +140,15 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val (path, options) = splitUrlOptions(resolved)
             val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
             val body = fetchUrl(renderUrl(path, "", sourceUrl, page).absolute(sourceUrl), mergedOptions, null, sourceUrl, database)
-            val rule = source.objectValue("ruleExplore") ?: source.objectValue("ruleSearch") ?: throw RuleExecutionException("该书源未配置 ruleExplore/ruleSearch")
+            /*
+             * `ruleExplore` 常常**存在但是空的**：实测全库 5,574 个源里 2,857 个的
+             * `ruleExplore.bookList` 是空串，其中 2,828 个的 `ruleSearch.bookList` 可用。
+             * 原来写的是 `ruleExplore ?: ruleSearch` —— 非 null 就选中它，于是这半个库点开
+             * 发现分栏一律报「缺少 bookList 规则」（用户 2026-10-08 报的就是这个）。
+             * 改成**逐字段**回落：explore 里非空的用它，空的取 search 的（Legado 的发现页同理）。
+             */
+            val rule = mergeExploreRule(source.objectValue("ruleExplore"), source.objectValue("ruleSearch"))
+                ?: throw RuleExecutionException("该书源未配置 ruleExplore/ruleSearch")
             bookItems(body, rule, sourceUrl)
         }
     }

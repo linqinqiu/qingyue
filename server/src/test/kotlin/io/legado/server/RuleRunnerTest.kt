@@ -727,4 +727,24 @@ class RuleRunnerTest {
         assertEquals("书架书", books.single().name)
         assertEquals("https://agg.example/s1", books.single().bookUrl)
     }
+
+    @Test
+    fun `explore falls back to ruleSearch when ruleExplore is a blank shell`() {
+        // 实测全库 5,574 个源里 2,857 个的 `ruleExplore` 是空壳（bookList 为空串），其中 2,828 个的
+        // `ruleSearch.bookList` 可用。原来 `ruleExplore ?: ruleSearch` 会选中那个空壳，
+        // 于是半个库点开发现分栏一律报「缺少 bookList 规则」。
+        val source = """{
+            "bookSourceUrl":"https://empty-explore.example",
+            "exploreUrl":"分类::/cat",
+            "ruleExplore":{"bookList":"","name":"","author":""},
+            "ruleSearch":{"bookList":"class.item","name":"class.name@text","bookUrl":"class.name@href","author":"class.author@text"}
+        }"""
+        val runner = RuleRunner { _ ->
+            """<ul><li class="item"><a class="name" href="/b/1">回落到搜索规则</a><span class="author">某某</span></li></ul>"""
+        }
+        val books = runner.explore(source, "/cat")
+        assertEquals("回落到搜索规则", books.single().name)
+        assertEquals("https://empty-explore.example/b/1", books.single().bookUrl)
+        assertEquals("某某", books.single().author)
+    }
 }
