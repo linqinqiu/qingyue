@@ -5303,12 +5303,9 @@ input[type=range] { min-height: 24px; }
 .settings-row-main { display: grid; gap: 3px; min-width: 0; flex: 1 1 auto; }
 .settings-row-main strong { font-size: var(--t-md); font-weight: 600; }
 .settings-row-main small { color: var(--muted); font-size: var(--t-sm); line-height: 1.6; }
-.settings-row-also { color: color-mix(in srgb, var(--muted) 78%, var(--ink)); font-size: var(--t-xs); }
 .settings-row .subtle-button { flex: none; }
 @media (max-width: 720px) {
   .settings-page { padding: 32px 18px 44px; }
-  /* 窄屏把"就近在哪儿"收掉：那是一句提示，不该把动作按钮挤到下一行 */
-  .settings-row-also { display: none; }
 }
 .about-hero { display: grid; gap: 12px; }
 .about-hero h1 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 30px; font-weight: 600; }
@@ -5378,9 +5375,6 @@ input[type=range] { min-height: 24px; }
   background: var(--surface-muted);
   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
 }
-.changelog-source { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 24px; color: var(--muted); font-size: 12px; line-height: 1.7; }
-.changelog-source svg { width: 14px; height: 14px; }
-.changelog-source code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 @media (max-width: 640px) {
   .changelog-page { padding: 32px 18px 44px; }
   .customize-base-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }

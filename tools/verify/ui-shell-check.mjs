@@ -221,7 +221,7 @@ try {
     head: document.querySelector('.changelog-page .page-title h1')?.textContent?.trim() ?? '',
     version: document.querySelector('.changelog-release h2')?.textContent?.trim() ?? '',
     emptySaid: !!document.querySelector('.changelog-empty'),
-    source: (document.querySelector('.changelog-source')?.textContent ?? '').includes('CHANGELOG.md'),
+    headP: document.querySelector('.changelog-page .page-title p')?.textContent ?? '',
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }))
   check('③页头是这一套页面共用的那种式样（.page-title）', log.head === '更新日志', `实测「${log.head || '(空)'}」`)
@@ -229,7 +229,8 @@ try {
     log.releases > 0 && log.items > 0 && log.groups > 0 && !log.emptySaid,
     `${log.releases} 个版本 · ${log.groups} 组 · ${log.items} 条`)
   check('③当前运行版本那一段被标出来', log.current === 1 && log.flag && /^\d+\.\d+\.\d+$/.test(log.version), `顶部版本 ${log.version || '(空)'}`)
-  check('③页尾写明读的就是 CHANGELOG.md（来源可查）', log.source, '')
+  check('③页头不再解释"这一页读的就是 CHANGELOG.md…"（0.6.10 去掉那句元话术）',
+    !/这一页读的|界面现编/.test(log.headP), log.headP || '(空)')
   check('③1440 宽下没有横向溢出', log.overflow <= 1, `溢出 ${log.overflow}px`)
   await page.screenshot({ path: path.join(SHOTS, `ui-changelog-${STAMP}.png`) }).catch(() => null)
 

@@ -18,20 +18,20 @@ const sections: SettingsSection[] = [{
   rows: [{
     title: 'TXT 分章规则',
     hint: '下一本导入的 TXT 按哪条切目录。',
-    also: '书架「导入本地」旁边',
     action: '打开规则表',
     onClick: () => undefined,
   }],
 }]
 
-test('静态渲染：分组、一行一句说明、一个动作，就近入口也说出来', () => {
+test('静态渲染：分组、一行一句说明、一个动作', () => {
   const html = renderToStaticMarkup(React.createElement(SettingsPage, { sections }))
   assert.match(html, /设置/)
   assert.match(html, /本地书/, '分组标题')
   assert.match(html, /TXT 分章规则/)
   assert.match(html, /下一本导入的 TXT 按哪条切目录/, '这一行说得出它管什么')
-  assert.match(html, /就近：书架「导入本地」旁边/, '就近入口写在脸上，用户不用猜哪条是正路')
   assert.match(html, /打开规则表/, '右侧一个动作')
+  // 「就近：…」那条元话术已在 0.6.10 去掉：告诉用户"别处还有一条路"对使用者没用（用户点名）
+  assert.doesNotMatch(html, /就近：/, '不该再出现"就近入口"那句解释')
 })
 
 test('这一页只是路由：它自己不含任何编辑器实现', () => {

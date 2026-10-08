@@ -3401,13 +3401,13 @@ function App() {
       rows: [
         {
           title: '书源管理',
-          hint: '导入、分组、启停、体检书源；规则原文与启用状态都在这一页。',
+          hint: '导入、分组、启停、体检书源。',
           action: '打开书源',
           onClick: () => navigate('sources'),
         },
         {
           title: '替换净化规则',
-          hint: '正文里按正则删除广告与杂乱内容；启用位与先后顺序都在这。',
+          hint: '正文里按正则删除广告与杂乱内容。',
           action: '打开规则',
           onClick: () => navigate('rules'),
         },
@@ -3417,8 +3417,7 @@ function App() {
       title: '界面',
       rows: [{
         title: '皮肤与配色',
-        hint: '晓白 / 护眼 / 夜读三档，外加一条只存在这台浏览器里的自定义 CSS。',
-        also: '顶栏「我的」里也能直接切',
+        hint: '晓白 / 护眼 / 夜读三档，外加自定义 CSS。',
         action: '打开自定义',
         onClick: () => setShowCustomize(true),
       }],
@@ -3428,14 +3427,13 @@ function App() {
       rows: [
         {
           title: '快捷键',
-          hint: '阅读器与全局的按键表；表与真正生效的键是同一份定义。',
-          also: '阅读器里按 ? 直接出这张表',
+          hint: '阅读器与全局的按键表。',
           action: '看按键表',
           onClick: () => setShowShortcuts(true),
         },
         {
           title: '离线缓存',
-          hint: '已下载到这台电脑浏览器里的章节；朗读的引擎与语速在任意一本书的阅读设置里改。',
+          hint: '已下载到这台电脑浏览器里的章节。',
           action: '管理离线缓存',
           onClick: () => setShowOfflineCache(true),
         },
@@ -3446,7 +3444,6 @@ function App() {
       rows: [{
         title: 'TXT 分章规则',
         hint: '下一本导入的 TXT 按哪条切目录，以及哪几条参与「自动」打分。',
-        also: '书架「导入本地」旁边那颗「分章规则」可以选完直接导书',
         action: '打开规则表',
         onClick: () => setTocRulesSignal(value => value + 1),
       }],
@@ -3462,8 +3459,7 @@ function App() {
         },
         {
           title: '运行日志',
-          hint: '这台服务自己写了什么：级别、失败原因、同类合并后的计数。',
-          also: '全局快捷键 L',
+          hint: '这台服务写了什么：级别、失败原因、错误计数。',
           action: '看日志',
           onClick: () => setShowLogs(true),
         },

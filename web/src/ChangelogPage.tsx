@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { api, type ChangelogRelease } from './api'
-import { Icon } from './icons'
 import { Notice } from './Notice'
 
 /**
@@ -88,7 +87,6 @@ function richText(text: string) {
 
 export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
   const [releases, setReleases] = useState<ChangelogRelease[]>([])
-  const [raw, setRaw] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -96,7 +94,7 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
     setLoading(true)
     setError('')
     api.changelog()
-      .then(text => { setRaw(text); setReleases(parseChangelog(text)) })
+      .then(text => setReleases(parseChangelog(text)))
       .catch(reason => setError(reason instanceof Error ? reason.message : '无法读取更新日志'))
       .finally(() => setLoading(false))
   }, [])
@@ -114,12 +112,11 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
       {loading && <p className="changelog-loading">正在读取…</p>}
       {!!error && (
         <Notice
-          text={`${error} —— 这个包里没有随包的 CHANGELOG 文本，或读取失败。` +
-            '这不是"没有更新"：日志在不在仓库里是另一件事，这一页只报"当前这个包能不能把它给出来"。'}
+          text={`${error} —— 这个包里没有随包的 CHANGELOG 文本，或读取失败。`}
         />
       )}
       {!loading && !error && releases.length === 0 && (
-        <p className="changelog-empty">更新日志是空的（服务端给出的文本里没有任何 `## [版本号]` 段）。这种时候要怀疑打包环节，而不是当作"没有变化"。</p>
+        <p className="changelog-empty">更新日志是空的。</p>
       )}
       {!loading && !error && releases.length > 0 && (
         <div className="changelog-list">
@@ -142,13 +139,6 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
             </section>
           ))}
         </div>
-      )}
-      {!loading && !error && releases.length > 0 && (
-        <p className="changelog-source">
-          <Icon name="file" />
-          这一页读的就是仓库里的 <code>CHANGELOG.md</code>（<code>GET /api/changelog</code> 原样返回，共 {raw.length} 字符）；
-          版本号本身只有一个书写处：<code>server/build.gradle</code>。
-        </p>
       )}
     </main>
   )
