@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
-import { PRIMARY_PAGES } from './shortcuts'
+import { PRIMARY_PAGES, SETTINGS_SUBPAGES } from './shortcuts'
 import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from './readerSettings'
@@ -84,6 +84,9 @@ export function AppHeader({
   }, [menuOpen])
 
 
+  /** 顶栏这一项是不是"当前所在"：书源 / 规则 / 备份 归在「设置」名下，打开它们时高亮「设置」。 */
+  const navActive = (navPage: string) => page === navPage || (navPage === 'settings' && SETTINGS_SUBPAGES.includes(page))
+
   const handleThemeChange = (theme: ReaderSettings['theme']) => {
     onSettingsChange({ ...settings, theme })
   }
@@ -121,18 +124,18 @@ export function AppHeader({
 
       <nav aria-label="主导航">
         {/*
-          入口不再一个个手写：顶栏、数字键 1–8、Alt + ←/→ 的循环顺序全部取自
-          shortcuts.ts 里的 PRIMARY_PAGES（用户 2026-10-04：「优化一下主导航栏…
-          把设置里面、折叠里面的拿出来，本来是主页的样式、主页的框架」——
-          规则与备份原来只能从「设置」页点进去，设置本身收在「我的」里）。
-          手写八份 <button> 的代价已经付过一次：三份表各自漏过不同的页面。
+          入口不再一个个手写：顶栏、数字键 1–6、Alt + ←/→ 的循环顺序全部取自
+          shortcuts.ts 里的 PRIMARY_PAGES。手写一排 <button> 的代价已经付过一次：
+          三份表各自漏过不同的页面。
+          归属判据写在 shortcuts.ts 表头；书源 / 规则 / 备份 收在「设置」页下，
+          打开它们时这里高亮「设置」，用户才看得出"我还在设置这一层里"。
         */}
         {PRIMARY_PAGES.map(item => (
           <button
             key={item.page}
             type="button"
-            className={page === item.page ? 'active' : ''}
-            aria-current={page === item.page ? 'page' : undefined}
+            className={navActive(item.page) ? 'active' : ''}
+            aria-current={navActive(item.page) ? 'page' : undefined}
             onClick={() => onNavigate(item.page as AppPage)}
           >
             {item.nav}

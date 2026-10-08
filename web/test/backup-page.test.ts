@@ -62,20 +62,24 @@ test('套用只在前端映射得动的条目上出现，映射结果如实播�
   assert.equal(merged.lineHeight, 1.5, '10dp 行距 / 20 号字 = 1 + 0.5 倍')
 })
 
-test('导航：规则/备份收进「我的」☰ 菜单；active 高亮仍对主导航页生效', () => {
+test('导航：一级只有 书库/书架/发现/订阅/设置；书源/规则/备份 收进「设置」，打开时高亮「设置」', () => {
   const html = renderToStaticMarkup(
     React.createElement(AppHeader, {
-      page: 'sources',
+      page: 'sources', // 书源现在挂在「设置」页下
       settings: { ...defaultReaderSettings },
       onSettingsChange: () => undefined,
       onNavigate: () => undefined,
       onLogout: () => undefined,
     }),
   )
-  assert.ok(html.includes('书源'), '主导航要有书源这一档')
-  assert.ok(html.includes('我的'), '「我的」菜单入口在位（规则/备份收在这里）')
+  // 一级入口就是这五个（用户 2026-10-08 定的框架，对齐 Legado-with-MD3 的 IA）
+  for (const nav of ['书库', '书架', '发现', '订阅', '设置']) {
+    assert.ok(html.includes(nav), `主导航要有「${nav}」这一档`)
+  }
+  assert.ok(!html.includes('书源'), '书源不再占顶栏（收进「设置」页了）')
+  assert.ok(html.includes('我的'), '「我的」菜单入口在位')
   assert.ok(html.includes('header-menu-btn'), '☰ 功能菜单按钮在位')
-  assert.ok(html.includes('class="active"'), '当前页要高亮')
+  assert.ok(html.includes('class="active"'), '打开书源时顶栏要高亮「设置」')
   assert.ok(!/WebDAV/i.test(html), '导航文案不能再承诺 WebDAV')
 })
 

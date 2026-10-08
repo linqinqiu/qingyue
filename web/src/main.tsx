@@ -3400,6 +3400,23 @@ function App() {
    */
   const settingsSections: SettingsSection[] = [
     {
+      title: '内容源与规则',
+      rows: [
+        {
+          title: '书源管理',
+          hint: '导入、分组、启停、体检书源；规则原文与启用状态都在这一页。',
+          action: '打开书源',
+          onClick: () => navigate('sources'),
+        },
+        {
+          title: '替换净化规则',
+          hint: '正文里按正则删除广告与杂乱内容；启用位与先后顺序都在这。',
+          action: '打开规则',
+          onClick: () => navigate('rules'),
+        },
+      ],
+    },
+    {
       title: '界面',
       rows: [{
         title: '皮肤与配色',
@@ -3440,6 +3457,12 @@ function App() {
     {
       title: '数据与诊断',
       rows: [
+        {
+          title: '备份包',
+          hint: '导入手机备份包，或把本机的书源 / 书架 / 规则导出成一份。',
+          action: '打开备份',
+          onClick: () => navigate('backup'),
+        },
         {
           title: '运行日志',
           hint: '这台服务自己写了什么：级别、失败原因、同类合并后的计数。',

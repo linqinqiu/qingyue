@@ -71,25 +71,32 @@ export const READER_SHORTCUTS: Shortcut[] = [
 ]
 
 /**
- * 一级页面**只在这里列一次**：顶栏从左到右的按钮、数字键 1–8、`Alt + ← / →` 的循环顺序，
+ * 一级页面**只在这里列一次**：顶栏从左到右的按钮、数字键 1–6、`Alt + ← / →` 的循环顺序，
  * 三处都从这一张表取。
  *
  * 原来它是三份：顶栏在 `AppHeader.tsx` 里手写五个、`main.tsx` 里 `NAV` 一份七个
- * （而且 发现 与 书源 的顺序和顶栏相反）、这张表又一份 —— 用户 2026-10-04 把规则/备份/设置
- * 提回一级导航时，三份就会各自漏掉不同的那个。AGENTS §5「按键表与处理器必须同源」同一个病。
+ * （而且 发现 与 书源 的顺序和顶栏相反）、这张表又一份 —— 三份各自漏过不同的页面。
+ * AGENTS §5「按键表与处理器必须同源」同一个病。
  *
- * `nav` 是顶栏上那两个字，`label` 是这张表里说全的名字（「替换净化规则」而不是「规则」）。
+ * 归属判据（用户 2026-10-08 定的框架，对齐 Legado-with-MD3 的 IA）：
+ * **顶栏只放"有独立页面、会停下来管理"的目的地**。书源管理 / 替换净化规则 / 备份包
+ * 都收进了「设置」页（它们仍各有自己的 URL，只是入口从「设置」进）—— 见 [SETTINGS_SUBPAGES]。
+ *
+ * `nav` 是顶栏上那两个字，`label` 是这张表里说全的名字。
  */
 export const PRIMARY_PAGES: { page: string; nav: string; label: string }[] = [
   { page: 'library', nav: '书库', label: '书库' },
   { page: 'shelf', nav: '书架', label: '书架' },
-  { page: 'sources', nav: '书源', label: '书源' },
   { page: 'explore', nav: '发现', label: '发现' },
   { page: 'subscriptions', nav: '订阅', label: '订阅' },
-  { page: 'rules', nav: '规则', label: '替换净化规则' },
-  { page: 'backup', nav: '备份', label: '备份包' },
   { page: 'settings', nav: '设置', label: '设置' },
 ]
+
+/**
+ * 不再占顶栏、改从「设置」页进的页面。它们打开时顶栏高亮「设置」——
+ * 否则顶栏一片都不亮，用户会以为"点丢了"。
+ */
+export const SETTINGS_SUBPAGES: string[] = ['sources', 'rules', 'backup']
 
 /** 数字键切页：键 = 表里的位置，标签 = 说全的那个名字。 */
 const PAGE_KEYS: [string, string, string][] = PRIMARY_PAGES.map((item, index) =>

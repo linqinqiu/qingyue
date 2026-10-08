@@ -37,12 +37,14 @@ test('HeaderMenu - AppHeader static rendering', () => {
   assert.ok(html.includes('青阅'), 'Header should contain brand title')
   assert.ok(html.includes('app-brand'), 'Header should have app-brand class')
   
-  // Verify 5 main navigation tabs：书库·书架·书源·发现·订阅（规则/备份收进「我的」☰ 菜单，初始不渲染）
+  // 一级导航（用户 2026-10-08 定的框架，对齐 Legado-with-MD3）：书库·书架·发现·订阅·设置。
+  // 书源 / 规则 / 备份 收进「设置」页，不再占顶栏。
   assert.ok(html.includes('书库'), 'Header should contain 书库 tab')
   assert.ok(html.includes('书架'), 'Header should contain 书架 tab')
-  assert.ok(html.includes('书源'), 'Header should contain 书源 tab')
   assert.ok(html.includes('发现'), 'Header should contain 发现 tab')
   assert.ok(html.includes('订阅'), 'Header should contain 订阅 tab')
+  assert.ok(html.includes('设置'), 'Header should contain 设置 tab')
+  assert.ok(!html.includes('书源'), '书源不再占顶栏（收进「设置」页了）')
   assert.ok(html.includes('我的'), 'Header should contain 我的 menu label')
 
   // Verify hamburger menu button
