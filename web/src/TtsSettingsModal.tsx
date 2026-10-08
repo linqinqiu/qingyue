@@ -86,13 +86,13 @@ export const TtsSettingsModal: React.FC<TtsSettingsModalProps> = ({
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="tts-settings-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="朗读设置">
-        <header className="source-login-header">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-s" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="朗读设置">
+        <header className="dialog-head">
           <div className="source-login-title-group">
             <h3 className="source-login-title"><Icon name="volume2" /> 听书朗读设置</h3>
           </div>
-          <button type="button" className="source-login-action-btn" onClick={onClose} title="关闭" aria-label="关闭"><Icon name="close" /></button>
+          <button type="button" className="overlay-close" onClick={onClose} title="关闭" aria-label="关闭"><Icon name="close" /></button>
         </header>
 
         <div className="source-login-body tts-modal-content">

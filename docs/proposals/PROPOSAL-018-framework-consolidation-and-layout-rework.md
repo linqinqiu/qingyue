@@ -2,7 +2,7 @@
 id: PROPOSAL-018
 title: 框架脉络重整 —— 以书库为冻结基准，统一浮层系统与版面原型
 status: implemented-partially # draft | review | accepted | implemented | rejected
-# 2026-10-04：W1 已实施并部署（0.6.1），W2–W6 未动。逐条对账见 §4 的「实测」列。
+# 2026-10-05：W1（0.6.1）与 W2 浮层系统（0.6.4）已实施并部署，W3–W6 未动。逐条对账见 §4 的「实测」列。
 author: Agent & User
 date: 2026-10-03
 ---
@@ -109,7 +109,7 @@ L4 控件 control      按钮 4 档 / 复选 1 档 / 选择器 1 套 / 行 2 档
 | 波 | 内容 | 为什么这个顺序 | 实测 |
 | --- | --- | --- | --- |
 | **W1 事实性坏了的** | ① `ContextMenu` 两套数值互斥；② 12 个弹窗缺 `Esc`；③ `.shortcut-close` 等 29 个无样式类名；④ `role="dialog"`/`aria-label` 缺失；⑤ 发现页 390 宽**横向溢出** | 这些是"坏"不是"丑"，先修完再谈重排，否则重排判据会被它们污染 | **已做（0.6.1，2026-10-04）**：① 新增 `web/src/overlayGeometry.ts` 一份算式，菜单改成挂载后量真实矩形再夹，`Select` 的 340/288/34 只留 JS 一份；② 接 `useEscapeClose` 的文件 6→18；③ 扫出 35 项，2 项补真规则、4 项留作门禁锚点、其余删；④ `role="dialog"` 15→25 处并补 `aria-label`；⑤ 根因是 grid 子项缺 `min-width:0`（那颗 nowrap 芯片顶宽轨道），现在 27 屏 0 溢出。§5 的 1/2/3 三条判据已落地（冻结模式、浮层语义扫描、无样式类名扫描），另补一条"门禁选择器必须还长在界面上" |
-| **W2 浮层系统** | 落 `.dialog-shell` + 遮罩 + 关闭键 + `useOverlayPosition`，16 套外壳并完 | 版面重排会大量用到浮层，先有统一件 | 未动。`overlayGeometry.ts` 只收了"定位"这一件；外壳/遮罩/关闭键仍是各写各的（新骨架 `qingyue/web/src/overlay/` 那套是干净的，等 W4 逐页搬） |
+| **W2 浮层系统** | 落 `.dialog-shell` + 遮罩 + 关闭键 + `useOverlayPosition`，16 套外壳并完 | 版面重排会大量用到浮层，先有统一件 | **已做（0.6.4，2026-10-05）**：`overlayGeometry.ts`（W1）只收了"定位"，这一波补上剩下三件。样式表末尾新增 L3 那一档：`--dw-s:480 / --dw-m:680 / --dw-l:940`（都 `min(X,94vw)`）+ `--dh-shell: min(88vh,760px)` + `--backdrop`，`.dialog-shell`（+ `size-s/m/l`、`is-fullscreen`）、`.overlay-backdrop`（+ `is-topped / is-flush / is-menu / is-viewer`）、`.dialog-head`、`.overlay-close`（30×30）。**24 处挡片、17 套外壳全部改引这一档**（宽度 13 档→3、max-height 9 档→1、阴影 8 档→1、动画 4 档→1），11 种关闭键→1 颗，5 处 inline 压弹窗宽高→0。顺带逮到两处"从来没生效"：`.book-manage-sheet` 没有 max-height（长列表撑破视口）、朗读设置弹窗引用的 `@keyframes modal-enter` 在样式表里**根本不存在**（所以它一直是硬蹦出来的）。`.source-login-header` / `.modal-card` / `.modal-header` / `.header-view-dialog`（后者 TSX 里压根没人用）随并档删除；`role="dialog"` 与 Esc 由 W1 那 18 个文件继续盯着。**判据口径**（见 §5.2 的落地说明）：数的是"哪条规则声明了外壳几何"而不是"类名叫什么" —— 页面类名要留给门禁当锚点。抽屉挡片与看图画布按 §3.3 各留一档，理由写在样式表里。 |
 | **W3 控件与刻度** | 复选框、选择器统一、行高、间距/字号档位 | 重排每页都要用它们 | 未动 |
 | **W4 A/B 类页重排** | 发现（最惨：76% 底部死白）→ 订阅 → 书源 → 规则 → 书架（只重排页头，网格卡不动） | 从问题最大的开始 | 未动。实测这一波之后仍未变：发现 1440 底部死白 64%、书源控件中位高 58px |
 | **W5 C 类页重排** | 设置 → 备份 → 关于 → 书签 → 更新日志（去居中、去说明文、去 kicker） | 这批是"半块屏空白"的集中区 | 未动（设置两侧死白仍 50%）—— 等 §6 第 3 件拍板 |
@@ -126,6 +126,17 @@ L4 控件 control      按钮 4 档 / 复选 1 档 / 选择器 1 套 / 行 2 档
    - TSX 里作为弹窗外壳的类名数量 **≤ 3**（`.dialog-shell` / `.reader-drawer` / `.tts-floating-bar`）；
    - 所有 `.dialog-shell` 使用者必须同时出现 `useEscapeClose` 与 `role="dialog"`；
    - `styles.css` 里 `min-width:196` 与 `ContextMenu.tsx` 里的常量**只能有一处**。
+
+   **W2 落地说明（2026-10-05）**：第二条按字面数"TSX 里挂在弹窗根节点上的类名"是判不准的 ——
+   页面类名（`.logs-modal`、`.book-detail-modal` 那 11 个）必须留着当门禁锚点，
+   而 W1 刚踩过"把没有样式的类名当死代码删掉，五条判据当场红在探针上"。
+   所以实现改成数**声明了什么**：一条只有单个类名的规则同时写了 `max-height` + `border-radius` + `box-shadow`
+   就算"一套外壳几何"，只许 `.dialog-shell`（豁免 `.reader-drawer` / `.tts-floating-bar`，它们不是弹窗）；
+   遮罩按 `position: fixed` + `inset: 0` + 深色底数，实测剩 2 条（`.overlay-backdrop` + `.reader-drawer-backdrop`），
+   看图画布是 `.overlay-backdrop.is-viewer`（同一颗挡片的修饰档，底色与理由写在样式表里）；
+   关闭键按"30×30 + border:0 + 居中"数，只许 `.overlay-close` 一颗。
+   另外两条是 TSX 侧的：每个弹窗挡片都必须套一个 `.dialog-shell`（第 17 套几何就是这么长回来的）、
+   以及**不许用 inline style 压弹窗宽高**。四条注入反扫都在 `web/test/UiContract.test.ts`。
 3. **无样式类名判据**：把"TSX 挂着而样式表 0 命中"从人工发现变成常驻扫描（白名单制，新增即红）——
    这条能自动逮到本轮那 29 个里的绝大多数。
 4. **术语判据**：界面文案与注释里禁现"对话框/弹层/浮层"指代弹窗；`缓存/离线/下载` 不得混用为同一动作。

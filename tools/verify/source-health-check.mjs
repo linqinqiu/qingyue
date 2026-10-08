@@ -157,7 +157,7 @@ try {
     } else {
       note('「连停用的一起体检」开关', `本机 ${counts.total} 个源全部启用，按设计不出现这个勾`)
     }
-    await page.evaluate(() => { document.querySelector('.close-button')?.click() })
+    await page.evaluate(() => { document.querySelector('.source-health-modal .overlay-close')?.click() })
     await sleep(500)
 
     // 把书源列表筛成只有两条探针，再开体检：体检弹窗的范围取自列表当前筛出的那批。

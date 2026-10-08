@@ -378,14 +378,14 @@ function RssReader({ source, article, onClose }: { source: RssSourceSummary; art
   }, [source.sourceUrl, article.link])
 
   return (
-    <div className="modal-backdrop rss-reader-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
-      <article className="rss-reader" role="dialog" aria-modal="true" aria-label={article.title}>
+    <div className="overlay-backdrop is-flush" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
+      <article className="dialog-shell size-m rss-reader" role="dialog" aria-modal="true" aria-label={article.title}>
         <header>
           <div>
             <h2>{article.title}</h2>
             <small>{source.name}{article.pubDate ? ` · ${article.pubDate}` : ''}</small>
           </div>
-          <button type="button" className="subtle-button" onClick={onClose} aria-label="关闭文章"><Icon name="close" /></button>
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭文章"><Icon name="close" /></button>
         </header>
         {article.image && sanitizeImageUrl(article.image) && <img className="rss-reader-image" src={sanitizeImageUrl(article.image)!} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }} />}
         {state === 'loading' && <p className="explore-message">正在取正文…</p>}

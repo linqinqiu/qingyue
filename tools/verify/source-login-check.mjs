@@ -187,7 +187,7 @@ await page.evaluate(() => [...document.querySelectorAll('.source-login-method-ta
 await new Promise(resolve => setTimeout(resolve, 500))
 const cookieTab = await page.evaluate(() => ({
   panel: !!document.querySelector('.direct-cookie-card'),
-  nestedModals: document.querySelectorAll('.top-layer-modal-backdrop').length,
+  nestedModals: document.querySelectorAll('.overlay-backdrop.is-topped').length,
   textarea: !!document.querySelector('.source-login-panel textarea'),
 }))
 check('粘贴 Cookie 就地展开，不叠第二层浮层', cookieTab.panel && cookieTab.nestedModals === 0 && cookieTab.textarea, JSON.stringify(cookieTab))

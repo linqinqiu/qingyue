@@ -139,7 +139,7 @@ async function runBrowserVerification() {
     console.log('✅ Confirmed: Switch source option is hidden for local book!')
 
     // Close modal
-    await page.click('.close-btn')
+    await page.click(".overlay-close")
     await new Promise((r) => setTimeout(r, 500))
 
     // Step 7: Create and upload sample EPUB book

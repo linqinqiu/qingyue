@@ -103,11 +103,11 @@ export function TocRulesModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="toc-rules-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="本地书分章规则">
-        <header className="toc-rules-head">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-m toc-rules-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="本地书分章规则">
+        <header className="dialog-head toc-rules-head">
           <h2><Icon name="list" /> 本地书分章规则</h2>
-          <button type="button" className="toc-rules-close" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
         </header>
 
         <div className="toc-rules-body">

@@ -2535,16 +2535,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
     {/* Offline TTS Fallback Confirmation Dialog */}
     {offlineTtsConfirmOpen && (
-      <div className="modal-backdrop" onClick={() => setOfflineTtsConfirmOpen(false)}>
+      <div className="overlay-backdrop" onClick={() => setOfflineTtsConfirmOpen(false)}>
         <div
-          className="source-login-modal"
-          style={{ maxWidth: '420px' }}
+          className="dialog-shell size-s"
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
           aria-label="离线语音提示"
         >
-          <header className="source-login-header">
+          <header className="dialog-head">
             <div className="source-login-title">
               <span><Icon name="volume2" /></span>
               <div>
@@ -2552,7 +2551,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 <small>当前设备处于离线状态</small>
               </div>
             </div>
-            <button type="button" className="subtle-button close-btn" onClick={() => setOfflineTtsConfirmOpen(false)} aria-label="关闭">
+            <button type="button" className="overlay-close" onClick={() => setOfflineTtsConfirmOpen(false)} aria-label="关闭">
               <Icon name="close" />
             </button>
           </header>
@@ -2583,7 +2582,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       </div>
     )}
     {lightboxSrc && (
-      <div className="reader-image-lightbox" onClick={() => setLightboxSrc(null)} role="dialog" aria-label="图片预览">
+      <div className="overlay-backdrop is-viewer" onClick={() => setLightboxSrc(null)} role="dialog" aria-label="图片预览">
         <button type="button" className="reader-image-lightbox-close" aria-label="关闭预览" onClick={() => setLightboxSrc(null)}><Icon name="close" /></button>
         <img src={lightboxSrc} alt="" onClick={event => event.stopPropagation()} />
       </div>

@@ -130,13 +130,16 @@ test('theme-color 跟着皮肤走，且取的是计算值', () => {
 
 test('样式表里两张新界面都有规则（更新日志页、自定义弹窗、分章规则弹窗）', () => {
   const css = read('..', 'src', 'styles.css')
-  assert.match(css, /\.customize-dialog \{/)
+  // W2 并档：两张弹窗自己的宽高没了，几何在共用那一档里 —— 所以断言也搬到那一档上。
+  assert.match(css, /^\.dialog-shell \{/m, '弹窗外壳那一档不见了，两张弹窗都会退回裸 div')
+  assert.match(css, /^\.dialog-head \{/m, '弹窗页头那一档不见了')
+  assert.match(read('..', 'src', 'CustomizeModal.tsx'), /className="dialog-shell[^"]*customize-dialog"/)
+  assert.match(read('..', 'src', 'TocRulesModal.tsx'), /className="dialog-shell[^"]*toc-rules-modal"/)
   assert.match(css, /\.changelog-page \{/)
   assert.match(css, /\.theme-swatch-custom/)
   assert.match(css, /\.menu-section-action/)
   assert.match(css, /\.theme-name/)
-  // 搬出去的弹窗得有自己完整的壳：类名不在样式表里 = 渲染出来是一个没有边框没有滚动的裸 div
-  assert.match(css, /\.toc-rules-modal \{/)
+  // 搬出去的弹窗还得有自己的内容样式：类名不在样式表里 = 渲染出来是一个没有滚动的裸 div
   assert.match(css, /\.toc-rules-body \{/)
   assert.match(css, /\.toc-rule \{/)
   assert.doesNotMatch(css, /\.customize-toc-/, '分章规则的样式不姓"自定义"了，类名也跟着搬')

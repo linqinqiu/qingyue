@@ -14,13 +14,13 @@ import { useEscapeClose } from './useEscapeClose'
  */
 export function ShortcutHelp({ onClose }: { onClose: () => void }) {
   useEscapeClose(onClose)
-  return <div className="modal-backdrop" onClick={onClose}>
-    <div className="source-login-modal shortcut-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="快捷键">
-      <div className="shortcut-modal-header">
+  return <div className="overlay-backdrop" onClick={onClose}>
+    <div className="dialog-shell size-m shortcut-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="快捷键">
+      <div className="dialog-head">
         <h2>快捷键</h2>
-        <button type="button" className="shortcut-close" onClick={onClose} aria-label="关闭快捷键表"><Icon name="close" /></button>
+        <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭快捷键表"><Icon name="close" /></button>
       </div>
-      <div className="drawer-scroll-content shortcut-modal-body">
+      <div className="drawer-scroll-content">
         {SHORTCUT_TABLES.map(table => {
           const groups = [...new Set(table.items.map(item => item.group))]
           return <section key={table.scope} className="setting-section">

@@ -164,7 +164,7 @@ export function AppHeader({
         {menuOpen && (
           <>
             <div
-              className="header-menu-backdrop"
+              className="overlay-backdrop is-menu"
               onClick={() => setMenuOpen(false)}
               aria-hidden="true"
             />

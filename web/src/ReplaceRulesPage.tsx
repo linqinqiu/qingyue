@@ -585,11 +585,11 @@ export function ReplaceRulesPage() {
 
       {/* 编辑/新建规则弹窗 */}
       {isEditModalOpen && editingRule && (
-        <div className="modal-backdrop" onClick={() => setIsEditModalOpen(false)}>
-          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="编辑替换规则" onClick={e => e.stopPropagation()}>
-            <header className="source-login-header">
+        <div className="overlay-backdrop" onClick={() => setIsEditModalOpen(false)}>
+          <div className="dialog-shell size-m" role="dialog" aria-modal="true" aria-label="编辑替换规则" onClick={e => e.stopPropagation()}>
+            <header className="dialog-head">
               <h3 className="source-login-title">{editingRule.id ? '编辑替换规则' : '新建替换规则'}</h3>
-              <button type="button" className="icon-btn" onClick={() => setIsEditModalOpen(false)}>
+              <button type="button" className="overlay-close" aria-label="关闭" onClick={() => setIsEditModalOpen(false)}>
                 <Icon name="close" />
               </button>
             </header>
@@ -708,11 +708,11 @@ export function ReplaceRulesPage() {
 
       {/* 导入订阅弹窗 */}
       {isImportModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
-          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="导入替换规则" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
-            <header className="source-login-header">
+        <div className="overlay-backdrop" onClick={() => setIsImportModalOpen(false)}>
+          <div className="dialog-shell size-s" role="dialog" aria-modal="true" aria-label="导入替换规则" onClick={e => e.stopPropagation()}>
+            <header className="dialog-head">
               <h3 className="source-login-title">导入替换规则</h3>
-              <button type="button" className="icon-btn" onClick={() => setIsImportModalOpen(false)}>
+              <button type="button" className="overlay-close" aria-label="关闭" onClick={() => setIsImportModalOpen(false)}>
                 <Icon name="close" />
               </button>
             </header>

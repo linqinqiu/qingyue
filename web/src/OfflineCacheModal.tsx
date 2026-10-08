@@ -69,15 +69,15 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="overlay-backdrop" onClick={onClose}>
       <div
-        className="source-login-modal offline-cache-modal"
+        className="dialog-shell size-s"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="离线缓存"
       >
-        <header className="source-login-header">
+        <header className="dialog-head">
           <div className="source-login-title">
             <span><Icon name="book" /></span>
             <div>
@@ -85,7 +85,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
               <small>存在这台电脑的浏览器里，断网也能读已下载的部分</small>
             </div>
           </div>
-          <button type="button" className="subtle-button close-btn" onClick={onClose} aria-label="关闭">
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭">
             <Icon name="close" />
           </button>
         </header>

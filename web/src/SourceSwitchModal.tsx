@@ -297,15 +297,15 @@ export function SourceSwitchModal({
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="overlay-backdrop" onClick={onClose}>
       <div
-        className="source-switch-dialog"
+        className="dialog-shell size-m"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`切换书源: ${bookName}`}
       >
-        <header className="source-switch-header">
+        <header className="dialog-head source-switch-header">
           <div>
             <div className="source-switch-kicker">
               <Icon name="sliders" />
@@ -314,7 +314,7 @@ export function SourceSwitchModal({
             <h2>{bookName}</h2>
             <small>{author ? `作者：${author}` : '未知作者'} · 当前：{sourceLabel(currentSourceId)}</small>
           </div>
-          <button className="subtle-button close-btn" onClick={onClose} aria-label="关闭">
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭">
             <Icon name="close" />
           </button>
         </header>

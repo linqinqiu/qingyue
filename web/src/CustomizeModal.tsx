@@ -58,11 +58,11 @@ export function CustomizeModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="customize-dialog" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="自定义">
-        <header className="customize-header">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-s customize-dialog" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="自定义">
+        <header className="dialog-head customize-header">
           <h2><Icon name="sliders" /> 自定义</h2>
-          <button type="button" className="customize-close" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
         </header>
 
         <div className="customize-body">

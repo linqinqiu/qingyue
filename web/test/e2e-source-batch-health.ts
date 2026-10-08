@@ -415,7 +415,7 @@ async function runE2E() {
       await new Promise((r) => setTimeout(r, 300))
 
       // Close health modal
-      const closeHealthBtn = await page.waitForSelector('.source-health-modal .close-button')
+      const closeHealthBtn = await page.waitForSelector('.source-health-modal .overlay-close')
       await closeHealthBtn?.click()
 
       console.log('  ✔ Instance 1 (Desktop) all real interaction checks passed!')

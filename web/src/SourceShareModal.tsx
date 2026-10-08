@@ -80,9 +80,9 @@ export function SourceShareModal({ sourceIds, sources, onClose, onToast }: Sourc
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="source-share-dialog" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="分享书源">
-        <header className="source-share-header">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-m" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="分享书源">
+        <header className="dialog-head source-share-header">
           <div>
             <h2>分享书源</h2>
             <small>
@@ -91,7 +91,7 @@ export function SourceShareModal({ sourceIds, sources, onClose, onToast }: Sourc
                 : `已选 ${picked.length} 个书源，打包成一个 JSON 数组`}
             </small>
           </div>
-          <button type="button" className="source-webview-icon-btn" title="关闭" onClick={onClose}>
+          <button type="button" className="overlay-close" title="关闭" aria-label="关闭" onClick={onClose}>
             <Icon name="close" />
           </button>
         </header>

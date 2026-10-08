@@ -72,14 +72,14 @@ export function SourceDebugModal({ sourceId, sourceName, onClose }: SourceDebugM
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop top-layer-modal-backdrop" onClick={onClose}>
-      <div className="source-debug-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={`调试书源 ${sourceName}`}>
-        <header className="source-debug-header">
+    <div className="overlay-backdrop is-topped" onClick={onClose}>
+      <div className="dialog-shell size-l source-debug-modal" onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={`调试书源 ${sourceName}`}>
+        <header className="dialog-head source-debug-header">
           <div>
             <span className="section-kicker">分阶段调试</span>
             <h2>{sourceName}</h2>
           </div>
-          <button type="button" className="subtle-button close-btn" aria-label="关闭调试面板" onClick={onClose}><Icon name="close" /></button>
+          <button type="button" className="overlay-close" aria-label="关闭调试面板" onClick={onClose}><Icon name="close" /></button>
         </header>
 
         <div className="source-debug-form">

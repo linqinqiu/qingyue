@@ -237,9 +237,9 @@ export function SourceHealthModal({
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card source-health-modal" role="dialog" aria-modal="true" aria-label="书源体检" onClick={e => e.stopPropagation()}>
-        <header className="modal-header">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-m source-health-modal" role="dialog" aria-modal="true" aria-label="书源体检" onClick={e => e.stopPropagation()}>
+        <header className="dialog-head">
           <div className="health-modal-title">
             <Icon name="activity" />
             <div>
@@ -283,7 +283,7 @@ export function SourceHealthModal({
               </label>
             )}
             {/* 收起 ≠ 停止：一轮整库体检几十分钟，顺手点叉就作废是用户明确要改掉的（2026-10-02） */}
-            <button type="button" className="close-button" onClick={onClose}
+            <button type="button" className="overlay-close" onClick={onClose}
               aria-label={running ? '收起窗口（体检继续在后台跑）' : '关闭'}>
               <Icon name="close" />
             </button>

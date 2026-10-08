@@ -141,15 +141,15 @@ export function LogsModal({ onClose }: { onClose: () => void }) {
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="overlay-backdrop" onClick={onClose}>
       <div
-        className="source-login-modal logs-modal"
+        className="dialog-shell size-l logs-modal"
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="运行日志"
       >
-        <div className="logs-modal-header">
+        <div className="dialog-head logs-modal-header">
           <h2>运行日志</h2>
           <div className="logs-modal-actions">
             <button type="button" className="logs-btn" onClick={() => void load()} disabled={state === 'loading'}>
@@ -170,7 +170,7 @@ export function LogsModal({ onClose }: { onClose: () => void }) {
             <button type="button" className="logs-btn danger" onClick={() => void clear()}>
               <Icon name="trash" /><span>清空</span>
             </button>
-            <button type="button" className="logs-btn" onClick={onClose} aria-label="关闭">
+            <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭">
               <Icon name="close" />
             </button>
           </div>

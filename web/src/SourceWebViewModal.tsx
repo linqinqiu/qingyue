@@ -268,8 +268,8 @@ export const SourceWebViewModal: React.FC<SourceWebViewModalProps> = ({
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop modal-backdrop--webview" onClick={onClose}>
-      <div className="source-webview-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="内置浏览器">
+    <div className="overlay-backdrop is-flush" onClick={onClose}>
+      <div className="dialog-shell is-fullscreen source-webview-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="内置浏览器">
         <div className="source-webview-toolbar">
           <div className="source-webview-nav-group">
             <button

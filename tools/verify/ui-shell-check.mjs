@@ -46,7 +46,7 @@ const clickIn = (page, scope, label) => page.evaluate(({ scope, label }) => {
  * 所以这里每次开之前先用挡片的 click 把残留收掉，开合一律按条件等，不再用固定 sleep 猜时间。
  */
 const openUserMenu = async (page, label = '') => {
-  await page.evaluate(() => document.querySelector('.header-menu-backdrop')?.click())
+  await page.evaluate(() => document.querySelector('.overlay-backdrop.is-menu')?.click())
   await page.waitForFunction(() => !document.querySelector('.header-menu-dropdown'), { timeout: 8000 }).catch(() => null)
   if (!(await clickIn(page, '.app-page-header', '我的'))) return false
   try {
@@ -162,7 +162,7 @@ try {
   check('②「设置 → 看日志」真的开得出运行日志弹窗（收进去的功能没坏）',
     await clickIn(page, '.settings-page', '看日志'), '')
   await page.waitForSelector('.logs-modal', { timeout: 8000 })
-  await page.evaluate(() => document.querySelector('.logs-modal .logs-btn[aria-label="关闭"]')?.click())
+  await page.evaluate(() => document.querySelector('.logs-modal .overlay-close[aria-label="关闭"]')?.click())
   await sleep(300)
   check('②日志弹窗关得掉', await page.evaluate(() => !document.querySelector('.logs-modal')), '')
 
@@ -188,7 +188,7 @@ try {
   await page.waitForSelector('.shortcut-modal', { timeout: 8000 })
   const shortcutRows = await page.evaluate(() => document.querySelectorAll('.shortcut-row, .shortcut-table tr').length)
   check('③那张表真的列出了按键（不是空弹窗）', shortcutRows > 0, `实测 ${shortcutRows} 行`)
-  await page.evaluate(() => document.querySelector('.shortcut-close')?.click())
+  await page.evaluate(() => document.querySelector('.shortcut-modal .overlay-close')?.click())
   check('③那张表关得掉（不留一层挡住「关于」的挡片）',
     await page.waitForFunction(() => !document.querySelector('.shortcut-modal'), { timeout: 5000 }).then(() => true).catch(() => false), '')
   check('③「更新日志」点得动', await clickIn(page, '.about-actions', '更新日志'), '')
@@ -298,7 +298,7 @@ try {
 
   // ─────────── ⑤ 分章规则的落点（搬出「自定义」，长在书架导入旁边） ───────────
   // ④ 收场时「自定义」弹窗还开着：不关掉就点下一颗按钮，点到的其实是挡片底下的控件。
-  await page.evaluate(() => document.querySelector('.customize-close')?.click())
+  await page.evaluate(() => document.querySelector('.customize-dialog .overlay-close')?.click())
   await page.goto(`${BASE}/#shelf`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.shelf-bar', { timeout: 30000 })
   const shelfBar = await page.evaluate(() => ({
@@ -354,7 +354,7 @@ try {
     `壳=${toc.mounted} 可滚=${toc.scrollable} 溢出 ${toc.overflow}px`)
   await page.screenshot({ path: path.join(SHOTS, `toc-rules-modal-${STAMP}.png`) }).catch(() => null)
   check('⑤这颗关闭按钮关得掉弹窗（挡片不留在那儿挡住后面的操作）',
-    await page.evaluate(() => { document.querySelector('.toc-rules-close')?.click(); return !!document.querySelector('.toc-rules-modal') })
+    await page.evaluate(() => { document.querySelector('.toc-rules-modal .overlay-close')?.click(); return !!document.querySelector('.toc-rules-modal') })
     && await page.waitForFunction(() => !document.querySelector('.toc-rules-modal'), { timeout: 5000 }).then(() => true).catch(() => false), '')
   // 「自定义」这一边：搬走了就必须在界面上真的看不见，不只是代码里删了
   check('⑤「自定义」弹窗还开得住（搬空之后不是空壳）', await openUserMenu(page, '自定义'), '')

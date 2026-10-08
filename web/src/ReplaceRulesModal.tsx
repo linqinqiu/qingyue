@@ -224,17 +224,16 @@ export const ReplaceRulesModal: React.FC<Props> = ({
     onClose()
   })
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="overlay-backdrop" onClick={onClose}>
       <div
-        className="rule-modal-card"
-        style={{ width: 'min(820px, 94vw)', maxHeight: '90vh' }}
+        className="dialog-shell size-l"
         role="dialog"
         aria-modal="true"
         aria-label="替换规则"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <header className="source-login-header">
+        <header className="dialog-head">
           <div className="rules-sidebar-title">
             <Icon name="sliders" />
             <span>替换净化规则管理</span>
@@ -281,7 +280,8 @@ export const ReplaceRulesModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={onClose}
-              className="icon-btn"
+              className="overlay-close"
+              aria-label="关闭"
             >
               <Icon name="close" />
             </button>
@@ -434,16 +434,17 @@ export const ReplaceRulesModal: React.FC<Props> = ({
 
       {/* Edit / Create Rule Dialog */}
       {isEditModalOpen && editingRule && (
-        <div className="modal-backdrop top-layer-modal-backdrop" onClick={() => setIsEditModalOpen(false)}>
-          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="编辑替换规则" onClick={e => e.stopPropagation()}>
-            <header className="source-login-header">
+        <div className="overlay-backdrop is-topped" onClick={() => setIsEditModalOpen(false)}>
+          <div className="dialog-shell size-m" role="dialog" aria-modal="true" aria-label="编辑替换规则" onClick={e => e.stopPropagation()}>
+            <header className="dialog-head">
               <h3 className="source-login-title">
                 {editingRule.id ? '编辑替换净化规则' : '新建替换净化规则'}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="icon-btn"
+                className="overlay-close"
+                aria-label="关闭"
               >
                 <Icon name="close" />
               </button>
@@ -604,14 +605,15 @@ export const ReplaceRulesModal: React.FC<Props> = ({
 
       {/* Import Dialog */}
       {isImportModalOpen && (
-        <div className="modal-backdrop top-layer-modal-backdrop" onClick={() => setIsImportModalOpen(false)}>
-          <div className="rule-modal-card" role="dialog" aria-modal="true" aria-label="导入替换规则" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
-            <header className="source-login-header">
+        <div className="overlay-backdrop is-topped" onClick={() => setIsImportModalOpen(false)}>
+          <div className="dialog-shell size-s" role="dialog" aria-modal="true" aria-label="导入替换规则" onClick={e => e.stopPropagation()}>
+            <header className="dialog-head">
               <h3 className="source-login-title">导入替换净化规则</h3>
               <button
                 type="button"
                 onClick={() => setIsImportModalOpen(false)}
-                className="icon-btn"
+                className="overlay-close"
+                aria-label="关闭"
               >
                 <Icon name="close" />
               </button>

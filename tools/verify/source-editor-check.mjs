@@ -243,7 +243,7 @@ if (loginRow) {
     await wait(2500)
     const geometry = await p.evaluate(() => {
       const dialog = document.querySelector('.source-webview-dialog')
-      const backdrop = document.querySelector('.modal-backdrop--webview')
+      const backdrop = document.querySelector('.overlay-backdrop.is-flush')
       const frame = document.querySelector('.source-webview-frame')
       const picker = document.querySelector('.source-webview-viewport-picker')
       if (!dialog) return { missing: true, opened: true }

@@ -18,20 +18,28 @@ import path from 'node:path'
 const css = fs.readFileSync(path.resolve(import.meta.dirname, '../src/styles.css'), 'utf8')
 const hasRule = (name: string) => new RegExp(`\\.${name}\\s*[,{:\\s]`).test(css)
 
-test('弹窗壳与关闭键都有真实规则（不是靠 UA 默认长相）', () => {
-  for (const name of ['modal-card', 'modal-header', 'close-button', 'icon-btn', 'shelf-remove', 'source-login-footer']) {
+test('浮层那一档有真实规则（不是靠 UA 默认长相）：一档外壳 / 一条遮罩 / 一颗关闭键 / 一行页头', () => {
+  for (const name of ['dialog-shell', 'dialog-head', 'overlay-close', 'overlay-backdrop', 'icon-btn', 'shelf-remove', 'source-login-footer']) {
     assert.ok(hasRule(name), `.${name} 在 styles.css 里没有规则 —— 用它的那个控件会退回浏览器默认外观`)
   }
   // 壳的规则要真的带几何值，光有个类名等于没写
-  const shell = /\.modal-card \{([^}]*)\}/.exec(css)?.[1] ?? ''
+  const shell = /^\.dialog-shell \{([^}]*)\}/m.exec(css)?.[1] ?? ''
   for (const prop of ['max-height', 'border-radius', 'box-shadow', 'overflow']) {
-    assert.match(shell, new RegExp(prop), `.modal-card 少了 ${prop}`)
+    assert.match(shell, new RegExp(prop), `.dialog-shell 少了 ${prop}`)
   }
-  // 四颗关闭键必须共用**同一档**（`.shortcut-close` 原来是挂在 TSX 上而样式表 0 命中的裸按钮）
-  const close = /\.close-button, \.icon-btn, \.shelf-remove, \.shortcut-close \{([^}]*)\}/.exec(css)?.[1] ?? ''
-  assert.ok(close, '关闭键那一档被拆开了 —— 四颗键必须共用同一条规则，否则又会各长各的')
+  // 宽度只能从令牌取，不许再写第五档像素值
+  assert.match(shell, /width: min\(var\(--dw-m\), 94vw\)/, '.dialog-shell 的中间档没走 --dw-m 令牌')
+  // 关闭键：30×30、无边框、不伸缩 —— §3.3 那一颗
+  const close = /^\.overlay-close \{([^}]*)\}/m.exec(css)?.[1] ?? ''
   assert.match(close, /width: 30px/)
   assert.match(close, /height: 30px/)
+  assert.match(close, /border: 0/)
+  assert.match(close, /flex: none/)
+  // 遮罩的底色只有一档令牌
+  const backdrop = /^\.overlay-backdrop \{([^}]*)\}/m.exec(css)?.[1] ?? ''
+  assert.match(backdrop, /background: var\(--backdrop\)/, '.overlay-backdrop 的底色要走 --backdrop 令牌')
+  assert.match(/:root \{[\s\S]*?--backdrop: rgba\(0, 0, 0, \.45\)/.exec(css)?.[0] ?? '', /--backdrop/,
+    '--backdrop 这一档不见了')
 })
 
 test('按钮档位都有全局基础档（换一处用不会变成裸文字）', () => {
@@ -55,7 +63,7 @@ test('朗读悬浮条：挂载时就夹回视口，且不给底部导航让位�
   const bar = /\.tts-floating-bar \{([\s\S]*?)\n\}/.exec(css2)?.[1] ?? ''
   const z = Number(/z-index:\s*(\d+)/.exec(bar)?.[1] ?? '9999')
   const drawer = Number(/\.reader-drawer \{[\s\S]*?z-index:\s*(\d+)/.exec(css2)?.[1] ?? '0')
-  const backdrop = Number(/\.modal-backdrop \{[^}]*z-index:\s*(\d+)/.exec(css2)?.[1] ?? '0')
+  const backdrop = Number(/\.overlay-backdrop \{[^}]*z-index:\s*(\d+)/.exec(css2)?.[1] ?? '0')
   assert.ok(z < drawer && z < backdrop,
     `朗读条压在抽屉与弹窗之上（bar ${z} / drawer ${drawer} / modal ${backdrop}）`)
 })
@@ -67,7 +75,7 @@ test('页面级浮层都在挡片之下（弹窗开着时顶栏与批量条不�
     assert.ok(block && value !== undefined, `${selector} 找不到带 z-index 的规则`)
     return Number(value)
   }
-  const backdrop = zIndex('.modal-backdrop')
+  const backdrop = zIndex('.overlay-backdrop')
   // 同值是"DOM 顺序决胜"的别名：今天恰好挡片在后，加一个 portal 就会翻过去
   for (const name of ['.app-page-header', '.source-batch-bar', '.tts-floating-bar']) {
     assert.ok(zIndex(name) < backdrop, `${name} 的 z 不小于挡片（${backdrop}）—— 弹窗会挡不住它`)
@@ -114,20 +122,54 @@ const MARKER_CLASSES: Record<string, string> = {
   'health-grouping-undo': '同一行的「撤销」，source-health-check 按它点',
   'source-login-entry-btn': '书源编辑器里那颗「登录」入口，source-editor-check 与 webview-login-probe 按它定位',
   'reader-flow-tail': '滚动模式章末提示条，reader-transition-check 按它判断"接不上下一章时有没有给提示"',
+  // W2 并档之后，这些页面类名不再声明几何（宽高/圆角/阴影/动画都在 `.dialog-shell` 那一档），
+  // 但门禁靠它们定位"是哪一张弹窗"。和上面几条同一个道理：没有样式 ≠ 没有用处。
+  'book-detail-modal': '书籍详情弹窗的根节点，book-detail / explore-detail 两条门禁按它定位（16 处）',
+  'customize-dialog': '「自定义」弹窗根节点，ui-shell-check 与 CustomizeSkin 按它定位',
+  'toc-rules-modal': '「本地书分章规则」弹窗根节点，ui-shell-check 与 toc-rule-check 按它定位',
+  'logs-modal': '运行日志弹窗根节点，logs-ui-check 按它定位（19 处）',
+  'logs-modal-header': '日志弹窗那一行页头，logs-ui-check 按它取「自动跟随 / 导出」那排按钮',
+  'shortcut-modal': '「快捷键」表弹窗根节点，shortcut-check 与 ui-shell-check 按它定位',
+  'source-health-modal': '体检弹窗根节点，source-health-check 与 e2e 脚本按它定位',
+  'source-group-modal': '批量分组弹窗根节点，source-health-check 按它定位',
+  'book-manage-sheet': '「书籍管理」那张卡的根节点，shelf-layout-check 与 ui-shell-check 按它定位',
+  'source-login-dialog': '书源登录弹窗根节点，source-login-check 按它定位',
+  'source-webview-dialog': '内置浏览器弹窗根节点，source-editor-check 按它定位',
 }
 
 /**
- * 浮层的三件事实：有挡片就得接 Esc、有 `role="dialog"` 就得有名字、
- * 每一层 `modal-backdrop` 都得有一档语义。抽成纯函数是为了能被**注入反扫** ——
- * 一条永远为真的判据等于没有判据（这条判据自己坏过一次：`rows > 0` 那种空判）。
+ * 浮层的四件事实（PROPOSAL-018 W1 + W2）：弹窗挡片必须接 Esc、必须有 `role="dialog"` 与名字、
+ * 必须套一档 `.dialog-shell` 外壳，而且这一档的宽高不许由 inline style 现场压。
+ * 抽成纯函数是为了能被**注入反扫** —— 一条永远为真的判据等于没有判据（这条判据自己坏过一次：`rows > 0` 那种空判）。
+ *
+ * 两类挡片不算弹窗：`.is-menu`（顶栏「我的」菜单，语义是"点别处就关"）、
+ * `.is-viewer`（正文配图的看图画布，整屏都是它的内容）。
  */
+function dialogBackdropCount(src: string) {
+  return [...src.matchAll(/className="(overlay-backdrop[^"]*)"/g)]
+    .filter(match => !/is-menu|is-viewer/.test(match[1])).length
+}
+
+/** 元素串里用 inline style 压了弹窗宽高的处数（§3.3「禁止 inline style 覆盖宽高」）。 */
+function inlineShellSizes(src: string) {
+  const hits: string[] = []
+  for (const match of src.matchAll(/className="[^"]*(dialog-shell|overlay-backdrop)[^"]*"[\s\S]{0,160}?\/?>/g)) {
+    const tag = match[0]
+    const style = /style=\{\{([^}]*)\}\}/.exec(tag)?.[1]
+    if (style && /\b(width|maxWidth|minWidth|height|maxHeight|minHeight)\s*:/.test(style)) hits.push(style.trim())
+  }
+  return hits
+}
+
 function auditOverlays(files: { name: string; src: string }[]) {
   const problems: string[] = []
   for (const { name, src } of files) {
-    const layers = (src.match(/className="modal-backdrop/g) ?? []).length
+    const layers = dialogBackdropCount(src)
     if (layers === 0) continue
     const hooks = (src.match(/useEscapeClose\(/g) ?? []).length
     if (hooks === 0) problems.push(`${name}：${layers} 层挡片却一次 Esc 都没接（Esc 关不掉）`)
+    const shells = (src.match(/className="[^"]*\bdialog-shell\b[^"]*"/g) ?? []).length
+    if (shells < layers) problems.push(`${name}：${layers} 层弹窗挡片只有 ${shells} 个 .dialog-shell 外壳（第 ${shells + 1} 套几何就是这么长回来的）`)
     const dialogs = (src.match(/role="dialog"/g) ?? []).length
     if (dialogs < layers) problems.push(`${name}：${layers} 层挡片只有 ${dialogs} 处 role="dialog"（读屏软件找不到这一层）`)
     for (const match of src.matchAll(/role="dialog"[\s\S]{0,200}/g)) {
@@ -136,9 +178,50 @@ function auditOverlays(files: { name: string; src: string }[]) {
         break
       }
     }
+    const inline = inlineShellSizes(src)
+    if (inline.length > 0) problems.push(`${name}：${inline.length} 处用 inline style 压弹窗宽高（${inline.join(' / ')}）—— 宽度只有 --dw-s/m/l 三档`)
   }
   return problems
 }
+
+/**
+ * 样式表侧的并档判据：外壳几何、遮罩、关闭键各自只许一档。
+ * 判的是"这条规则声明了什么"，不是"类名叫什么" —— 改版前 17 套外壳里有一半名字并不像外壳。
+ */
+function shellRulesOf(bare: string) {
+  const rules: { selector: string; body: string }[] = []
+  for (const match of bare.matchAll(/([^}{}]+)\{([^}]*)\}/g)) {
+    const selector = match[1].trim().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ')
+    // 只看"一个类名本身"的规则：`.a b {}`、`.a, .b > c {}` 这类是内容样式，不是外壳
+    if (!/^(\.[a-zA-Z][\w-]*)(,\s*\.[a-zA-Z][\w-]*)*$/.test(selector)) continue
+    rules.push({ selector, body: match[2] })
+  }
+  return rules
+}
+
+function auditOverlayLayers(bare: string) {
+  const problems: string[] = []
+  const shells = shellRulesOf(bare).filter(({ body }) =>
+    /max-height:/.test(body) && /border-radius:/.test(body) && /box-shadow:/.test(body))
+    .map(({ selector }) => selector)
+    .filter(selector => !SHELL_WHITELIST.has(selector.split(',')[0].trim()))
+  if (shells.length > 0) problems.push(`又长出一套弹窗外壳几何：${shells.join('、')} —— 外壳只许 .dialog-shell 一档`)
+  const backdrops = shellRulesOf(bare).filter(({ body }) =>
+    /position: fixed/.test(body) && /inset: 0/.test(body) && /(rgba\(0, 0, 0|var\(--backdrop\))/.test(body))
+    .map(({ selector }) => selector.split(',')[0].trim())
+  if (backdrops.length > 2) problems.push(`遮罩有 ${backdrops.length} 档（${backdrops.join('、')}）—— §5.2 只许弹窗挡片 + 抽屉挡片两条`)
+  const closes = shellRulesOf(bare).filter(({ body }) =>
+    /width: 30px/.test(body) && /height: 30px/.test(body) && /border: 0/.test(body) && /place-items: center/.test(body))
+    .map(({ selector }) => selector.split(',')[0].trim())
+    .filter(selector => /close/i.test(selector))
+  if (closes.length > 1 || (closes.length === 1 && closes[0] !== '.overlay-close')) {
+    problems.push(`关闭键又分成几档（${closes.join('、') || '没有 .overlay-close'}）—— 只许 .overlay-close 一颗`)
+  }
+  return problems
+}
+
+/** 抽屉与悬浮条按 §3.3 保留自己的几何档（它们不是弹窗），所以在这三档里豁免。 */
+const SHELL_WHITELIST = new Set(['.dialog-shell', '.reader-drawer', '.tts-floating-bar'])
 
 test('浮层尺寸只有一处来源：菜单不许在 TSX 里写像素，夹取算式不许各写一份', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
@@ -195,24 +278,50 @@ test('几何重复判据会红：把 340 塞回样式表，必须报出 MENU_MAX
 })
 
 
-test('每个弹窗都接了 Esc、有 role="dialog" 与名字', () => {
+test('每个弹窗都接了 Esc、套了 .dialog-shell、有 role="dialog" 与名字，且不用 inline style 压宽高', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
   const files = fs.readdirSync(dir).filter(n => n.endsWith('.tsx'))
     .map(n => ({ name: n, src: fs.readFileSync(path.join(dir, n), 'utf8') }))
-  assert.deepEqual(auditOverlays(files), [], '浮层的 Esc / role / 名字不许再靠自觉（PROPOSAL-018 W1 ②④）')
+  assert.deepEqual(auditOverlays(files), [],
+    '浮层的 Esc / 外壳 / role / 名字 / inline 宽高不许再靠自觉（PROPOSAL-018 W1 ②④ + W2 §3.3）')
 })
 
-test('浮层判据自己会红：注入一处缺 Esc、一处缺 role、一处缺名字，三条都要报出来', () => {
+test('浮层并档之后：样式表里只剩一档外壳、两条遮罩、一颗关闭键', () => {
+  assert.deepEqual(auditOverlayLayers(bareCss), [],
+    '并完档又长回来 —— W2 收的就是这三档（17 套外壳 / 4 套遮罩 / 11 种关闭键）')
+})
+
+test('并档判据自己会红：注入第 17 套外壳、第三条遮罩、第二颗关闭键、一处 inline 宽高，四条都要报出来', () => {
+  // 反向对照：这四样就是改版前的四种病。注入一样判据不红，等于那条判据不存在。
+  const injected = `${bareCss}
+.seventeenth-shell { max-height: 88vh; border-radius: 14px; box-shadow: 0 20px 50px rgba(0, 0, 0, .25); }
+.third-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .3); }
+.second-close { width: 30px; height: 30px; border: 0; display: grid; place-items: center; }`
+  const problems = auditOverlayLayers(injected)
+  assert.ok(problems.some(p => p.includes('第 17 套') || p.includes('seventeenth-shell')), '多一套外壳几何必须报')
+  assert.ok(problems.some(p => p.includes('third-backdrop')), '多一条遮罩必须报')
+  assert.ok(problems.some(p => p.includes('second-close')), '多一颗关闭键必须报')
+  assert.deepEqual(auditOverlayLayers(bareCss), [], '撤掉注入之后应当是干净的')
+})
+
+test('浮层判据自己会红：缺 Esc、缺外壳、缺 role、缺名字、inline 压宽高，五条都要报出来', () => {
   const synthetic = [
-    { name: 'NoEsc.tsx', src: '<div className="modal-backdrop"><div role="dialog" aria-modal="true" aria-label="x">' },
-    { name: 'NoRole.tsx', src: '<div className="modal-backdrop" onClick={onClose}><div onClick={stop} /></div>', },
-    { name: 'Unnamed.tsx', src: '<div className="modal-backdrop"><div role="dialog" aria-modal="true">useEscapeClose(onClose)', },
+    { name: 'NoEsc.tsx', src: '<div className="overlay-backdrop"><div className="dialog-shell" role="dialog" aria-modal="true" aria-label="x">' },
+    { name: 'NoRole.tsx', src: '<div className="overlay-backdrop" onClick={onClose}><div className="dialog-shell" onClick={stop} /></div>', },
+    { name: 'Unnamed.tsx', src: '<div className="overlay-backdrop"><div className="dialog-shell" role="dialog" aria-modal="true">useEscapeClose(onClose)', },
+    { name: 'NoShell.tsx', src: '<div className="overlay-backdrop"><div className="legacy-shell" role="dialog" aria-label="x">useEscapeClose(onClose)', },
+    { name: 'Inline.tsx', src: '<div className="overlay-backdrop"><div className="dialog-shell" style={{ width: \'min(820px, 94vw)\', maxHeight: \'90vh\' }} role="dialog" aria-label="x">useEscapeClose(onClose)', },
   ]
   const problems = auditOverlays(synthetic)
   assert.ok(problems.some(p => p.includes('NoEsc') && p.includes('Esc')), '缺 Esc 必须报')
   assert.ok(problems.some(p => p.includes('NoRole')), '缺 role="dialog" 必须报')
   assert.ok(problems.some(p => p.includes('Unnamed') && p.includes('aria-label')), '缺名字必须报')
+  assert.ok(problems.some(p => p.includes('NoShell') && p.includes('dialog-shell')), '不套 .dialog-shell 必须报')
+  assert.ok(problems.some(p => p.includes('Inline') && p.includes('inline style')), 'inline 压弹窗宽高必须报')
 })
+
+/** 样式表去掉块注释之后的正文（注释里写历史数值是给下一次改的人看的，不算违规）。 */
+const bareCss = css.replace(/\/\*[\s\S]*?\*\//g, '')
 
 /**
  * 门禁用的类名必须真的长在界面上（PROPOSAL-018 W1 ③ 的配套判据）。

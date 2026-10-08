@@ -486,9 +486,9 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="source-login-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="书源登录">
-        <div className="source-login-header">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-s source-login-dialog" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="书源登录">
+        <div className="dialog-head">
           <div className="source-login-title-group">
             <h3 className="source-login-title">登录 {sourceName}</h3>
             {uiResponse?.sourceVariable && (
@@ -556,7 +556,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
             </div>
             <button
               type="button"
-              className="source-login-action-btn"
+              className="overlay-close"
               title="关闭"
               aria-label="关闭"
               onClick={onClose}
@@ -810,11 +810,11 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
         </div>
 
         {headerEditOpen && (
-          <div className="modal-backdrop top-layer-modal-backdrop" onClick={() => setHeaderEditOpen(false)}>
-            <div className="source-login-dialog" style={{ width: 'min(500px, 94vw)' }} role="dialog" aria-modal="true" aria-label="编辑登录请求头" onClick={e => e.stopPropagation()}>
-              <div className="source-login-header">
+          <div className="overlay-backdrop is-topped" onClick={() => setHeaderEditOpen(false)}>
+            <div className="dialog-shell size-s source-login-dialog" role="dialog" aria-modal="true" aria-label="编辑登录请求头" onClick={e => e.stopPropagation()}>
+              <div className="dialog-head">
                 <h3>编辑 / 填入登录头 (Login Header)</h3>
-                <button type="button" className="source-login-action-btn" onClick={() => setHeaderEditOpen(false)} aria-label="关闭"><Icon name="close" /></button>
+                <button type="button" className="overlay-close" onClick={() => setHeaderEditOpen(false)} aria-label="关闭"><Icon name="close" /></button>
               </div>
               <div className="source-login-body" style={{ padding: '16px' }}>
                 <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--muted)' }}>

@@ -47,7 +47,7 @@ export function BookmarkDrawer({
       <header className="bookmark-drawer-head">
         <h3>书签</h3>
         <small>{marks.length} 条 · 同一本书换源后仍然在这里</small>
-        <button type="button" className="close-button" onClick={onClose} aria-label="关闭书签栏"><Icon name="close" /></button>
+        <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭书签栏"><Icon name="close" /></button>
       </header>
 
       <section className="bookmark-add">

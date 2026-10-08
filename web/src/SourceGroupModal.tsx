@@ -36,14 +36,14 @@ export function SourceGroupModal({
 
   useEscapeClose(onClose)
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card source-group-modal" role="dialog" aria-modal="true" aria-label="批量设置分组" onClick={e => e.stopPropagation()}>
-        <header className="modal-header">
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-s source-group-modal" role="dialog" aria-modal="true" aria-label="批量设置分组" onClick={e => e.stopPropagation()}>
+        <header className="dialog-head">
           <div>
             <h2>批量设置分组</h2>
             <small>已选中 {selectedCount} 个书源</small>
           </div>
-          <button type="button" className="close-button" onClick={onClose} aria-label="关闭">
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭">
             <Icon name="close" />
           </button>
         </header>
