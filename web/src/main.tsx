@@ -490,15 +490,15 @@ function BookDetailModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={handleClose}>
+    <div className="overlay-backdrop" onClick={handleClose}>
       <div
-        className="book-detail-modal"
+        className="dialog-shell size-m book-detail-modal"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`书籍详情: ${book.details.name}`}
       >
-        <header className="book-detail-modal-header">
+        <header className="dialog-head book-detail-modal-header">
           <div className="book-detail-heading">
             {cover ? (
               <img className="book-detail-cover" src={cover} alt="" referrerPolicy="no-referrer" onError={() => setCoverTried(count => count + 1)} />
@@ -548,7 +548,7 @@ function BookDetailModal({
               {book.progress ? '继续阅读' : '开始阅读'}
               <Icon name="arrowRight" />
             </button>
-            <button className="subtle-button close-btn" onClick={handleClose} aria-label="关闭">
+            <button type="button" className="overlay-close" onClick={handleClose} aria-label="关闭">
               <Icon name="close" />
             </button>
           </div>
@@ -1959,20 +1959,20 @@ function BookInfoEditModal({
   }
 
   return (
-    <div className="modal-backdrop top-layer-modal-backdrop" onClick={onClose}>
+    <div className="overlay-backdrop is-topped" onClick={onClose}>
       <div
-        className="book-info-edit-modal"
+        className="dialog-shell size-s"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`编辑书籍信息: ${item.name}`}
       >
-        <header className="book-info-edit-header">
+        <header className="dialog-head">
           <div>
             <span className="section-kicker">书籍信息</span>
             <h2>编辑书籍信息</h2>
           </div>
-          <button className="subtle-button close-btn" onClick={onClose} aria-label="关闭">
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭">
             <Icon name="close" />
           </button>
         </header>
@@ -2123,8 +2123,8 @@ function BookManageModal({
   const percent = Math.min(100, Math.round((item.cachedChapters / Math.max(1, item.totalChapters || 1)) * 100))
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="book-manage-sheet" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`书籍管理: ${item.name}`}>
+    <div className="overlay-backdrop" onClick={onClose}>
+      <div className="dialog-shell size-s book-manage-sheet" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`书籍管理: ${item.name}`}>
         <header className="manage-sheet-header">
           <div className="manage-sheet-cover">
             <BookCover coverKey={item.coverKey} name={item.name} author={item.author} compact />
@@ -2134,7 +2134,7 @@ function BookManageModal({
             <p>{item.author || '未知作者'}</p>
             <small>{item.completed ? '已读完' : item.chapterIndex === undefined ? '刚加入书架' : `阅读至第 ${item.chapterIndex + 1} 章`}</small>
           </div>
-          <button className="subtle-button close-btn" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
+          <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
         </header>
 
         <div className="manage-sheet-actions">
@@ -3114,10 +3114,12 @@ function ShelfPage({
 
 function App() {
   const [ready, setReady] = useState(false)
-  /** 探活失败（服务没起、正在重启、离线）—— 这时要说"连不上"，而不是问用户要任何东西。 */
-  const [serviceUnreachable, setServiceUnreachable] = useState(false)
-  /** 自增一下就能重跑探活（"重试"按钮）。 */
-  const [probe, setProbe] = useState(0)
+  /**
+   * 启动等待提示。这台服务不设身份、冷启动要几十秒（加载几千个书源、预热缓存），
+   * 探活一次没问到只说明"它还没起来"——这时该做的是自动重试，而不是把人挡在一张
+   * 「连不上本机服务 / 不是你的密码」的整屏页前面（用户 2026-10-08 要求删掉那张页）。
+   */
+  const [bootHint, setBootHint] = useState('')
   const [settings, setSettings] = useState<ReaderSettings>(loadReaderSettings)
   /**
    * 当前要挂在根上的皮肤类名（自定义皮肤是**叠**在内置皮肤上的，所以可能有两个类；
@@ -3191,18 +3193,41 @@ function App() {
   }, [])
 
   useEffect(() => {
-    // 这台服务不设身份：启动只做一次探活。问到就进界面，问不到说明服务没起/正在重启，
-    // 那时要的是"等一等再试"，不是让用户去猜一个根本不存在的密码。
-    void fetch('/healthz').then(async response => {
-      setServiceUnreachable(!response.ok)
-      if (!response.ok) return []
-      // 版本号只认服务端报的这一个来源：Gradle 写进清单、/healthz 报出来、界面显示它。
-      // 三处同一个数，不会出现"改了 build.gradle 忘了改界面"的假版本号。
-      const health = await response.json().catch(() => null)
-      if (health?.version) setServerVersion(String(health.version))
-      return api.sources()
-    }).then(list => setSources(list)).catch(() => setServiceUnreachable(true)).finally(() => setReady(true))
-  }, [probe])
+    // 启动探活：问到就进界面；问不到就**自动重试**（服务冷启动要几十秒）。
+    // 不再整屏挡住 —— 这台服务不设身份，"连不上"只意味着它还没起来或正在重启，
+    // 该做的是等一等再试，而不是让人去猜一个根本不存在的密码。
+    let cancelled = false
+    let timer: number | undefined
+    let attempts = 0
+    // 前 ~60s 每 1.5s 快速重试（期间停在加载页）；之后先进界面，再每 5s 慢轮询，服务起来会自愈。
+    const FAST_UNTIL = 40
+    const tick = () => {
+      if (cancelled) return
+      attempts += 1
+      if (attempts === 4) setBootHint('正在等待本机服务启动…（它可能正在重启，稍等片刻）')
+      fetch('/healthz')
+        .then(async response => {
+          if (!response.ok) throw new Error(`healthz ${response.status}`)
+          // 版本号只认服务端报的这一个来源：Gradle 写进清单、/healthz 报出来、界面显示它。
+          // 三处同一个数，不会出现"改了 build.gradle 忘了改界面"的假版本号。
+          const health = await response.json().catch(() => null)
+          if (cancelled) return
+          if (health?.version) setServerVersion(String(health.version))
+          const list = await api.sources().catch(() => [])
+          if (cancelled) return
+          setSources(list)
+          setBootHint('')
+          setReady(true)
+        })
+        .catch(() => {
+          if (cancelled) return
+          if (attempts === FAST_UNTIL) setReady(true) // 等够了先放行，别把人永远挡在加载页
+          timer = window.setTimeout(tick, attempts < FAST_UNTIL ? 1500 : 5000)
+        })
+    }
+    tick()
+    return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
+  }, [])
 
   useEffect(() => {
     const sync = () => setPage(pageFromHash())
@@ -3335,22 +3360,13 @@ function App() {
     }
   }
 
-  if (!ready) return <main className={`app-loading ${skinClasses}`}><span>正在打开阅读空间…</span></main>
-  if (serviceUnreachable) {
+  if (!ready) {
+    // 慢启动期间也要挂 PwaManager 与 Toast：更新提示、后台同步的反馈不能因为"还在等"就消失。
     return (
-      <main className={`app-shell ${skinClasses}`}>
+      <main className={`app-loading ${skinClasses}`}>
         <ToastContainer />
         <PwaManager />
-        <section className="app-unreachable">
-          <h1>连不上本机服务</h1>
-          <p>
-            探活没问到（不是凭据问题，这台服务不需要登录）。常见原因是青阅正在重启或没启动 ——
-            这种情况下要的是服务，不是你的密码。
-          </p>
-          <button type="button" className="primary-button" onClick={() => setProbe(value => value + 1)}>
-            重试连接
-          </button>
-        </section>
+        <span>{bootHint || '正在打开阅读空间…'}</span>
       </main>
     )
   }

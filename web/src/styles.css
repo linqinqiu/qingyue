@@ -33,11 +33,6 @@ svg { width: 18px; height: 18px; flex: none; }
 .theme-dark { --canvas: #202522; --surface: #292e2b; --surface-muted: #232825; --ink: #eef1ec; --muted: #a9b0aa; --line: #3b433d; --accent: #67b58d; --accent-soft: #303f35; --accent-ink: #90d7ad; --accent-solid: #67b58d; --accent-solid-hover: #7cc79e; --on-accent: #0f241a; --danger: #f29384; --danger-solid: #f29384; --on-danger: #2b110d; --shadow: 0 12px 30px rgba(0, 0, 0, .25); color-scheme: dark; }
 .app-shell { min-height: 100vh; min-height: 100dvh; background: var(--canvas); color: var(--ink); }
 .app-loading { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
-/* 服务没起 / 正在重启时说的话，不能和"没登录"混成同一个密码框 */
-.app-unreachable { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; padding: 24px; }
-.app-unreachable h1 { font-size: 18px; margin: 0; }
-.app-unreachable p { margin: 0; max-width: 46ch; color: var(--muted); font-size: 13px; line-height: 1.7; }
-.app-unreachable .primary-button { min-height: 34px; }
 .nav-search-indicator { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); animation: nav-search-pulse 1.4s ease-in-out infinite; }
 @keyframes nav-search-pulse { 0%, 100% { opacity: .3; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.35); } }
 
@@ -198,20 +193,8 @@ svg { width: 18px; height: 18px; flex: none; }
   height: 20px;
 }
 
-/* Header Dropdown Menu */
-.header-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 199;
-  background: rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  animation: menuBackdropFadeIn 0.15s ease-out;
-}
-@keyframes menuBackdropFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+/* Header Dropdown Menu —— 挡片改引 `.overlay-backdrop.is-menu`（W2，一条遮罩只一档）。
+   菜单面板自己仍走下面的 `.header-menu-dropdown`：它是菜单，不是弹窗。 */
 
 .header-menu-dropdown {
   position: absolute;
@@ -563,8 +546,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .library-book-detail header p { margin-top: 7px; color: var(--muted); font-size: 13px; }
 
 /* Book Detail Modal Dialog */
-.book-detail-modal { width: min(680px, 94vw); max-height: 88vh; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; overflow: hidden; animation: scaleUp 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
-.book-detail-modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 22px; border-bottom: 1px solid var(--line); background: var(--surface); flex-shrink: 0; }
+/* 外壳几何（宽高/圆角/阴影/动画）已并入文末的 `.dialog-shell`（W2）；
+   下面这些页面类名只留内容样式，以及门禁按它定位弹窗根节点。 */
+.book-detail-modal-header { align-items: flex-start; gap: 16px; }
 /* 取不到封面时用与书架同一套文字书封（书名 + 作者），不再只摆一个书名首字 */
 .book-detail-cover-text { display: block; overflow: hidden; }
 .book-detail-cover-text .cover-fallback { width: 100%; height: 100%; }
@@ -796,33 +780,14 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .shelf-meta-chapter.completed { color: var(--accent-ink); font-weight: 600; }
 /* 「更多」是三个点：1.65 描边在 18px 下几乎看不见，整颗按钮看着就是块空白方框 */
 
-/* Book Manage Modal Sheet */
-.modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, .45); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 18px; animation: fadeIn .18s ease; }
-
-/*
- * 弹窗共用的壳。此前一个都没有：`SourceHealthModal` 与 `SourceGroupModal` 挂着
- * `.modal-card` / `.modal-header` / `.close-button` 三个类名，而样式表里**一条规则都不存在**
- * （2026-10-03 审计查出），于是它们的标题栏没有内边距、`h2` 吃浏览器默认的 2em 粗体、
- * 关闭键是一个没有尺寸的裸按钮。同一批还有 `.icon-btn`、`.shelf-remove`、`.source-login-footer`。
- * 这里补上基础档，新弹窗请复用这一套，不要再抄第 15 份几何值。
+/* Book Manage Modal Sheet —— 挡片与外壳见文末 `.overlay-backdrop` / `.dialog-shell`（W2）。
+ *
+ * 这里原来写着 `.modal-backdrop` + `.modal-card` + `.modal-header` 一档"共用壳"
+ * （2026-10-03 补的，当时 `SourceHealthModal` 与 `SourceGroupModal` 挂着三个类名而样式表
+ * 一条规则都没有，标题栏没有内边距、`h2` 吃浏览器默认的 2em 粗体、关闭键是没有尺寸的裸按钮）。
+ * W2 把它并成了唯一一档：宽度只有三档、max-height 只有一个、关闭键只有 `.overlay-close`。
  */
-.modal-card {
-  width: min(560px, 100%); max-height: min(88vh, 760px);
-  display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, .25); overflow: hidden;
-  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.modal-header {
-  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 18px; border-bottom: 1px solid var(--line);
-}
-.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
-.modal-header small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--t-xs); }
-/* 弹窗右上角那颗关闭键的统一档（30×30、无边框、hover 才有底色）。
-   `.shortcut-close` 原来只挂在 TSX 上、样式表 0 命中，于是「快捷键」那张表的关闭键
-   是按浏览器默认长相画的裸按钮 —— 界面没说错，但它是唯一一个没有尺寸的关闭键。 */
-.close-button, .icon-btn, .shelf-remove, .shortcut-close {
+.icon-btn, .shelf-remove {
   width: 30px; height: 30px; flex: none;
   /* 4496 那条全局 `button { min-height: 34px }` 排在后面，会把 30px 的方键悄悄拉成 30×34。
      可点面积仍然在"30–34"这一档内，但要的是方的。 */
@@ -831,24 +796,24 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   border: 0; border-radius: 6px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
-.close-button:hover, .icon-btn:hover, .shelf-remove:hover, .shortcut-close:hover { background: var(--surface-muted); color: var(--ink); }
-.close-button svg, .icon-btn svg, .shelf-remove svg { width: 16px; height: 16px; }
+.icon-btn:hover, .shelf-remove:hover { background: var(--surface-muted); color: var(--ink); }
+.icon-btn svg, .shelf-remove svg { width: 16px; height: 16px; }
 /* 弹窗底部动作条：上边框 + 淡底，动作靠右。OfflineCacheModal 一直在挂这个类名，之前也是空的。 */
 .source-login-footer {
   flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 8px;
   padding: 12px 18px; border-top: 1px solid var(--line); background: var(--surface-muted);
 }
 
-.book-manage-sheet { width: min(440px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 48px rgba(0, 0, 0, .22); overflow: hidden; animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1); }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.manage-sheet-header { display: grid; grid-template-columns: 46px minmax(0, 1fr) 32px; gap: 14px; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+/* 「书籍管理」这一张的页头带封面列，所以是 grid 而不是 `.dialog-head` 那一档 flex；
+   但内边距与底边线跟 `.dialog-head` 取同一个数，免得两种弹窗头部差 2px。 */
+.manage-sheet-header { display: grid; grid-template-columns: 46px minmax(0, 1fr) 30px; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .manage-sheet-cover { width: 46px; aspect-ratio: 3 / 4; border-radius: 5px; overflow: hidden; background: var(--surface-muted); display: grid; place-items: center; font-size: 18px; color: var(--accent); font-family: Georgia, serif; }
 .manage-sheet-cover img { width: 100%; height: 100%; object-fit: cover; }
 .manage-sheet-info h3 { margin: 0; font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .manage-sheet-info p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 .manage-sheet-info small { font-size: 12px; color: var(--accent-ink); font-weight: 500; }
-.manage-sheet-header .close-btn { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; color: var(--muted); }
 .manage-sheet-actions { padding: 10px 12px 14px; display: grid; gap: 4px; }
 .manage-action-row { width: 100%; display: grid; grid-template-columns: 36px minmax(0, 1fr) 20px; align-items: center; gap: 12px; padding: 11px 12px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; color: var(--ink); transition: background .15s ease; }
 .manage-action-row:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 5%, transparent); }
@@ -861,11 +826,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .action-text strong { font-size: 14px; font-weight: 600; }
 .action-text small { font-size: 11px; color: var(--muted); }
 
-/* Book Info Edit Modal (Top-level Overlay) */
-.top-layer-modal-backdrop { z-index: 120; }
-.book-info-edit-modal { width: min(540px, 94vw); max-height: 88vh; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 64px rgba(0, 0, 0, .32); display: flex; flex-direction: column; overflow: hidden; animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1); }
-.book-info-edit-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--line); background: var(--surface); flex-shrink: 0; }
-.book-info-edit-header h2 { font-size: 18px; font-weight: 650; margin: 2px 0 0; }
+/* Book Info Edit Modal —— 叠层挡片用 `.overlay-backdrop.is-topped`、外壳用 `.dialog-shell.size-s`、
+   页头与标题都在 `.dialog-head` 那一档里（W2）：这一张原来自己写着 540 宽 + 一份阴影，标题还比别家大两号。 */
 .book-info-edit-form { display: flex; flex-direction: column; flex: 1 1 auto; overflow: hidden; }
 .book-info-edit-body { flex: 1 1 auto; overflow-y: auto; padding: 20px 22px; display: grid; gap: 20px; }
 
@@ -1260,7 +1222,6 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   .library-hero h1 { font-size: 30px; }
   .library-results > div { grid-template-columns: 1fr; }
   .library-book-detail > header { align-items: stretch; flex-direction: column; }
-  .book-detail-modal { width: min(600px, 94vw); max-height: 88vh; border-radius: 14px; }
   .book-detail-modal-header { flex-direction: column; align-items: stretch; padding: 16px 16px 14px; gap: 14px; position: relative; }
   .book-detail-heading { width: 100%; align-items: flex-start; gap: 14px; padding-right: 36px; min-width: 0; flex: 1 1 auto; }
   .book-detail-cover, .book-detail-cover-text { width: 68px; height: 90px; flex: none; flex-shrink: 0; }
@@ -1270,7 +1231,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   .book-detail-header-actions { width: 100%; display: grid; grid-template-columns: 1fr 1.2fr; gap: 10px; }
   .book-detail-header-actions .shelf-toggle-btn { width: 100%; justify-content: center; height: 40px; }
   .book-detail-header-actions .primary-button.read-btn { width: 100%; justify-content: center; height: 40px; }
-  .book-detail-header-actions .close-btn { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: var(--surface-muted); }
+  .book-detail-header-actions .overlay-close { position: absolute; top: 12px; right: 12px; }
   .book-detail-section { padding: 0 16px; }
   .shelf-page { padding: 32px 16px; }
   .shelf-tabs { gap: 16px; margin-top: -10px; }
@@ -1401,25 +1362,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .toast-close:hover { color: var(--ink); background: var(--surface-muted); }
 
 /* Source Switch Modal Dialog */
-.source-switch-dialog {
-  width: min(560px, 100%);
-  max-height: min(82vh, 700px);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.source-switch-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--line);
-}
+/* 换源弹窗的页头标题是三行（小标 / 书名 / 作者），所以顶端对齐；
+   宽高与内边距都来自 `.dialog-shell.size-m` + `.dialog-head`（W2）。 */
+.source-switch-header { align-items: flex-start; }
 .source-switch-kicker {
   display: inline-flex;
   align-items: center;
@@ -1431,8 +1376,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   margin-bottom: 4px;
 }
 .source-switch-kicker svg { width: 14px; height: 14px; }
-.source-switch-header h2 { margin: 0; font-size: 18px; font-weight: 700; font-family: Georgia, "Noto Serif SC", serif; }
-.source-switch-header small { color: var(--muted); font-size: 12px; margin-top: 2px; display: block; }
+/* 标题字号与前后距都在 `.dialog-head` 那一档（W2）；这里只留这一张的衬线字体。 */
+.source-switch-header h2 { font-family: Georgia, "Noto Serif SC", serif; }
 .source-search-banner {
   padding: 10px 20px;
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
@@ -1745,27 +1690,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   white-space: nowrap;
 }
 
-.source-login-dialog, .source-login-modal {
-  width: min(520px, 94vw);
-  max-height: min(85vh, 720px);
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
-}
+/* 书源登录档：外壳走 `.dialog-shell`（W2）。这里的类名只剩内容样式与门禁锚点。 */
 
-.source-login-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
+/* 书源登录 / 朗读设置 / 替换规则 / 运行日志这几张弹窗的页头都改引 `.dialog-head`（W2）。 */
 
 .source-login-title-group {
   display: flex;
@@ -2012,31 +1939,6 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   font-size: 14px;
 }
 
-.header-view-dialog {
-  width: 480px;
-  max-width: 90vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  overflow: hidden;
-}
-
-.header-view-code {
-  background: var(--surface-muted);
-  padding: 12px;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 300px;
-  overflow-y: auto;
-  color: var(--ink);
-}
-
 .source-login-textarea {
   width: 100%;
   box-sizing: border-box;
@@ -2093,8 +1995,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-paragraph-image { margin: 1.2em 0; text-align: center; text-indent: 0; }
 .reader-paragraph-image[hidden] { display: none; }
 .reader-paragraph-image img { max-width: 100%; height: auto; border-radius: 4px; }
-.reader-image-lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, 0.86); cursor: zoom-out; animation: fadeIn .18s ease; }
-.reader-image-lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5); cursor: default; }
+/* 正文配图点击放大：挡片是 `.overlay-backdrop.is-viewer`（那一档只改底色与光标），
+   图上那颗关闭键 40×40 是它自己的一档 —— 深色画布上的可点面积要更大，见文末浮层判据的白名单。 */
+.overlay-backdrop.is-viewer img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5); cursor: default; }
 .reader-image-lightbox-close { position: absolute; top: 16px; right: 18px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 18px; cursor: pointer; }
 .reader-image-lightbox-close:hover { background: rgba(255, 255, 255, 0.28); }
 
@@ -2120,7 +2023,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   left: 50%;
   transform: translateX(-50%);
   /*
-    原来 950：比 `.reader-drawer`(30)、`.reader-drawer-backdrop`(28)、`.modal-backdrop`(100) 都高，
+    原来 950：比 `.reader-drawer`(30)、`.reader-drawer-backdrop`(28)、`.overlay-backdrop`(100) 都高，
     所以朗读时一打开目录/书签/设置抽屉或换源、朗读设置弹窗，这条 bar 就浮在最上层，
     压住抽屉标题栏与弹窗内容（2026-10-03 审计）。它只需要盖住正文 —— 26 高于
     `.reader-boundary-message`(25)、低于抽屉与弹窗。
@@ -2324,18 +2227,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 }
 
 /* TTS Settings Modal */
-.tts-settings-dialog {
-  width: min(540px, 94vw);
-  max-height: 88vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  animation: modal-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
+/* 朗读设置弹窗：外壳走 `.dialog-shell`。
+   它原来挂的入场动画 `modal-enter` 在样式表里根本没有对应的 @keyframes，
+   所以"淡入放大"从来没演出来过 —— 现在跟其余弹窗同用 scaleUp。 */
 
 .tts-modal-content {
   display: flex;
@@ -2526,18 +2420,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 /* ---------------------------------------------------------------- 内置登录浏览器 (WebView) */
 
-/* 内置登录浏览器独占整屏：遮罩不留内边距，弹窗不投影不圆角 */
-.modal-backdrop--webview { padding: 0; }
-
-.source-webview-dialog {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--surface);
-  animation: fadeIn .18s ease;
-}
+/* 内置登录浏览器独占整屏：挡片不留内边距（`.overlay-backdrop.is-flush`），
+   外壳不投影不圆角（`.dialog-shell.is-fullscreen`）—— 都是浮层那一档的开关，不再单写一类几何。 */
 
 .source-webview-toolbar {
   display: flex;
@@ -2829,8 +2713,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 /* PWA Install Banner & Update Toast */
 /* 这两条浮层的层级（999/1000）压过弹窗遮罩（100）：整屏登录时它们正好盖在页面底部，
    移动站的提交按钮十有八九就在那个位置 —— 有弹窗时干脆让路。 */
-body:has(.modal-backdrop) .pwa-install-banner,
-body:has(.modal-backdrop) .pwa-update-toast { display: none; }
+body:has(.overlay-backdrop) .pwa-install-banner,
+body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
 
 .pwa-install-banner {
   position: fixed;
@@ -2968,33 +2852,9 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 }
 
 /* Offline Storage Modal */
-.offline-cache-modal {
-  max-width: 520px;
-}
-/* 运行日志弹窗：宽一点放得下消息与时间，列表自己滚，头部与筛选条固定。 */
-.logs-modal {
-  width: min(860px, 96vw);
-}
-/* 「快捷键」这张表：一列键名 + 一句它干什么，键名用 kbd 框起来（跟真键盘上的样子对得上）。 */
-.shortcut-modal {
-  width: min(620px, 96vw);
-}
-.shortcut-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-}
-.shortcut-modal-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-.shortcut-modal-body {
-  max-height: min(70vh, 620px);
-}
+/* 离线缓存 / 运行日志 / 快捷键这三张弹窗的宽高与页头都并进了 `.dialog-shell` + `.dialog-head`（W2）：
+   离线缓存 size-s、快捷键 size-m、运行日志 size-l（消息与时间在两列里要横向空间）。
+   「快捷键」这张表：一列键名 + 一句它干什么，键名用 kbd 框起来（跟真键盘上的样子对得上）。 */
 .shortcut-list {
   margin: 0 0 14px;
   display: grid;
@@ -3025,20 +2885,9 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
   padding: 1px 6px;
   text-align: center;
 }
-.logs-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-}
-.logs-modal-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink);
-}
+/* `.logs-modal` 与 `.logs-modal-header` 已经没有样式了（宽高与页头都在 `.dialog-shell.size-l`
+   + `.dialog-head` 里），但 logs-ui-check 靠这两个类名定位弹窗，所以留在界面上 ——
+   已写进 UiContract 的锚点白名单（"没有样式"不等于"没有用处"，见 W1 那次误删）。 */
 .logs-modal-actions {
   display: flex;
   align-items: center;
@@ -3798,19 +3647,6 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 }
 
 /* Modals & Forms for Rules */
-.rule-modal-card {
-  width: min(600px, 94vw);
-  max-height: 88vh;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: scaleUp 0.2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-
 .rule-form-group {
   display: flex;
   flex-direction: column;
@@ -4065,17 +3901,7 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 }
 
 /* Health check modal */
-.source-health-modal {
-  width: min(780px, 94vw);
-  max-height: 88vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--surface);
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
-}
+/* 体检弹窗：外壳走 `.dialog-shell.size-m`（W2），宽度从 780 收到 680 这一档。 */
 
 .health-modal-title {
   display: flex;
@@ -4465,9 +4291,8 @@ body:has(.modal-backdrop) .pwa-update-toast { display: none; }
 }
 
 /* —— 书源分阶段调试台 —— */
-.source-debug-modal { width: min(940px, 94vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 48px rgba(0, 0, 0, .22); overflow: hidden; }
-.source-debug-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
-.source-debug-header h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: 18px; line-height: 1.3; }
+/* 书源调试弹窗：外壳走 `.dialog-shell.size-l`（940 那一档本来就是照它定的）。 */
+.source-debug-header h2 { font-family: Georgia, "Noto Serif SC", serif; line-height: 1.3; }
 .source-debug-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) 92px auto; gap: 10px; align-items: end; padding: 14px 20px; border-bottom: 1px solid var(--line); }
 .source-debug-form label { display: grid; gap: 5px; min-width: 0; }
 .source-debug-form label > span { color: var(--muted); font-size: 12px; }
@@ -4765,10 +4590,8 @@ input[type=range] { min-height: 24px; }
 }
 
 /* —— 书源分享浮层 —— */
-.source-share-dialog { width: min(680px, 94vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-4); box-shadow: var(--elev-3); overflow: hidden; }
-.source-share-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
-.source-share-header h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-2xl); }
-.source-share-header small { display: block; margin-top: 3px; color: var(--muted); font-size: var(--t-sm); }
+/* 分享书源弹窗：外壳与页头并入 `.dialog-shell.size-m` + `.dialog-head`（W2）。 */
+.source-share-header h2 { font-family: Georgia, "Noto Serif SC", serif; }
 .source-share-body { display: grid; gap: 12px; padding: 16px 20px; overflow: hidden; }
 .source-share-tip { margin: 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: var(--r-2); background: var(--surface-muted); color: var(--muted); font-size: var(--t-sm); line-height: 1.7; }
 .source-share-tip code { padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent-ink); font-size: 12px; }
@@ -5013,8 +4836,10 @@ input[type=range] { min-height: 24px; }
 .rss-article-body strong { display: -webkit-box; overflow: hidden; font-size: var(--t-lg); font-weight: 600; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .rss-article-body small { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: var(--t-md); line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .rss-article-body em { color: var(--muted); font-size: var(--t-xs); font-style: normal; }
-.rss-reader-backdrop { padding: 0; }
-.rss-reader { width: min(760px, 100%); max-height: 100%; overflow-y: auto; padding: var(--s-6); border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface); box-shadow: 0 16px 48px rgba(0, 0, 0, .22); display: grid; gap: var(--s-4); }
+/* RSS 正文这一张：外壳与挡片改引 `.dialog-shell.size-m` + `.overlay-backdrop`（W2），
+   原来它自己写着 width 760 / max-height 100% / 一套边框阴影，是第 17 套几何。
+   这里只留它作为"一篇文章"的排版：内边距、段落间距、能滚。 */
+.rss-reader { overflow-y: auto; padding: var(--s-6); gap: var(--s-4); }
 .rss-reader > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-4); }
 .rss-reader h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-2xl); line-height: 1.45; }
 .rss-reader header small { display: block; margin-top: 5px; color: var(--muted); font-size: var(--t-sm); }
@@ -5305,34 +5130,10 @@ input[type=range] { min-height: 24px; }
 .menu-section-action:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 /* —— 「自定义」弹窗 —— */
-.customize-dialog {
-  width: min(560px, 94vw);
-  max-height: min(86vh, 760px);
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
-  overflow: hidden;
-  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.customize-header {
-  flex: none;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-}
-.customize-header h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 600; }
+/* 「自定义」弹窗：外壳与页头走 `.dialog-shell.size-s` + `.dialog-head`，关闭键走 `.overlay-close`（W2）。
+   原来 `.toc-rules-modal` 是这一整份的复制品，两份数值各自漂了半年。 */
+.customize-header h2 { display: flex; align-items: center; gap: 8px; }
 .customize-header h2 svg { width: 18px; height: 18px; color: var(--accent); }
-.customize-close {
-  width: 30px; height: 30px;
-  display: grid; place-items: center;
-  border-radius: 6px;
-  color: var(--muted); background: transparent;
-}
-.customize-close:hover { background: var(--surface-muted); color: var(--ink); }
-.customize-close svg { width: 16px; height: 16px; }
 .customize-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 20px; }
 .customize-section { display: grid; gap: 8px; }
 .customize-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -5369,34 +5170,10 @@ input[type=range] { min-height: 24px; }
  * 「本地书分章规则」弹窗（2026-10-03：从「自定义」里搬出来，挂在书架导入旁边）
  * 壳沿用「自定义」弹窗那一套尺寸与圆角：同一应用里两种弹窗几何只会显得随机。
  * ========================================================================== */
-.toc-rules-modal {
-  width: min(560px, 94vw);
-  max-height: min(86vh, 760px);
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
-  overflow: hidden;
-  animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.toc-rules-head {
-  flex: none;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-}
-.toc-rules-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 600; }
+/* 「本地书分章规则」弹窗：外壳/页头/关闭键都改引浮层那一档（W2）。
+   这一份原来是 `.customize-dialog` 的整份复制 —— 两份数值互相漂。 */
+.toc-rules-head h2 { display: flex; align-items: center; gap: 8px; }
 .toc-rules-head h2 svg { width: 18px; height: 18px; color: var(--accent); }
-.toc-rules-close {
-  width: 30px; height: 30px;
-  display: grid; place-items: center;
-  border-radius: 6px;
-  color: var(--muted); background: transparent;
-}
-.toc-rules-close:hover { background: var(--surface-muted); color: var(--ink); }
-.toc-rules-close svg { width: 16px; height: 16px; }
 .toc-rules-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 14px; }
 .toc-rules-failed { margin: 0; color: var(--danger); font-size: 13px; }
 .toc-rules-loading { margin: 0; color: var(--muted); font-size: 13px; }
@@ -5443,7 +5220,7 @@ input[type=range] { min-height: 24px; }
 .bookmark-drawer-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 8px; padding: 14px 14px 10px; border-bottom: 1px solid var(--line); }
 .bookmark-drawer-head h3 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 16px; font-weight: 600; }
 .bookmark-drawer-head small { grid-column: 1 / -1; color: var(--muted); font-size: var(--t-xs); }
-.bookmark-drawer-head .close-button { grid-row: 1; }
+.bookmark-drawer-head .overlay-close { grid-row: 1; }
 .bookmark-add { display: grid; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .bookmark-quote, .bookmark-hint { margin: 0; color: var(--muted); font-size: var(--t-xs); line-height: 1.65; }
 .bookmark-quote span { display: block; margin-top: 3px; color: var(--ink); }
@@ -5582,3 +5359,72 @@ input[type=range] { min-height: 24px; }
   color: var(--danger); font-size: 13px;
 }
 .logs-error .logs-btn { flex: none; }
+
+/* ============================================================
+   L3 浮层 —— 一档外壳 + 一条遮罩 + 一颗关闭键 + 一行页头
+   （PROPOSAL-018 §3.3 · W2，2026-10-05）
+
+   改版前的账：弹窗外壳 16 套类名 / 13 档宽度 / 9 种 max-height / 8 种阴影 /
+   4 种入场动画，遮罩 4 套实现 4 档底色，关闭键 11 种类名 5 档尺寸，
+   另有 5 处用 inline style 直接压弹窗宽高。`.toc-rules-modal` 是
+   `.customize-dialog` 的整份复制，`.book-manage-sheet` 干脆没有 max-height
+   —— 长列表把弹窗顶出视口。这些都不会报错，只会让每一页的浮层"差一点点"。
+
+   现在只有一档：几何值全部从下面的令牌取，页面类名只留内容样式
+   （标题字号、封面列、动作条）与门禁锚点，不再声明宽高/圆角/阴影。
+   命名与新骨架 `qingyue/web/src/overlay/` 对齐（`.dialog-shell` + `size-*`），
+   W4 逐页搬过去时不必再改一遍名字。
+   ============================================================ */
+:root {
+  /* 宽度只有三档。94vw 的上限保证 390 宽的手机上两侧各留 3%。 */
+  --dw-s: 480px; --dw-m: 680px; --dw-l: 940px;
+  --dh-shell: min(88vh, 760px);
+  --backdrop: rgba(0, 0, 0, .45);
+}
+
+/* 一条遮罩：弹窗、内置浏览器、右键菜单挡片、看图都从这一档走。 */
+.overlay-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center; padding: var(--s-4);
+  background: var(--backdrop); backdrop-filter: blur(4px);
+  animation: fadeIn .18s ease;
+}
+/* 叠在另一个弹窗之上（编辑弹窗 / 导入弹窗 / 调试面板 / 内置浏览器登录头）。 */
+.overlay-backdrop.is-topped { z-index: 120; }
+/* 顶栏「我的」菜单的挡片：比弹窗高，因为菜单本身挂在页头那一层之上。 */
+.overlay-backdrop.is-menu { z-index: 199; }
+/* 整屏就是内容（内置浏览器、RSS 文章），挡片不留 16px 白边。 */
+.overlay-backdrop.is-flush { padding: 0; }
+/* 看图画布：要压到 86% 才看得出深色图的血边，也不该再套一层模糊。 */
+.overlay-backdrop.is-viewer { background: rgba(0, 0, 0, .86); backdrop-filter: none; padding: var(--s-6); cursor: zoom-out; z-index: 1000; }
+
+.dialog-shell {
+  display: flex; flex-direction: column;
+  width: min(var(--dw-m), 94vw); max-height: var(--dh-shell);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-3); box-shadow: var(--elev-3);
+  overflow: hidden; animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.dialog-shell.size-s { width: min(var(--dw-s), 94vw); }
+.dialog-shell.size-m { width: min(var(--dw-m), 94vw); }
+.dialog-shell.size-l { width: min(var(--dw-l), 94vw); }
+/* 内置浏览器：整屏是它的语义，没有圆角也没有阴影。 */
+.dialog-shell.is-fullscreen { width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; animation: fadeIn .18s ease; }
+
+/* 弹窗页头一行：标题在左、动作在右，高度由内容定，只有底边线是一档。 */
+.dialog-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3); padding: 14px 18px; border-bottom: 1px solid var(--line);
+}
+.dialog-head h2, .dialog-head h3 { margin: 0; min-width: 0; font-size: 16px; font-weight: 600; }
+.dialog-head small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--t-xs); }
+
+/* 一颗关闭键：30×30、无边框、hover 才有底色。 */
+.overlay-close {
+  width: 30px; height: 30px; flex: none; min-height: 30px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--r-1);
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.overlay-close:hover { background: var(--surface-muted); color: var(--ink); }
+.overlay-close svg { width: 16px; height: 16px; }

@@ -1,7 +1,20 @@
 import { execFileSync } from 'node:child_process';
 import { resolveRuntime } from './scripts/runtime.mjs';
 
-const { port } = resolveRuntime();
+/** `node stop.mjs [--port N]`：按端口找本项目的 java 进程停掉。端口默认与 start.mjs 同源。 */
+function portArg(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--port') return Number(argv[++i]);
+    if (arg.startsWith('--port=')) return Number(arg.slice('--port='.length));
+  }
+  return null;
+}
+
+const override = portArg(process.argv.slice(2));
+const { port: defaultPort } = resolveRuntime();
+const port = Number.isInteger(override) && override > 0 ? override : defaultPort;
+
 const lines = execFileSync('netstat', ['-ano'], { encoding: 'utf8' }).split(/\r?\n/)
   .filter((line) => new RegExp(`:${port}\\s`).test(line) && /LISTENING/i.test(line));
 if (!lines.length) { console.log(`端口 ${port} 上没有在跑的服务`); process.exit(0); }

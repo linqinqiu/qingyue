@@ -65,15 +65,30 @@ function resolveRuntime(target) {
   return 'jlink 新裁'
 }
 
-/** 启动脚本：cmd 按 GBK 读，所以这里只许 ASCII；行尾必须是 CRLF。 */
+/**
+ * 启动脚本：cmd 按 GBK 读，所以这里只许 ASCII；行尾必须是 CRLF。
+ *
+ * 端口可自定义（学 workbuddy-switch 的 `--port`）：`start.bat 1235` 优先，其次包内的
+ * `port.txt`，都没有才是 1234。服务冷启动要几十秒，所以另起一个后台 PowerShell **等端口
+ * 真的能连上再开浏览器** —— 一上来就开会只看到"无法访问此页面"。
+ */
+const psOpenWhenReady = 'for($i=0;$i -lt 240;$i++){try{$c=New-Object Net.Sockets.TcpClient;'
+  + "$c.Connect('127.0.0.1',%LEGADO_PORT%);$c.Close();"
+  + "Start-Process 'http://127.0.0.1:%LEGADO_PORT%/';break}catch{Start-Sleep -Milliseconds 500}}"
 const startBat = [
   '@echo off', 'setlocal', 'cd /d "%~dp0"',
-  'set LEGADO_PORT=1234', 'set LEGADO_DATA_DIR=data',
+  'set LEGADO_PORT=1234',
+  'if not "%~1"=="" set LEGADO_PORT=%~1',
+  'if exist "%~dp0port.txt" for /f "usebackq delims=" %%p in ("%~dp0port.txt") do set LEGADO_PORT=%%p',
+  'set LEGADO_DATA_DIR=data',
   'if not exist "%~dp0tmp" mkdir "%~dp0tmp"', 'echo.',
   `echo  QingYue ${version}  (bundled runtime, no JDK needed)`,
-  'echo  UI        http://127.0.0.1:1234/',
-  'echo  New shell http://127.0.0.1:1234/next/',
-  'echo  Stop with Ctrl+C.  Data stays in .\\data', 'echo.',
+  'echo  UI        http://127.0.0.1:%LEGADO_PORT%/',
+  'echo  New shell http://127.0.0.1:%LEGADO_PORT%/next/',
+  'echo  Stop with Ctrl+C.  Data stays in .\\data',
+  'echo  Change port:  start.bat 1235   (or write a number into port.txt)',
+  'echo.',
+  `start "" /b powershell -NoProfile -WindowStyle Hidden -Command "${psOpenWhenReady}"`,
   `"${'%~dp0'}runtime\\bin\\java.exe" -Djava.io.tmpdir="${'%~dp0'}tmp" -jar "${'%~dp0'}${jarName}"`,
   '', '',
 ].join('\r\n')
