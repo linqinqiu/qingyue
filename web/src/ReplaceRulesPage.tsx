@@ -446,7 +446,6 @@ export function ReplaceRulesPage() {
       <section className="rules-content-area">
         <header className="page-title">
           <div>
-            <span className="section-kicker">青阅</span>
             <h1>替换净化规则</h1>
             <p>净化网页抓取正文中的反爬文字对调、乱码错别字、引流广告与多余排版。</p>
           </div>

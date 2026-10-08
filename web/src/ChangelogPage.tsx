@@ -107,7 +107,6 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
     <main className="changelog-page">
       <header className="page-title">
         <div>
-          <span className="section-kicker">这个服务自己</span>
           <h1>更新日志</h1>
           <p>
             {serverVersion ? `当前运行的是 ${serverVersion}。` : '版本号以服务端报回的为准。'}

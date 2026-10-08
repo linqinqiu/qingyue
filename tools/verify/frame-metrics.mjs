@@ -299,10 +299,16 @@ if (COMPARE) {
     console.log(`NOTE  ${a.vp} ${a.route} 版面占用 ${b.coveragePct}% → ${a.coveragePct}%`)
     note(a.contentWidth >= b.contentWidth - 24, `${a.vp} ${a.route} 内容实占宽 ${b.contentWidth}px → ${a.contentWidth}px（不得明显变窄）`)
     // 窄屏页头条会折成两行，绝对上限只对宽屏成立；窄屏只要求"不比改前更靠下"。
-    const topCap = a.vp.startsWith('desk-') ? '第一行内容起始 ≤96px' : '窄屏只看是否比改前更靠下'
-    note(a.contentTop <= b.contentTop + 2 && !(a.vp.startsWith('desk-') && a.contentTop > 96),
-      `${a.vp} ${a.route} 第一行内容起始 ${b.contentTop}px → ${a.contentTop}px（页头必须变矮；${topCap}）`)
-    note(a.kickerCount === 0, `${a.vp} ${a.route} 不再出现 section-kicker 说明行（改前 ${b.kickerCount} 处）`)
+    // 书库是**冻结页**（PROPOSAL-018 §1）：它的页头高度与 kicker 就是基线的一部分，
+    // 这两条对它不成立 —— 否则"冻结"与"去 kicker"两条要求互相打架。
+    if (a.route !== '#library') {
+      const topCap = a.vp.startsWith('desk-') ? '第一行内容起始 ≤96px' : '窄屏只看是否比改前更靠下'
+      note(a.contentTop <= b.contentTop + 2 && !(a.vp.startsWith('desk-') && a.contentTop > 96),
+        `${a.vp} ${a.route} 第一行内容起始 ${b.contentTop}px → ${a.contentTop}px（页头必须变矮；${topCap}）`)
+      note(a.kickerCount === 0, `${a.vp} ${a.route} 不再出现 section-kicker 说明行（改前 ${b.kickerCount} 处）`)
+    } else {
+      console.log(`NOTE  ${a.vp} ${a.route} 冻结页：页头与 kicker 不动（基线里就是 ${b.kickerCount} 处）`)
+    }
     note(a.buttonHeights.median >= Math.min(b.buttonHeights.median, a.buttonHeights.median) - 2 && a.buttonHeights.median <= b.buttonHeights.median + 2,
       `${a.vp} ${a.route} 控件中位高度 ${b.buttonHeights.median}px → ${a.buttonHeights.median}px（密度不得漂）`)
     if (b.gridColumns > 0 && a.gridColumns > 0) {

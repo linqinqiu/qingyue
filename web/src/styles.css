@@ -4409,6 +4409,11 @@ input[type=range] { min-height: 24px; }
   gap: var(--s-5);
   align-content: start;
 }
+/*
+ * 页头上方的留白：书库是**冻结页**（PROPOSAL-018 §1），保持基线值不动；其余页收到 36px。
+ * 原来 56px 会把首行内容推到 y=118（帧栅格第 5 格 = 100px），而 §3.2 的目标是"第一行内容起始 ≤96px"。
+ */
+.shelf-page, .explore-page, .subscription-page, .backup-page { padding-block-start: 36px; }
 .page-title { gap: var(--s-4); }
 .page-title-actions { display: flex; align-items: center; gap: var(--s-2); flex: none; }
 
@@ -5034,7 +5039,7 @@ input[type=range] { min-height: 24px; }
 /* ============================================================
    备份恢复页（WebDAV 文件服务删除后，这一页只剩"选包即恢复"）
    ============================================================ */
-.backup-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px; }
+.backup-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px; }
 .backup-panel { margin-top: var(--s-5); padding: var(--s-5); border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
 .backup-panel h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-xl); font-weight: 600; }
 .backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
@@ -5240,7 +5245,7 @@ input[type=range] { min-height: 24px; }
 .bookmark-edit input { flex: 1 1 auto; min-width: 0; }
 .bookmark-message { margin: 0; padding: 8px 14px; color: var(--danger); font-size: var(--t-xs); }
 
-.bookmarks-page { width: min(920px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: 44px 32px 64px; }
+.bookmarks-page { width: min(920px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 .bookmarks-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
 .bookmarks-head h1 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 26px; font-weight: 600; }
 .bookmarks-head p { margin: 5px 0 0; color: var(--muted); font-size: var(--t-sm); }
@@ -5263,9 +5268,9 @@ input[type=range] { min-height: 24px; }
 @media (max-width: 640px) { .bookmarks-page { padding: 28px 18px 44px; } .bookmarks-book li { flex-direction: column; } }
 
 /* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
-.about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+.about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 /* —— 「设置」页：一行一件事，右侧一个动作。它不重复实现编辑器，只负责分类与跳转 —— */
-.settings-page { max-width: 760px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+.settings-page { max-width: 760px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 .settings-section { margin-top: 30px; }
 .settings-section h2 { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; }
 .settings-rows { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
@@ -5324,7 +5329,7 @@ input[type=range] { min-height: 24px; }
 }
 
 /* —— 「更新日志」页 —— */
-.changelog-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
+.changelog-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 .changelog-loading, .changelog-empty { color: var(--muted); font-size: 14px; }
 .changelog-list { display: grid; gap: 8px; margin-top: 28px; }
 .changelog-release { display: grid; gap: 14px; padding: 20px 0; border-top: 1px solid var(--line); }

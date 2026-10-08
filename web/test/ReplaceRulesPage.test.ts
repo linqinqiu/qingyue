@@ -9,8 +9,8 @@ test('ReplaceRulesPage - Static Rendering and Component Structure', () => {
   const element = React.createElement(ReplaceRulesPage)
   const html = renderToStaticMarkup(element)
 
-  // Verify kicker, title, and description
-  assert.ok(html.includes('青阅'), 'Page should contain kicker')
+  // 页头只有标题 + 一句说明（kicker 说明行已在 0.6.7 去掉，见 PROPOSAL-018 §3.2）
+  assert.ok(!/section-kicker/.test(html), '页头不该再有 kicker 说明行')
   assert.ok(html.includes('替换净化规则'), 'Page should contain main title')
   assert.ok(html.includes('净化网页抓取正文中的反爬文字对调'), 'Page should contain description')
 

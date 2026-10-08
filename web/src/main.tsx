@@ -750,7 +750,6 @@ function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
     <section className="subscription-panel">
       <header>
         <div>
-          <span className="section-kicker">同步远程书源</span>
           <h2>书源订阅地址</h2>
           <p>放的是<b>返回书源 JSON 的直链</b>（Legado「书源管理 · 订阅」里那种链接），不是网页地址。每 6 小时自动同步一次，同一地址的书源会整体覆盖更新。</p>
         </div>
@@ -846,7 +845,6 @@ function SubscriptionPage({ onSourcesChange, onNavigate }: { onSourcesChange: ()
     <main className="subscription-page">
       <header className="page-title">
         <div>
-          <span className="section-kicker">两类订阅</span>
           <h1>订阅</h1>
           <p>「书源订阅」同步远程书源列表；「RSS 订阅」是「订阅」页那些源，导入备份包后会出现在那里。</p>
         </div>
@@ -1368,7 +1366,6 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
       <section className="sources-content">
         <header className="page-title">
           <div>
-            <span className="section-kicker">青阅</span>
             <h1>书源管理</h1>
             <p>导入、校验与维护你的阅读来源。</p>
           </div>

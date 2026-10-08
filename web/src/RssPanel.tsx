@@ -125,7 +125,6 @@ export function RssPanel({ onChanged, onNavigate }: { onChanged: () => void; onN
     <section className="subscription-panel rss-panel">
       <header>
         <div>
-          <span className="section-kicker">要读的订阅源</span>
           <h2>RSS 订阅源</h2>
           <p>备份包里的 <code>rssSources.json</code> 会直接恢复到这张列表，点开即读，不依赖任何外部服务。</p>
         </div>

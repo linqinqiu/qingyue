@@ -168,7 +168,6 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
     <main className="explore-page">
       <header className="explore-header">
         <div>
-          <span className="section-kicker">按书源发现</span>
           <h1>发现</h1>
           <p>读取书源自带的发现页分栏（榜单、分类、专题），点书先看详情，再决定读不读。</p>
         </div>
