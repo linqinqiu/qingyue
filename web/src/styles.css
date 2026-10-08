@@ -401,7 +401,7 @@ svg { width: 18px; height: 18px; flex: none; }
 .sidebar-notice { margin: 0 16px 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .source-list-label { display: flex; justify-content: space-between; padding: 10px 20px; color: var(--muted); border-top: 1px solid var(--line); font-size: 12px; }
 .source-list { display: grid; overflow-y: auto; overflow-x: hidden; align-content: start; min-width: 0; }
-.source-list button { min-height: 58px; display: grid; gap: 5px; padding: 10px 16px; background: transparent; color: var(--ink); text-align: left; border-left: 3px solid transparent; width: 100%; box-sizing: border-box; min-width: 0; }
+.source-list button { min-height: 48px; display: grid; gap: 2px; padding: 8px 16px; background: transparent; color: var(--ink); text-align: left; border-left: 3px solid transparent; width: 100%; box-sizing: border-box; min-width: 0; }
 .source-list button:hover { background: var(--surface-muted); }
 .source-list button.selected { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent-ink); }
 .source-list small { color: var(--muted); font-size: 11px; }
@@ -5303,6 +5303,25 @@ input[type=range] { min-height: 24px; }
 .about-table td { padding: 7px 10px 7px 0; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
 .about-table td:last-child { width: 88px; color: var(--muted); white-space: nowrap; }
 @media (max-width: 640px) { .about-page { padding: 32px 18px 44px; } }
+
+/* —— C 类页（设置 / 备份 / 关于）宽屏两栏 ——
+   PROPOSAL-018 §3.2 的目标是"两侧死白 ≤25%"。单栏限宽居中做不到：920 的列在 1440 屏上
+   两侧各留 260px（实测设置页 50%、备份 40%、关于 39%）。≥1200px 时把分组左右并排、
+   页头横跨两栏，内容实占 ~76%。窄屏（<1200px）仍是单栏居中，与原来一致。 */
+@media (min-width: 1200px) {
+  .settings-page, .backup-page, .about-page {
+    max-width: 1120px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    column-gap: 44px;
+    row-gap: 0;
+  }
+  /* 页头横跨两栏，不被挤进某一栏 */
+  .settings-page > .page-title,
+  .backup-page > .page-title,
+  .about-page > .about-hero { grid-column: 1 / -1; }
+}
 
 /* —— 「更新日志」页 —— */
 .changelog-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px 64px; }
