@@ -4431,6 +4431,30 @@ input[type=range] { min-height: 24px; }
 .explore-tabs.expanded { max-height: 40vh; overflow-y: auto; }
 .explore-tab { min-height: var(--ctl-sm); border-radius: var(--r-pill); font-size: var(--t-md); }
 
+/*
+ * 发现页（A 类页，PROPOSAL-018 §3.2）：撑满视口高度 + 内容区吃掉剩余空间。
+ * 原来它只按内容高度排，选源失败或结果少时底部留下 ~71% 空白；现在"下半区"（结果 / 空态 /
+ * 读取中）都 flex:1，页面始终填到视口底部。空态也从一行灰字改成一块居中的面板 —— 一页空着
+ * 的时候，一行字贴在顶上、下面全是白，看着像坏了。
+ */
+.explore-page {
+  min-height: calc(100vh - 68px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-block: 36px clamp(28px, 4vw, 48px);
+}
+.explore-page > * { flex: none; min-width: 0; }
+.explore-page > .explore-results,
+.explore-page > .explore-message,
+.explore-page > .explore-loading { flex: 1 1 auto; }
+.explore-message, .explore-loading {
+  display: grid; place-content: center; gap: var(--s-2); padding: var(--s-6);
+  border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface);
+  color: var(--muted); font-size: var(--t-md); text-align: center;
+}
+.explore-loading { grid-auto-flow: column; align-items: center; }
+
 /* —— 书库静置态：搜索框下面不再是一整屏空白 + 一条孤零零的横线 —— */
 .library-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-3); border-top: 0; }
 .library-idle a {
