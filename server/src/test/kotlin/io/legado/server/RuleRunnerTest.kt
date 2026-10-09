@@ -170,6 +170,24 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `@@ marks inside {{}} templates are stripped before evaluation`() {
+        // 上游模板常写 `{{@@.k.0@text}}`：`@@` 只是标记不是选择器，不剥掉会去选一个叫 `@@.k.0`
+        // 的东西，取值必空（实测 65 个源的 intro/kind 这么丢）。
+        val source = """{
+            "bookSourceUrl":"https://atmark.example",
+            "searchUrl":"https://atmark.example/s?q={{key}}",
+            "ruleSearch":{"bookList":"//li","name":"@css:.t@text","bookUrl":"@css:a@href","kind":"{{@@.k.0@text}}","intro":"{{ @@.i@text}}"}
+        }"""
+        val page = """<html><body><ul><li><a href="/b/1"><span class="t">书名</span></a><span class="k">都市</span><span class="k">完结</span><span class="i">简介文本</span></li></ul></body></html>"""
+        val runner = RuleRunner { url -> if (url.startsWith("https://atmark.example/s")) page else error("unexpected $url") }
+
+        val result = runner.search(source, "搜").single()
+        assertEquals("书名", result.name)
+        assertEquals("都市", result.kind)
+        assertEquals("简介文本", result.intro)
+    }
+
+    @Test
     fun `search returns candidates directly without fetching details TOC or content`() {
         val source = """{
             "bookSourceUrl":"https://source.example",

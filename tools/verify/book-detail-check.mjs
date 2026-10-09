@@ -197,17 +197,16 @@ try {
       })
       await sleep(400)
 
-      // 目录展开条与简介仍在原位（这一轮重排过头部，别把下面的弄丢）
+      // 目录预览与简介仍在原位（这一轮重排过头部，别把下面的弄丢）
       const rest = await page.evaluate(() => ({
         hasToc: !!document.querySelector('.preview-chapters button'),
         tocTitle: document.querySelector('.book-detail-section-title small')?.textContent?.trim() ?? '',
-        expand: !!document.querySelector('.chapter-expand-bar'),
         chapters: Number((document.querySelector('.book-detail-stats > div > dd')?.textContent ?? '').match(/\d+/)?.[0] ?? -1),
       }))
       if (rest.chapters === 0) {
         note('目录预览仍在弹窗里', '这本书取不到目录（0 章），预览按设计就是空的 —— 换一本有目录的书才验得了这条')
       } else {
-        check('目录预览仍在弹窗里', rest.hasToc, `${rest.tocTitle}${rest.expand ? ' · 有展开条' : ''}`)
+        check('目录预览仍在弹窗里', rest.hasToc, rest.tocTitle)
       }
 
       // 「在书源页中定位」真的带过去：跳完书源页的搜索框里应该是那个源名。

@@ -4474,6 +4474,11 @@ input[type=range] { min-height: 24px; }
 .explore-tabs:not(.expanded) { max-height: calc(var(--ctl-sm) * 2 + var(--s-2)); }
 .explore-tabs.expanded { max-height: 40vh; overflow-y: auto; }
 .explore-tab { min-height: var(--ctl-sm); border-radius: var(--r-pill); font-size: var(--t-md); }
+/* 「N 本书」计数挪到分栏行右端（原在结果表头，离分栏隔着一屏）。align-start：
+   分栏展开到 40vh 时计数钉在首行旁边，不跟着掉到底部。 */
+.explore-tabs-row { display: flex; align-items: flex-start; gap: var(--s-3); }
+.explore-tabs-row .explore-tabs { flex: 1 1 auto; min-width: 0; }
+.explore-tab-count { flex: 0 0 auto; padding-top: calc((var(--ctl-sm) - 1em) / 2); color: var(--muted); font-size: var(--t-sm); white-space: nowrap; }
 
 /*
  * 发现页（A 类页，PROPOSAL-018 §3.2）：撑满视口高度 + 内容区吃掉剩余空间。
@@ -5148,17 +5153,8 @@ input[type=range] { min-height: 24px; }
    （书架 hover 信息层与右键归组沿用 .shelf-card-hover 既有规则，不需要新增样式）
    ============================================================ */
 
-/* ① 目录预览：通栏展开条 + 离屏行不参与布局 */
+/* ① 目录预览：一次全给（展开条已删），离屏行不参与布局 */
 .preview-chapters button { content-visibility: auto; contain-intrinsic-size: auto 44px; }
-.chapter-expand-bar { display: flex; align-items: stretch; gap: var(--s-2); margin-top: var(--s-2); }
-.chapter-expand-more { display: flex; flex: 1; align-items: center; justify-content: center; gap: 7px; min-height: var(--ctl); padding: 0 var(--s-4); border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface-muted); color: var(--ink); font-size: var(--t-md); font-weight: 600; }
-.chapter-expand-more:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); color: var(--accent-ink); }
-.chapter-expand-more svg { width: 15px; height: 15px; }
-.chapter-expand-all { min-height: var(--ctl); padding: 0 var(--s-4); border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface); color: var(--muted); font-size: var(--t-md); white-space: nowrap; }
-.chapter-expand-all:hover { color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.chapter-collapse { display: block; width: 100%; min-height: 30px; margin-top: 6px; border: 0; background: transparent; color: var(--muted); font-size: var(--t-sm); }
-.chapter-collapse:hover { color: var(--accent-ink); text-decoration: underline; }
-@media (max-width: 640px) { .chapter-expand-bar { flex-wrap: wrap; } .chapter-expand-more { flex: 1 1 100%; } }
 
 /* ② 选源：只列启用中的，停用要显式勾出来 */
 .library-scope-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--t-sm); white-space: nowrap; cursor: pointer; }

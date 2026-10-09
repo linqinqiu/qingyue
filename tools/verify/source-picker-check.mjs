@@ -275,24 +275,23 @@ try {
     (exploreGroupHint ?? '').includes('搜索'), exploreGroupHint)
   await page.screenshot({ path: path.join(SHOTS, 'picker-explore-source-search.png') })
 
-  // ── ④ 目录预览的展开条 ──────────────────────────────────
-  // 展开条只在章数 > 16 时出现。逐本试前几本，别因为第一本目录短就跳过。
+  // ── ④ 目录预览（一次全给） ──────────────────────────────────
+  // 2026-10-09 起目录预览不再分水位：弹窗打开就把整份目录挂出来。逐本试前几本，
+  // 别因为第一本目录短就跳过。
   const openBookWithChapters = async () => {
     const handles = await page.$$('.search-card')
     for (let index = 0; index < Math.min(7, handles.length); index++) {
       await handles[index].click()
-      let toc = { hasBar: false, rows: 0, title: '' }
+      let toc = { rows: 0, title: '' }
       for (let tick = 0; tick < 20; tick++) {
         await sleep(1500)
         toc = await page.evaluate(() => ({
-          hasBar: !!document.querySelector('.chapter-expand-bar'),
-          label: document.querySelector('.chapter-expand-more')?.textContent?.trim() ?? '',
           rows: document.querySelectorAll('.preview-chapters button').length,
           title: document.querySelector('.book-detail-section-title small')?.textContent?.trim() ?? '',
         }))
-        if (toc.hasBar || toc.rows > 0) break
+        if (toc.rows > 0) break
       }
-      if (toc.hasBar) return toc
+      if (toc.rows > 0) return toc
       await page.keyboard.press('Escape')
       await sleep(800)
     }
@@ -306,37 +305,17 @@ try {
   await sleep(18000)
   const toc = await openBookWithChapters()
   if (toc) {
-    check('目录展开条写得看得懂（"继续展开 N 章"而不是空括号）',
-      /继续展开\s*\d+\s*章/.test(toc.label), toc.label)
-    check('标题行交代了"已显示 / 共"两数', /已显示\s*\d+\s*\/\s*\d+\s*章/.test(toc.title), toc.title)
-    const before = toc.rows
-    await page.click('.chapter-expand-more')
-    await sleep(2500)
-    const after = await page.evaluate(() => ({
-      rows: document.querySelectorAll('.preview-chapters button').length,
-      visibility: getComputedStyle(document.querySelector('.preview-chapters button')).contentVisibility,
-    }))
-    check('点一次就按千章推进，不是一批批磨', after.rows > before, `${before} → ${after.rows} 行`)
-    check('离屏章节行不参与布局（content-visibility 生效）', after.visibility === 'auto', after.visibility)
-    const all = await page.evaluate(() => !!document.querySelector('.chapter-expand-all'))
-    if (all) {
-      await page.click('.chapter-expand-all')
-      const done = await pollUntil(() => page.evaluate(() => ({
-        rows: document.querySelectorAll('.preview-chapters button').length,
-        title: document.querySelector('.book-detail-section-title small')?.textContent?.trim() ?? '',
-        collapsed: !!document.querySelector('.chapter-collapse'),
-      })), state => state.collapsed, 12000)
-      check('「一次全部展开」真的全放出来并能收起',
-        !!done && done.rows > after.rows && /共\s*\d+\s*章/.test(done.title),
-        done ? `${after.rows} → ${done.rows} 行 · ${done.title}` : '点完全展开后 12 秒仍未收起到位')
-    } else {
-      skip('「一次全部展开」', '剩余不足一步，按钮按设计不出现')
-    }
+    const total = Number(toc.title.match(/\d+/)?.[0] ?? -1)
+    check('标题行交代了总数（"共 N 章"）', /共\s*\d+\s*章/.test(toc.title), toc.title)
+    check('目录一次全给（行数 = 总数，没有水位）', total >= 0 && toc.rows === total, `${toc.rows} 行 · ${toc.title}`)
+    const visibility = await page.evaluate(() =>
+      getComputedStyle(document.querySelector('.preview-chapters button')).contentVisibility)
+    check('离屏章节行不参与布局（content-visibility 生效）', visibility === 'auto', visibility)
     await page.screenshot({ path: path.join(SHOTS, 'picker-toc-expand.png') })
     await page.keyboard.press('Escape')
     await sleep(600)
   } else {
-    skip('目录展开条', '前几本搜索结果都没有超过 16 章的目录')
+    skip('目录预览', '前几本搜索结果都没有取到目录')
   }
 
   // ── ⑤ 书架信息层与右键归组 ──────────────────────────────

@@ -53,9 +53,7 @@ import { parseSourceJsonText, extractSourcesFromRaw, sanitizeImageUrl } from './
 /** 书源侧栏一次渲染的条数上限：整库导入常有数千个源，全量挂载会让首屏和滚动一起变卡。 */
 const SOURCE_PAGE_SIZE = 120
 
-/** 书籍详情弹窗的目录预览：初始水位与「继续展开」步长。步长按千章走，五千章的书两次点完。 */
-const TOC_INITIAL = 16
-const TOC_STEP = 1000
+/* 目录预览不再分水位：一次全给（用户 2026-10-09：「目录预览直接展示全部目录，不需要展开了」）。 */
 
 /**
  * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效，音乐` 表示同时属于两个分组。
@@ -310,8 +308,6 @@ function BookDetailModal({
   onClose: () => void
 }) {
   const [introExpanded, setIntroExpanded] = useState(false)
-  /** 目录预览的展开水位，见 TOC_INITIAL / TOC_STEP 的说明。 */
-  const [tocShown, setTocShown] = useState(TOC_INITIAL)
   const [inspections, setInspections] = useState<Map<string, SourceHealthInspection>>(() =>
     getInitialOrStoredInspections(choices.map(c => c.result))
   )
@@ -395,7 +391,7 @@ function BookDetailModal({
    * 用户的感觉就是"点了半天才出来"。步长提到 1,000，再给一条"一次全部展开"，
    * 配合 CSS content-visibility 让离屏行不参与布局与绘制。
    */
-  const visibleChapters = useMemo(() => book.chapters.slice(0, Math.min(tocShown, book.chapters.length)).map(item => (
+  const visibleChapters = useMemo(() => book.chapters.map(item => (
     <button
       className={item.index === resumeIndex ? 'resume-chapter' : ''}
       key={item.url}
@@ -404,8 +400,7 @@ function BookDetailModal({
       <span>{item.title}</span>
       {item.index === resumeIndex && book.progress && <small>上次阅读</small>}
     </button>
-  )), [book.chapters, book.progress, handleOpenReader, resumeIndex, tocShown])
-  const shownChapters = Math.min(tocShown, book.chapters.length)
+  )), [book.chapters, book.progress, handleOpenReader, resumeIndex])
 
   useEffect(() => {
     let active = true
@@ -587,46 +582,14 @@ function BookDetailModal({
           <div className="book-detail-section">
             <div className="book-detail-section-title">
               <span>目录预览</span>
-              <small>
-                {shownChapters === book.chapters.length
-                  ? `共 ${book.chapters.length} 章`
-                  : `已显示 ${shownChapters} / ${book.chapters.length} 章`}
-              </small>
+              <small>共 {book.chapters.length} 章</small>
             </div>
+            {/* 一次全给（用户 2026-10-09：「目录预览直接展示全部目录，不需要展开了」）。
+                离屏行靠 CSS content-visibility 不参与布局与绘制，所以不必再分水位 ——
+                "继续展开 / 收起"那种做法让大目录看着像只显示了一小截。 */}
             <div className="preview-chapters">
               {visibleChapters}
             </div>
-            {/*
-              原来是一句括号里带计数的 ghost 按钮：既看不出可点、又每次只放 300 章，
-              五千章的书要点十几次，用户的感觉就是"点了半天才出来"。
-              现在改成一条通栏的展开条：左边按千章步进，右边给"全部"这一档。
-            */}
-            {book.chapters.length > shownChapters && (
-              <div className="chapter-expand-bar">
-                <button
-                  type="button"
-                  className="chapter-expand-more"
-                  onClick={() => setTocShown(value => Math.min(book.chapters.length, value + TOC_STEP))}
-                >
-                  <Icon name="chevronDown" />
-                  <span>继续展开 {Math.min(TOC_STEP, book.chapters.length - shownChapters)} 章</span>
-                </button>
-                {book.chapters.length - shownChapters > TOC_STEP && (
-                  <button
-                    type="button"
-                    className="chapter-expand-all"
-                    onClick={() => setTocShown(book.chapters.length)}
-                  >
-                    一次全部展开
-                  </button>
-                )}
-              </div>
-            )}
-            {tocShown > TOC_INITIAL && (
-              <button type="button" className="chapter-collapse" onClick={() => setTocShown(TOC_INITIAL)}>
-                收起，只留前 {TOC_INITIAL} 章
-              </button>
-            )}
           </div>
         </div>
       </div>

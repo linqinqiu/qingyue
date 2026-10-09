@@ -50,9 +50,12 @@ internal class NodeValue private constructor(private val html: Element?, private
         }
 
         if (trimmedRule.contains("{{") && trimmedRule.contains("}}")) {
-            trimmedRule = Regex("\\{\\{(.*?)}}").replace(trimmedRule) { match ->
+            val templated = Regex("\\{\\{(.*?)}}").replace(trimmedRule) { match ->
                 // 只去前导空白：`{{$.t##T|\+.*## }}` 的替换串就是那个空格，整串 trim 会把时间粘成 `2023-09-0100:00:33`。
-                val inner = match.groupValues[1].trimStart()
+                // `@@` 前缀（上游常见写法，如 `{{@@#bookIntro@text}}`、`{{@@td.0@text}}`）只是标记，
+                // 不是选择器的一部分 —— 不剥掉的话整条规则会去选一个叫 `@@#bookIntro` 的东西，取值必空。
+                val raw = match.groupValues[1].trimStart()
+                val inner = if (raw.startsWith("@@")) raw.substring(2).trimStart() else raw
                 if (inner.isBlank()) return@replace ""
                 // 先查 `@put:` 存下的变量（上游 `{{}}` 与 `@get:{}` 是同一条正则匹配的）
                 ruleVariables[inner.trim()]?.let { return@replace it }
@@ -64,6 +67,13 @@ internal class NodeValue private constructor(private val html: Element?, private
                     runCatching { valuePlain(branch) }.getOrNull()?.takeIf { it.isNotBlank() }
                 } ?: ""
             }
+            // 上游语义：规则里只要出现 {{}}，整条就是文本模板 —— 展开的结果就是最终值。
+            // 不早退的话 "都市" 这种纯文本会掉到函数末尾被再当一次 CSS 选择器求值，必空
+            // （实测 65 个源的 intro/kind 全这么丢的；带 @js: / <js> 尾段的仍走后面的合成路径）。
+            if (templated != trimmedRule && findInlineJsMarker(templated) == null && !templated.contains("<js>")) {
+                return templated
+            }
+            trimmedRule = templated
         }
 
         if (trimmedRule.startsWith("@js:") || trimmedRule.startsWith("js:")) {

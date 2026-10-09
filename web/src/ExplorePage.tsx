@@ -210,18 +210,23 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
 
       {tabs.length > 0 && (
         <>
-          <nav className={tabsExpanded ? 'explore-tabs expanded' : 'explore-tabs'} aria-label="发现分栏">
-            {labelledTabs.map(item => (
-              <button
-                key={`${item.title}::${item.url}`}
-                type="button"
-                className={tab?.url === item.url ? 'explore-tab active' : 'explore-tab'}
-                onClick={() => setTab(item)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          {/* 「N 本书」原来挂在下面结果卡片的表头里，跟分栏按钮离着一屏 —— 用户 2026-10-09
+              「分栏按钮计数位置」，挪到分栏这一行的右端，选了哪个分栏、这个分栏几本书一眼看全。 */}
+          <div className="explore-tabs-row">
+            <nav className={tabsExpanded ? 'explore-tabs expanded' : 'explore-tabs'} aria-label="发现分栏">
+              {labelledTabs.map(item => (
+                <button
+                  key={`${item.title}::${item.url}`}
+                  type="button"
+                  className={tab?.url === item.url ? 'explore-tab active' : 'explore-tab'}
+                  onClick={() => setTab(item)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+            {books.length > 0 && <small className="explore-tab-count">{books.length} 本书</small>}
+          </div>
           {tabs.length > 22 && (
             <button type="button" className="ghost-button explore-tabs-toggle" onClick={() => setTabsExpanded(value => !value)}>
               {tabsExpanded ? '收起分栏' : `展开全部 ${tabs.length} 个分栏`}
@@ -234,7 +239,7 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
 
       {books.length > 0 && (
         <section className="explore-results">
-          <header><h2>{tab?.title ?? '发现'}</h2><small>{books.length} 本书</small></header>
+          <header><h2>{tab?.title ?? '发现'}</h2></header>
           <div className="explore-grid">
             {books.map((book, index) => (
               <button type="button" key={`${book.sourceId}::${book.bookUrl}::${index}`} className="explore-card" onClick={() => void open(book)}>
