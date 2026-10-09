@@ -53,11 +53,16 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   const table = read('../src/shortcuts.ts')
   // 书源已回到顶栏：它必须是一级入口，且不再出现在收编清单里
   assert.ok(/\{ page: 'sources'/.test(table), '书源要回到顶栏一级表里')
-  assert.ok(!/SETTINGS_SUBPAGES[^\n]*'sources'/.test(table), '书源既回了顶栏，就不该再留在 SETTINGS_SUBPAGES')
-  // 规则 / 备份 仍在「设置」页下：不占顶栏，但必须出现在收编清单里（不能凭空消失）
+  // 规则 / 备份 仍从「设置」页进：0.6.27 起是悬浮层（PageDialog），不占顶栏也不占路由，
+  // 但入口与处理必须真的接上（不能凭空消失）
+  const app = read('../src/main.tsx')
   for (const page of ['rules', 'backup']) {
     assert.ok(!new RegExp(`\\{ page: '${page}'`).test(table), `${page} 不该占顶栏`)
-    assert.ok(table.includes(`'${page}'`), `${page} 既不在顶栏也不在收编清单（SETTINGS_SUBPAGES）里，等于消失了`)
+    // 规则走 ReplaceRulesModal（showReplaceRules），备份 / 更新日志 / 关于走 PageDialog
+    const wired = page === 'rules'
+      ? app.includes('setShowReplaceRules(true)') && app.includes("pageDialog === 'rules'")
+      : app.includes(`setPageDialog('${page}')`)
+    assert.ok(wired, `${page} 的悬浮层没接线`)
   }
   assert.ok(table.includes("'settings'"), '设置必须留在一级表里')
 
@@ -70,8 +75,9 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   assert.match(block, /setTocRulesSignal\(value => value \+ 1\)/, '分章规则那行要真的能开弹窗')
   // 2026-10-09 书源回到顶栏，设置页不再留书源那行（同一个目的地只留一条路）
   assert.doesNotMatch(block, /navigate\('sources'\)/, '书源回了顶栏，设置页不该再留第二条路')
-  assert.match(block, /navigate\('rules'\)/, '替换净化规则要在设置页有一行')
-  assert.match(block, /navigate\('backup'\)/, '备份包要在设置页有一行')
+  // 0.6.27 起规则 / 备份 两行改为开悬浮层：行还在，动作从整页导航换成弹层
+  assert.match(block, /setShowReplaceRules\(true\)/, '替换净化规则要在设置页有一行（开悬浮层）')
+  assert.match(block, /setPageDialog\('backup'\)/, '备份包要在设置页有一行（开悬浮层）')
 })
 
 test('路由与"去书架开弹窗"的信号接上了', () => {

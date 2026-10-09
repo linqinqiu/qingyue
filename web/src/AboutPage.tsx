@@ -82,7 +82,7 @@ export function AboutPage({
   const homepage = repository ? `https://github.com/${repository}` : ''
 
   return (
-    <main className="about-page">
+    <section className="about-page">
       <header className="about-hero">
         <h1>{info?.title ?? '青阅'}</h1>
         <p>把 Legado 书源规则跑在服务端的本地阅读库：书架、发现、订阅、朗读与离线缓存都在自己的机器上。</p>
@@ -137,6 +137,6 @@ export function AboutPage({
       <Section title="免责声明">
         <p>{DISCLAIMER_TEXT}</p>
       </Section>
-    </main>
+    </section>
   )
 }

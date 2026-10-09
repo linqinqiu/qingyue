@@ -14,7 +14,8 @@ const SRC = path.resolve(import.meta.dirname, '../src')
 
 test('备份页静态渲染：主语是备份包，不是"手机恢复"，也不再教用户连网络服务', () => {
   const html = renderToStaticMarkup(React.createElement(BackupPage))
-  assert.ok(html.includes('备份包'), '页面标题要点明这是备份包入口')
+  // 0.6.27 起备份是悬浮层：标题在层头（BackupPage 单独静态渲染看不到），正文只说清入口与动作
+  assert.ok(html.includes('备份包'), '正文要点明这是备份包入口（标题在悬浮层头）')
   assert.ok(html.includes('选择备份包导入'), '主按钮必须能选本地 zip')
   // 用户 2026-09-30：「手机恢复这个名词解释有些难听，咱们这是电脑啊，支持手机端阅读的备份，但是不要这么命名」
   assert.ok(!/手机恢复|手机端|手机导入|手机端恢复/.test(html), `不许把电脑上的页面命名成手机动作：${html.slice(0, 200)}`)
@@ -27,6 +28,28 @@ test('备份页静态渲染：主语是备份包，不是"手机恢复"，也不
     '必须提前说清"已存在的书源不会被刷掉启用位"')
   assert.ok(html.includes('临时文件'), '要说清包不落盘，用户才敢把备份交出来')
   assert.ok(!/WebDAV|webdav/i.test(html), '页面上不许再出现 WebDAV 字样')
+})
+
+test('「会恢复到应用里 / 原样收下的条目」清单里不许有同名条目（同一条列两遍 = 重复 key + 说法打架）', () => {
+  // 2026-10-09 抓到：「TXT 分章规则」在 KEPT_SECTIONS 里被列了两遍（一条说"可套用"、
+  // 一条说"原样存着不读"，互相矛盾），同时是 React 的重复 key（只警告、不报错，门禁看不见）。
+  const html = renderToStaticMarkup(React.createElement(BackupPage))
+  const labels = [...html.matchAll(/<dt>([^<]+)<\/dt>/g)].map(m => m[1].trim())
+  assert.ok(labels.length > 0, '清单没渲染出来，判据在演空戏')
+  const dupes = [...new Set(labels.filter((label, index) => labels.indexOf(label) !== index))]
+  assert.deepEqual(dupes, [], `这些条目列了两遍：${dupes.join('、')}`)
+})
+
+test('备份页分两层说明，且两层不交叉：会恢复到应用里 / 原样收下的条目', () => {
+  // 0.6.27 之前两层混在一个「这个包会恢复什么」清单里，"恢复进应用"和"原样收下"读不出区别。
+  const html = renderToStaticMarkup(React.createElement(BackupPage))
+  assert.ok(html.includes('会恢复到应用里'), '恢复那一层要有自己的标题')
+  assert.ok(html.includes('原样收下的条目'), '原样收下那一层要有自己的标题')
+  const restored = /会恢复到应用里([\s\S]*?)原样收下的条目/.exec(html)?.[1] ?? ''
+  assert.ok(restored.length > 0, '两层之间要有内容')
+  for (const kept of ['阅读样式', '朗读引擎', '字典规则']) {
+    assert.ok(!restored.includes(kept), `「${kept}」属于"原样收下"那一层，不该混进"会恢复到应用里"`)
+  }
 })
 
 /**

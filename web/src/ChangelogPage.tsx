@@ -102,13 +102,9 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
   useEffect(() => { load() }, [load])
 
   return (
-    <main className="changelog-page">
-      <header className="page-title">
-        <div>
-          <h1>更新日志</h1>
-          <p>{serverVersion ? `当前运行的是 ${serverVersion}。` : '版本号以服务端报回的为准。'}</p>
-        </div>
-      </header>
+    <section className="changelog-page">
+      {/* 标题由悬浮层头给（0.6.27），正文只留一句"当前跑的是哪一版" */}
+      <p className="page-lead">{serverVersion ? `当前运行的是 ${serverVersion}。` : '版本号以服务端报回的为准。'}</p>
       {loading && <p className="changelog-loading">正在读取…</p>}
       {!!error && (
         <Notice
@@ -140,6 +136,6 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
           ))}
         </div>
       )}
-    </main>
+    </section>
   )
 }

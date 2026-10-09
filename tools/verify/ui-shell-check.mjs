@@ -218,13 +218,13 @@ try {
     items: document.querySelectorAll('.changelog-group li').length,
     current: document.querySelectorAll('.changelog-release.current').length,
     flag: !!document.querySelector('.changelog-flag'),
-    head: document.querySelector('.changelog-page .page-title h1')?.textContent?.trim() ?? '',
+    head: document.querySelector('.page-dialog .dialog-head h2')?.textContent?.trim() ?? '',
     version: document.querySelector('.changelog-release h2')?.textContent?.trim() ?? '',
     emptySaid: !!document.querySelector('.changelog-empty'),
-    headP: document.querySelector('.changelog-page .page-title p')?.textContent ?? '',
+    headP: document.querySelector('.changelog-page .page-lead')?.textContent ?? '',
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }))
-  check('③页头是这一套页面共用的那种式样（.page-title）', log.head === '更新日志', `实测「${log.head || '(空)'}」`)
+  check('③层头是这一套浮层共用的那种式样（.dialog-head，0.6.27 起标题在层头）', log.head === '更新日志', `实测「${log.head || '(空)'}」`)
   check('③有版本段与条目，且没有把"没读到"说成"没有更新"',
     log.releases > 0 && log.items > 0 && log.groups > 0 && !log.emptySaid,
     `${log.releases} 个版本 · ${log.groups} 组 · ${log.items} 条`)

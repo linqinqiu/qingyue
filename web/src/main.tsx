@@ -23,7 +23,7 @@ import { SourceLoginModal } from './SourceLoginModal'
 import { SourceDebugModal } from './SourceDebugModal'
 import { SourceShareModal } from './SourceShareModal'
 import { ReplaceRulesModal } from './ReplaceRulesModal'
-import { ReplaceRulesPage } from './ReplaceRulesPage'
+import { PageDialog } from './PageDialog'
 import { ExplorePage } from './ExplorePage'
 import { RssPanel } from './RssPanel'
 import { Notice } from './Notice'
@@ -65,9 +65,14 @@ const splitSourceGroups = (raw?: string) =>
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 
-type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'settings'
+type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'settings'
+/** 不占导航栏、也不占整页的目的地（0.6.27 起全部悬浮化）：规则 / 备份 / 更新日志 / 关于 */
+type PageDialogKind = 'rules' | 'backup' | 'changelog' | 'about'
+const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则', backup: '备份包', changelog: '更新日志', about: '关于' }
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : location.hash === '#settings' ? 'settings' : 'library'
+const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#settings' ? 'settings' : 'library'
+/** 旧深链进来仍开对的那一个悬浮层，不白屏也不跳页 */
+const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : null
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -784,7 +789,7 @@ function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
  * 页签上带条数：这张页最容易出现的状态是"看着像空的"，
  * 数字能立刻区分"这一类我一条都没有"和"数据在另一张页签里"。
  */
-function SubscriptionPage({ onSourcesChange, onNavigate }: { onSourcesChange: () => void; onNavigate: (page: Page) => void }) {
+function SubscriptionPage({ onSourcesChange, onNavigate, onOpenBackup }: { onSourcesChange: () => void; onNavigate: (page: Page) => void; onOpenBackup: () => void }) {
   const [tab, setTab] = useState<'sources' | 'rss'>('sources')
   const [counts, setCounts] = useState<{ sources: number | null; rss: number | null }>({ sources: null, rss: null })
   const [refreshKey, setRefreshKey] = useState(0)
@@ -819,7 +824,7 @@ function SubscriptionPage({ onSourcesChange, onNavigate }: { onSourcesChange: ()
       </nav>
       {tab === 'sources'
         ? <SubscriptionPanel onSourcesChange={onSourcesChange} onChanged={refresh} onNavigate={onNavigate} />
-        : <RssPanel onChanged={refresh} onNavigate={onNavigate} />}
+        : <RssPanel onChanged={refresh} onOpenBackup={onOpenBackup} />}
     </main>
   )
 }
@@ -3139,6 +3144,7 @@ function App() {
     }
   })
   const [showReplaceRules, setShowReplaceRules] = useState(false)
+  const [pageDialog, setPageDialog] = useState<PageDialogKind | null>(dialogFromHash())
   const [showOfflineCache, setShowOfflineCache] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -3219,7 +3225,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const sync = () => setPage(pageFromHash())
+    // 深链与浏览器前进/后退都从这里走：命中悬浮层 hash（#backup 等）就开层、不换页（保住语境）；
+    // 命中普通页面 hash 就换页并关掉可能还开着的悬浮层。
+    const sync = () => {
+      const dialog = dialogFromHash()
+      setPageDialog(dialog)
+      if (!dialog) setPage(pageFromHash())
+    }
     addEventListener('hashchange', sync)
     return () => removeEventListener('hashchange', sync)
   }, [])
@@ -3402,7 +3414,7 @@ function App() {
           title: '替换净化规则',
           hint: '正文里按正则删除广告与杂乱内容。',
           action: '打开规则',
-          onClick: () => navigate('rules'),
+          onClick: () => setShowReplaceRules(true),
         },
       ],
     },
@@ -3448,7 +3460,7 @@ function App() {
           title: '备份包',
           hint: '导入手机备份包，或把本机的书源 / 书架 / 规则导出成一份。',
           action: '打开备份',
-          onClick: () => navigate('backup'),
+          onClick: () => setPageDialog('backup'),
         },
         {
           title: '运行日志',
@@ -3483,25 +3495,15 @@ function App() {
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
-        onOpenChangelog={() => navigate('changelog')}
+        onOpenChangelog={() => setPageDialog('changelog')}
+        onOpenAbout={() => setPageDialog('about')}
         onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
       />
       {page === 'sources' ? (
         <SourcesPage selected={selected} onSelect={setSelected} onSourcesChange={setSources} />
       ) : page === 'subscriptions' ? (
-        <SubscriptionPage onSourcesChange={refreshSources} onNavigate={navigate} />
-      ) : page === 'rules' ? (
-        <ReplaceRulesPage />
-      ) : page === 'backup' ? (
-        <BackupPage />
-      ) : page === 'changelog' ? (
-        <ChangelogPage serverVersion={serverVersion} />
-      ) : page === 'about' ? (
-        <AboutPage
-          onOpenChangelog={() => navigate('changelog')}
-          onOpenShortcuts={() => setShowShortcuts(true)}
-        />
+        <SubscriptionPage onSourcesChange={refreshSources} onNavigate={navigate} onOpenBackup={() => setPageDialog('backup')} />
       ) : page === 'settings' ? (
         <SettingsPage sections={settingsSections} />
       ) : page === 'shelf' ? (
@@ -3534,9 +3536,21 @@ function App() {
         />
       )}
       <ReplaceRulesModal
-        isOpen={showReplaceRules}
-        onClose={() => setShowReplaceRules(false)}
+        isOpen={showReplaceRules || pageDialog === 'rules'}
+        onClose={() => { setShowReplaceRules(false); if (pageDialog === 'rules') setPageDialog(null) }}
       />
+      {pageDialog && pageDialog !== 'rules' && (
+        <PageDialog title={PAGE_DIALOG_TITLES[pageDialog]} onClose={() => setPageDialog(null)}>
+          {pageDialog === 'backup' && <BackupPage />}
+          {pageDialog === 'changelog' && <ChangelogPage serverVersion={serverVersion} />}
+          {pageDialog === 'about' && (
+            <AboutPage
+              onOpenChangelog={() => setPageDialog('changelog')}
+              onOpenShortcuts={() => setShowShortcuts(true)}
+            />
+          )}
+        </PageDialog>
+      )}
       {showOfflineCache && (
         <OfflineCacheModal onClose={() => setShowOfflineCache(false)} />
       )}

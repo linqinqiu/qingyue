@@ -22,7 +22,7 @@ const VIEWPORTS = [
   { name: 'desk-1180', width: 1180, height: 800 },
   { name: 'mobile-390', width: 390, height: 844 },
 ].filter(vp => !process.env.FRAME_VP || process.env.FRAME_VP.split(',').includes(vp.name))
-const ROUTES = ['#library', '#shelf', '#sources', '#explore', '#subscriptions', '#rules', '#backup', '#settings', '#about']
+const ROUTES = ['#library', '#shelf', '#sources', '#explore', '#subscriptions', '#settings']
   .filter(route => !process.env.FRAME_ROUTES || process.env.FRAME_ROUTES.split(',').includes(route))
 
 const collect = () => {

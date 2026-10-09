@@ -100,6 +100,18 @@ export const ReplaceRulesModal: React.FC<Props> = ({
       toast.error(e.message || '切换状态失败')
     }
   }
+  /** 批量启停（从整页版搬进来）：作用于当前筛选可见的规则，没筛选就是全部。 */
+  const toggleAllRules = async (enable: boolean) => {
+    const ids = filteredRules.map(r => r.id)
+    if (ids.length === 0) return
+    try {
+      await api.toggleReplaceRules(ids, enable)
+      setRules(prev => prev.map(r => (ids.includes(r.id) ? { ...r, isEnabled: enable } : r)))
+      onRulesChanged?.()
+    } catch (e: any) {
+      toast.error(e.message || '批量操作失败')
+    }
+  }
 
   const handleDelete = async (rule: ReplaceRule) => {
     if (!confirm(`确定删除规则「${rule.name || rule.pattern}」吗？`)) return
@@ -215,14 +227,17 @@ export const ReplaceRulesModal: React.FC<Props> = ({
     setIsEditModalOpen(true)
   }
 
-  if (!isOpen) return null
-
-  // Esc 一次只关一层：里层弹窗开着时先关里层，都关了才轮到外面这一层
+  // Esc 一次只关一层：里层弹窗开着时先关里层，都关了才轮到外面这一层。
+  // 这个 hook 必须在下面的 `if (!isOpen) return null` 之前无条件调用 —— 放到早退之后
+  // 会让「关→开」时 hook 数量变化，React 抛 #300（Rendered fewer hooks than expected）。
   useEscapeClose(() => {
+    if (!isOpen) return
     if (isImportModalOpen) { setIsImportModalOpen(false); return }
     if (isEditModalOpen) { setIsEditModalOpen(false); return }
     onClose()
   })
+
+  if (!isOpen) return null
   return (
     <div className="overlay-backdrop" onClick={onClose}>
       <div
@@ -267,6 +282,22 @@ export const ReplaceRulesModal: React.FC<Props> = ({
             >
               <Icon name="upload" />
               <span>导入</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void toggleAllRules(true)}
+              className="subtle-button"
+              style={{ padding: '0 10px', fontSize: '12px' }}
+            >
+              <span>全部启用</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void toggleAllRules(false)}
+              className="subtle-button"
+              style={{ padding: '0 10px', fontSize: '12px' }}
+            >
+              <span>全部禁用</span>
             </button>
             <button
               type="button"

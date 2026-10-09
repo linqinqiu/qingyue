@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons'
-import { PRIMARY_PAGES, SETTINGS_SUBPAGES } from './shortcuts'
+import { PRIMARY_PAGES } from './shortcuts'
 import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from './readerSettings'
 
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'rules' | 'backup' | 'changelog' | 'about' | 'settings'
+export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'settings'
 
 export interface AppHeaderProps {
   page: AppPage
@@ -15,6 +15,8 @@ export interface AppHeaderProps {
   onNavigate: (page: AppPage) => void
   /** 顶栏那颗版本号芯片点开的「更新日志」页（菜单里不再重复列一条）。 */
   onOpenChangelog?: () => void
+  /** 「我的」菜单里的「关于」：0.6.27 起是悬浮层，不再走整页导航。 */
+  onOpenAbout?: () => void
   onOpenCustomize?: () => void
   /** 服务端 /healthz 报回来的版本号；空串表示还没问到（离线或启动中）。 */
   version?: string
@@ -30,6 +32,7 @@ export function AppHeader({
   onSettingsChange,
   onNavigate,
   onOpenChangelog,
+  onOpenAbout,
   onOpenCustomize,
   version = '',
 }: AppHeaderProps) {
@@ -84,8 +87,8 @@ export function AppHeader({
   }, [menuOpen])
 
 
-  /** 顶栏这一项是不是"当前所在"：书源 / 规则 / 备份 归在「设置」名下，打开它们时高亮「设置」。 */
-  const navActive = (navPage: string) => page === navPage || (navPage === 'settings' && SETTINGS_SUBPAGES.includes(page))
+  /** 顶栏这一项是不是"当前所在"。规则 / 备份 / 关于 / 更新日志 0.6.27 起改为悬浮层，不再参与导航高亮。 */
+  const navActive = (navPage: string) => page === navPage
 
   const handleThemeChange = (theme: ReaderSettings['theme']) => {
     onSettingsChange({ ...settings, theme })
@@ -253,10 +256,9 @@ export function AppHeader({
                   className="menu-logout-btn"
                   style={{ color: 'var(--ink)' }}
                   role="menuitem"
-                  aria-current={page === 'about' ? 'page' : undefined}
                   onClick={() => {
                     setMenuOpen(false)
-                    onNavigate('about')
+                    onOpenAbout?.()
                   }}
                 >
                   <Icon name="info" />

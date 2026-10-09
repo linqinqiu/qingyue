@@ -295,9 +295,10 @@ if (loginRow) {
 // ---------- 7. 备份页：WebDAV 删掉之后，恢复入口只剩"选包即导入" ----------
 await p.goto(`${BASE}/#backup`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 await wait(1200)
-const backupHead = await p.$eval('.backup-page h1', el => el.innerText.trim()).catch(() => '')
+// 0.6.27 起备份是悬浮层：标题在层头（.dialog-head h2），正文不再重复一遍 h1。
 // 用户 2026-09-30：「手机恢复这个名词解释有些难听，咱们这是电脑啊」——标题是「备份包」，主语是包不是手机
-check('备份页标题就叫「备份包」', backupHead === '备份包', backupHead)
+const backupHead = await p.$eval('.page-dialog .dialog-head h2', el => el.innerText.trim()).catch(() => '')
+check('备份悬浮层标题就叫「备份包」', backupHead === '备份包', backupHead)
 const backupButtons = await p.$$eval('.backup-actions button', nodes => nodes.map(n => n.innerText.replace(/\s+/g, ' ').trim()))
 check('页上有选包导入按钮，且不再承诺任何网络服务', backupButtons.some(t => t.includes('选择备份包导入')), backupButtons.join(' / '))
 const backupBody = await p.$eval('.backup-page', el => el.innerText)

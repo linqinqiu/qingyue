@@ -13,7 +13,7 @@ import { Select } from './Select'
  * 与同页另一张「书源订阅」不是一回事：那张是**书源 JSON 的远程地址**（上游 `RuleSub`），
  * 这张是**要读的 RSS 源**（上游 `RssSource`）。列表内容来自备份导入，也可能一条都没有。
  */
-export function RssPanel({ onChanged, onNavigate }: { onChanged: () => void; onNavigate: (page: 'backup') => void }) {
+export function RssPanel({ onChanged, onOpenBackup }: { onChanged: () => void; onOpenBackup: () => void }) {
   const [sources, setSources] = useState<RssSourceSummary[]>([])
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState('')
@@ -177,7 +177,7 @@ export function RssPanel({ onChanged, onNavigate }: { onChanged: () => void; onN
             body={<>这张列表对应 Legado「订阅」页那一栏（备份包里的 <code>rssSources.json</code>）。导入后全部恢复到本地，读的时候不依赖任何外部服务。</>}
             actions={[
               { label: '粘贴 RSS JSON 添加', onClick: openImport, primary: true, icon: 'plus' },
-              { label: '去导入备份包', onClick: () => onNavigate('backup'), icon: 'importFile' },
+              { label: '去导入备份包', onClick: () => onOpenBackup(), icon: 'importFile' },
             ]}
           />
         )}

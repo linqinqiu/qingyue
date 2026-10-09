@@ -53,7 +53,7 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
   // 备份里那份要真的能套用到服务端规则表（不是只"收下"）
   const backup = read('../src/BackupPage.tsx')
   assert.match(backup, /api\.applyTocRulesFromBackup\(\)/, '备份页对这条有真的套用动作')
-  assert.match(backup, /TXT 分章规则/, '「这个包会恢复什么」清单里说得出它能套用')
+  assert.match(backup, /TXT 分章规则/, '「原样收下的条目」清单里说得出它能套用')
   const store = read('../../server/src/main/kotlin/io/legado/server/BackupStore.kt')
   assert.match(store, /APPLYABLE_NAMES = listOf\([^)]*"txtTocRule\.json"/, '服务端也把这条标成可套用（界面上的按钮按它出现）')
 })

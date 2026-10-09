@@ -75,6 +75,7 @@ local-patches.diff
 !/tools/verify/snapshot-coverage.mjs
 !/tools/verify/archive-verify.mjs
 !/tools/verify/overlay-audit.mjs
+!/tools/verify/overlay-tier-check.mjs
 !/tools/verify/paginate-flow-check.mjs
 !/tools/verify/reader-flow-check.mjs
 !/tools/verify/reader-transition-check.mjs

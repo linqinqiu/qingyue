@@ -447,7 +447,8 @@ try {
   }))
   if (rssBefore.length === 0) {
     ok('RSS 清干净后给出两个可点的去处', rssEmpty.rows === 0 && rssEmpty.guide && rssEmpty.buttons.length >= 2, JSON.stringify(rssEmpty.buttons))
-    // 空态上的「导入手机备份包」必须真的跳到文件页（阶段 2 的上传入口在那里）
+    // 空态上的「导入手机备份包」必须真的开出备份入口（阶段 2 的上传入口在那里）。
+    // 0.6.27 起备份是悬浮层：不再跳页、hash 不变，判据改成「开出了悬浮层且有选包按钮」。
     await page.evaluate(() => {
       const button = [...document.querySelectorAll('.panel-empty-actions button')].find(node => node.textContent?.includes('备份包'))
       button?.click()
@@ -455,9 +456,10 @@ try {
     await sleep(1200)
     const landed = await page.evaluate(() => ({
       hash: location.hash,
+      dialog: !!document.querySelector('.dialog-shell'),
       hasUpload: [...document.querySelectorAll('button')].some(node => node.textContent?.includes('选择备份包导入')),
     }))
-    ok('空态的「导入手机备份包」跳到备份页且有选包入口', landed.hash === '#backup' && landed.hasUpload, JSON.stringify(landed))
+    ok('空态的「导入手机备份包」开出备份悬浮层且有选包入口', landed.dialog && landed.hasUpload, JSON.stringify(landed))
   } else {
     ok('本机有真 RSS 源时不显示空态', !rssEmpty.guide, `rows=${rssEmpty.rows} guide=${rssEmpty.guide}`)
   }

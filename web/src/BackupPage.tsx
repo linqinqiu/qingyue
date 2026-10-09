@@ -24,14 +24,13 @@ const RESTORED_SECTIONS: [string, string][] = [
   ['分组', '包里的组号会换成本机组号（同名只留一个）'],
 ]
 
-/** 没有原生界面、但已原样收进数据目录的条目，以及它们各自的下落。 */
+/** 没有原生界面、但会原样收进数据目录的条目，以及它们各自的下落（导入后下面会列出这次实际收下的文件）。 */
 const KEPT_SECTIONS: [string, string][] = [
-  ['阅读样式', '可套用到本机阅读设置（下面「包里收下的条目」里一键套用）'],
+  ['阅读样式', '可套用到本机阅读设置'],
   ['朗读引擎', '可套用到本机朗读设置'],
   ['TXT 分章规则', '可套用到本机规则表：按规则字面匹配采纳你在手机上勾的启用/停用，包里自己加的规则作为新规则收下'],
   ['字典规则', '这台服务没有取词功能，先原样存着，可下载'],
-  ['TXT 分章规则', '原样存着，可下载。导入本地书用的是内置分章规则，不读包里的这一份'],
-  ['其余条目', '搜索历史、书籍笔记、RSS 收藏、阅读记录 —— 原样存着，在下面「包里收下的条目」里可下载'],
+  ['其余条目', '搜索历史、书籍笔记、RSS 收藏、阅读记录 —— 原样存着，可下载'],
 ]
 
 export function reportImportSummary(summary: BackupImportSummary) {
@@ -131,13 +130,9 @@ export function BackupPage() {
   }
 
   return (
-    <main className="backup-page">
-      <header className="page-title">
-        <div>
-          <h1>备份包</h1>
-          <p>选一个 Legado 导出的 zip 就能恢复。全程只在这台电脑与它自己的服务之间传输，不经过任何网盘或网络服务。</p>
-        </div>
-      </header>
+    <section className="backup-page">
+      {/* 标题由悬浮层头给（0.6.27），正文只留一句说清"这一步在做什么"的引导语 */}
+      <p className="page-lead">选一个 Legado 导出的 zip 就能恢复。全程只在这台电脑与它自己的服务之间传输，不经过任何网盘或网络服务。</p>
 
       <section className="backup-panel">
         <div className="backup-actions">
@@ -181,7 +176,7 @@ export function BackupPage() {
       </section>
 
       <section className="backup-panel">
-        <h2>这个包会恢复什么</h2>
+        <h2>会恢复到应用里</h2>
         <dl className="backup-scope">
           {RESTORED_SECTIONS.map(([name, detail]) => (
             <div key={name}>
@@ -189,6 +184,16 @@ export function BackupPage() {
               <dd>{detail.replace(/\*\*(.+?)\*\*/g, '$1')}</dd>
             </div>
           ))}
+        </dl>
+      </section>
+
+      <section className="backup-panel">
+        <h2>原样收下的条目</h2>
+        <p className="backup-hint">
+          应用里还没有对应界面的条目不会被丢掉 —— 服务会原样收在数据目录里、随时可下载；
+          阅读样式与朗读引擎还能一键套到本机设置。
+        </p>
+        <dl className="backup-scope">
           {KEPT_SECTIONS.map(([name, detail]) => (
             <div key={name}>
               <dt>{name}</dt>
@@ -196,38 +201,32 @@ export function BackupPage() {
             </div>
           ))}
         </dl>
-      </section>
-
-      {keptFailed && kept.length === 0 && (
-        <p className="backup-hint" role="status">
-          「包里收下的其余条目」这一次没读到 —— 下面没有列出来不代表服务器没收下什么。
-          <button type="button" className="subtle-button" onClick={() => void loadKept()}>再取一次</button>
-        </p>
-      )}
-
-      {kept.length > 0 && (
-        <section className="backup-panel">
-          <h2>包里收下的其余条目</h2>
-          <p className="backup-hint">
-            这些条目这台服务还没有自己的界面去用它们，所以是原样收在数据目录里而不是丢掉；
-            其中阅读样式与朗读引擎可以直接套到本机设置上。
+        {keptFailed && kept.length === 0 && (
+          <p className="backup-hint" role="status">
+            本次实际收下的文件没取到。
+            <button type="button" className="subtle-button" onClick={() => void loadKept()}>再取一次</button>
           </p>
-          <ul className="backup-kept-list">
-            {kept.map(entry => (
-              <li key={entry.name}>
-                <span className="backup-kept-label">{entry.label}</span>
-                <span className="backup-kept-meta">
-                  {entry.items > 0 ? `${entry.items} 条 · ` : ''}{Math.max(1, Math.round(entry.bytes / 1024))} KB
-                </span>
-                {entry.appliable && (
-                  <button type="button" className="subtle-button" onClick={() => void applyKept(entry)}>套用</button>
-                )}
-                <a className="subtle-button backup-kept-download" href={api.keptBackupEntryUrl(entry.name)} download={entry.name}>下载</a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </main>
+        )}
+        {kept.length > 0 && (
+          <>
+            <h3 className="backup-kept-subhead">本次导入实际收下的文件</h3>
+            <ul className="backup-kept-list">
+              {kept.map(entry => (
+                <li key={entry.name}>
+                  <span className="backup-kept-label">{entry.label}</span>
+                  <span className="backup-kept-meta">
+                    {entry.items > 0 ? `${entry.items} 条 · ` : ''}{Math.max(1, Math.round(entry.bytes / 1024))} KB
+                  </span>
+                  {entry.appliable && (
+                    <button type="button" className="subtle-button" onClick={() => void applyKept(entry)}>套用</button>
+                  )}
+                  <a className="subtle-button backup-kept-download" href={api.keptBackupEntryUrl(entry.name)} download={entry.name}>下载</a>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+    </section>
   )
 }

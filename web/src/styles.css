@@ -5152,6 +5152,7 @@ input[type=range] { min-height: 24px; }
 .backup-kept-list .subtle-button { margin-left: auto; min-height: 28px; padding: 0 11px; font-size: var(--t-sm); text-decoration: none; }
 .backup-kept-download { color: var(--muted); }
 .backup-hint { margin-top: var(--s-3); color: var(--muted); font-size: var(--t-sm); line-height: 1.7; }
+.backup-kept-subhead { margin-top: var(--s-4); color: var(--ink); font-size: var(--t-md); font-weight: 600; }
 .backup-scope { display: grid; gap: var(--s-2); margin-top: var(--s-4); }
 .backup-scope > div { display: grid; grid-template-columns: 108px 1fr; gap: var(--s-3); align-items: baseline; padding-bottom: var(--s-2); border-bottom: 1px solid var(--line); }
 .backup-scope > div:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -5487,3 +5488,13 @@ input[type=range] { min-height: 24px; }
 }
 .overlay-close:hover { background: var(--surface-muted); color: var(--ink); }
 .overlay-close svg { width: 16px; height: 16px; }
+
+/* —— 整页内容改悬浮层（0.6.27：规则 / 备份 / 更新日志 / 关于）—— */
+/* 页面组件原先按整页排版（100vh 高度、居中、大 padding），进了弹窗这些都要归零 */
+.page-dialog-body { min-height: 0; overflow-y: auto; }
+.page-dialog .backup-page, .page-dialog .changelog-page, .page-dialog .about-page {
+  min-height: 0; max-width: none; margin: 0; padding: var(--s-5) var(--s-6);
+}
+.page-dialog .backup-page { padding-block-start: var(--s-5); }
+/* 正文引导语：替代原来的整页大标题（标题已由 .dialog-head 给，正文不再重复一遍 h1） */
+.page-dialog .page-lead { margin: 0 0 var(--s-4); color: var(--muted); font-size: var(--t-lg); line-height: 1.7; }

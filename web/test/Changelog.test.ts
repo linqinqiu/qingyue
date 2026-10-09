@@ -112,6 +112,8 @@ test('ChangelogPage 初始态是"正在读取"，不是空列表', () => {
   assert.match(html, /changelog-loading/, '未到手之前要显示读取中')
   assert.match(html, /正在读取/, '文案要直说在读取')
   assert.doesNotMatch(html, /changelog-empty/, '还没读到就不许说"更新日志是空的"')
-  assert.match(html, /当前运行的是 0\.2\.0/, '页头要报出服务端版本号')
-  assert.match(html, /page-title/, '页头沿用其它页面那一种式样（这个应用只有一套界面）')
+  assert.match(html, /当前运行的是 0\.2\.0/, '要报出服务端版本号')
+  // 0.6.27 起更新日志是悬浮层：标题由层头给，正文改用 .page-lead 引导语，不再重复一遍大标题
+  assert.match(html, /page-lead/, '引导语沿用悬浮层正文那一档式样')
+  assert.doesNotMatch(html, /<h1>/, '标题在层头，正文不再重复一遍 h1')
 })

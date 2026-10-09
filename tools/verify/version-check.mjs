@@ -144,8 +144,10 @@ try {
     current: document.querySelector('.changelog-release.current h2')?.textContent?.trim() ?? '',
     items: document.querySelectorAll('.changelog-release li').length,
   }))
+  // 0.6.27 起更新日志是悬浮层：hash 不再变，判据改为「当前版本高亮 + 有条目」
+  //（current 高亮只有真的打开了更新日志才会出现）。
   check('点版本号真的进「更新日志」，且当前版本被标出来',
-    brand.isButton && landed.hash === '#changelog' && !!landed.current && landed.items > 0,
+    brand.isButton && !!landed.current && landed.items > 0,
     `${landed.hash} · 当前版本=${landed.current || '(没高亮)'} · ${landed.items} 条`)
   await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded' })
   await sleep(800)
