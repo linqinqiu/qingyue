@@ -1862,6 +1862,8 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             tocRule = getString(18),
             // 第 19 列：自定义排序位，null = 没参与过自定义排序
             sortOrder = getObject(19) as? Int,
+            // 第 20 列：书源 `bookSourceType`（json_extract 自 source.payload；本地书无源行 → 0）
+            sourceType = getInt(20),
         )
     }
     private fun java.sql.ResultSet.toReplaceRule(): ReplaceRule = ReplaceRule(
@@ -2131,7 +2133,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         private val HOST_IN_URL = Regex("""https?://([^/\s"'<>\\:?#]+)""", RegexOption.IGNORE_CASE)
 
         /** 书架列表与单本查询共用同一份 SELECT：两处各写一遍迟早会漂移成不同字段。 */
-        private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)),s.toc_rule,s.sort_order from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url"
+        private const val SHELF_SELECT = "select s.source_id,s.book_url,s.name,s.author,s.toc_url,s.cover_key,p.chapter_index,p.scroll_position,s.last_read_at,coalesce(c.cached_chapters,0),coalesce(c.total_chapters,0),coalesce(c.state,'idle'),c.last_error,s.completed,s.alternate_sources,s.group_id,(select max(t.updated_at) from book_toc_cache t where t.source_id=s.source_id and (t.toc_url=s.toc_url or t.toc_url=s.book_url)),s.toc_rule,s.sort_order,coalesce(json_extract(src.payload,'\$.bookSourceType'),0) from book_shelf s left join reading_progress p on p.source_id=s.source_id and p.book_url=s.book_url left join book_cache_status c on c.source_id=s.source_id and c.book_url=s.book_url left join source src on src.id=s.source_id"
     }
 }
 

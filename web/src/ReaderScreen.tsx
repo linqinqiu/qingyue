@@ -6,6 +6,7 @@ import { useEscapeClose } from './useEscapeClose'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, swipeDirection, ViewportBounds } from './readerInteractions'
 import { mapCells, TapAction, zoneAt } from './tapZones'
+import { isMediaType } from './bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, sectionAtPage, sectionProgress } from './readerFlow'
@@ -399,6 +400,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const chapterIndexRef = useRef(chapterIndex)
   chapterIndexRef.current = chapterIndex
   const [content, setContent] = useState('')
+  // 非文本章节（音频/EPUB 直链）：服务端把媒体地址放在 `mediaUrl`。离线缓存里没有这个字段，
+  // 但音频源的 `content` 本身就是那串地址，所以渲染时用 `mediaUrl`，没有就用像 URL 的 `content`。
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [loadedChapterUrl, setLoadedChapterUrl] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
@@ -618,6 +622,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const paragraphs = useMemo(() => (content ? splitParagraphs(content) : []), [content])
   // 朗读管线只认"当前这一章已经到位"的正文，过渡期间给空数组，避免读进上一章剩下的段落。
   const ttsParagraphs = useMemo(() => (isCurrentChapterLoaded ? paragraphs : []), [isCurrentChapterLoaded, paragraphs])
+  // 非文本章节（音频/视频/文件）：这一章的"正文"其实是一个媒体地址，不能当段落排出来。
+  // 优先用服务端给的 `mediaUrl`；离线缓存没有它，但音频源的 `content` 本身就是那串地址，故兜底。
+  const sourceType = currentBook.details.sourceType ?? 0
+  const mediaSrc = useMemo(() => {
+    if (!isMediaType(sourceType)) return null
+    if (mediaUrl) return mediaUrl
+    const trimmed = content.trim()
+    return /^https?:\/\/\S+$/.test(trimmed) ? trimmed : null
+  }, [sourceType, mediaUrl, content])
   // 过渡期间大标题跟着正文走（挂着上一章的标题），新章名只出现在「正在载入」那条里 ——
   // 标题是新的、正文是旧的，比两者都旧更容易让人以为串了章。
   const shownChapterTitle = isStaleContent ? (currentRef.current?.chapter.title || chapter?.title) : chapter?.title
@@ -996,6 +1009,35 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     )
   }
 
+  /** 非文本章节的渲染：音频播放器 / 视频播放器 / 文件下载（`mediaSrc` 为空时返回 null）。 */
+  const renderMediaBlock = () => {
+    if (!mediaSrc) return null
+    if (sourceType === 1) {
+      return (
+        <div className="reader-media" data-media-type="audio">
+          <audio
+            src={mediaSrc}
+            controls
+            autoPlay
+            onEnded={() => { if (chapterIndex < currentBook.chapters.length - 1) changeChapter(chapterIndex + 1) }}
+          />
+        </div>
+      )
+    }
+    if (sourceType === 4) {
+      return (
+        <div className="reader-media" data-media-type="video">
+          <video src={mediaSrc} controls />
+        </div>
+      )
+    }
+    return (
+      <div className="reader-media" data-media-type="file">
+        <a className="reader-media-download" href={mediaSrc} target="_blank" rel="noreferrer" download>下载文件</a>
+      </div>
+    )
+  }
+
   const showBoundaryNotice = useCallback((msg: string) => {
     setBoundaryMessage(msg)
     if (boundaryTimerRef.current !== null) window.clearTimeout(boundaryTimerRef.current)
@@ -1242,9 +1284,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     let cancelled = false
     setLoading(true)
     setMessage('')
-    const applyContent = (nextContent: string) => {
+    const applyContent = (nextContent: string, nextMediaUrl: string | null = null) => {
       if (cancelled) return
       setContent(nextContent)
+      setMediaUrl(nextMediaUrl)
       setLoadedChapterUrl(chapter.url)
       // 续接推进时 position 给 null：下面那个定位 effect 见到 null 就直接返回，
       // 于是"跨章"不再伴随任何 scrollTo —— 这正是"不是一体的吗"要的答案。
@@ -1262,7 +1305,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       applyContent(preloaded)
     } else {
       void api.content(currentBook.details.sourceId, chapter.url, currentBook.bookUrl)
-        .then(result => applyContent(result.content))
+        .then(result => applyContent(result.content, result.mediaUrl ?? null))
         .catch(error => {
           if (!cancelled) setMessage(error instanceof Error ? error.message : '无法读取正文')
         })
@@ -1282,6 +1325,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    */
   useEffect(() => {
     if (!content) return
+    // 非文本章节（音频/视频/文件）不续接下一章：它们是"一章一个媒体"，续接只会把地址当正文排出来。
+    if (isMediaType(sourceType)) { setFlowTail([]); return }
     // 锚点还没换上这一章的正文时不许重排窗口：那会在"上一章的字还挂着"的那一两帧里
     // 把已经续接进来的那一章从 DOM 中摘走，画面凭空少一章 —— 正是要消灭的"跳"。
     // 宁可让那一章短暂地出现两次（重复的那份在视口下方，看不见），也不许它消失。
@@ -1557,6 +1602,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    * 返回 false 表示前面真的没有章了（调用方去说"已是第一章"）。
    */
   const prependPreviousChapter = useCallback(async () => {
+    // 非文本章节（音频/视频/文件）不往回接章：同续接，媒体地址不能当正文。
+    if (isMediaType(currentBook.details.sourceType ?? 0)) return false
     const oldest = flowHeadRef.current[0]?.chapter ?? chapter
     const oldestIndex = oldest ? currentBook.chapters.findIndex(item => item.url === oldest.url) : -1
     let target = oldestIndex - 1
@@ -2395,7 +2442,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
                   {loading && !content && <ReaderContentSkeleton />}
                   {message && <p className="reader-error">{message}</p>}
-                  {paragraphs.map((line, index) => renderContentBlock(line, index))}
+                  {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
                 </section>
                 {flowTail.map((item, tailIndex) => (
                   <Fragment key={item.chapter.url}>
@@ -2426,7 +2473,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
             {loading && !content && <ReaderContentSkeleton />}
             {message && <p className="reader-error">{message}</p>}
-            {paragraphs.map((line, index) => renderContentBlock(line, index))}
+            {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
           </section>
           {flowTail.map(item => (
             <section key={item.chapter.url} className="reader-flow-chapter reader-flow-tail" data-chapter-index={item.chapter.index}>

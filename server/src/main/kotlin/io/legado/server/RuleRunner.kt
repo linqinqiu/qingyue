@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -95,12 +96,12 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val rendered = renderUrl(urlTemplate, keyword, sourceUrl).absolute(sourceUrl)
             val body = fetchUrl(rendered, mergedOptions, keyword, sourceUrl, database)
             val rule = source.objectValue("ruleSearch") ?: throw RuleExecutionException("该书源未配置 ruleSearch")
-            bookItems(body, rule, sourceUrl)
+            bookItems(body, rule, sourceUrl, source.sourceType())
         }
     }
 
     /** 把 `ruleSearch` / `ruleExplore` 这类「列表规则 + 字段规则」解析成书籍条目。 */
-    private fun bookItems(body: String, rule: JsonObject, sourceUrl: String): List<SearchResult> {
+    private fun bookItems(body: String, rule: JsonObject, sourceUrl: String, sourceType: Int): List<SearchResult> {
         val listRule = rule.string("bookList") ?: throw RuleExecutionException("缺少 bookList 规则")
         // 与 chapters() 一致：`<js>…</js>` 形式的列表规则要先过沙箱预处理，直接丢给 Jsoup/json-path 会解析失败
         val items = if (isJsRule(listRule)) jsListNodes(NodeValue.document(body), listRule, body, sourceUrl) else nodes(body, listRule)
@@ -116,6 +117,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 kind = item.value(rule.string("kind"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
                 wordCount = item.value(rule.string("wordCount"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
                 lastChapter = item.value(rule.string("lastChapter"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
+                sourceType = sourceType,
             )
             // 这一条解析里 `@put` 下的变量（漫画源典型是 comic_id）留一份，给后面的详情/目录/正文用
             rememberRuleData(url, item.snapshotVariables())
@@ -172,7 +174,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
              */
             val rule = mergeExploreRule(source.objectValue("ruleExplore"), source.objectValue("ruleSearch"))
                 ?: throw RuleExecutionException("该书源未配置 ruleExplore/ruleSearch")
-            bookItems(body, rule, sourceUrl)
+            bookItems(body, rule, sourceUrl, source.sourceType())
         }
     }
 
@@ -438,6 +440,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             kind = value("kind")?.trim()?.takeIf { it.isNotBlank() },
             wordCount = value("wordCount")?.trim()?.takeIf { it.isNotBlank() },
             lastChapter = value("lastChapter")?.trim()?.takeIf { it.isNotBlank() },
+            sourceType = source.sourceType(),
         )
     }
 
@@ -1336,6 +1339,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     private fun String.objectValue(): JsonObject = json.parseToJsonElement(this).jsonObject
     private fun JsonObject.objectValue(key: String): JsonObject? = get(key)?.jsonObject
     private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull
+    /** 书源 `bookSourceType`：0 文本 / 1 音频 / 2 图片(漫画) / 3 文件 / 4 视频；缺省或非数字给 0。 */
+    private fun JsonObject.sourceType(): Int = (get("bookSourceType") as? JsonPrimitive)?.intOrNull ?: 0
     private companion object {
         const val MAX_BODY_BYTES = 2 * 1024 * 1024
         private const val MAX_TRACE_CHARS = 240
@@ -1374,12 +1379,12 @@ private class JsSourceRunner(private val runner: RuleRunner, private val source:
     fun search(keyword: String): List<SearchResult> = call("search", arrayOf(keyword, 1)).jsonArray().mapNotNull { value ->
         val book = Json.parseToJsonElement(value).jsonObject
         val url = book.string("bookUrl") ?: return@mapNotNull null
-        SearchResult(source.string("bookSourceUrl")!!, book.string("name") ?: return@mapNotNull null, book.string("author"), url, book.string("coverUrl"), book.string("intro"))
+        SearchResult(source.string("bookSourceUrl")!!, book.string("name") ?: return@mapNotNull null, book.string("author"), url, book.string("coverUrl"), book.string("intro"), sourceType = source.sourceType())
     }
     fun details(bookUrl: String): BookDetails {
         val value = callOptional("getBookInfo", arrayOf(bookObject(bookUrl)))?.jsonObjectOrEmpty() ?: JsonObject(emptyMap())
         val name = value.string("name")?.trim().orEmpty()
-        return BookDetails(source.string("bookSourceUrl")!!, name.ifBlank { "未命名书籍" }, value.string("author"), value.string("intro"), value.string("coverUrl"), value.string("tocUrl") ?: bookUrl)
+        return BookDetails(source.string("bookSourceUrl")!!, name.ifBlank { "未命名书籍" }, value.string("author"), value.string("intro"), value.string("coverUrl"), value.string("tocUrl") ?: bookUrl, sourceType = source.sourceType())
     }
     fun chapters(tocUrl: String): List<Chapter> = call("getChapters", arrayOf(bookObject(tocUrl))).jsonArray().mapIndexedNotNull { index, value ->
         val chapter = Json.parseToJsonElement(value).jsonObject; val url = chapter.string("url") ?: return@mapIndexedNotNull null; Chapter(index, chapter.string("title") ?: "第 ${index + 1} 章", url)
@@ -1428,6 +1433,8 @@ private class JsSourceRunner(private val runner: RuleRunner, private val source:
     private fun String.jsonArray(): List<String> = (Json.parseToJsonElement(this) as? JsonArray)?.map { it.toString() } ?: throw RuleExecutionException("JS书源返回值必须是数组")
     private fun String.jsonObjectOrEmpty(): JsonObject = runCatching { Json.parseToJsonElement(this).jsonObject }.getOrDefault(JsonObject(emptyMap()))
     private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull
+    /** 书源 `bookSourceType`：0 文本 / 1 音频 / 2 图片(漫画) / 3 文件 / 4 视频；缺省或非数字给 0。 */
+    private fun JsonObject.sourceType(): Int = (get("bookSourceType") as? JsonPrimitive)?.intOrNull ?: 0
 }
 
 class RuleExecutionException(message: String) : RuntimeException(message)

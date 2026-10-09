@@ -296,6 +296,8 @@ data class SourceLoginStateRecord(
     val kind: String? = null,
     val wordCount: String? = null,
     val lastChapter: String? = null,
+    /** 书源的 `bookSourceType`：0 文本 / 1 音频 / 2 图片(漫画) / 3 文件 / 4 视频。 */
+    val sourceType: Int = 0,
 )
 @Serializable data class BookRequest(val sourceId: String, val bookUrl: String)
 @Serializable data class BookDetails(
@@ -308,6 +310,8 @@ data class SourceLoginStateRecord(
     val kind: String? = null,
     val wordCount: String? = null,
     val lastChapter: String? = null,
+    /** 书源的 `bookSourceType`：0 文本 / 1 音频 / 2 图片(漫画) / 3 文件 / 4 视频。 */
+    val sourceType: Int = 0,
 )
 @Serializable data class Chapter(val index: Int, val title: String, val url: String, val isVolume: Boolean = false)
 @Serializable data class ContentRequest(val sourceId: String, val chapterUrl: String = "", val bookUrl: String? = null)
@@ -401,6 +405,8 @@ data class CachedBookRequest(
     val tocRule: String? = null,
     /** 自定义排序位（1 起）；null = 这本书没参与过自定义排序，界面上排在有序段之后、按最后阅读排。 */
     val sortOrder: Int? = null,
+    /** 书源的 `bookSourceType`：0 文本 / 1 音频 / 2 图片(漫画) / 3 文件 / 4 视频。 */
+    val sourceType: Int = 0,
 )
 
 /** 书架分组（上游 `data/entities/BookGroup.kt`）。`bookCount` 由查询侧带出，不落库。 */

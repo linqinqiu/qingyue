@@ -22,12 +22,12 @@ export type UpdateCheckResult = {
   status: 'latest' | 'available' | 'not_found' | 'unreachable' | string
   message?: string | null
 }
-export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string; kind?: string; wordCount?: string; lastChapter?: string }
+export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string; kind?: string; wordCount?: string; lastChapter?: string; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type ExploreTab = { title: string; url: string }
-export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[] }
+export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[]; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type Chapter = { index: number; title: string; url: string; isVolume?: boolean }
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
-export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null; /** 自定义排序位（1 起）；null/缺省 = 没参与过自定义排序 */ sortOrder?: number | null }
+export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null; /** 自定义排序位（1 起）；null/缺省 = 没参与过自定义排序 */ sortOrder?: number | null; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
 export type ImportResponse = { imported: number; updated: number; skipped: number; errors: string[] }
@@ -446,7 +446,7 @@ export const api = {
   chapters: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<Chapter[]>('/api/books/chapters', { method: 'POST', body: JSON.stringify({ sourceId, bookUrl }), signal }),
   content: async (sourceId: string, chapterUrl: string, bookUrl?: string, signal?: AbortSignal) => {
     try {
-      const res = await request<{ title?: string; content: string }>('/api/books/content', { method: 'POST', body: JSON.stringify({ sourceId, chapterUrl, bookUrl }), signal })
+      const res = await request<{ title?: string; content: string; mediaUrl?: string }>('/api/books/content', { method: 'POST', body: JSON.stringify({ sourceId, chapterUrl, bookUrl }), signal })
       if (res?.content && bookUrl) {
         void putOfflineChapter(sourceId, bookUrl, chapterUrl, res.title || null, res.content)
       }

@@ -17,6 +17,7 @@ import { AboutPage } from './AboutPage'
 import { CustomizeModal } from './CustomizeModal'
 import { ServerPortModal } from './ServerPortModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, formatIntro, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
+import { bookTypeMeta, commonBookType } from './bookType'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { SourceLoginModal } from './SourceLoginModal'
@@ -530,7 +531,12 @@ function BookDetailModal({
             <div className="book-detail-info">
               <span className="section-kicker">书籍详情</span>
               <h2>{book.details.name}</h2>
-              <p>{book.details.author || '未知作者'}</p>
+              <p>
+                {book.details.author || '未知作者'}
+                {bookTypeMeta(book.details.sourceType) && (
+                  <span className={`book-type-badge type-${book.details.sourceType}`}>{bookTypeMeta(book.details.sourceType)!.label}</span>
+                )}
+              </p>
               {/*
                 一行 run-on 的 span 读不出主次（用户：「书籍详情信息不完善，明了」）：
                 改成"标签 + 值"两列，并把书架上才有、这里一直没说过的阅读进度补进来。
@@ -1834,6 +1840,9 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
             <div className={`search-grid search-mode-${resultLayout.mode}`}>
               {visibleGroups.map(group => {
                 const isExact = isExactMatch(group, search.keyword)
+                // 同书多源的类型：全部一致才挂徽标（音频/漫画/文件/视频）
+                const groupType = commonBookType(group.sources.map(source => source.sourceType))
+                const groupTypeMeta = bookTypeMeta(groupType)
                 // 封面取第一个真给了地址的源；referer 也用它 —— 防盗链图站按来源放行
                 const coverSource = group.sources.find(source => source.coverUrl?.trim())
                 const cover = sanitizeImageUrl(coverSource?.coverUrl)
@@ -1862,6 +1871,7 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
                       </span>
                     </span>
                     <strong className="search-card-name" title={group.name}><HighlightText text={group.name} keyword={search.keyword} /></strong>
+                    {groupTypeMeta && <span className={`book-type-badge type-${groupType}`}>{groupTypeMeta.label}</span>}
                     <small className="search-card-author">{group.author || '未知作者'}</small>
                     <small className="search-card-sources">{group.sources.length} 个书源{isExact ? ' · 精准匹配' : ''}</small>
                     {/* 只有列表档显示：挑书时最该看的是这本书讲什么，而不是又一个书名。没简介也没最新章就整栏不渲染。 */}
@@ -2124,7 +2134,10 @@ function BookManageModal({
           </div>
           <div className="manage-sheet-info">
             <h3>{item.name}</h3>
-            <p>{item.author || '未知作者'}</p>
+            <p>
+              {item.author || '未知作者'}
+              {bookTypeMeta(item.sourceType) && <span className={`book-type-badge type-${item.sourceType}`}>{bookTypeMeta(item.sourceType)!.label}</span>}
+            </p>
             <small>{item.completed ? '已读完' : item.chapterIndex === undefined ? '刚加入书架' : `阅读至第 ${item.chapterIndex + 1} 章`}</small>
           </div>
           <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
@@ -3032,6 +3045,9 @@ function ShelfPage({
                   <h3 className="shelf-card-name" title={item.name}>{item.name}</h3>
                   <p className="shelf-card-author">{item.author || '未知作者'}</p>
                   <div className="shelf-card-meta">
+                    {bookTypeMeta(item.sourceType) && (
+                      <span className={`book-type-badge type-${item.sourceType}`}>{bookTypeMeta(item.sourceType)!.label}</span>
+                    )}
                     <span className={`shelf-meta-chapter ${item.completed ? 'completed' : ''}`}>
                       {item.completed ? '已读完' : item.chapterIndex === undefined ? '刚加入书架' : `第 ${item.chapterIndex + 1} 章`}
                     </span>
@@ -3348,6 +3364,8 @@ function App() {
       intro: undefined,
       tocUrl: item.tocUrl,
       alternateSources: item.alternateSources,
+      // 书架条目带书源类型（服务端 json_extract 来的）—— 阅读器据此选播放器/图片流
+      sourceType: item.sourceType,
     }
 
     try {
