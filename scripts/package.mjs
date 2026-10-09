@@ -30,8 +30,10 @@ if (!fs.existsSync(jar)) fail(`没有 ${path.relative(ROOT, jar)}，先跑 ./gra
 
 const nextDir = path.join(ROOT, 'next')
 const nextIndex = path.join(nextDir, 'index.html')
-if (!fs.existsSync(nextIndex)) fail('没有 next/（新骨架产物）。先跑 node scripts/prepare-next.mjs')
-if (!/\/next\/assets\//.test(fs.readFileSync(nextIndex, 'utf8'))) fail('next/index.html 不带 /next/ 前缀，解开就是空白页')
+/** 0.6.23 起 next/ 可选：新骨架源仓已弃、主界面全覆盖，包里不再强带。 */
+const hasNext = fs.existsSync(nextIndex)
+if (hasNext && !/\/next\/assets\//.test(fs.readFileSync(nextIndex, 'utf8'))) fail('next/index.html 不带 /next/ 前缀，解开就是空白页')
+if (!hasNext) console.log('NOTE  没有 next/（新骨架产物）—— 出不含 /next/ 的包')
 
 const NAME = `qingyue-${version}`
 const outDir = path.join(ROOT, 'dist', NAME)
@@ -84,7 +86,7 @@ const startBat = [
   'if not exist "%~dp0tmp" mkdir "%~dp0tmp"', 'echo.',
   `echo  QingYue ${version}  (bundled runtime, no JDK needed)`,
   'echo  UI        http://127.0.0.1:%LEGADO_PORT%/',
-  'echo  New shell http://127.0.0.1:%LEGADO_PORT%/next/',
+  ...(hasNext ? ['echo  New shell http://127.0.0.1:%LEGADO_PORT%/next/'] : []),
   'echo  Stop with Ctrl+C.  Data stays in .\\data',
   'echo  Change port:  start.bat 1235   (or write a number into port.txt)',
   'echo.',
@@ -110,7 +112,7 @@ const readme = fs.readFileSync(template, 'utf8')
 fs.rmSync(outDir, { recursive: true, force: true })
 fs.mkdirSync(outDir, { recursive: true })
 fs.copyFileSync(jar, path.join(outDir, jarName))
-fs.cpSync(nextDir, path.join(outDir, 'next'), { recursive: true })
+if (hasNext) fs.cpSync(nextDir, path.join(outDir, 'next'), { recursive: true })
 fs.writeFileSync(path.join(outDir, 'start.bat'), startBat, { mode: 0o644 })
 fs.writeFileSync(path.join(outDir, 'README.txt'), readme)
 const runtimeNote = resolveRuntime(path.join(outDir, 'runtime'))

@@ -82,10 +82,13 @@ const liveVersion = await fetch(`${BASE}/healthz`).then(response => response.jso
 // 只看包根上的 jar：runtime/lib/jrt-fs.jar 也是 .jar，把它算进来这条就永远在报"两个 jar"
 const jarEntries = names.filter(name => name.split('/').length === 2 && name.endsWith('.jar'))
 
-check('包顶层就那几样：启动脚本、说明、jar、next/、runtime/',
+// /next/ 新骨架自 0.6.23 起不再随包分发（其源仓已弃，主界面早已全覆盖）；包里有没有就按有没有验
+const hasNext = names.some(name => name.startsWith(`${topDir[0]}/next/`))
+check('包顶层就那几样：启动脚本、说明、jar、runtime/（+ 可选 next/）',
   topDir.length === 1 && names.every(name => name.startsWith(topDir[0] + '/')) &&
     ['start.bat', 'README.txt'].every(file => names.includes(`${topDir[0]}/${file}`)) &&
-    ['next', 'runtime'].every(dir => names.some(name => name.startsWith(`${topDir[0]}/${dir}/`))),
+    names.some(name => name.startsWith(`${topDir[0]}/runtime/`)) &&
+    (hasNext || !names.some(name => name.includes('/next/'))),
   topDir.join(','))
 check(`jar 在包里且版本号就是 gradle 的那一个（${gradleVersion}）`,
   jarEntries.length === 1 && jarEntries[0].includes(`-${gradleVersion}-all.jar`), jarEntries.join(','))
@@ -120,13 +123,15 @@ check('start.bat 是 CRLF 且只用 ASCII（cmd 按 GBK 读，中文注释会变
 check('start.bat 里端口与数据目录都显式给了（不依赖工作目录）',
   /LEGADO_PORT=1234/.test(startBat) && /LEGADO_DATA_DIR=data/.test(startBat))
 
-/** 包里那份 next/index.html 必须就是服务正在返回的那一份。 */
-const packedIndex = readText(`${topDir[0]}/next/index.html`)
-const liveIndex = await fetch(`${BASE}/next/`).then(response => response.text()).catch(() => '')
-const bundleOf = html => (html.match(/\/next\/assets\/[\w.-]+\.js/) ?? ['(没找到)'])[0]
-check('包里的 next/index.html 与线上 /next/ 是同一份构建',
-  packedIndex.length > 0 && bundleOf(packedIndex) === bundleOf(liveIndex),
-  `包 ${bundleOf(packedIndex)} · 线上 ${bundleOf(liveIndex)}`)
+/** 包里若带 next/，那份 index.html 必须就是服务正在返回的那一份。 */
+if (hasNext) {
+  const packedIndex = readText(`${topDir[0]}/next/index.html`)
+  const liveIndex = await fetch(`${BASE}/next/`).then(response => response.text()).catch(() => '')
+  const bundleOf = html => (html.match(/\/next\/assets\/[\w.-]+\.js/) ?? ['(没找到)'])[0]
+  check('包里的 next/index.html 与线上 /next/ 是同一份构建',
+    packedIndex.length > 0 && bundleOf(packedIndex) === bundleOf(liveIndex),
+    `包 ${bundleOf(packedIndex)} · 线上 ${bundleOf(liveIndex)}`)
+}
 
 /**
  * 反向对照：把"包里混进用户数据 / 写了本机绝对路径"这两种坏法当场演一遍，
