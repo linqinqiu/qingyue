@@ -6,8 +6,9 @@
 //
 // 归档是**跟这一份 jar 绑定的**：jar 一重建就得重新生成。所以每次 `:server:fatJar` 之后跑一次本脚本。
 //
-// 跑法：node tools/make-cds.mjs
+// 跑法：node tools/make-cds.mjs [--port N]
 //   产物：server/build/cds/app.jsa   （start.mjs / start.cmd 会自动带上它）
+//   `--port`：后台重建时用 —— 正在跑的服务占着默认端口，重建这一次得换一个。
 //
 // 生成时服务会真的起来一次（`--cds-dump`），脚本趁这 8 秒预热几个接口 —— 请求路径的类
 // （规则引擎 / Jsoup / JsonPath）是懒加载的，不预热就进不了归档。然后进程自己正常退出，
@@ -18,6 +19,18 @@ import path from 'node:path';
 import { resolveRuntime } from '../scripts/runtime.mjs';
 
 const runtime = resolveRuntime();
+
+/** `--port N`：覆盖监听端口（默认跟 start.mjs 同源）。 */
+function portArg(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--port') return Number(argv[++i]);
+    if (argv[i].startsWith('--port=')) return Number(argv[i].slice('--port='.length));
+  }
+  return null;
+}
+const override = portArg(process.argv.slice(2));
+const port = Number.isInteger(override) && override > 0 ? override : runtime.port;
+
 const jars = readdirSync(runtime.libs).filter((name) => name.endsWith('-all.jar')).sort();
 if (!jars.length) {
   console.error(`没有 ${runtime.libs}\\*-all.jar，先跑 gradle :server:fatJar`);
@@ -29,10 +42,10 @@ mkdirSync(outDir, { recursive: true });
 const archive = path.join(outDir, 'app.jsa');
 
 const browseHost = runtime.host === '0.0.0.0' || runtime.host === '::' ? '127.0.0.1' : runtime.host;
-const base = `http://${browseHost}:${runtime.port}`;
+const base = `http://${browseHost}:${port}`;
 const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java') : 'java';
 
-console.log(`用 ${path.basename(jar)} 生成 CDS 归档…`);
+console.log(`用 ${path.basename(jar)} 生成 CDS 归档（端口 ${port}）…`);
 const child = spawn(
   java,
   [`-XX:ArchiveClassesAtExit=${archive}`, `-Djava.io.tmpdir=${runtime.tmpDir}`, '-jar', jar, '--cds-dump'],
@@ -40,7 +53,7 @@ const child = spawn(
     env: {
       ...process.env,
       LEGADO_HOST: runtime.host,
-      LEGADO_PORT: String(runtime.port),
+      LEGADO_PORT: String(port),
       LEGADO_DATA_DIR: runtime.dataDir,
       LEGADO_DATABASE: runtime.database,
     },

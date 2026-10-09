@@ -75,15 +75,19 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
      * 放到服务真正起来（端口已 listen）之后再跑：先能用界面，这些在背后补。
      * 早期版本给没有封面的本地书画过一张按书名哈希的彩色 SVG（整架看下去就是彩虹），
      * 生成逻辑已删，这里把已经落库的那批回收掉，界面才会回落到主题化的文字占位。
+     *
+     * `--cds-dump` 时**跳过**这三样：那次运行只为生成类归档（`tools/make-cds.mjs`），
+     * 而它可能和正在跑的服务共用同一个库 —— 只读预热不会抢写，跳过这些写活儿才安全。
      */
-    environment.monitor.subscribe(ApplicationStarted) {
-        subscriptions.start()
-        bookCache.start()
-        val purgedCovers = coverCache.purgeGeneratedLocalCovers(database)
-        if (purgedCovers > 0) log.info("已回收 {} 张自动生成的本地书封面", purgedCovers)
-    }
-    // --cds-dump：给生成脚本 ~8 秒预热几个接口（让请求路径的类也进归档），然后正常退出。
-    if (cdsDump) {
+    if (!cdsDump) {
+        environment.monitor.subscribe(ApplicationStarted) {
+            subscriptions.start()
+            bookCache.start()
+            val purgedCovers = coverCache.purgeGeneratedLocalCovers(database)
+            if (purgedCovers > 0) log.info("已回收 {} 张自动生成的本地书封面", purgedCovers)
+        }
+    } else {
+        // 生成脚本趁这几秒预热几个接口（让请求路径的类也进归档），然后正常退出。
         environment.monitor.subscribe(ApplicationStarted) {
             Thread {
                 Thread.sleep(8000)

@@ -81,6 +81,37 @@ function openBrowser(target) {
   } catch { /* 打不开就只打印地址，不是致命错误 */ }
 }
 
+/** 找一个空闲端口：后台重建 CDS 时用（刚起来的服务占着默认那个）。 */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * CDS 归档过期/缺失时**在后台重建**：这次照常起、只是没享受到那几秒，重建完下次启动就快了。
+ * 用另一个端口 + detached，不挡这次启动、也不和刚起来的服务抢端口。
+ */
+async function rebuildCds() {
+  try {
+    const port = await freePort();
+    const child = spawn(
+      process.execPath,
+      [path.join(runtime.root, 'tools', 'make-cds.mjs'), '--port', String(port)],
+      { cwd: runtime.root, detached: true, stdio: 'ignore' },
+    );
+    child.unref();
+    console.log('CDS 归档已过期 —— 正在后台重建（这次先用不着它，下次启动会更快）');
+  } catch (error) {
+    console.log(`CDS 归档已过期，后台重建没起来：${error instanceof Error ? error.message : error}`);
+  }
+}
+
 // 幂等：已经在跑就直接开界面 —— 重复点图标不该报"端口被占"，也不该再起第二个实例。
 if (await isReady(url)) {
   console.log(`青阅已在运行 ${url}`);
@@ -104,15 +135,12 @@ probe.listen(runtime.port, runtime.host, () => {
       // 不指定的话 JVM 临时目录是 C:\Users\<用户>\AppData\Local\Temp，装到哪都会往系统盘写。
       `-Djava.io.tmpdir=${runtime.tmpDir}`,
     ];
-    // CDS 类归档（tools/make-cds.mjs 生成）：冷启动实测 ~7.8s → ~4.8s。
-    // 归档是跟这一份 jar 绑定的 —— 比 jar 旧就不用它（JVM 本来也会忽略并打一条警告），并提示重建。
+    // CDS 类归档（tools/make-cds.mjs 生成）：冷启动实测 ~8.3s → ~5.3s。
+    // 归档是跟这一份 jar 绑定的 —— 过期/缺失就不带它（这次慢一点），起完在后台重建给下次用。
     const cdsArchive = path.join(runtime.root, 'server', 'build', 'cds', 'app.jsa');
     const jarPath = path.join(runtime.libs, jar);
-    if (existsSync(cdsArchive) && statSync(cdsArchive).mtimeMs >= statSync(jarPath).mtimeMs) {
-      jvmArgs.push(`-XX:SharedArchiveFile=${cdsArchive}`);
-    } else if (existsSync(cdsArchive)) {
-      console.log('CDS 归档比 jar 旧，本次跳过 —— 重建后跑一次 node tools/make-cds.mjs');
-    }
+    const cdsFresh = existsSync(cdsArchive) && statSync(cdsArchive).mtimeMs >= statSync(jarPath).mtimeMs;
+    if (cdsFresh) jvmArgs.push(`-XX:SharedArchiveFile=${cdsArchive}`);
     // detached + unref：服务作为独立进程存活，不随调用方退出而被回收。
     const child = spawn(java, [...jvmArgs, '-jar', path.join(runtime.libs, jar)], {
       env, stdio: ['ignore', log, log], detached: true, windowsHide: true,
@@ -130,6 +158,7 @@ probe.listen(runtime.port, runtime.host, () => {
       process.exit(1);
     }
     console.log(`服务已就绪 ${url}`);
+    if (!cdsFresh) void rebuildCds();
     if (args.open) openBrowser(url);
     else console.log('（--no-open：没有打开浏览器）');
   });
