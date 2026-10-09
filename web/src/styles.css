@@ -2758,8 +2758,12 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1 1 auto;
   min-width: 0;
 }
+/* 这段文案是 nowrap + 省略号，flex 子项默认 min-width:auto 会被它顶到内容宽 ——
+   390 宽实测横幅自己 358px、里面却伸出到 507px。与"nowrap 芯片顶宽整条轨道"同一个形状。 */
+.pwa-banner-info { flex: 1 1 auto; min-width: 0; }
 .pwa-banner-info strong {
   display: block;
   font-size: 14px;
