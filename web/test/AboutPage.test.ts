@@ -75,7 +75,7 @@ test('许可那一栏不许说"未拷代码"：随包的上游数据要认下来
 test('开发者那一格不许兜底成别人的仓库', () => {
   // 原来 `UpdateCheck.repository` 硬写着别人家的 slug（这份代码 clone 来的地方），
   // 于是「关于」页把那名字当成本项目的开发者、项目主页与检查更新的目标。
-  // 用户 2026-10-05：「GitHub 上我是 linqinqiu，不要将仓库放到别人手里」。
+  // 用户 2026-10-05：「GitHub 账号是我本人的，不要将仓库放到别人手里」。
   const shown = withoutComments(page)
   assert.doesNotMatch(shown, /lukelzlz/)
   assert.match(shown, /未配置仓库地址/)

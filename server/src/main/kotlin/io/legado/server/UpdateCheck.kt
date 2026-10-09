@@ -21,7 +21,7 @@ object UpdateCheck {
      * 仓库 slug 只有一个来源：环境变量 `LEGADO_REPO`。
      *
      * 原来这里硬写着 `lukelzlz/legado-server` —— 那是这份代码当初 clone 来的地方，**不是本项目的归属**，
-     * 于是「关于」页把别人家名字当成开发者写给用户看（用户 2026-10-05：「GitHub 上我是 linqinqiu，
+     * 于是「关于」页把别人家名字当成开发者写给用户看（用户 2026-10-05：「GitHub 账号是我本人的，
      * 不要将仓库放到别人手里」+「这些内容也不对啊」）。没配就如实说没配，界面上也不给「项目主页」那条链接。
      */
     val repository: String = System.getenv("LEGADO_REPO")?.trim()?.takeIf { it.isNotBlank() } ?: ""
