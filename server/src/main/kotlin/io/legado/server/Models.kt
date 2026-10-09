@@ -311,7 +311,15 @@ data class SourceLoginStateRecord(
 )
 @Serializable data class Chapter(val index: Int, val title: String, val url: String, val isVolume: Boolean = false)
 @Serializable data class ContentRequest(val sourceId: String, val chapterUrl: String = "", val bookUrl: String? = null)
-@Serializable data class ChapterContent(val title: String? = null, val content: String)
+@Serializable data class ChapterContent(
+    val title: String? = null,
+    val content: String,
+    /**
+     * 非文本章节（音频/EPUB 直链）的媒体地址。书源正文 JS 给 `yp_url` 赋值时填这个；
+     * 前端据此渲染播放器，而不是把地址当正文排出来。
+     */
+    val mediaUrl: String? = null,
+)
 @Serializable data class ReadingProgress(
     val sourceId: String,
     val bookUrl: String,

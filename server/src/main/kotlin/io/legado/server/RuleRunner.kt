@@ -523,17 +523,30 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             if (chapterHref == null && !isVolume) return@mapNotNull null
             Triple(name, chapterHref ?: "", isVolume)
         }
-        val nextUrls = if (nextRule.isEmpty()) emptyList() else NodeValue.document(body)
+        val nextRaw = if (nextRule.isEmpty()) "" else NodeValue.document(body)
             .also { it.seedVariables(seedVars) }
             .value(nextRule, jsSandbox, body, pageUrl)
             .orEmpty()
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .map { it.absolute(pageUrl) }
-            .distinct()
-            .toList()
-        return items to nextUrls
+            .trim()
+        return items to parseNextTocUrls(nextRaw, pageUrl)
+    }
+
+    /**
+     * `nextTocUrl` 的求值结果可能是三种：单个地址、多行地址（上游「一次给多个入口页」的老写法），
+     * 或 JS 返回的 **JSON 数组** —— 如懒人听书 `@js:` 拼出的分页列表，`NativeJSON.stringify` 会把它
+     * 序列化成一行 `["url1","url2"]`。三种都要拆成一个个地址：否则整个数组会被当成**一个** URL 去请求，
+     * 报「URL 格式无效或包含未解析变量」、整本目录取不到（音频源就这样）。
+     */
+    private fun parseNextTocUrls(raw: String, pageUrl: String): List<String> {
+        if (raw.isEmpty()) return emptyList()
+        val candidates: List<String> = if (raw.startsWith("[")) {
+            val parsed = runCatching { Json.parseToJsonElement(raw) as? JsonArray }.getOrNull()
+            if (parsed != null) parsed.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            else raw.lineSequence().toList()
+        } else {
+            raw.lineSequence().toList()
+        }
+        return candidates.map { it.trim() }.filter { it.isNotEmpty() }.map { it.absolute(pageUrl) }.distinct()
     }
 
     private fun isJsRule(rule: String): Boolean {
@@ -609,9 +622,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             return ChapterContent(cleanedTitle, cleanedText)
         }
 
-        return jsSandbox.withSourceContext(
-            readingContext(sourceContext(source, sourceUrl), sourceUrl, bookUrl, bookName, chapterUrl),
-        ) {
+        val execContext = readingContext(sourceContext(source, sourceUrl), sourceUrl, bookUrl, bookName, chapterUrl)
+        return jsSandbox.withSourceContext(execContext) {
             val rule = source.objectValue("ruleContent") ?: throw RuleExecutionException("该书源未配置 ruleContent")
             val contentRule = rule.string("content") ?: throw RuleExecutionException("缺少 ruleContent.content")
             val nextRule = rule.string("nextContentUrl").orEmpty().trim()
@@ -656,6 +668,15 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 }
             }
             val root = firstRoot ?: throw RuleExecutionException("正文页取不到内容")
+            // 音频 / EPUB 直链：正文 JS 给 `yp_url` 赋了媒体地址 —— 这一章的"正文"就是那个地址。
+            // 必须**先**判它：Rhino 会把赋值表达式的值当成脚本返回值（`yp_url = $.data.path` 的结果
+            // 就是那串地址），于是 `pageText` 非空、根本走不到"文本为空"分支，mediaUrl 就丢了。
+            val media = execContext.mediaUrl
+            if (!media.isNullOrBlank()) {
+                return@withSourceContext ChapterContent(
+                    root.value(rule.string("title"), jsSandbox, firstBody, chapterUrl), media, media,
+                )
+            }
             var text = pageTexts.filter { it.isNotBlank() }.joinToString("\n\n")
             if (text.isBlank()) {
                 val detail = jsSandbox.lastError?.let { "，脚本异常：$it" } ?: ""
@@ -1047,9 +1068,20 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         validateTarget(initial)
         val builder = HttpRequest.newBuilder(initial)
             .timeout(Duration.ofSeconds(20))
-            .header("User-Agent", "LegadoServer/0.1")
             .header("Accept-Encoding", "gzip, deflate")
-        effectiveHeaders(initial, options, sourceId, db).forEach { (name, value) -> builder.header(name, value) }
+        val headers = effectiveHeaders(initial, options, sourceId, db)
+        // 书源给了 User-Agent 就**别再加我们自己的**：`HttpRequest.Builder.header()` 是**追加**不是覆盖，
+        // 两个 UA 会一起发出去，站点按第一个判 —— 懒人听书的详情接口因此返回空数据
+        // （45 字节 `{"data":{}}`，搜索却照常出结果，极易误判成"书源坏了"）。
+        if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
+            builder.header("User-Agent", "LegadoServer/0.1")
+        }
+        // Java HttpClient 禁止设置这几个头，书源里 `"Connection": "keep-alive"` 极常见 ——
+        // 原样传进去直接抛 `IllegalArgumentException：restricted header name`，整个搜索/正文全废
+        // （实测懒人听书源：搜索「失败」、什么都搜不到）。这些头由 HttpClient 自己管，过滤掉即可。
+        headers
+            .filterKeys { it.lowercase() !in RESTRICTED_HEADERS }
+            .forEach { (name, value) -> builder.header(name, value) }
         val method = options?.method?.uppercase() ?: "GET"
         val body = options?.body
         if (method != "GET" && body != null) {
@@ -1309,6 +1341,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         private const val MAX_TRACE_CHARS = 240
         /** ruleData（跨调用复用的 @put 变量）的键上限：超了整表清空 —— 丢了顶多重搜一次。 */
         const val MAX_RULE_DATA_KEYS = 4096
+        /** Java HttpClient 的受限请求头（设了会抛 IllegalArgumentException，见 request()）。 */
+        val RESTRICTED_HEADERS = setOf("connection", "content-length", "expect", "host", "upgrade")
         val URL_VARIABLE_PATTERN = Regex("\\{\\{(.+?)}}")
 
         // 下方几个正则原来在每次调用处现编译：cleanContent 走每章正文（离线缓存整本 = 上万次），

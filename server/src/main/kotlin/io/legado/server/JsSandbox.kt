@@ -30,6 +30,11 @@ data class JsExecutionContext(
     var openUrl: String? = null,
     var copyText: String? = null,
     var reRenderUi: Boolean = false,
+    /**
+     * 正文 JS 里给 `yp_url` 赋值 = "这一章的内容是一个媒体地址"（音频/EPUB 直链）。
+     * 音频源（如懒人听书）大量这么写；不认的话正文规则返回空、整章取不到。
+     */
+    var mediaUrl: String? = null,
     /** 脚本执行失败的原始原因，供登录动作回传给前端展示（否则按钮会「假成功」） */
     var lastError: String? = null,
     /**
@@ -158,6 +163,12 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             ScriptableObject.putProperty(scope, "chapter", createChapterBridge(scope, context))
 
             val result = cx.evaluateString(scope, executableScript, "rule.js", 1, null)
+            // 音频 / EPUB 直链：书源正文 JS 会给全局 `yp_url` 赋媒体地址（无 `var`），脚本本身不 `return`。
+            // 不认这个约定，这类源的正文就恒为空。
+            runCatching {
+                val media = ScriptableObject.getProperty(scope, "yp_url")
+                if (media is CharSequence && media.isNotBlank()) context?.mediaUrl = media.toString()
+            }
             if (result == null || result == Context.getUndefinedValue()) {
                 val globalResult = ScriptableObject.getProperty(scope, "result")
                 if (globalResult != null && globalResult != Context.getUndefinedValue()) {

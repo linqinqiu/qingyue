@@ -751,6 +751,32 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `nextTocUrl 返回 JSON 数组时逐页爬取`() {
+        // 懒人听书的 `nextTocUrl` 是 `@js:` 拼出的分页数组，Rhino 的 NativeJSON.stringify 把它序列化成
+        // 一行 `["url1","url2"]`；原来只按行拆 → 整个数组被当成**一个** URL 请求 → 「URL 格式无效或包含
+        // 未解析变量」、整本目录取不到（音频源的拦路虎）。
+        val source = """{
+            "bookSourceUrl":"https://audio.example",
+            "ruleToc":{
+                "chapterList":".list a",
+                "chapterName":"text",
+                "chapterUrl":"href",
+                "nextTocUrl":"@js:var list=[]; for(var i=2;i<=3;i++){ list.push('https://audio.example/toc?p='+i); } list;"
+            }
+        }"""
+        val runner = RuleRunner { url ->
+            when {
+                url.endsWith("/toc?p=1") -> """<div class="list"><a href="/c/1">一</a></div>"""
+                url.endsWith("/toc?p=2") -> """<div class="list"><a href="/c/2">二</a></div>"""
+                url.endsWith("/toc?p=3") -> """<div class="list"><a href="/c/3">三</a></div>"""
+                else -> throw AssertionError("不该请求 $url")
+            }
+        }
+        val chapters = runner.chapters(source, "https://audio.example/toc?p=1")
+        assertEquals(listOf("一", "二", "三"), chapters.map { it.title })
+    }
+
+    @Test
     fun `img 里的 Legado 图片选项（地址,{headers}）不留在正文里`() {
         // 漫画源把 `<img src="地址,{"headers":"…"}">` 整串塞进 src（引号没转义）。
         // 老正则从 `src="` 取到第一个引号为止 → 地址被截成 `地址,{`，标签后半截还留在正文里。
