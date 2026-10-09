@@ -214,7 +214,7 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
               「分栏按钮计数位置」，挪到分栏这一行的右端，选了哪个分栏、这个分栏几本书一眼看全。 */}
           <div className="explore-tabs-row">
             <nav className={tabsExpanded ? 'explore-tabs expanded' : 'explore-tabs'} aria-label="发现分栏">
-              {labelledTabs.map(item => (
+              {(tabsExpanded ? labelledTabs : labelledTabs.slice(0, 22)).map(item => (
                 <button
                   key={`${item.title}::${item.url}`}
                   type="button"
@@ -224,14 +224,20 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
                   {item.label}
                 </button>
               ))}
+              {/* 展开开关收在分栏末尾、与分栏同尺寸（用户 2026-10-09：不要单独一行的大按钮） */}
+              {tabs.length > 22 && (
+                <button
+                  type="button"
+                  className="explore-tab explore-tabs-toggle"
+                  aria-expanded={tabsExpanded}
+                  onClick={() => setTabsExpanded(value => !value)}
+                >
+                  {tabsExpanded ? '收起' : `全部 ${tabs.length}`}
+                </button>
+              )}
             </nav>
             {books.length > 0 && <small className="explore-tab-count">{books.length} 本书</small>}
           </div>
-          {tabs.length > 22 && (
-            <button type="button" className="ghost-button explore-tabs-toggle" onClick={() => setTabsExpanded(value => !value)}>
-              {tabsExpanded ? '收起分栏' : `展开全部 ${tabs.length} 个分栏`}
-            </button>
-          )}
         </>
       )}
 

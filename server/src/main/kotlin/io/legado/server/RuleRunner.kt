@@ -250,7 +250,10 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 }
             }
         }
-        trimmed.lineSequence().flatMap { it.split("&#") }.mapNotNull { entry ->
+        // 与上游一致（legado-with-MD3 的 exploreKinds）：exploreUrl 的分栏分隔符是 `&&` 与换行
+        // —— 实测本库 110 个源的 exploreUrl 用 `&&`，原来只按行切、这些源的分栏全被并成一条。
+        // `&#` 是 RSS sortUrl（与本函数共享）的方言，一并保留。
+        trimmed.split(Regex("&&|&#|\n+")).mapNotNull { entry ->
             val title = entry.substringBefore("::").trim()
             val url = entry.substringAfter("::", "").trim()
             if (title.isEmpty() || url.isEmpty()) null else ExploreTab(title, url)

@@ -4471,9 +4471,8 @@ input[type=range] { min-height: 24px; }
 
 /* —— 封面占位：从「一个 56px 大字」改成可读书名卡 —— */
 /* —— 发现分栏：默认两行，多出来的收进「展开」，不再切一半藏住 —— */
-.explore-tabs { position: relative; max-height: none; overflow: hidden; display: flex; flex-wrap: wrap; gap: var(--s-2); padding-bottom: var(--s-1); border-bottom: 0; }
-.explore-tabs:not(.expanded) { max-height: calc(var(--ctl-sm) * 2 + var(--s-2)); }
-.explore-tabs.expanded { max-height: 40vh; overflow-y: auto; }
+.explore-tabs { position: relative; display: flex; flex-wrap: wrap; gap: var(--s-2); padding-bottom: var(--s-1); border-bottom: 0; }
+.explore-tabs.expanded { padding-bottom: var(--s-2); }
 .explore-tab { min-height: var(--ctl-sm); border-radius: var(--r-pill); font-size: var(--t-md); }
 /* 「N 本书」计数挪到分栏行右端（原在结果表头，离分栏隔着一屏）。align-start：
    分栏展开到 40vh 时计数钉在首行旁边，不跟着掉到底部。 */
@@ -4532,7 +4531,9 @@ input[type=range] { min-height: 24px; }
 .empty-editor { gap: var(--s-3); padding: var(--s-7) var(--s-5); }
 .empty-editor > svg { width: 44px; height: 44px; padding: 11px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
 .empty-editor h2 { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-2xl); }
-.explore-tabs-toggle { justify-self: start; margin-top: calc(0px - var(--s-3)); padding: 0 var(--s-3); font-size: var(--t-md); }
+/* 展开开关就是分栏末尾的一枚小胶囊：与分栏同尺寸（explore-tab 基础档给尺寸），accent 描边区分 */
+.explore-tabs-toggle { color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: var(--accent-soft); }
+.explore-tabs-toggle:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
 /* 书源空态继承了编辑器的 grid-template-rows（中间一行 minmax(270px,1fr)），
    图标/标题/说明之间被撑出三段空洞。 */
