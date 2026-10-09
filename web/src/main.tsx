@@ -3361,14 +3361,8 @@ function App() {
    */
   const settingsSections: SettingsSection[] = [
     {
-      title: '内容源与规则',
+      title: '规则',
       rows: [
-        {
-          title: '书源管理',
-          hint: '导入、分组、启停、体检书源。',
-          action: '打开书源',
-          onClick: () => navigate('sources'),
-        },
         {
           title: '替换净化规则',
           hint: '正文里按正则删除广告与杂乱内容。',

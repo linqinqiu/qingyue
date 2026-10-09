@@ -127,7 +127,7 @@ export function AppHeader({
           入口不再一个个手写：顶栏、数字键 1–6、Alt + ←/→ 的循环顺序全部取自
           shortcuts.ts 里的 PRIMARY_PAGES。手写一排 <button> 的代价已经付过一次：
           三份表各自漏过不同的页面。
-          归属判据写在 shortcuts.ts 表头；书源 / 规则 / 备份 收在「设置」页下，
+          归属判据写在 shortcuts.ts 表头；规则 / 备份 收在「设置」页下，
           打开它们时这里高亮「设置」，用户才看得出"我还在设置这一层里"。
         */}
         {PRIMARY_PAGES.map(item => (

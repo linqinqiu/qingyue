@@ -103,11 +103,12 @@ try {
   }))
   check('①界面是旧版那一套顶栏外壳', shell.topbar, shell.topbar ? shell.nav.join(' / ') : '没找到 .app-page-header')
   // 一级入口的集合与顺序（用户 2026-10-08 定的框架，对齐 Legado-with-MD3：
-  // 顶栏只留"有独立页面、会停下来管理"的目的地；书源 / 规则 / 备份 收进「设置」页）。
+  // 顶栏只留"有独立页面、会停下来管理"的目的地；2026-10-09 用户要求把「书源」放回顶栏，
+  // 替换净化规则 / 备份 仍收进「设置」页）。
   // 判"整串相等"而不是"数一下有几个"：少一项、多一项、换了顺序都要红 —— 只数条目的话，
   // 把「书签」换成「设置」也能凑够数，等于没判。
-  check('①顶栏五个一级入口，顺序与那张表一致',
-    shell.nav.join('|') === '书库|书架|发现|订阅|设置', shell.nav.join(' / '))
+  check('①顶栏六个一级入口，顺序与那张表一致',
+    shell.nav.join('|') === '书库|书架|书源|发现|订阅|设置', shell.nav.join(' / '))
   check('①侧栏 / 页头条那套 v2 结构不在页面上',
     !shell.rail && !shell.pageBar && !shell.frame,
     `侧栏=${shell.rail} 页头条=${shell.pageBar} 框架=${shell.frame}`)
@@ -131,7 +132,7 @@ try {
   // 「更新日志」「快捷键」两条从菜单里收掉了（用户 2026-10-03：「顶栏『我的』菜单堆太多」）：
   // 前者有顶栏版本芯片 + 「关于」两条路，后者改由「关于」进。这里按新的分法判。
   check('②菜单里有「关于」入口', menu.labels.some(l => l.includes('关于')), menu.labels.join(' / '))
-  // 一级目的地不在菜单里留第二条路（「设置」是一级入口，书源/规则/备份 收在「设置」页），
+  // 一级目的地不在菜单里留第二条路（「设置」是一级入口，规则/备份 收在「设置」页），
   // 否则改了这边忘了那边、两边指向不同实现只是时间问题。
   check('②菜单里不再重复一级入口与已收编条目（设置 / 规则 / 备份 都不在菜单里）',
     !menu.labels.some(l => /^(设置|规则|备份|替换净化规则|备份包)$/.test(l)), menu.labels.join(' / '))
@@ -159,9 +160,9 @@ try {
     settings.groups.length >= 4 && settings.rows.length >= 5
     && settings.rows.every(row => row.title && row.action && row.hint.length >= 8),
     `${settings.groups.join('/')} · ${settings.rows.length} 行`)
-  // 2026-10-08：书源 / 替换净化规则 / 备份包 从顶栏搬进「设置」页 —— 搬完必须还找得到。
-  check('②「设置」里收着 书源管理 / 替换净化规则 / 备份包 三行',
-    ['书源管理', '替换净化规则', '备份包'].every(t => settings.rows.some(row => row.title === t)),
+  // 2026-10-08：替换净化规则 / 备份包 从顶栏搬进「设置」页（书源 2026-10-09 回到顶栏）—— 搬完必须还找得到。
+  check('②「设置」里收着 替换净化规则 / 备份包 两行',
+    ['替换净化规则', '备份包'].every(t => settings.rows.some(row => row.title === t)),
     settings.rows.map(r => r.title).join(' / '))
   check('②这一页 1440 宽不横向溢出', settings.overflow <= 1, `溢出 ${settings.overflow}px`)
   check('②「设置 → 看日志」真的开得出运行日志弹窗（收进去的功能没坏）',
@@ -171,17 +172,16 @@ try {
   await sleep(300)
   check('②日志弹窗关得掉', await page.evaluate(() => !document.querySelector('.logs-modal')), '')
 
-  // 搬进「设置」的三条不许只剩一行字：至少书源管理这一条要真的导航得过去，
-  // 而且过去之后顶栏要亮「设置」—— 否则用户点完一片都不亮，以为点丢了。
-  check('②「设置 → 打开书源」真的导航过去（搬进来的入口是通的）',
-    await clickIn(page, '.settings-page', '打开书源'), '')
+  // 书源已是顶栏一级入口：从顶栏点「书源」要真的导航过去，且顶栏高亮「书源」（不再归在「设置」名下）。
+  check('②顶栏「书源」点得开这一页（一级入口是通的）',
+    await clickIn(page, '.app-page-header nav', '书源'), '')
   await page.waitForFunction(() => location.hash === '#sources', { timeout: 8000 }).catch(() => null)
   const atSources = await page.evaluate(() => ({
     hash: location.hash,
     active: [...document.querySelectorAll('.app-page-header nav button.active')].map(n => (n.textContent ?? '').trim()),
   }))
-  check('②打开书源后顶栏高亮「设置」（书源归在设置名下）',
-    atSources.hash === '#sources' && atSources.active.join(',') === '设置',
+  check('②打开书源后顶栏高亮「书源」',
+    atSources.hash === '#sources' && atSources.active.join(',') === '书源',
     `hash=${atSources.hash} · 高亮=${atSources.active.join(',') || '(无)'}`)
 
   // ─────────────────────── ③ 应用内「更新日志」 ───────────────────────

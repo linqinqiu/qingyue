@@ -77,15 +77,17 @@ export const READER_SHORTCUTS: Shortcut[] = [
  * （而且 发现 与 书源 的顺序和顶栏相反）、这张表又一份 —— 三份各自漏过不同的页面。
  * AGENTS §5「按键表与处理器必须同源」同一个病。
  *
- * 归属判据（用户 2026-10-08 定的框架，对齐 Legado-with-MD3 的 IA）：
- * **顶栏只放"有独立页面、会停下来管理"的目的地**。书源管理 / 替换净化规则 / 备份包
- * 都收进了「设置」页（它们仍各有自己的 URL，只是入口从「设置」进）—— 见 [SETTINGS_SUBPAGES]。
+ * 归属判据（用户 2026-10-08 定的框架，对齐 Legado-with-MD3 的 IA；2026-10-09 用户要求
+ * 把「书源」放回顶栏，故书源管理重新是一级入口）。**顶栏只放"有独立页面、会停下来管理"的目的地**。
+ * 替换净化规则 / 备份包 仍收在「设置」页（它们各有自己的 URL，只是入口从「设置」进）——
+ * 见 [SETTINGS_SUBPAGES]。
  *
  * `nav` 是顶栏上那两个字，`label` 是这张表里说全的名字。
  */
 export const PRIMARY_PAGES: { page: string; nav: string; label: string }[] = [
   { page: 'library', nav: '书库', label: '书库' },
   { page: 'shelf', nav: '书架', label: '书架' },
+  { page: 'sources', nav: '书源', label: '书源' },
   { page: 'explore', nav: '发现', label: '发现' },
   { page: 'subscriptions', nav: '订阅', label: '订阅' },
   { page: 'settings', nav: '设置', label: '设置' },
@@ -95,7 +97,7 @@ export const PRIMARY_PAGES: { page: string; nav: string; label: string }[] = [
  * 不再占顶栏、改从「设置」页进的页面。它们打开时顶栏高亮「设置」——
  * 否则顶栏一片都不亮，用户会以为"点丢了"。
  */
-export const SETTINGS_SUBPAGES: string[] = ['sources', 'rules', 'backup']
+export const SETTINGS_SUBPAGES: string[] = ['rules', 'backup']
 
 /** 数字键切页：键 = 表里的位置，标签 = 说全的那个名字。 */
 const PAGE_KEYS: [string, string, string][] = PRIMARY_PAGES.map((item, index) =>

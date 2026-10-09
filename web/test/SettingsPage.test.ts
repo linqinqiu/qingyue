@@ -41,31 +41,35 @@ test('这一页只是路由：它自己不含任何编辑器实现', () => {
   assert.doesNotMatch(page, /useState/, '它没有自己的状态：状态仍在原来那一处')
 })
 
-test('一级目的地只在顶栏列一次；书源/规则/备份 收在「设置」页 —— 收放改了，功能一条没少', () => {
+test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页 —— 收放改了，功能一条没少', () => {
   // 2026-10-08 用户定的框架（对齐 Legado-with-MD3）：顶栏只留 书库/书架/发现/订阅/设置，
-  // 书源 / 替换净化规则 / 备份包 从顶栏搬进「设置」页。判的仍是同一件事：
-  // **不许有功能只剩下一个找不到的入口**，也不许同一个目的地在两处各留一条路。
+  // 书源 / 替换净化规则 / 备份包 从顶栏搬进「设置」页；2026-10-09 用户要求把「书源」放回顶栏。
+  // 判的仍是同一件事：**不许有功能只剩下一个找不到的入口**，也不许同一个目的地在两处各留一条路。
   const header = read('../src/AppHeader.tsx')
   assert.match(header, /PRIMARY_PAGES\.map/, '顶栏入口由那张表渲染（手写一排按钮迟早漏一项）')
   assert.ok(!/<span>设置<\/span>/.test(header), '「设置」已是一级入口，不该再在「我的」菜单里留第二条路')
   assert.ok(!/<span>规则<\/span>|<span>备份<\/span>|<span>书源<\/span>/.test(header), '规则 / 备份 / 书源 不在菜单里重复')
 
   const table = read('../src/shortcuts.ts')
-  for (const page of ['sources', 'rules', 'backup']) {
-    assert.ok(!new RegExp(`\\{ page: '${page}'`).test(table), `${page} 不该再占顶栏`)
+  // 书源已回到顶栏：它必须是一级入口，且不再出现在收编清单里
+  assert.ok(/\{ page: 'sources'/.test(table), '书源要回到顶栏一级表里')
+  assert.ok(!/SETTINGS_SUBPAGES[^\n]*'sources'/.test(table), '书源既回了顶栏，就不该再留在 SETTINGS_SUBPAGES')
+  // 规则 / 备份 仍在「设置」页下：不占顶栏，但必须出现在收编清单里（不能凭空消失）
+  for (const page of ['rules', 'backup']) {
+    assert.ok(!new RegExp(`\\{ page: '${page}'`).test(table), `${page} 不该占顶栏`)
     assert.ok(table.includes(`'${page}'`), `${page} 既不在顶栏也不在收编清单（SETTINGS_SUBPAGES）里，等于消失了`)
   }
   assert.ok(table.includes("'settings'"), '设置必须留在一级表里')
 
-  // 收进设置页的三项，各自要有一行、并且真的导航过去（这一页只做路由，不建第二套实现）
+  // 收进设置页的两项，各自要有一行、并且真的导航过去（这一页只做路由，不建第二套实现）
   const main = read('../src/main.tsx')
   const block = /const settingsSections: SettingsSection\[\] = \[[\s\S]*?\r?\n  \]\r?\n/.exec(main)?.[0] ?? ''
   assert.ok(block.length > 400, '要真的取到 settingsSections 那一段（取空串下面几条对什么都成立）')
   assert.match(block, /setShowOfflineCache\(true\)/, '离线缓存仍是设置页的一行')
   assert.match(block, /setShowLogs\(true\)/, '运行日志仍是设置页的一行')
   assert.match(block, /setTocRulesSignal\(value => value \+ 1\)/, '分章规则那行要真的能开弹窗')
-  // 2026-10-08 从顶栏搬进来的三条：都要在设置页有入口，且指向原来那一份实现
-  assert.match(block, /navigate\('sources'\)/, '书源管理要在设置页有一行')
+  // 2026-10-09 书源回到顶栏，设置页不再留书源那行（同一个目的地只留一条路）
+  assert.doesNotMatch(block, /navigate\('sources'\)/, '书源回了顶栏，设置页不该再留第二条路')
   assert.match(block, /navigate\('rules'\)/, '替换净化规则要在设置页有一行')
   assert.match(block, /navigate\('backup'\)/, '备份包要在设置页有一行')
 })
