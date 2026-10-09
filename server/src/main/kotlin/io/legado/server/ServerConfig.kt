@@ -11,6 +11,11 @@ data class ServerConfig(
     val localBooksDirectory: Path = coverCacheDirectory.resolveSibling("local_books"),
     /** 新骨架前端的磁盘目录；没有这个目录就不挂 `/next`（见 [staticNext]）。 */
     val nextDirectory: Path = Path.of("next"),
+    /**
+     * 安装根：界面里改端口时把 `port.txt` 写在这里（启动器下次就从它读端口）。
+     * `LEGADO_HOME` 由启动器传（见 `scripts/runtime.mjs` 的 `childEnvironment`）；裸跑 jar 就取当前目录。
+     */
+    val homeDirectory: Path = Path.of("."),
 ) {
     companion object {
 
@@ -37,6 +42,7 @@ data class ServerConfig(
                 localBooksDirectory = dataDir.resolve("local_books"),
                 // 相对当前工作目录，与 data/ 同一套规矩：整合包解开在哪，就在哪找 next/
                 nextDirectory = Path.of(env["LEGADO_NEXT_DIR"] ?: "next"),
+                homeDirectory = Path.of(env["LEGADO_HOME"] ?: ".").toAbsolutePath(),
             )
         }
     }

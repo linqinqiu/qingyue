@@ -15,6 +15,7 @@ import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
 import { AboutPage } from './AboutPage'
 import { CustomizeModal } from './CustomizeModal'
+import { ServerPortModal } from './ServerPortModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
 import { SourceSwitchModal } from './SourceSwitchModal'
@@ -3130,6 +3131,8 @@ function App() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   /** 「自定义」弹窗：只有皮肤那一档（界面布局随 v2 一起撤掉了）。 */
   const [showCustomize, setShowCustomize] = useState(false)
+  /** 「设置 → 服务端口」：改的是安装根的 port.txt，重启青阅后生效。 */
+  const [showServerPort, setShowServerPort] = useState(false)
   /**
    * 「设置 → TXT 分章规则」点下去的意图。规则弹窗连同它那颗「按这条导入本地书」都住在
    * 书架里（导书的动作在那边），所以这里只发一个"去开一下"的信号，不复制一份弹窗。
@@ -3439,6 +3442,17 @@ function App() {
         },
       ],
     },
+    {
+      title: '服务',
+      rows: [
+        {
+          title: '服务端口',
+          hint: '青阅跑在哪个端口；改完重启青阅后生效。',
+          action: '改端口',
+          onClick: () => setShowServerPort(true),
+        },
+      ],
+    },
   ]
 
   return (
@@ -3518,6 +3532,9 @@ function App() {
       )}
       {showCustomize && (
         <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setShowCustomize(false)} />
+      )}
+      {showServerPort && (
+        <ServerPortModal onClose={() => setShowServerPort(false)} />
       )}
     </div>
   )

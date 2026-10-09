@@ -26,7 +26,7 @@ if not errorlevel 1 (
 
 rem 2) not running -> start it in the background, wait for /healthz, then open the UI
 echo Starting QingYue service... (first launch takes about ten seconds)
-start "QingYue" /min cmd /c "node start.mjs --no-open"
+start "QingYue" /min cmd /c "node start.mjs --no-open --port %PORT%"
 powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; for($i=0;$i -lt 240;$i++){ try{ if((Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 '%URL%healthz').StatusCode -eq 200){ exit 0 } }catch{}; Start-Sleep -Milliseconds 500 }; exit 1"
 if errorlevel 1 (
   echo.

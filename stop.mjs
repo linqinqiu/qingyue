@@ -15,11 +15,32 @@ const override = portArg(process.argv.slice(2));
 const { port: defaultPort } = resolveRuntime();
 const port = Number.isInteger(override) && override > 0 ? override : defaultPort;
 
-const lines = execFileSync('netstat', ['-ano'], { encoding: 'utf8' }).split(/\r?\n/)
-  .filter((line) => new RegExp(`:${port}\\s`).test(line) && /LISTENING/i.test(line));
-if (!lines.length) { console.log(`端口 ${port} 上没有在跑的服务`); process.exit(0); }
+/** 这个端口上正在听的那些 PID。 */
+function pidsOnPort(target) {
+  const lines = execFileSync('netstat', ['-ano'], { encoding: 'utf8' }).split(/\r?\n/)
+    .filter((line) => new RegExp(`:${target}\\s`).test(line) && /LISTENING/i.test(line));
+  return [...new Set(lines.map((line) => line.trim().split(/\s+/).pop()))];
+}
 
-const pids = [...new Set(lines.map((line) => line.trim().split(/\s+/).pop()))];
+/**
+ * 按 jar 找本项目进程（不认端口）。**换了端口之后靠它兜底**：
+ * 在界面上把端口从 1234 改成 1235 之后、还没重启时，服务其实仍在 1234 上跑，
+ * 而配置里的端口已经是 1235 —— 只按端口找会"找不到"，于是以为没在跑。
+ */
+function projectPids() {
+  const out = execFileSync('powershell', ['-NoProfile', '-Command',
+    `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | Where-Object { $_.CommandLine -match 'legado-server-.*-all\\.jar' } | ForEach-Object { $_.ProcessId }`,
+  ], { encoding: 'utf8' });
+  return [...new Set(out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))];
+}
+
+let pids = pidsOnPort(port);
+if (!pids.length) {
+  pids = projectPids();
+  if (pids.length) console.log(`端口 ${port} 上没有服务；按 jar 找到 ${pids.length} 个本项目进程`);
+}
+if (!pids.length) { console.log('没有在跑的青阅服务'); process.exit(0); }
+
 for (const pid of pids) {
   // 只认命令行里确实是本项目 jar 的进程：按 PID 盲杀过一次，教训写在这儿。
   const info = execFileSync('powershell', ['-NoProfile', '-Command',

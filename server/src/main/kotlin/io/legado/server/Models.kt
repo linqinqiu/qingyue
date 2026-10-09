@@ -486,6 +486,17 @@ data class CachedBookRequest(
 /** 「关于」页顶部那三样：名字、版本、发布仓库。版本只有一个来源（清单），界面不许写死。 */
 @Serializable data class AboutInfo(val title: String, val version: String, val repository: String)
 
+/**
+ * 服务自身：当前绑在哪、界面里那个「服务端口」现在显示什么。
+ * `port` 是**这次运行**实际用的端口 —— 改了 port.txt 也不会变，要重启才生效。
+ */
+@Serializable data class ServerInfo(val host: String, val port: Int)
+
+/** 界面里改端口：只写安装根的 `port.txt`，不碰正在跑的这个进程。 */
+@Serializable data class ServerPortRequest(val port: Int)
+
+@Serializable data class ServerPortResult(val port: Int, val restartRequired: Boolean)
+
 /** 「关于 → 检查更新」的结果。`status`：`latest` / `available` / `not_found` / `unreachable`。 */
 @Serializable data class UpdateCheckResult(
     val current: String,

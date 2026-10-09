@@ -64,6 +64,11 @@ fun Route.apiRoutes(
     edgeTts: EdgeTtsService = EdgeTtsService(),
     ttsSessions: TtsSessionService = TtsSessionService(edgeTts),
     localBooksDirectory: Path = Path.of(".data/local_books"),
+    /** 安装根：界面里改端口时把 `port.txt` 写在这里。 */
+    homeDirectory: Path = Path.of("."),
+    /** 这次运行实际绑的地址与端口（`/api/server` 报给界面）。 */
+    currentHost: String = "127.0.0.1",
+    currentPort: Int = 8080,
 ) {
     val webView = WebViewProxy(database)
     // 备份包里没有原生归宿的个性化条目，原样收在数据目录下的一个文件夹里（见 BackupStore 的取舍说明）。
@@ -75,6 +80,27 @@ fun Route.apiRoutes(
     val externalLogin = ExternalBrowserLogin(database, localBooksDirectory.resolveSibling("external-browser-profile"))
     val debugger = SourceDebugger(runner)
     route("/api") {
+        // 服务自身 + 改端口。端口只写安装根的 `port.txt`，**重启后生效** —— 正在跑的这个进程改不了。
+        get("/server") {
+            call.respond(ServerInfo(host = currentHost, port = currentPort))
+        }
+        put("/server/port") {
+            if (!call.requireSameOriginWrite()) return@put
+            val request = runCatching { call.receive<ServerPortRequest>() }.getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@put
+            }
+            if (request.port !in 1..65535) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_port", "端口要在 1–65535 之间")); return@put
+            }
+            val file = homeDirectory.resolve("port.txt")
+            try {
+                java.nio.file.Files.createDirectories(homeDirectory)
+                java.nio.file.Files.writeString(file, "${request.port}\n")
+            } catch (error: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, ApiError("write_failed", "写不进 $file：${error.message}")); return@put
+            }
+            call.respond(ServerPortResult(port = request.port, restartRequired = request.port != currentPort))
+        }
         get("/sources") {
             call.respond(database.listSources(call.request.queryParameters["q"]))
         }

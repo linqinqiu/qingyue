@@ -5209,6 +5209,9 @@ input[type=range] { min-height: 24px; }
 .customize-header h2 { display: flex; align-items: center; gap: 8px; }
 .customize-header h2 svg { width: 18px; height: 18px; color: var(--accent); }
 .customize-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 20px; }
+/* 「服务端口」弹窗：一行现状 + 一个数字框 + 保存，比皮肤那套简单。 */
+.server-port-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 14px; }
+.server-port-current { margin: 0; font-size: 13px; color: var(--muted); }
 .customize-section { display: grid; gap: 8px; }
 .customize-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .customize-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }

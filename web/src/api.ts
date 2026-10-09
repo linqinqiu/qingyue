@@ -10,6 +10,9 @@ import {
 export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number; /** 自定义排序位；null = 没拖过，按名称排在有序段之后 */ sortOrder?: number | null }
 export type SourceRecord = { id: string; json: string; version: number; updatedAt: number }
 export type AboutInfo = { title: string; version: string; repository: string }
+/** 服务自身：这次运行实际绑在哪（改 port.txt 不会让它变，要重启）。 */
+export type ServerInfo = { host: string; port: number }
+export type ServerPortResult = { port: number; restartRequired: boolean }
 export type UpdateCheckResult = {
   current: string
   latest?: string | null
@@ -384,6 +387,10 @@ export const api = {
   shelfGroups: () => request<BookGroup[]>('/api/bookshelf/groups'),
   /** 「关于」页顶部的名字/版本/仓库：版本只有一个来源（jar 清单），界面不许写死。 */
   about: () => request<AboutInfo>('/api/about'),
+  /** 服务自身：当前绑的地址与端口。 */
+  serverInfo: () => request<ServerInfo>('/api/server'),
+  /** 改端口：只写安装根的 `port.txt`，重启青阅后生效。 */
+  setServerPort: (port: number) => request<ServerPortResult>('/api/server/port', { method: 'PUT', body: JSON.stringify({ port }) }),
   checkUpdate: () => request<UpdateCheckResult>('/api/about/update-check', { method: 'POST' }),
   createShelfGroup: (name: string) => request<BookGroup>('/api/bookshelf/groups', { method: 'POST', body: JSON.stringify({ name }) }),
   removeShelfGroup: (id: number) => request<void>(`/api/bookshelf/groups/${id}`, { method: 'DELETE' }),

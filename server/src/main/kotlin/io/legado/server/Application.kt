@@ -124,7 +124,10 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     }
     routing {
         get("/healthz") { call.respond(HealthStatus(title = BuildInfo.title, version = BuildInfo.version, status = "ok")) }
-        apiRoutes(database, runner, coverCache, subscriptions, bookCache, edgeTts, ttsSessions, config.localBooksDirectory)
+        apiRoutes(
+            database, runner, coverCache, subscriptions, bookCache, edgeTts, ttsSessions,
+            config.localBooksDirectory, config.homeDirectory, config.host, config.port,
+        )
         // 注册在 staticWeb 之前：根路由是 `staticResources("/")`，先摆 /next 才不必去猜路由树的优先级
         staticNext(config.nextDirectory)
         staticWeb()
