@@ -658,7 +658,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .shelf-empty p { color: var(--muted); font-size: 14px; }
 
 /* Bookshelf Grid & Split Cards */
-.shelf-grid { display: grid; gap: 22px; }
+.shelf-grid { display: grid; gap: var(--card-gap); }
 .shelf-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, .04); transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
 .shelf-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0, 0, 0, .08); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
 /* 批量模式下的选中状态 */
@@ -788,8 +788,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .shelf-import-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 550; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); transition: all .15s ease; }
 .shelf-import-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .shelf-page.drag-active { outline: 2px dashed var(--accent); outline-offset: -8px; background: color-mix(in srgb, var(--accent) 3%, transparent); }
-.shelf-card-info { padding: 12px 14px 6px; display: grid; gap: 4px; }
-.shelf-card-name { margin: 0; font-size: 15px; font-weight: 650; color: var(--ink); line-height: 1.35; min-height: 2.7em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.shelf-card-info { padding: var(--card-pad-y) var(--card-pad-x) 6px; display: grid; gap: var(--s-1); }
+.shelf-card-name { margin: 0; font-size: var(--card-title); font-weight: 650; color: var(--ink); line-height: 1.35; min-height: 2.7em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
 .shelf-card-name:hover { color: var(--accent); }
 .shelf-card-author { margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .shelf-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
@@ -4487,6 +4487,10 @@ input[type=range] { min-height: 24px; }
   --ctl-sm: 30px; --ctl: 34px; --ctl-lg: 40px;
   --page-max: 1240px;
   --gutter: clamp(18px, 4vw, 44px);
+  /* 页级节奏：页面上下留白与区块间距。书库是冻结页，不参与收紧（见下方 .library-page）。 */
+  --page-pad-top: 36px; --page-pad-bottom: clamp(28px, 4vw, 48px); --page-gap: var(--s-5);
+  /* 卡片密度：网格间距 / 内边距 / 标题字号 —— 卡片类表面统一从这里取，别再手写 22px、14px。 */
+  --card-gap: 22px; --card-pad-x: 14px; --card-pad-y: 12px; --card-title: var(--t-xl);
   /* 三层叠加的「自然光」阴影：近处一道硬边定轮廓、中景一道柔光给层次、远处一道大模糊铺气氛。
      单层大模糊会在浅色底上糊成一片灰雾（旧值就是这个问题），分层后卡片有厚度又不脏。 */
   --elev-1: 0 1px 1px rgba(16, 26, 20, .04), 0 2px 5px rgba(16, 26, 20, .05), 0 6px 16px rgba(16, 26, 20, .045);
@@ -4514,14 +4518,14 @@ input[type=range] { min-height: 24px; }
   padding-inline: var(--gutter);
   padding-block: clamp(28px, 5vw, 56px);
   display: grid;
-  gap: var(--s-5);
+  gap: var(--page-gap);
   align-content: start;
 }
 /*
  * 页头上方的留白：书库是**冻结页**（PROPOSAL-018 §1），保持基线值不动；其余页收到 36px。
  * 原来 56px 会把首行内容推到 y=118（帧栅格第 5 格 = 100px），而 §3.2 的目标是"第一行内容起始 ≤96px"。
  */
-.shelf-page, .explore-page, .subscription-page, .backup-page { padding-block-start: 36px; }
+.shelf-page, .explore-page, .subscription-page, .backup-page { padding-block-start: var(--page-pad-top); }
 
 /* —— 页面切换：内容轻微上浮淡入，给"换了一页"一点手感。
    书库（.library-page）是冻结基准、阅读器有自己的转场，都不参与。 —— */
@@ -4566,7 +4570,7 @@ input[type=range] { min-height: 24px; }
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
-  padding-block: 36px clamp(28px, 4vw, 48px);
+  padding-block: var(--page-pad-top) var(--page-pad-bottom);
 }
 .explore-page > * { flex: none; min-width: 0; }
 .explore-page > .explore-results,
