@@ -10,7 +10,7 @@
  * 默认值刻意保持"和现在一样"（翻页模式按列分、滚动模式按行分），改了才生效，不改不漂移。
  */
 
-export type TapAction = 'previous' | 'next' | 'toggle' | 'toc' | 'marks' | 'addMark' | 'settings' | 'none'
+export type TapAction = 'previous' | 'next' | 'toggle' | 'toc' | 'settings' | 'none'
 
 export type TapGrid = { rows: number; cols: number; actions: TapAction[] }
 
@@ -19,13 +19,11 @@ export const TAP_ACTION_LABELS: Record<TapAction, { label: string; hint: string 
   next: { label: '下一页 / 下一章', hint: '往前翻一栏，跨过章界只是"下一页"' },
   toggle: { label: '呼出 / 收起工具栏', hint: '现在中间那一格的行为' },
   toc: { label: '打开章节目录', hint: '直接进目录，不用先呼工具栏' },
-  marks: { label: '打开书签', hint: '这本书的书签列表' },
-  addMark: { label: '给这一章加书签', hint: '一键标整章，批注进书签栏再补' },
   settings: { label: '打开阅读设置', hint: '字号、行距、主题、翻页方式' },
   none: { label: '不做任何事', hint: '防误触：这一格点了没反应' },
 }
 
-export const TAP_ACTION_ORDER: TapAction[] = ['previous', 'next', 'toggle', 'toc', 'marks', 'addMark', 'settings', 'none']
+export const TAP_ACTION_ORDER: TapAction[] = ['previous', 'next', 'toggle', 'toc', 'settings', 'none']
 
 /** 两种模式各自的出厂默认：与改动前逐字一致（翻页按左右列、滚动按上下段）。 */
 export const DEFAULT_GRIDS: Record<'paginate' | 'scroll', TapGrid> = {

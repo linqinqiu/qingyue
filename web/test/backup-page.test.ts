@@ -41,7 +41,7 @@ test('导入结果播报：原样收下的条目单独一句，不和"不承接"
       sources: 1, rules: 0, books: 0, progress: 0,
       keptSections: [
         { name: 'readConfig.json', label: '阅读样式', bytes: 2048, items: 3, appliable: true, updatedAt: 1 },
-        { name: 'bookmark.json', label: '书签', bytes: 512, items: 2, appliable: false, updatedAt: 1 },
+        { name: 'dictRule.json', label: '字典规则', bytes: 512, items: 2, appliable: false, updatedAt: 1 },
       ],
       skippedSections: ['replaceRule.json'],
     })
@@ -50,7 +50,7 @@ test('导入结果播报：原样收下的条目单独一句，不和"不承接"
   }
   const all = shown.join('\n')
   assert.ok(all.includes('另外原样收下 2 类条目'), all)
-  assert.ok(all.includes('阅读样式') && all.includes('书签'), '收下的条目名要念出来：' + all)
+  assert.ok(all.includes('阅读样式') && all.includes('字典规则'), '收下的条目名要念出来：' + all)
   assert.ok(all.includes('连收下的地方都还没有'), '真的没承接的才用重话：' + all)
 })
 
@@ -113,13 +113,13 @@ test('导入结果播报：空包要警告而不是报"完成"', () => {
   try {
     reportImportSummary({
       sources: 0, sourcesUpdated: 0, rules: 0, rulesUpdated: 0, books: 0, booksUpdated: 0, progress: 0,
-      rssSources: 0, rssSourcesUpdated: 0, skippedSections: ['bookmark.json'],
+      rssSources: 0, rssSourcesUpdated: 0, skippedSections: ['highlight.json'],
     })
   } finally {
     unsubscribe()
   }
   assert.ok(shown.join('\n').includes('没有可导入的内容'), '空包要说空')
-  assert.ok(shown.join('\n').includes('bookmark.json'), '顺带说明跳过了什么')
+  assert.ok(shown.join('\n').includes('highlight.json'), '顺带说明跳过了什么')
 })
 
 /** 去掉注释：残留扫描要抓的是"代码还在用 WebDAV"，不是"某句解释提到了它"。 */

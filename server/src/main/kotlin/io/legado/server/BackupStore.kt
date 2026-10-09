@@ -9,7 +9,7 @@ import java.nio.file.StandardCopyOption
  *
  * 为什么是文件而不是表：用户口径里有一条红线 —— `themeConfig` / `readConfig` / `config.xml` /
  * `videoConfig` / `highlightRule` / `keyboardAssists` / `servers` 这七类是**配置**，
- * 不许为了"支持导入"就给它们建表。而书签、字典、阅读记录、搜索历史这些虽然能建表，
+ * 不许为了"支持导入"就给它们建表。而字典、阅读记录、搜索历史这些虽然能建表，
  * 但本服务当前没有对应的界面去消费它们，建了表等于制造"导入成功但其实没地方用"的假支持。
  *
  * 所以这里的取舍是：**先原样收下并如实上报**（文件名、条数、字节数、什么时候收的），
@@ -64,7 +64,7 @@ class BackupStore(private val directory: Path) {
 
         /** 备份包里我们目前没有原生归宿、但值得原样收下的条目。 */
         val KEEP_NAMES = listOf(
-            "bookmark.json", "dictrule.json", "readconfig.json", "httpTTS.json", "httptts.json",
+            "dictrule.json", "readconfig.json", "httpTTS.json", "httptts.json",
             "searchhistory.json", "txtTocRule.json", "bookmemo.json", "rssStar.json",
             "themeConfig.json", "style.json", "theme.json", "readRecord.json",
         )
@@ -73,7 +73,6 @@ class BackupStore(private val directory: Path) {
         val APPLYABLE_NAMES = listOf("readconfig.json", "httpTTS.json", "httptts.json", "txtTocRule.json")
 
         val KEEP_LABELS = mapOf(
-            "bookmark.json" to "书签",
             "dictrule.json" to "字典规则",
             "readconfig.json" to "阅读样式",
             "httptts.json" to "朗读引擎",

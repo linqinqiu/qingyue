@@ -62,7 +62,6 @@ export const READER_SHORTCUTS: Shortcut[] = [
   { action: 'font-decrease', keys: ['-', '_'], display: '-', label: '字号减小一档', group: '排版' },
   { action: 'theme-next', keys: ['t'], display: 'T', label: '换下一套主题', group: '排版' },
   { action: 'toc', keys: ['d'], display: 'D', label: '打开 / 收起目录', group: '面板' },
-  { action: 'marks', keys: ['b'], display: 'B', label: '打开 / 收起书签（先框选段落再按会直接加一条）', group: '面板' },
   { action: 'settings', keys: ['s'], display: 'S', label: '打开 / 收起阅读设置', group: '面板' },
   { action: 'tts', keys: ['m'], display: 'M', label: '朗读：播放 / 暂停', group: '面板' },
   { action: 'fullscreen', keys: ['f'], display: 'F', label: '全屏 / 退出全屏', group: '面板' },

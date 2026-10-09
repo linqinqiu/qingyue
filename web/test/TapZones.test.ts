@@ -63,8 +63,8 @@ test('清洗：缺项、长度不够、认不出的动作、行列离谱都回�
   assert.deepEqual(sanitizeGrid({ rows: 1, cols: 3 }, fallback), fallback)
   assert.deepEqual(sanitizeGrid({ rows: 1, cols: 3, actions: ['next'] }, fallback),
     { rows: 1, cols: 3, actions: ['next', 'toggle', 'next'] })
-  assert.deepEqual(sanitizeGrid({ rows: 1, cols: 3, actions: ['nope', 'toc', 'marks'] }, fallback),
-    { rows: 1, cols: 3, actions: ['previous', 'toc', 'marks'] })
+  assert.deepEqual(sanitizeGrid({ rows: 1, cols: 3, actions: ['nope', 'toc', 'settings'] }, fallback),
+    { rows: 1, cols: 3, actions: ['previous', 'toc', 'settings'] })
   // 上限：不许存出 99×99 这种把抽屉撑爆的表
   const huge = sanitizeGrid({ rows: 99, cols: 99, actions: [] }, fallback)
   assert.equal(huge.rows, 6)

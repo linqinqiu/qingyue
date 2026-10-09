@@ -51,7 +51,6 @@ import './TtsBarPosition.test.ts'
 import './SettingsPage.test.ts'
 import './UiContract.test.ts'
 import './SourceHealthRun.test.ts'
-import './Bookmarks.test.ts'
 import './SourceOrder.test.ts'
 import './TapZones.test.ts'
 /*

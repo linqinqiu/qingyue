@@ -22,6 +22,15 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 h1, h2, h3, p { margin: 0; }
 svg { width: 18px; height: 18px; flex: none; }
+/* 选区与滚动条也用主题色：系统默认的蓝与整站绿调不搭，细滚动条在桌面端更克制。
+   局部显式隐藏滚动条的地方（导航横滚等）用更具体的选择器覆盖，不受这里影响。 */
+::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--ink); }
+/* 只给滚动条上色、**不改它的宽度**：改宽度会挪动视口内容宽，而书库是冻结基准（PROPOSAL-018 §1），
+   几何一个像素都不许动。Firefox 走 scrollbar-color，WebKit 只描 thumb、不写 ::-webkit-scrollbar 尺寸。 */
+* { scrollbar-color: color-mix(in srgb, var(--muted) 38%, transparent) transparent; }
+*::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background-clip: content-box; background-color: color-mix(in srgb, var(--muted) 34%, transparent); }
+*::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--muted) 58%, transparent); }
+*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
 /*
  * 主题令牌。关键约定：`--accent` 只用于描边与文字，实底控件必须用 `--accent-solid` 配 `--on-accent`，
  * 两者成对定义、保证白字/深字压在上面的对比度 ≥4.5。
@@ -167,6 +176,8 @@ svg { width: 18px; height: 18px; flex: none; }
   position: relative;
   display: flex;
   align-items: center;
+  /* 窄屏顶栏被导航挤满时，"我的"这一颗不许被压窄换行（曾出现「我/的」竖排成两行） */
+  flex: 0 0 auto;
 }
 .header-menu-btn {
   height: 38px;
@@ -182,6 +193,7 @@ svg { width: 18px; height: 18px; flex: none; }
 .header-menu-label {
   font-size: 14px;
   line-height: 1;
+  white-space: nowrap;
 }
 .header-menu-btn:hover,
 .header-menu-btn.active {
@@ -1293,10 +1305,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
     padding-right: max(0px, var(--safe-right));
     box-sizing: border-box;
     display: grid;
-    /* 六颗键（目录 / 书签 / 换源 / 朗读 / 设置 / 夜读）挤在四列里：后两颗被推到第二行，
-       而容器高度是写死的 `calc(58px + safe-bottom)`，于是它们在手机上根本看不见
-       （2026-10-03 审计）。列数按实际按钮数写。 */
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    /* 五颗键（目录 / 换源 / 朗读 / 设置 / 夜读）：列数按实际按钮数写 —— 写少了后几颗会被推到
+       第二行，而容器高度是写死的 `calc(58px + safe-bottom)`，它们在手机上就根本看不见
+       （2026-10-03 审计）。书签那颗已在 0.6.12 随功能一起删掉。 */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface) 92%, transparent);
     backdrop-filter: blur(16px);
@@ -4278,10 +4290,11 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
 .explore-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); }
 .explore-more-row { display: flex; justify-content: center; padding: 14px; border-top: 1px solid var(--line); }
 .explore-more-row button:disabled { opacity: .6; cursor: default; }
-.explore-card { display: grid; gap: 8px; padding: 16px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
+.explore-card { display: grid; gap: 8px; padding: 16px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: background .15s ease; }
 .explore-card:hover { background: var(--surface-muted); }
+.explore-card:hover .explore-cover { transform: translateY(-3px); box-shadow: var(--elev-2); }
 /* 封面位：占位先摆着、真图加载出来再淡入（DeferredCover，见 web/src/Cover.tsx） */
-.explore-cover { position: relative; display: block; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); }
+.explore-cover { position: relative; display: block; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-muted); box-shadow: var(--elev-1); transition: transform .2s ease, box-shadow .2s ease; }
 .deferred-cover { position: absolute; inset: 0; display: block; }
 .deferred-cover > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .18s ease; }
 .deferred-cover > img.is-loaded { opacity: 1; }
@@ -4333,8 +4346,8 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
         ④ 键盘焦点必须可见，用 --accent 描一圈
    这一节放在文件末尾，靠同选择器后置覆盖前面各页的旧写法。
    ============================================================ */
-.primary-button { background: var(--accent-solid); color: var(--on-accent); border: 1px solid transparent; }
-.primary-button:hover:not(:disabled) { background: var(--accent-solid-hover); color: var(--on-accent); border-color: transparent; }
+.primary-button { background: var(--accent-solid); color: var(--on-accent); border: 1px solid transparent; box-shadow: 0 1px 2px color-mix(in srgb, var(--accent-solid) 32%, transparent); }
+.primary-button:hover:not(:disabled) { background: var(--accent-solid-hover); color: var(--on-accent); border-color: transparent; box-shadow: 0 3px 12px color-mix(in srgb, var(--accent-solid) 34%, transparent); }
 .subtle-button, .ghost-button { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
 .subtle-button:hover:not(:disabled), .ghost-button:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 /*
@@ -4356,7 +4369,12 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
 button.danger-solid, .danger-solid { background: var(--danger-solid); color: var(--on-danger); border: 1px solid transparent; }
 
 /* 最小可点面积：旧样式里 17/21/22/23px 高的控件统一抬到 30–34 */
-button, .primary-button, .subtle-button, .ghost-button, .danger-button { min-height: 34px; }
+button, .primary-button, .subtle-button, .ghost-button, .danger-button {
+  min-height: 34px;
+  /* 统一过渡：hover 换色不再"啪"地跳；按下时轻微下沉，给一点物理触感 */
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
+}
+.primary-button:active:not(:disabled), .subtle-button:active:not(:disabled), .ghost-button:active:not(:disabled), .secondary-button:active:not(:disabled) { transform: translateY(1px); }
 input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { min-height: 34px; }
 input[type=range] { min-height: 24px; }
 .rules-group-pill, .debug-node, .explore-tab, .shelf-tabs button { min-height: 30px; }
@@ -4385,14 +4403,17 @@ input[type=range] { min-height: 24px; }
   --ctl-sm: 30px; --ctl: 34px; --ctl-lg: 40px;
   --page-max: 1240px;
   --gutter: clamp(18px, 4vw, 44px);
-  --elev-1: 0 1px 2px rgba(16, 26, 20, .05), 0 2px 8px rgba(16, 26, 20, .04);
-  --elev-2: 0 8px 24px rgba(16, 26, 20, .10);
-  --elev-3: 0 20px 56px rgba(16, 26, 20, .20);
+  /* 三层叠加的「自然光」阴影：近处一道硬边定轮廓、中景一道柔光给层次、远处一道大模糊铺气氛。
+     单层大模糊会在浅色底上糊成一片灰雾（旧值就是这个问题），分层后卡片有厚度又不脏。 */
+  --elev-1: 0 1px 1px rgba(16, 26, 20, .04), 0 2px 5px rgba(16, 26, 20, .05), 0 6px 16px rgba(16, 26, 20, .045);
+  --elev-2: 0 2px 4px rgba(16, 26, 20, .05), 0 10px 24px rgba(16, 26, 20, .10), 0 18px 40px rgba(16, 26, 20, .07);
+  --elev-3: 0 8px 20px rgba(16, 26, 20, .12), 0 28px 64px rgba(16, 26, 20, .20);
 }
 .theme-dark {
-  --elev-1: 0 1px 2px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .25);
-  --elev-2: 0 8px 24px rgba(0, 0, 0, .45);
-  --elev-3: 0 20px 56px rgba(0, 0, 0, .6);
+  /* 暗底上"近处硬边"要更亮一点才看得出边界，远处保持深黑，否则整片糊掉 */
+  --elev-1: 0 1px 1px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .38), 0 8px 20px rgba(0, 0, 0, .30);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, .5), 0 12px 28px rgba(0, 0, 0, .48), 0 20px 44px rgba(0, 0, 0, .40);
+  --elev-3: 0 10px 24px rgba(0, 0, 0, .55), 0 30px 68px rgba(0, 0, 0, .62);
 }
 
 /* —— 版式基线 —— */
@@ -4417,6 +4438,18 @@ input[type=range] { min-height: 24px; }
  * 原来 56px 会把首行内容推到 y=118（帧栅格第 5 格 = 100px），而 §3.2 的目标是"第一行内容起始 ≤96px"。
  */
 .shelf-page, .explore-page, .subscription-page, .backup-page { padding-block-start: 36px; }
+
+/* —— 页面切换：内容轻微上浮淡入，给"换了一页"一点手感。
+   书库（.library-page）是冻结基准、阅读器有自己的转场，都不参与。 —— */
+@keyframes page-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.shelf-page, .explore-page, .subscription-page, .backup-page,
+.settings-page, .about-page, .changelog-page, .rules-page-container, .sources-page {
+  animation: page-enter .26s cubic-bezier(.16, 1, .3, 1);
+}
+/* 系统开了"减少动态"就全站降级为即时：前庭敏感的用户不该被这些位移影响 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 .page-title { gap: var(--s-4); }
 .page-title-actions { display: flex; align-items: center; gap: var(--s-2); flex: none; }
 
@@ -4452,11 +4485,16 @@ input[type=range] { min-height: 24px; }
 .explore-page > .explore-message,
 .explore-page > .explore-loading { flex: 1 1 auto; }
 .explore-message, .explore-loading {
-  display: grid; place-content: center; gap: var(--s-2); padding: var(--s-6);
-  border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface);
-  color: var(--muted); font-size: var(--t-md); text-align: center;
+  display: grid; place-content: center; justify-items: center; gap: var(--s-3); padding: var(--s-6);
+  border-radius: var(--r-3);
+  /* 去掉硬边框：一整屏的描边空框看着像坏了。改成一层极淡的顶光 + 柔底，读起来是"安静的留白"。 */
+  background:
+    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-muted) 62%, var(--surface));
+  color: var(--muted); font-size: var(--t-md); line-height: 1.75; text-align: center;
 }
-.explore-loading { grid-auto-flow: column; align-items: center; }
+.explore-loading { grid-auto-flow: row; }
+.explore-loading svg { width: 22px; height: 22px; color: var(--accent); animation: spin 1s linear infinite; }
 
 /* —— 书库静置态：搜索框下面不再是一整屏空白 + 一条孤零零的横线 —— */
 .library-idle { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-3); border-top: 0; }
@@ -5246,53 +5284,6 @@ input[type=range] { min-height: 24px; }
 .toc-repick .rules-setting-btn { flex: none; }
 .customize-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .customize-saved { color: var(--muted); font-size: 12px; }
-
-/* —— 书签：阅读器左栏那一叠 + 「我的 → 书签」那一页 —— */
-.reader-drawer-marks .bookmark-drawer-body { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-.bookmark-drawer-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 8px; padding: 14px 14px 10px; border-bottom: 1px solid var(--line); }
-.bookmark-drawer-head h3 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 16px; font-weight: 600; }
-.bookmark-drawer-head small { grid-column: 1 / -1; color: var(--muted); font-size: var(--t-xs); }
-.bookmark-drawer-head .overlay-close { grid-row: 1; }
-.bookmark-add { display: grid; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-.bookmark-quote, .bookmark-hint { margin: 0; color: var(--muted); font-size: var(--t-xs); line-height: 1.65; }
-.bookmark-quote span { display: block; margin-top: 3px; color: var(--ink); }
-.bookmark-note-input { min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--t-sm); }
-.bookmark-add-actions { display: flex; gap: 8px; }
-.bookmark-add-actions .primary-button, .bookmark-add-actions .ghost-button { flex: 1 1 auto; min-height: 32px; font-size: var(--t-sm); }
-.bookmark-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: 6px 0 16px; list-style: none; }
-.bookmark-list > li { padding: 8px 14px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-.bookmark-jump { display: grid; gap: 4px; width: 100%; padding: 0; color: inherit; text-align: left; background: none; border: 0; font: inherit; cursor: pointer; }
-.bookmark-meta { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-.bookmark-meta strong { overflow: hidden; font-size: var(--t-sm); text-overflow: ellipsis; white-space: nowrap; }
-.bookmark-meta small { flex: none; color: var(--muted); font-size: var(--t-xs); }
-.bookmark-text { display: -webkit-box; overflow: hidden; color: var(--ink); font-size: var(--t-sm); line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.bookmark-note { color: var(--accent-ink); font-size: var(--t-xs); }
-.bookmark-row-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
-.bookmark-edit { display: flex; gap: 6px; margin-top: 6px; }
-.bookmark-edit input { flex: 1 1 auto; min-width: 0; }
-.bookmark-message { margin: 0; padding: 8px 14px; color: var(--danger); font-size: var(--t-xs); }
-
-.bookmarks-page { width: min(920px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
-.bookmarks-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
-.bookmarks-head h1 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 26px; font-weight: 600; }
-.bookmarks-head p { margin: 5px 0 0; color: var(--muted); font-size: var(--t-sm); }
-.bookmarks-search { display: inline-flex; align-items: center; gap: 7px; min-width: 240px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); color: var(--muted); }
-.bookmarks-search input { min-width: 0; flex: 1; padding: 8px 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--t-sm); }
-.bookmarks-notice, .bookmarks-empty { color: var(--muted); font-size: var(--t-sm); line-height: 1.8; }
-.bookmarks-book { margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--line); }
-.bookmarks-book > header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.bookmarks-book h2 { margin: 0; font-family: Georgia, "Noto Serif SC", serif; font-size: 18px; font-weight: 600; }
-.bookmarks-book > header small { color: var(--muted); font-size: var(--t-xs); }
-.bookmarks-book ul { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-.bookmarks-book li { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
-.bookmarks-row-main { display: grid; gap: 3px; min-width: 0; }
-.bookmarks-row-main strong { font-size: var(--t-sm); }
-.bookmarks-row-main small { color: var(--muted); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
-.bookmarks-quote { margin: 2px 0 0; color: var(--ink); font-size: var(--t-sm); line-height: 1.7; overflow-wrap: anywhere; }
-.bookmarks-note { margin: 2px 0 0; color: var(--accent-ink); font-size: var(--t-sm); line-height: 1.7; }
-.bookmarks-row-actions { display: flex; flex: none; gap: 6px; align-items: center; }
-.bookmarks-noop { color: var(--muted); font-size: var(--t-xs); }
-@media (max-width: 640px) { .bookmarks-page { padding: 28px 18px 44px; } .bookmarks-book li { flex-direction: column; } }
 
 /* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
 .about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }

@@ -9,26 +9,6 @@ import {
 
 export type SourceSummary = { id: string; name: string; url: string; group?: string; enabled: boolean; isJsSource: boolean; hasLogin: boolean; updatedAt: number; version: number; /** 自定义排序位；null = 没拖过，按名称排在有序段之后 */ sortOrder?: number | null }
 export type SourceRecord = { id: string; json: string; version: number; updatedAt: number }
-/**
- * 书签。归拢键是「书名 + 作者」（服务端算），不是 sourceId + bookUrl ——
- * 换源之后章节号常常整体错位，用户要的正是"同一本书换个源也看得到这些书签"。
- * `paragraphFrom === -1` 表示整章书签。
- */
-export type BookMark = {
-  id: number
-  sourceId: string
-  bookUrl: string
-  bookName: string
-  bookAuthor?: string | null
-  chapterIndex: number
-  chapterTitle: string
-  paragraphFrom: number
-  paragraphTo: number
-  quote: string
-  note: string
-  createdAt: number
-}
-export type BookMarkDraft = Omit<BookMark, 'id' | 'createdAt' | 'bookName'> & { bookName: string }
 export type AboutInfo = { title: string; version: string; repository: string }
 export type UpdateCheckResult = {
   current: string
@@ -413,12 +393,6 @@ export const api = {
     request<{ updated: number }>('/api/bookshelf/order', { method: 'PUT', body: JSON.stringify({ books }) }),
   /** 回到"从没拖过"的状态：把全架的自定义位置清空（不是切排序档）。 */
   clearShelfOrder: () => request<{ updated: number }>('/api/bookshelf/order', { method: 'DELETE' }),
-  /** 书签：给了 name 就是"这本书的"（跨书源共用），不给就是全部。 */
-  marks: (name?: string, author?: string) =>
-    request<BookMark[]>(`/api/marks${name ? `?name=${encodeURIComponent(name)}${author ? `&author=${encodeURIComponent(author)}` : ''}` : ''}`),
-  createMark: (draft: BookMarkDraft) => request<BookMark>('/api/marks', { method: 'POST', body: JSON.stringify(draft) }),
-  setMarkNote: (id: number, note: string) => request<BookMark>(`/api/marks/${id}/note`, { method: 'PUT', body: JSON.stringify({ note }) }),
-  removeMark: (id: number) => request<void>(`/api/marks/${id}`, { method: 'DELETE' }),
   // RSS 订阅（手机「订阅」页那一栏）；上面 subscriptions 是「书源订阅地址」，两者不是一回事
   rssSources: (query?: string) => request<RssSourceSummary[]>(`/api/rss/sources${query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`),
   addRssSources: (sources: string[]) => request<ImportResponse>('/api/rss/sources', { method: 'POST', body: JSON.stringify({ sources }) }),

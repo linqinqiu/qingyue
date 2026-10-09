@@ -7,7 +7,7 @@
  * 其中阅读样式与朗读引擎能一键套到本机设置。
  *
  * 这条探针**故意不打 1234 那台**：keep 存储按条目名落文件，探针一包就会盖掉用户真导过的
- * readConfig.json / bookmark.json。所以这里用 `LEGADO_DATA_DIR` + `LEGADO_PORT` 起一个
+ * readConfig.json / bookMemo.json。所以这里用 `LEGADO_DATA_DIR` + `LEGADO_PORT` 起一个
  * 只活几十秒的独立实例（同一个 fatJar），跑完杀进程、删临时目录，用户的 data/ 一个字节都不动
  * —— 收尾还专门复查一遍真数据目录没被碰。
  *
@@ -96,7 +96,11 @@ const TTS = JSON.stringify([
   { name: '探针引擎', url: 'https://tts.example.test/say?text={{text}}', enable: true },
   { name: '另一个', url: 'https://tts2.example.test/{{text}}' },
 ])
-const BOOKMARKS = JSON.stringify([{ id: 1, bookUrl: 'https://probe.test/b/1' }, { id: 2 }, { id: 3 }])
+const BOOK_MEMOS = JSON.stringify([
+  { bookUrl: 'https://probe.test/b/1', content: '甲' },
+  { bookUrl: 'https://probe.test/b/2', content: '乙' },
+  { bookUrl: 'https://probe.test/b/3', content: '丙' },
+])
 const DICT = JSON.stringify([{ name: '探针字典', url: 'https://dict.example.test/?q={{key}}' }])
 const SEARCH_HISTORY = JSON.stringify(['探针词甲', '探针词乙'])
 const READ_CONFIG_V1 = READ_STYLE
@@ -139,7 +143,7 @@ try {
     { name: 'bookSource.json', data: JSON.stringify([{ bookSourceUrl: `https://probe-kept-${STAMP}.test/`, bookSourceName: `探针收下源 ${STAMP}`, bookSourceGroup: '探针', bookSourceType: 0, enabled: false, enabledExplore: false, lastUpdateTime: 1, customOrder: 99997, ruleSearch: { bookList: '.book' } }]) },
     { name: 'readConfig.json', data: READ_CONFIG_V1 },
     { name: 'httpTTS.json', data: TTS },
-    { name: 'bookmark.json', data: BOOKMARKS },
+    { name: 'bookMemo.json', data: BOOK_MEMOS },
     { name: 'dictRule.json', data: DICT },
     { name: 'searchHistory.json', data: SEARCH_HISTORY },
     { name: 'themeConfig.json', data: JSON.stringify({ currentTheme: 'dark' }) },
@@ -154,7 +158,7 @@ try {
   const kept = first.json?.keptSections ?? []
   const names = kept.map(item => item.name)
   const byName = Object.fromEntries(kept.map(item => [String(item.name).toLowerCase(), item]))
-  for (const expected of ['readconfig.json', 'httptts.json', 'bookmark.json', 'dictrule.json', 'searchhistory.json', 'themeconfig.json', 'readrecord.json']) {
+  for (const expected of ['readconfig.json', 'httptts.json', 'bookmemo.json', 'dictrule.json', 'searchhistory.json', 'themeconfig.json', 'readrecord.json']) {
     ok(`导入结果里报了收到的 ${expected}`, expected in byName, names.join(', '))
   }
   for (const rejected of ['config.xml', 'videoconfig.xml', 'autotask.json']) {
@@ -164,10 +168,10 @@ try {
     kept.map(item => `${item.name}=${item.label}`).join(' '))
   ok('只有阅读样式与朗读引擎标成"可套用"',
     byName['readconfig.json']?.appliable === true && byName['httptts.json']?.appliable === true
-      && byName['bookmark.json']?.appliable === false && byName['dictrule.json']?.appliable === false,
+      && byName['bookmemo.json']?.appliable === false && byName['dictrule.json']?.appliable === false,
     kept.map(item => `${item.label}:${item.appliable}`).join(' '))
   ok('条数按顶层元素数出来了（界面上能说"3 条"而不是只报文件名）',
-    byName['bookmark.json']?.items === 3 && byName['searchhistory.json']?.items === 2 && byName['readconfig.json']?.items === 2,
+    byName['bookmemo.json']?.items === 3 && byName['searchhistory.json']?.items === 2 && byName['readconfig.json']?.items === 2,
     kept.map(item => `${item.label}:${item.items}`).join(' '))
   ok('收下的条目不再出现在 skippedSections 里',
     !(first.json?.skippedSections ?? []).some(item => names.some(name => item.toLowerCase() === String(name).toLowerCase())),
@@ -191,9 +195,9 @@ try {
     `${raw.status} · 长度 ${raw.text.length} vs ${READ_CONFIG_V1.length}`)
   const ttsRaw = await get(`/api/backup/kept/${encodeURIComponent(byName['httptts.json']?.name ?? 'httpTTS.json')}`)
   ok('朗读引擎原文也在，前端映射才有得可映射', ttsRaw.status === 200 && ttsRaw.text === TTS, `${ttsRaw.status} ${ttsRaw.text.slice(0, 60)}`)
-  const bookmarkRaw = await get('/api/backup/kept/bookmark.json')
-  ok('书签原文逐字保真（含包里的字段名大小写）',
-    bookmarkRaw.text === BOOKMARKS && bookmarkRaw.json?.[0]?.bookUrl === 'https://probe.test/b/1', bookmarkRaw.text.slice(0, 80))
+  const memoRaw = await get('/api/backup/kept/bookMemo.json')
+  ok('书籍笔记原文逐字保真（含包里的字段名大小写）',
+    memoRaw.text === BOOK_MEMOS && memoRaw.json?.[0]?.content === '甲', memoRaw.text.slice(0, 80))
 
   const missing = await get('/api/backup/kept/config.xml')
   ok('没收的配置文件读不出来，且给的是可读的 404 而不是堆栈',
@@ -215,8 +219,8 @@ try {
   const overwritten = await get('/api/backup/kept/readConfig.json')
   ok('覆盖后读到的是新内容（旧的不会留着混淆）',
     overwritten.text === READ_CONFIG_V2, overwritten.text.slice(0, 80))
-  const untouched = await get('/api/backup/kept/bookmark.json')
-  ok('第二个包里没有的条目不受影响', untouched.text === BOOKMARKS, `${untouched.status} ${untouched.text.slice(0, 60)}`)
+  const untouched = await get('/api/backup/kept/bookMemo.json')
+  ok('第二个包里没有的条目不受影响', untouched.text === BOOK_MEMOS, `${untouched.status} ${untouched.text.slice(0, 60)}`)
 
   ok('界面上"能套用"的判定与前端读的路径一致（GET 的原文可直接 JSON.parse）',
     (() => { try { return JSON.parse(overwritten.text)[0].name === '第二次导入的样式' } catch { return false } })(), overwritten.text.slice(0, 60))

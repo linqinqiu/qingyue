@@ -1353,44 +1353,6 @@ fun Route.apiRoutes(
             if (!call.requireSameOriginWrite()) return@delete
             call.respond(ShelfOrderResult(database.clearBookshelfOrder()))
         }
-        get("/marks") {
-            val name = call.request.queryParameters["name"]
-            val marks = if (name.isNullOrBlank()) {
-                database.listMarks()
-            } else {
-                database.listMarks(database.bookKeyOf(name, call.request.queryParameters["author"] ?: ""))
-            }
-            call.respond(marks)
-        }
-        post("/marks") {
-            if (!call.requireSameOriginWrite()) return@post
-            val request = runCatching { call.receive<BookMarkCreateRequest>() }.getOrElse {
-                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@post
-            }
-            // 整章书签天生没有原文（它标的就是"这一章"），所以只有段落书签才要求至少有一句原文或批注
-            if (request.paragraphFrom >= 0 && request.quote.isBlank() && request.note.isBlank()) {
-                call.respond(HttpStatusCode.BadRequest, ApiError("empty_mark", "书签至少要有一句原文或一条批注")); return@post
-            }
-            call.respond(database.createMark(request))
-        }
-        put("/marks/{id}/note") {
-            if (!call.requireSameOriginWrite()) return@put
-            val id = call.parameters["id"]?.toLongOrNull()
-                ?: return@put call.respond(HttpStatusCode.BadRequest, ApiError("invalid_mark", "书签标识无效"))
-            val request = runCatching { call.receive<BookMarkNoteRequest>() }.getOrElse {
-                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 JSON")); return@put
-            }
-            val updated = database.updateMarkNote(id, request.note)
-                ?: return@put call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书签不存在"))
-            call.respond(updated)
-        }
-        delete("/marks/{id}") {
-            if (!call.requireSameOriginWrite()) return@delete
-            val id = call.parameters["id"]?.toLongOrNull()
-                ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("invalid_mark", "书签标识无效"))
-            if (database.deleteMark(id)) call.respond(HttpStatusCode.NoContent)
-            else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书签不存在"))
-        }
         delete("/bookshelf") {
             if (!call.requireSameOriginWrite()) return@delete
             val sourceId = call.request.queryParameters["sourceId"]; val bookUrl = call.request.queryParameters["bookUrl"]
