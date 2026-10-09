@@ -32,6 +32,12 @@ export type ReaderSettings = {
   maxWidth: number
   columnMode: ReaderColumnMode
   sidebarPinned: boolean
+  /**
+   * 固定目录（`sidebarPinned`）时目录栏的宽度，px。
+   * 目录与正文之间那条边界可以左右拖（用户 2026-10-09：「我希望目录与正文边界能左右移动部分」）——
+   * 拖出来的值存在这里；正文区与点击分区的范围都跟着它走。
+   */
+  sidebarWidth: number
   ttsEngine: TtsEngineType
   ttsVoice: string
   ttsSpeed: number
@@ -81,6 +87,7 @@ export const defaultReaderSettings: ReaderSettings = {
   maxWidth: 860,
   columnMode: 'auto',
   sidebarPinned: false,
+  sidebarWidth: 300,
   ttsEngine: 'edge',
   ttsVoice: 'zh-CN-XiaoxiaoNeural',
   ttsSpeed: 1.0,
@@ -258,6 +265,7 @@ export function loadReaderSettings(): ReaderSettings {
       maxWidth: parseMaxWidth(saved.maxWidth),
       columnMode: parseColumnMode(saved.columnMode),
       sidebarPinned: typeof saved.sidebarPinned === 'boolean' ? saved.sidebarPinned : defaultReaderSettings.sidebarPinned,
+      sidebarWidth: Math.round(clampNumber(saved.sidebarWidth, 220, 560, defaultReaderSettings.sidebarWidth)),
       ttsEngine: parseTtsEngine(saved.ttsEngine),
       ttsVoice: typeof saved.ttsVoice === 'string' && saved.ttsVoice.trim() ? saved.ttsVoice : defaultReaderSettings.ttsVoice,
       ttsSpeed: clampNumber(saved.ttsSpeed, 0.5, 3.0, defaultReaderSettings.ttsSpeed),

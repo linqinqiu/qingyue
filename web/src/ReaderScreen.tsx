@@ -407,6 +407,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [activeDrawer, setActiveDrawer] = useState<'toc' | 'settings' | null>(null)
   /** 「在正文上编辑点击区域」那层开着没有（见 TapZoneEditor）。 */
   const [tapZoneEditing, setTapZoneEditing] = useState(false)
+  /** 正在拖「目录 | 正文」那条边界（只为高亮它）。 */
+  const [resizingSidebar, setResizingSidebar] = useState(false)
   const [toolbarsVisible, setToolbarsVisible] = useState(false)
   const [boundaryMessage, setBoundaryMessage] = useState('')
   const [inShelf, setInShelf] = useState(true)
@@ -434,6 +436,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [localSyncProgress, setLocalSyncProgress] = useState({ current: 0, total: 0 })
   const localSyncAbortRef = useRef<AbortController | null>(null)
   const [customRangeOpen, setCustomRangeOpen] = useState(false)
+  /**
+   * 目录抽屉底部那一块（离线缓存 + 这本书）默认收起（用户 2026-10-09：「这张图片位置内容折叠整理
+   * 归纳到底部，不要影响目录显示」）—— 原来它常驻四五行，把章节列表挤得只剩几条。
+   * 缓存进行中时强制展开，不然进度条看不见。
+   */
+  const [drawerFooterOpen, setDrawerFooterOpen] = useState(false)
   const [customRangeStart, setCustomRangeStart] = useState(1)
   const [customRangeEnd, setCustomRangeEnd] = useState(50)
   const [offlineTtsConfirmOpen, setOfflineTtsConfirmOpen] = useState(false)
@@ -477,6 +485,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  /** 正文区（.reader-main）：点击分区按它的矩形算，固定目录时不把目录栏算进去。 */
+  const readerMainRef = useRef<HTMLElement | null>(null)
+  const resizingSidebarRef = useRef(false)
 
   const chapter = currentBook.chapters[chapterIndex]
   // 异步回调里判断「这一章还是不是当前章」必须用 ref：闭包捕获的 chapter 是发起请求那一刻的。
@@ -1894,6 +1905,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     '--reader-text-indent': `${settings.textIndent}em`,
     '--reader-content-padding': `${settings.contentPadding}px`,
     '--reader-max-width': `${settings.maxWidth}px`,
+    '--reader-sidebar-width': `${settings.sidebarWidth}px`,
     '--reader-font-family': getReaderFontFamily(settings.font),
   } as CSSProperties
 
@@ -1939,6 +1951,59 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setToolbarsVisible(visible => !visible)
   }, [chapterIndex, changeChapter, goNextPage, goPrevPage, settings.pageMode])
 
+  /**
+   * 正文区的视口矩形。
+   *
+   * 点击分区的范围必须按它算，不能按整窗 —— 目录固定在左侧时正文被 `margin-left` 挤到右边
+   * （用户 2026-10-09：「如果我左侧打开了目录那么你这规定范围会不会有问题」），
+   * 按整窗算的话"左边一列"有一半压在目录栏底下，点在正文左缘会算成别的区。
+   */
+  const readingRect = () => {
+    const el = readerMainRef.current
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+      }
+    }
+    return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+  }
+
+  /**
+   * 拖「目录 | 正文」那条边界改目录栏宽度（用户 2026-10-09：「我希望目录与正文边界能左右移动部分，
+   * 但是不影响功能和界面展示」）。宽度存进设置；正文区与点击分区的范围都跟着 CSS 变量走。
+   */
+  const onSidebarResizeDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    resizingSidebarRef.current = true
+    setResizingSidebar(true)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const onSidebarResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizingSidebarRef.current) return
+    const width = Math.round(Math.min(560, Math.max(220, event.clientX)))
+    if (width !== settings.sidebarWidth) onSettingsChange({ ...settings, sidebarWidth: width })
+  }
+  const onSidebarResizeUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    resizingSidebarRef.current = false
+    setResizingSidebar(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  /**
+   * 编辑层要盖在**正文区**上，不能压住固定的目录栏（用户 2026-10-09：「不要影响目录显示」）。
+   * 正文区左缘由布局决定（固定目录 / 拖出来的宽度），所以实测而不是猜。
+   */
+  const [readingLeft, setReadingLeft] = useState(0)
+  useEffect(() => {
+    if (!tapZoneEditing) return
+    const measure = () => setReadingLeft(Math.round(readerMainRef.current?.getBoundingClientRect().left ?? 0))
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [tapZoneEditing, settings.sidebarPinned, settings.sidebarWidth])
+
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const start = pointerStartRef.current
     pointerStartRef.current = null
@@ -1961,11 +2026,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         return
       }
       if (isTapGesture(start.x, start.y, event.clientX, event.clientY)) {
-        runTapAction(zoneAt(settings.tapZones.paginate, event.clientX, event.clientY, window.innerWidth, window.innerHeight))
+        const rect = readingRect()
+        runTapAction(zoneAt(settings.tapZones.paginate, event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height))
       }
     } else {
       if (isTapGesture(start.x, start.y, event.clientX, event.clientY)) {
-        runTapAction(zoneAt(settings.tapZones.scroll, event.clientX, event.clientY, window.innerWidth, window.innerHeight))
+        const rect = readingRect()
+        runTapAction(zoneAt(settings.tapZones.scroll, event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height))
       }
     }
   }
@@ -2044,7 +2111,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     {/* TOC Drawer (Left) */}
     <aside className={`reader-drawer reader-drawer-left ${activeDrawer === 'toc' ? 'open' : ''} ${settings.sidebarPinned ? 'pinned' : ''}`} aria-label="目录抽屉">
       <header className="drawer-header">
-        <div className="drawer-title"><Icon name="list" /><strong>目录</strong><small>共 {currentBook.chapters.length} 章</small></div>
+        {/*
+          标题栏原来只写「共 N 章」，不告诉你在读哪一章（用户 2026-10-09：「目录你怎么不标注章节名」）。
+          现在把当前章名放进来；章名可能很长，CSS 截断 + title 里给全名。
+        */}
+        <div className="drawer-title">
+          <Icon name="list" /><strong>目录</strong>
+          <small className="drawer-title-current" title={chapter?.title || undefined}>
+            {chapter?.title ? `正在读：${chapter.title}` : `共 ${currentBook.chapters.length} 章`}
+          </small>
+        </div>
         <div className="drawer-header-actions">
           <IconButton
             className={`desktop-reverse-btn ${tocReverse ? 'reversed' : ''}`}
@@ -2091,7 +2167,20 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         overscan={8}
         autoScrollKey={activeDrawer === 'toc' || settings.sidebarPinned ? 1 : 0}
       />
-      <footer className="drawer-footer">
+      <footer className={`drawer-footer ${drawerFooterOpen ? 'is-open' : ''}`}>
+        {/* 收起态只有这一行；展开才露出缓存与「这本书」那两组（见 drawerFooterOpen 的注释） */}
+        <button
+          type="button"
+          className="drawer-footer-toggle"
+          aria-expanded={drawerFooterOpen || cacheStatus.state === 'caching' || localSyncing}
+          onClick={() => setDrawerFooterOpen(value => !value)}
+        >
+          <Icon name={drawerFooterOpen ? 'chevronDown' : 'chevronRight'} />
+          <span>离线缓存 · 这本书</span>
+          {inShelf && <span className="drawer-footer-badge">已在书架</span>}
+        </button>
+        {(drawerFooterOpen || cacheStatus.state === 'caching' || localSyncing) && (
+        <div className="drawer-footer-body">
         {/* Cache Control Section */}
         <div className="drawer-cache-section">
           {cacheStatus.state === 'caching' ? (
@@ -2208,8 +2297,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             <Icon name={inShelf ? 'check' : 'plus'} />{inShelf ? '已在书架' : '加书架'}
           </button>
         </div>
+        </div>
+        )}
       </footer>
     </aside>
+
+    {/* 目录 | 正文 那条边界：固定目录时可左右拖（用户 2026-10-09） */}
+    {settings.sidebarPinned && (
+      <div
+        className={`reader-sidebar-resizer ${resizingSidebar ? 'is-dragging' : ''}`}
+        style={{ left: `${settings.sidebarWidth}px` }}
+        role="separator"
+        aria-label="拖动调整目录栏宽度"
+        onPointerDown={onSidebarResizeDown}
+        onPointerMove={onSidebarResizeMove}
+        onPointerUp={onSidebarResizeUp}
+      />
+    )}
 
     {/* Settings Drawer (Right) */}
     <aside className={`reader-drawer reader-drawer-right ${activeDrawer === 'settings' ? 'open' : ''}`} aria-label="阅读设置">
@@ -2241,6 +2345,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       <TapZoneEditor
         map={settings.pageMode === 'paginate' ? settings.tapZones.paginate : settings.tapZones.scroll}
         mode={settings.pageMode}
+        left={readingLeft}
         onMap={map => onSettingsChange({
           ...settings,
           tapZones: settings.pageMode === 'paginate'
@@ -2254,7 +2359,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     )}
 
     {/* Central Reading Canvas */}
-    <section className="reader-main">
+    <section ref={readerMainRef} className="reader-main">
       {settings.pageMode === 'paginate' ? (
         <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate} onContextMenu={onBodyContextMenu}>
           <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}`}>

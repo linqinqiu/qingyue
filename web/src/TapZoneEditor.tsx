@@ -30,10 +30,12 @@ type Axis = 'x' | 'y'
  * 两种翻页方式各一张表（"区分翻页方式的影响"）：切换方式换的是另一张表，互不干扰。
  */
 export function TapZoneEditor({
-  map, mode, onMap, onMode, onPreset, onClose,
+  map, mode, left = 0, onMap, onMode, onPreset, onClose,
 }: {
   map: TapMap
   mode: 'paginate' | 'scroll'
+  /** 正文区左缘（px）：固定目录时把编辑层让开目录栏，别压住它。 */
+  left?: number
   onMap: (next: TapMap) => void
   onMode: (next: 'paginate' | 'scroll') => void
   onPreset: (paginate: TapMap, scroll: TapMap) => void
@@ -106,7 +108,7 @@ export function TapZoneEditor({
   const modeLabel = mode === 'paginate' ? '平移分页' : '连续滚动'
 
   return (
-    <div className="tap-zone-editor" role="dialog" aria-label="编辑点击区域">
+    <div className="tap-zone-editor" style={{ left: `${left}px` }} role="dialog" aria-label="编辑点击区域">
       <div ref={surfaceRef} className="tap-zone-surface">
         {cellsList.map(cell => (
           <button
