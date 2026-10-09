@@ -38,6 +38,12 @@ object LocalBookParser {
 
     const val LOC_BOOK_SOURCE_ID = "loc_book"
 
+    // EPUB（zip）解压闸门：`ZipInputStream.readAllBytes()` 无上限，一个几百 KB 的 zip 炸弹能解出几十 GB
+    // 把堆打爆。单个 entry、整包总量、条目数三条都封顶，超了直接拒绝导入。
+    private const val MAX_EPUB_ENTRY_BYTES = 64 * 1024 * 1024
+    private const val MAX_EPUB_TOTAL_BYTES = 512L * 1024 * 1024
+    private const val MAX_EPUB_ENTRIES = 10_000
+
     // 中文小说章节识别核心正则（增强版）
     // 匹配格式包括：
     // - 第X章/回/节/卷/集/篇/部（数字、中文、混合）
@@ -237,12 +243,17 @@ object LocalBookParser {
      */
     fun parseEpub(filename: String, bytes: ByteArray, bookId: String = ""): ParsedBook {
         val entries = mutableMapOf<String, ByteArray>()
+        var totalBytes = 0L
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
             var entry: ZipEntry? = zis.nextEntry
             while (entry != null) {
                 if (!entry.isDirectory) {
                     val name = normalizeZipPath(entry.name)
-                    entries[name] = zis.readAllBytes()
+                    require(entries.size < MAX_EPUB_ENTRIES) { "EPUB 条目数超过 $MAX_EPUB_ENTRIES 上限" }
+                    val data = readBoundedEntry(zis, MAX_EPUB_ENTRY_BYTES)
+                    totalBytes += data.size
+                    require(totalBytes <= MAX_EPUB_TOTAL_BYTES) { "EPUB 解压后超过 ${MAX_EPUB_TOTAL_BYTES / 1024 / 1024} MiB 上限" }
+                    entries[name] = data
                 }
                 entry = zis.nextEntry
             }
@@ -399,6 +410,24 @@ object LocalBookParser {
     private fun findZipEntry(entries: Map<String, ByteArray>, path: String): ByteArray? {
         val norm = normalizeZipPath(path)
         return entries[norm] ?: entries.entries.firstOrNull { it.key.equals(norm, ignoreCase = true) }?.value
+    }
+
+    /**
+     * 按上限读一个 zip entry（防 zip 炸弹）。超限抛异常，导入直接被拒。
+     * `ZipInputStream.readAllBytes()` 无上限 —— 一个几百 KB 的压缩包能声明几十 GB 的解压体积。
+     */
+    private fun readBoundedEntry(zis: ZipInputStream, limit: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        var total = 0
+        while (true) {
+            val n = zis.read(buf)
+            if (n < 0) break
+            total += n
+            require(total <= limit) { "EPUB 单个文件解压后超过 ${limit / 1024 / 1024} MiB 上限" }
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
     }
 
     /**

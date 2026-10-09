@@ -327,4 +327,17 @@ class LocalBookParserTest {
         }
         return baos.toByteArray()
     }
+
+    @Test
+    fun `拒绝解压后超限的 EPUB（zip 炸弹）`() {
+        // 70 MiB 全 0 压缩后只有几十 KB —— 没有上限时 `readAllBytes()` 会把堆打爆。
+        val baos = ByteArrayOutputStream()
+        ZipOutputStream(baos).use { zos ->
+            zos.putNextEntry(ZipEntry("META-INF/container.xml"))
+            zos.write(ByteArray(70 * 1024 * 1024))
+            zos.closeEntry()
+        }
+        val error = runCatching { LocalBookParser.parseEpub("bomb.epub", baos.toByteArray()) }.exceptionOrNull()
+        assertTrue("解压超限应被拒，实际：$error", error is IllegalArgumentException)
+    }
 }
