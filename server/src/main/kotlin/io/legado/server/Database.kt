@@ -234,7 +234,21 @@ class Database(private val path: String) : Closeable, AutoCloseable {
      * 全库都没编号时 `sort_order is null` 恒为 1、`sort_order` 全 NULL，等价于原来那条按名称排 ——
      * 所以这条改动对没用过自定义排序的人是零影响的，不会因为一次拖动就把整库顺序钉死。
      */
-    fun listSources(query: String?): List<SourceSummary> = connect { db ->
+    // —— 书源清单缓存：两张清单只在 source 表写入时变化，而每次重算要 0.5~1.1s
+    // （5,574 行投影的序列化 + explore 的 JSON1 全表扫描），书源页/发现页每次进入都重算
+    // 就是「部分情景加载缓慢」的主因。所有写入路径统一走 invalidateSourceCaches()。
+    @Volatile private var sourceSummariesCache: List<SourceSummary>? = null
+    @Volatile private var exploreSourcesCache: List<SourceSummary>? = null
+    private fun invalidateSourceCaches() { sourceSummariesCache = null; exploreSourcesCache = null }
+
+    fun listSources(query: String?): List<SourceSummary> {
+        check(!isClosed) { "Database is closed" }
+        if (!query.isNullOrBlank()) return listSourcesFromDb(query)
+        sourceSummariesCache?.let { return it }
+        return listSourcesFromDb(null).also { sourceSummariesCache = it }
+    }
+
+    private fun listSourcesFromDb(query: String?): List<SourceSummary> = connect { db ->
         val sql = if (query.isNullOrBlank()) {
             "select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login, sort_order from source order by sort_order is null, sort_order, name collate nocase"
         } else {
@@ -304,7 +318,13 @@ class Database(private val path: String) : Closeable, AutoCloseable {
      * 改成让 SQLite 在 C 层筛：json_type/json_extract 走内置 JSON1，payload 根本不落到 Kotlin 侧，
      * 只把命中的那两千来行取回来。`json_valid` 兜底非法 JSON（等价于旧写法里 runCatching 跳过）。
      */
-    fun listExploreSources(): List<SourceSummary> = connect { db ->
+    fun listExploreSources(): List<SourceSummary> {
+        check(!isClosed) { "Database is closed" }
+        exploreSourcesCache?.let { return it }
+        return listExploreSourcesFromDb().also { exploreSourcesCache = it }
+    }
+
+    private fun listExploreSourcesFromDb(): List<SourceSummary> = connect { db ->
         db.prepareStatement(
             """
             select id, name, source_url, source_group, enabled, is_js, updated_at, version, has_login
@@ -345,7 +365,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 values(?,?,?,?,?,?,?,?,?,?) on conflict(id) do update set name=excluded.name,source_url=excluded.source_url,source_group=excluded.source_group,enabled=excluded.enabled,is_js=excluded.is_js,payload=excluded.payload,version=excluded.version,updated_at=excluded.updated_at,has_login=excluded.has_login""").use {
                 it.setString(1, parsed.id); it.setString(2, parsed.name); it.setString(3, parsed.url); it.setString(4, parsed.group); it.setInt(5, if (parsed.enabled) 1 else 0); it.setInt(6, if (parsed.isJs) 1 else 0); it.setString(7, parsed.json); it.setLong(8, version); it.setLong(9, now); it.setInt(10, if (parsed.hasLogin) 1 else 0); it.executeUpdate()
             }
-            db.commit(); SourceRecord(parsed.id, parsed.json, version, now)
+            db.commit(); invalidateSourceCaches(); SourceRecord(parsed.id, parsed.json, version, now)
         } catch (error: Throwable) { db.rollback(); throw error } finally { db.autoCommit = true }
     }
 
@@ -473,6 +493,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 db.autoCommit = true
             }
         }
+        invalidateSourceCaches()
         return affectedTotal
     }
     fun saveProgress(progress: ReadingProgress): ReadingProgress = write { db ->
@@ -1104,6 +1125,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 db.commit()
             } catch (error: Throwable) { db.rollback(); throw error } finally { db.autoCommit = true }
         }
+        invalidateSourceCaches()
         return ImportResponse(imported, updated, rawSources.size - unique.size, errors)
     }
 
@@ -1149,6 +1171,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 db.commit()
             } catch (error: Throwable) { db.rollback(); throw error } finally { db.autoCommit = true }
         }
+        invalidateSourceCaches()
         return ImportResponse(imported, updated, rawSources.size - unique.size, errors)
     }
 
