@@ -156,7 +156,7 @@ class E2EScenariosTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(java.nio.file.Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://bigsource.com", "https://bigsource.com/book/epic", "https://bigsource.com/book/epic/toc"))
 
             // User concurrently reads chapters and updates progress while caching takes place
@@ -254,7 +254,7 @@ class E2EScenariosTest {
                 assertEquals("第${i}章 已缓存正文", cached!!.content)
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(java.nio.file.Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://src.com", "https://src.com/book/1", "https://src.com/toc"))
 
             waitForCondition(10000) {

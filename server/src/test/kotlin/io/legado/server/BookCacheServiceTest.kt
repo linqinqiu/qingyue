@@ -34,7 +34,7 @@ class BookCacheServiceTest {
             responses["https://book/1/c3"] = """{"content":"第3章正文"}"""
 
             val runner = RuleRunner { url -> responses[url] ?: error("Unexpected URL: $url") }
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
 
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             waitForCondition(5000) { database.listBookshelf().single().cacheState == "ready" }
@@ -49,6 +49,40 @@ class BookCacheServiceTest {
             assertEquals("第3章正文", database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c3")?.content)
             service.stop()
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
+    }
+
+    @Test
+    fun `离线缓存漫画章节时把这一话的图也抓进图片缓存`() = runBlocking {
+        val path = temporaryDatabase()
+        val database = Database(path); database.initialize()
+        try {
+            val book = BookshelfWriteRequest("https://comic.test", "https://book/c", "某漫画", tocUrl = "https://book/c/toc")
+            database.saveBookshelf(book, null)
+            val sourceJson = """{"bookSourceUrl":"https://comic.test","bookSourceType":2,"ruleToc":{"chapterList":"$.data","chapterName":"$.title","chapterUrl":"$.url"},"ruleContent":{"content":"$.content"}}"""
+            database.saveSource(SourceCodec.parse(sourceJson), null)
+
+            val responses = ConcurrentHashMap<String, String>()
+            responses["https://book/c/toc"] = """{"data":[{"title":"第1话","url":"https://book/c/1"}]}"""
+            responses["https://book/c/1"] = """{"content":"![图片](https://img.test/a.jpg)\n![图片](https://img.test/b.jpg)"}"""
+            val runner = RuleRunner { url -> responses[url] ?: error("Unexpected URL: $url") }
+
+            val fetched = ConcurrentHashMap<String, AtomicInteger>()
+            val coverCache = CoverCache(Files.createTempDirectory("cover-cache")) { url ->
+                fetched.computeIfAbsent(url) { AtomicInteger(0) }.incrementAndGet()
+                "image/jpeg" to byteArrayOf(1, 2, 3)
+            }
+            val service = BookCacheService(database, runner, coverCache) {}
+
+            service.enqueue(CachedBookRequest("https://comic.test", "https://book/c", "https://book/c/toc"))
+            waitForCondition(5000) { fetched.containsKey("https://img.test/a.jpg") && fetched.containsKey("https://img.test/b.jpg") }
+            assertEquals("这一话的两张图都应被抓进图片缓存", 1, fetched["https://img.test/a.jpg"]?.get())
+            assertEquals(1, fetched["https://img.test/b.jpg"]?.get())
+            service.stop()
+        } finally {
+            // Windows 上临时 sqlite 不关连接就删不掉（本类其余用例正因此进基线）；这条自己关干净。
+            runCatching { database.close() }
+            Files.deleteIfExists(java.nio.file.Path.of(path))
+        }
     }
 
     @Test
@@ -76,7 +110,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             waitForCondition(5000) { database.listBookshelf().single().cacheState == "ready" }
 
@@ -110,7 +144,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             waitForCondition(5000) { database.listBookshelf().single().cacheState == "ready" }
 
@@ -142,7 +176,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.start()
             waitForCondition(5000) {
                 val list = database.listBookshelf()
@@ -179,7 +213,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             waitForCondition(5000) { database.listBookshelf().single().cacheState == "failed" }
 
@@ -215,7 +249,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             waitForCondition(5000) { database.listBookshelf().single().cacheState == "failed" }
 
@@ -251,7 +285,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
 
             delay(100)
@@ -274,7 +308,7 @@ class BookCacheServiceTest {
             database.saveBookshelf(book, null)
 
             val runner = RuleRunner()
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("missing-source", "https://book/1", "https://book/1/toc"))
 
             waitForCondition(5000) { database.listBookshelf().single().cacheState == "failed" }
@@ -308,7 +342,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             // Enqueue twice rapidly
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
@@ -351,7 +385,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
             waitForCondition(10_000) { database.listBookshelf().single().cacheState == "ready" }
 
@@ -384,7 +418,7 @@ class BookCacheServiceTest {
                 }
             }
 
-            val service = BookCacheService(database, runner) {}
+            val service = BookCacheService(database, runner, CoverCache(Files.createTempDirectory("cover-cache"))) {}
             service.enqueue(CachedBookRequest("https://s1.test", "https://book/1", "https://book/1/toc"))
 
             val intermediateSeen = waitForCondition(5_000) {

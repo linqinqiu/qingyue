@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-class BookCacheService(private val database: Database, private val runner: RuleRunner, private val log: (String) -> Unit) {
+class BookCacheService(private val database: Database, private val runner: RuleRunner, private val coverCache: CoverCache, private val log: (String) -> Unit) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
@@ -96,6 +96,9 @@ class BookCacheService(private val database: Database, private val runner: RuleR
                                             book.sourceId, book.bookUrl, chapter.url,
                                             content.copy(title = content.title ?: chapter.title)
                                         )
+                                        // 漫画/图文书：正文是 `![图片](url)` 占位行 —— 把图也抓进磁盘缓存，
+                                        // 离线打开才有图（阅读器那边点图也走同一个缓存，不会重复抓）。
+                                        cacheChapterImages(content.content, chapter.url)
                                         reportProgress(book, cachedCount.incrementAndGet(), lastProgressUpdate)
                                     } else {
                                         failures.incrementAndGet()
@@ -142,8 +145,26 @@ class BookCacheService(private val database: Database, private val runner: RuleR
         }
     }
 
+    /**
+     * 把一话正文里的图片抓进 `CoverCache` 的磁盘缓存（离线看漫画用）。
+     *
+     * 正文里的图是 `![图片](绝对地址)` 占位行（`cleanContent()` 生成的）。Referer 用**这一章的地址** ——
+     * 图站按来源放行防盗链，阅读器那边 `api.bookImage(url, chapter.url)` 也是这么传的，两边命中同一份缓存。
+     * 单话图片数封顶，坏规则不至于把整本书的缓存拖成图片爬虫。
+     */
+    private suspend fun cacheChapterImages(content: String, chapterUrl: String) {
+        if (!content.contains("![图片](")) return
+        val urls = IMAGE_PLACEHOLDER.findAll(content).map { it.groupValues[1] }.take(MAX_IMAGES_PER_CHAPTER).toList()
+        if (urls.isEmpty()) return
+        withContext(Dispatchers.IO) {
+            urls.forEach { url -> runCatching { coverCache.cacheContentImage(url, chapterUrl) } }
+        }
+    }
+
     private companion object {
         const val MAX_CHAPTER_BYTES = 2 * 1024 * 1024
+        const val MAX_IMAGES_PER_CHAPTER = 80
+        val IMAGE_PLACEHOLDER = Regex("""!\[图片\]\((https?://[^)\s]+)\)""")
         val CACHE_CONCURRENCY = AppConfig.cacheConcurrency
         const val BATCH_THROTTLE_DELAY_MS = 25L
         const val PROGRESS_UPDATE_INTERVAL_MS = 1_000L

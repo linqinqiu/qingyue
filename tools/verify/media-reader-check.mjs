@@ -71,6 +71,14 @@ try {
     check('音频章节渲染出 <audio> 播放器', !!audio && !!audio.src, audio ? `src=${audio.src.slice(0, 72)}` : '没找到 .reader-media audio')
     check('播放器带 controls', !!audio?.controls)
 
+    // A5：非文本章节不参与朗读 —— 朗读入口应是灰的（标题栏那颗按 aria-label 找，移动端那颗按文案找）
+    const tts = await page.evaluate(() => {
+      const header = document.querySelector('.reader-header-actions button[aria-label="本类型不支持朗读"]')
+      const nav = [...document.querySelectorAll('.mobile-reader-nav button')].find(b => b.textContent?.includes('朗读'))
+      return { header: !!header && header.disabled, nav: nav ? nav.disabled : null }
+    })
+    check('音频章节的朗读入口被禁用', tts.header || tts.nav === true, `header=${tts.header} nav=${tts.nav}`)
+
     await page.screenshot({ path: path.join(SHOTS, 'media-reader-audio.png') })
   }
 

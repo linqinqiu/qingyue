@@ -41,8 +41,8 @@ const themes = [
   ['light', '晓白'], ['paper', '护眼'], ['dark', '夜读'],
 ] as const
 
-function IconButton({ label, icon, onClick, className = '', onDoubleClick, hint }: { label: string; icon: Parameters<typeof Icon>[0]['name']; onClick: () => void; className?: string; onDoubleClick?: () => void; hint?: string }) {
-  return <button className={`reader-icon-button ${className}`} title={hint ? `${label} · ${hint}` : label} aria-label={label} onClick={onClick} onDoubleClick={onDoubleClick}><Icon name={icon} /></button>
+function IconButton({ label, icon, onClick, className = '', onDoubleClick, hint, disabled = false }: { label: string; icon: Parameters<typeof Icon>[0]['name']; onClick: () => void; className?: string; onDoubleClick?: () => void; hint?: string; disabled?: boolean }) {
+  return <button className={`reader-icon-button ${className}`} title={hint ? `${label} · ${hint}` : label} aria-label={label} onClick={onClick} onDoubleClick={onDoubleClick} disabled={disabled}><Icon name={icon} /></button>
 }
 
 function SettingRange({ label, value, min, max, step, onChange, display }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; display: string }) {
@@ -701,6 +701,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setTtsActive(false)
   }, [stopAllEngines])
 
+  // 切到音频/视频/文件章节（`mediaSrc` 非空）时把朗读停掉：那一章的"正文"是媒体地址，朗读没有意义。
+  useEffect(() => {
+    if (mediaSrc) stopTts()
+  }, [mediaSrc, stopTts])
+
   const pauseTts = useCallback(() => {
     const engine = getTtsEngine(settings.ttsEngine)
     engine.pause()
@@ -903,6 +908,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [ttsData.chunks, settings.pageMode])
 
   const toggleTts = useCallback(() => {
+    // 音频/视频/文件章节的"正文"是媒体地址，朗读没有意义（念一串 URL 只会干扰）—— 直接不响应。
+    if (mediaSrc) return
     if (!ttsActive) {
       if (typeof navigator !== 'undefined' && !navigator.onLine && settings.ttsEngine !== 'webSpeech') {
         setOfflineTtsConfirmOpen(true)
@@ -918,7 +925,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     } else {
       playTtsChunk(currentChunkIndex)
     }
-  }, [ttsActive, ttsPlayState, playTtsChunk, currentChunkIndex, pauseTts, resumeTts, getInitialTtsChunkIndex, settings.ttsEngine])
+  }, [mediaSrc, ttsActive, ttsPlayState, playTtsChunk, currentChunkIndex, pauseTts, resumeTts, getInitialTtsChunkIndex, settings.ttsEngine])
 
   const handleParagraphClick = useCallback((pIdx: number) => {
     // Only jump to paragraph if TTS is already active; don't auto-start reading on arbitrary clicks
@@ -2146,11 +2153,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         <IconButton label="阅读设置" icon="settings" onClick={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')} />
         <IconButton label={isFullscreen ? '退出全屏' : '全屏阅读'} icon="expand" onClick={toggleFullscreen} />
         <IconButton
-          label={!ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
+          label={mediaSrc ? '本类型不支持朗读' : !ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
           icon={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'}
           onClick={toggleTts}
           onDoubleClick={resetTtsBarPosition}
           hint="双击可把朗读悬浮条放回默认位置"
+          disabled={!!mediaSrc}
         />
       </div>
     </header>
@@ -2500,7 +2508,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     <nav className="mobile-reader-nav">
       <button onClick={() => setActiveDrawer('toc')}><Icon name="list" /><span>目录</span></button>
       <button onClick={() => setShowSourceSwitch(true)}><Icon name="sliders" /><span>换源</span></button>
-      <button onClick={toggleTts}><Icon name={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'} /><span>{ttsActive ? (ttsPlayState === 'playing' ? '暂停' : '继续') : '朗读'}</span></button>
+      <button onClick={toggleTts} disabled={!!mediaSrc}><Icon name={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'} /><span>{ttsActive ? (ttsPlayState === 'playing' ? '暂停' : '继续') : '朗读'}</span></button>
       <button onClick={() => setActiveDrawer('settings')}><span className="aa">Aa</span><span>设置</span></button>
       <button onClick={() => onSettingsChange({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' })}><Icon name="moon" /><span>夜读</span></button>
     </nav>

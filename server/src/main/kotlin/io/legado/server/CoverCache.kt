@@ -71,7 +71,8 @@ class CoverCache(private val directory: Path, private val fetcher: ((String) -> 
         val key = sha256(url)
         val stored = directory.resolve(key)
         if (Files.exists(stored)) return CachedCover(key, sniffContentType(stored))
-        val (rawType, body) = download(url, referer)
+        // `fetcher` 只在测试里注入（生产为 null）；正文图片也走它，单元测试才能不联网地钉住"图被缓存了"。
+        val (rawType, body) = fetcher?.invoke(url) ?: download(url, referer)
         val type = rawType.substringBefore(';').trim().lowercase()
         require(type.startsWith("image/") && type != "image/svg+xml") { "正文图片类型不被允许：${type.ifBlank { "未知" }}" }
         require(body.size <= MAX_BYTES) { "正文图片超过 5 MiB 限制" }

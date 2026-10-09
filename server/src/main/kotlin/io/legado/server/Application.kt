@@ -58,10 +58,12 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     database.initialize()
     val subscriptions = SubscriptionService(database) { message -> log.info(message) }
     val runner = RuleRunner(database = database)
-    val bookCache = BookCacheService(database, runner) { message -> log.info(message) }
+    // coverCache 要在 bookCache 之前建：离线缓存漫画章节时顺带把图抓进同一个磁盘缓存，
+    // 否则离线打开漫画只有 `![图片](url)` 占位、图全裂。
+    val coverCache = CoverCache(config.coverCacheDirectory)
+    val bookCache = BookCacheService(database, runner, coverCache) { message -> log.info(message) }
     val edgeTts = EdgeTtsService()
     val ttsSessions = TtsSessionService(edgeTts)
-    val coverCache = CoverCache(config.coverCacheDirectory)
     environment.monitor.subscribe(ApplicationStopping) { 
         logSystem("服务器正在停止")
         subscriptions.stop(); bookCache.stop(); ttsSessions.close(); database.close() 

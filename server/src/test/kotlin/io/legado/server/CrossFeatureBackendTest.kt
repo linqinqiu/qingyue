@@ -52,7 +52,7 @@ class CrossFeatureBackendTest {
 
             }
 
-            val cacheService = BookCacheService(database, runner) {}
+            val cacheService = BookCacheService(database, runner, CoverCache(java.nio.file.Files.createTempDirectory("cover-cache"))) {}
             cacheService.enqueue(CachedBookRequest("https://src1.com", "https://src1.com/b/1", "https://src1.com/b/1/toc"))
 
             // Concurrently perform 5 parallel search batches across 10 sources while reading shelf
@@ -322,7 +322,7 @@ class CrossFeatureBackendTest {
                 }
             }
 
-            val cacheService = BookCacheService(database, runner) {}
+            val cacheService = BookCacheService(database, runner, CoverCache(java.nio.file.Files.createTempDirectory("cover-cache"))) {}
             cacheService.enqueue(CachedBookRequest("https://src.com", "https://src.com/book/1", "https://src.com/toc"))
 
             // Reader concurrently reads and writes progress
@@ -374,7 +374,7 @@ class CrossFeatureBackendTest {
                 }
             }
 
-            val cacheService = BookCacheService(database, runner) {}
+            val cacheService = BookCacheService(database, runner, CoverCache(java.nio.file.Files.createTempDirectory("cover-cache"))) {}
             cacheService.enqueue(CachedBookRequest("https://src.com", "https://src.com/book/del", "https://src.com/toc"))
 
             // Remove bookshelf item while caching
