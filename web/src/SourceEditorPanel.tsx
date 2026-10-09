@@ -145,7 +145,9 @@ export const SourceEditor: React.FC<{
   onCreated: (source: SourceSummary) => void
   onOpenLogin?: (source: SourceSummary) => void
   onOpenDebug?: (source: SourceSummary) => void
-}> = ({ selected, creating, summary, onSaved, onCreateCancel, onCreated, onOpenLogin, onOpenDebug }) => {
+  /** 跳到「书库」搜索页、范围切成「指定书源」并用这一条（用户 2026-10-09 的建议）。 */
+  onSearchInLibrary?: (source: SourceSummary) => void
+}> = ({ selected, creating, summary, onSaved, onCreateCancel, onCreated, onOpenLogin, onOpenDebug, onSearchInLibrary }) => {
   const [record, setRecord] = useState<SourceRecord | null>(null)
   const [text, setText] = useState('')
   const [status, setStatus] = useState('')
@@ -281,6 +283,16 @@ export const SourceEditor: React.FC<{
             ? <button type="button" className="subtle-button" onClick={onCreateCancel}>取消新建</button>
             : selected!.hasLogin && <button type="button" className="subtle-button source-login-entry-btn" onClick={() => onOpenLogin?.(selected!)}>登录</button>
           }
+          {!creating && (
+            <button
+              type="button"
+              className="subtle-button"
+              title="跳到「书库」搜索页，范围自动切到「指定书源」并选中这个源 —— 用来快速看它还能不能搜到东西（比「调试」快，走的是正常的搜索链路）。"
+              onClick={() => onSearchInLibrary?.(selected!)}
+            >
+              在书库搜
+            </button>
+          )}
           {!creating && (
             <button
               type="button"

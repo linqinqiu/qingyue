@@ -32,6 +32,18 @@ test('SearchStatePersistence - store state updates and reactive subscriptions', 
   assert.equal(store.getSnapshot().keyword, '大奉打更人')
 })
 
+test('SearchStatePersistence - 搜索范围模式在 store 里（书源编辑器要能设好它再跳书库）', () => {
+  // 用户 2026-10-09 的建议：书源编辑界面「在书库里搜这个源」→ 范围切「指定书源」+ 选中该源 + 跳书库。
+  // 范围模式原来只是书库页的局部 state，别处设不到；放进 store 才连得起来。
+  const store = new SearchStore()
+  assert.equal(store.getSnapshot().scopeMode, 'all', '默认全部书源')
+  store.setSelectedSourceId('https://a.example')
+  store.setScopeMode('single')
+  const state = store.getSnapshot()
+  assert.equal(state.scopeMode, 'single')
+  assert.equal(state.selectedSourceId, 'https://a.example')
+})
+
 test('SearchStatePersistence - groupSearchResults groups by name and author with case-insensitivity', () => {
   const mockResults: SearchResult[] = [
     { sourceId: 'source-1', bookUrl: 'http://s1.com/b1', name: ' 诡秘之主 ', author: '爱潜水的乌贼', coverUrl: 'http://c1.jpg' },

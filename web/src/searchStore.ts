@@ -26,6 +26,12 @@ export interface SearchStoreState {
   detailLoading: boolean
   progress: SearchStreamEvent | null
   filters: SearchFilters
+  /**
+   * 书库搜索范围（全部 / 按分组 / 指定书源）。
+   * 放在 store 里是为了让别处能"跳过去、就用这个源搜" —— 书源编辑器的
+   * 「在书库里搜这个源」就是先设好它再跳页（用户 2026-10-09 的建议）。
+   */
+  scopeMode: 'all' | 'group' | 'single'
 }
 
 export const bookKey = (name: string, author?: string): string => {
@@ -169,6 +175,7 @@ const initialSearchState: SearchStoreState = {
   detailLoading: false,
   progress: null,
   filters: defaultSearchFilters,
+  scopeMode: 'all',
 }
 
 export class SearchStore {
@@ -209,6 +216,10 @@ export class SearchStore {
 
   setSelectedSourceIds = (selectedSourceIds: string[] | null) => {
     this.setState({ selectedSourceIds, selectedSourceId: selectedSourceIds?.length === 1 ? selectedSourceIds[0] : '' })
+  }
+
+  setScopeMode = (scopeMode: SearchStoreState['scopeMode']) => {
+    this.setState({ scopeMode })
   }
 
   setFilters = (filters: SearchFilters | ((current: SearchFilters) => SearchFilters)) => {
@@ -468,6 +479,7 @@ export function useSearchStore(): SearchStoreState & {
   setKeyword: (keyword: string) => void
   setSelectedSourceId: (sourceId: string) => void
   setSelectedSourceIds: (ids: string[] | null) => void
+  setScopeMode: (mode: SearchStoreState['scopeMode']) => void
   setFilters: (filters: SearchFilters | ((current: SearchFilters) => SearchFilters)) => void
   setOpenBook: (book: OpenBook | null) => void
   startSearch: (keyword?: string, sourceId?: string) => void
@@ -482,6 +494,7 @@ export function useSearchStore(): SearchStoreState & {
     setKeyword: searchStore.setKeyword,
     setSelectedSourceIds: searchStore.setSelectedSourceIds,
     setSelectedSourceId: searchStore.setSelectedSourceId,
+    setScopeMode: searchStore.setScopeMode,
     setFilters: searchStore.setFilters,
     setOpenBook: searchStore.setOpenBook,
     startSearch: searchStore.startSearch,

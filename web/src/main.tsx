@@ -845,6 +845,16 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   const [busyBatch, setBusyBatch] = useState(false)
   const [debugModalSource, setDebugModalSource] = useState<SourceSummary | null>(null)
   const [loginModalSource, setLoginModalSource] = useState<SourceSummary | null>(null)
+  const search = useSearchStore()
+  /**
+   * 「在书库搜」（用户 2026-10-09 的建议）：把书库的搜索范围设成「指定书源 + 这一条」再跳过去。
+   * 不自动开搜 —— 关键词由用户自己填（跳过去只是想"就用这个源试一下"）。
+   */
+  const searchInLibrary = (source: SourceSummary) => {
+    search.setSelectedSourceId(source.id)
+    search.setScopeMode('single')
+    location.hash = '#library'
+  }
   const [shareIds, setShareIds] = useState<string[] | null>(null)
   const [creating, setCreating] = useState(false)
   /**
@@ -1359,6 +1369,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
           }}
           onOpenLogin={source => setLoginModalSource(source)}
           onOpenDebug={source => setDebugModalSource(source)}
+          onSearchInLibrary={searchInLibrary}
         />
       </section>
 
@@ -1552,7 +1563,9 @@ const writeSearchHistory = (list: string[]): void => {
 
 function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSummary[]; onSourcesChanged: () => void; onOpen: (book: OpenBook, index: number) => void }) {
   const search = useSearchStore()
-  const [scopeMode, setScopeMode] = useState<'all' | 'group' | 'single'>('all')
+  // 范围模式放进 store：书源编辑器的「在书库里搜这个源」要能设好它再跳过来（用户 2026-10-09）
+  const scopeMode = search.scopeMode
+  const setScopeMode = search.setScopeMode
   const [scopeGroup, setScopeGroup] = useState('')
   const [includeDisabledSources, setIncludeDisabledSources] = useState(false)
   const enabledSourceCount = useMemo(() => sources.filter(source => source.enabled).length, [sources])
