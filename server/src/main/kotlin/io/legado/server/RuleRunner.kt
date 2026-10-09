@@ -1233,6 +1233,15 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         .joinToString("\n\n")
     private fun String.absolute(base: String): String = try {
         val cleanBase = base.substringBefore("##").substringBefore("#").trim()
+        // 规则里常见这种写法：`a.0@href##book\/(.*)\/##https://站点/img/$1.jpg` ——
+        // 正则从 `book` 开始匹配，**吃不掉 href 前面那个 `/`**，于是值成了 `/https://站点/img/x.jpg`。
+        // 再拿它当"根相对路径"去 resolve，就拼成 `https://站点/https://站点/img/x.jpg`（实测 00小说网
+        // 30/30 封面全废）。所以：去掉前导斜杠后若已经是绝对地址，就原样用它。
+        // 注意别误伤另外两种：`/img/x.jpg`（根相对，仍要按 base 解析）与 `//cdn/x.jpg`（协议相对）。
+        val withoutSlash = trim().removePrefix("/")
+        if (withoutSlash.startsWith("http://", ignoreCase = true) || withoutSlash.startsWith("https://", ignoreCase = true)) {
+            return withoutSlash
+        }
         if (cleanBase.startsWith("http://", ignoreCase = true) || cleanBase.startsWith("https://", ignoreCase = true)) {
             URI(cleanBase).resolve(this).toString()
         } else {
