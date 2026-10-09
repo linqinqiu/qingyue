@@ -42,6 +42,10 @@ svg { width: 18px; height: 18px; flex: none; }
 .theme-dark { --canvas: #202522; --surface: #292e2b; --surface-muted: #232825; --ink: #eef1ec; --muted: #a9b0aa; --line: #3b433d; --accent: #67b58d; --accent-soft: #303f35; --accent-ink: #90d7ad; --accent-solid: #67b58d; --accent-solid-hover: #7cc79e; --on-accent: #0f241a; --danger: #f29384; --danger-solid: #f29384; --on-danger: #2b110d; --shadow: 0 12px 30px rgba(0, 0, 0, .25); color-scheme: dark; }
 .app-shell { min-height: 100vh; min-height: 100dvh; background: var(--canvas); color: var(--ink); }
 .app-loading { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+/* 加载页那颗转圈：说明"在动"而不是卡死（服务冷启动要十几秒）。 */
+.app-loading-box { display: flex; align-items: center; gap: 10px; }
+.app-loading-spinner { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--muted) 30%, transparent); border-top-color: var(--accent); animation: app-loading-spin .8s linear infinite; }
+@keyframes app-loading-spin { to { transform: rotate(360deg); } }
 .nav-search-indicator { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--accent); animation: nav-search-pulse 1.4s ease-in-out infinite; }
 @keyframes nav-search-pulse { 0%, 100% { opacity: .3; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.35); } }
 

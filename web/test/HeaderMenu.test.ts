@@ -121,7 +121,8 @@ test('HeaderMenu - 版本号来自 /healthz，前端不写死', () => {
   assert.match(header, /className="menu-version"/, '版本号要有自己的位置，跟状态位一起摆在菜单头部')
 
   const app = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
-  assert.match(app, /fetch\('\/healthz'\)/, "版本号必须从 /healthz 取")
+  // 探活那条带 signal（超时用），所以不要求紧跟右括号。
+  assert.match(app, /fetch\('\/healthz'/, "版本号必须从 /healthz 取")
   assert.match(app, /version=\{serverVersion\}/, '取到的版本号要真的传给 AppHeader，不能只 fetch 不用')
 })
 

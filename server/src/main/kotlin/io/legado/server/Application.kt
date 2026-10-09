@@ -57,12 +57,6 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     val edgeTts = EdgeTtsService()
     val ttsSessions = TtsSessionService(edgeTts)
     val coverCache = CoverCache(config.coverCacheDirectory)
-    // 早期版本给没有封面的本地书画过一张按书名哈希的彩色 SVG，整架看下去就是彩虹；
-    // 生成逻辑已删，这里把已经落库的那批回收掉，界面才会回落到主题化的文字占位。
-    val purgedCovers = coverCache.purgeGeneratedLocalCovers(database)
-    if (purgedCovers > 0) log.info("已回收 {} 张自动生成的本地书封面", purgedCovers)
-    subscriptions.start()
-    bookCache.start()
     environment.monitor.subscribe(ApplicationStopping) { 
         logSystem("服务器正在停止")
         subscriptions.stop(); bookCache.stop(); ttsSessions.close(); database.close() 
@@ -70,6 +64,20 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     environment.monitor.subscribe(ApplicationStopped) { 
         logSystem("服务器已停止")
         subscriptions.stop(); bookCache.stop(); ttsSessions.close(); database.close() 
+    }
+    /**
+     * 订阅同步、缓存续跑、一次性封面回收都是**后台工作**，不必挡在"端口能连"前面。
+     *
+     * 冷启动实测：这三样在真实数据上要几秒，而这几秒用户正对着界面上的加载页干等。
+     * 放到服务真正起来（端口已 listen）之后再跑：先能用界面，这些在背后补。
+     * 早期版本给没有封面的本地书画过一张按书名哈希的彩色 SVG（整架看下去就是彩虹），
+     * 生成逻辑已删，这里把已经落库的那批回收掉，界面才会回落到主题化的文字占位。
+     */
+    environment.monitor.subscribe(ApplicationStarted) {
+        subscriptions.start()
+        bookCache.start()
+        val purgedCovers = coverCache.purgeGeneratedLocalCovers(database)
+        if (purgedCovers > 0) log.info("已回收 {} 张自动生成的本地书封面", purgedCovers)
     }
 
     install(ContentNegotiation) {

@@ -3154,39 +3154,48 @@ function App() {
   }, [])
 
   useEffect(() => {
-    // 启动探活：问到就进界面；问不到就**自动重试**（服务冷启动要几十秒）。
+    // 启动探活：问到就进界面；问不到就**自动重试**（服务冷启动要十几秒）。
     // 不再整屏挡住 —— 这台服务不设身份，"连不上"只意味着它还没起来或正在重启，
     // 该做的是等一等再试，而不是让人去猜一个根本不存在的密码。
+    //
+    // 两个刻意的取舍（用户 2026-10-09：「加载页转半分钟」）：
+    // ① 每次探活**带超时**。原来 fetch 不带 signal：端口已 listen 但服务还没开始答请求时，
+    //    这个 fetch 会一直挂着 —— `catch` 不触发、重试不启动、连"正在等待…"那句都换不出来，
+    //    加载页就这么干等到服务答话。
+    // ② 探活一过就放行，**不再等整份书源清单**（5,574 个源、~1MB）。书源在后台接着取，
+    //    取回来再填进去；首屏不必为它多等几秒。
     let cancelled = false
     let timer: number | undefined
     let attempts = 0
     // 前 ~60s 每 1.5s 快速重试（期间停在加载页）；之后先进界面，再每 5s 慢轮询，服务起来会自愈。
     const FAST_UNTIL = 40
-    const tick = () => {
+    const PROBE_TIMEOUT_MS = 2500
+    const tick = async () => {
       if (cancelled) return
       attempts += 1
       if (attempts === 4) setBootHint('正在等待本机服务启动…（它可能正在重启，稍等片刻）')
-      fetch('/healthz')
-        .then(async response => {
-          if (!response.ok) throw new Error(`healthz ${response.status}`)
-          // 版本号只认服务端报的这一个来源：Gradle 写进清单、/healthz 报出来、界面显示它。
-          // 三处同一个数，不会出现"改了 build.gradle 忘了改界面"的假版本号。
-          const health = await response.json().catch(() => null)
-          if (cancelled) return
-          if (health?.version) setServerVersion(String(health.version))
-          const list = await api.sources().catch(() => [])
-          if (cancelled) return
-          setSources(list)
-          setBootHint('')
-          setReady(true)
-        })
-        .catch(() => {
-          if (cancelled) return
-          if (attempts === FAST_UNTIL) setReady(true) // 等够了先放行，别把人永远挡在加载页
-          timer = window.setTimeout(tick, attempts < FAST_UNTIL ? 1500 : 5000)
-        })
+      const controller = new AbortController()
+      const probeTimeout = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
+      try {
+        const response = await fetch('/healthz', { signal: controller.signal })
+        if (!response.ok) throw new Error(`healthz ${response.status}`)
+        // 版本号只认服务端报的这一个来源：Gradle 写进清单、/healthz 报出来、界面显示它。
+        // 三处同一个数，不会出现"改了 build.gradle 忘了改界面"的假版本号。
+        const health = await response.json().catch(() => null)
+        if (cancelled) return
+        if (health?.version) setServerVersion(String(health.version))
+        setBootHint('')
+        setReady(true)
+        void api.sources().then(list => { if (!cancelled) setSources(list) }).catch(() => undefined)
+      } catch {
+        if (cancelled) return
+        if (attempts === FAST_UNTIL) setReady(true) // 等够了先放行，别把人永远挡在加载页
+        timer = window.setTimeout(tick, attempts < FAST_UNTIL ? 1500 : 5000)
+      } finally {
+        window.clearTimeout(probeTimeout)
+      }
     }
-    tick()
+    void tick()
     return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
   }, [])
 
@@ -3327,7 +3336,11 @@ function App() {
       <main className={`app-loading ${skinClasses}`}>
         <ToastContainer />
         <PwaManager />
-        <span>{bootHint || '正在打开阅读空间…'}</span>
+        {/* 转一下至少说明"在动"，不是一张死页 —— 服务冷启动要十几秒，光一行字容易被当成卡死。 */}
+        <div className="app-loading-box" role="status" aria-live="polite">
+          <span className="app-loading-spinner" aria-hidden="true" />
+          <span>{bootHint || '正在打开阅读空间…'}</span>
+        </div>
       </main>
     )
   }
