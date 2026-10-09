@@ -1216,12 +1216,25 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
      * 先把 `<img>` 换成 `![图片](绝对地址)` 占位行，前端按行还原成 `<img>` —— 这样在线读、
      * 离线缓存、净化管道、TTS 走的仍然是同一条字符串链路，不用为图片另开一套数据结构。
      * 懒加载源普遍写 `data-src`/`data-original`，一并认。`data:` 内联图会撑爆缓存，丢掉。
+     *
+     * 匹配**整个标签**再单独取 src：漫画源的 src 是 Legado 的 `地址,{"headers":"…"}` 形态，
+     * 里面带着**没转义的引号**（`<img src="地址,{"headers":"{\"Referer\":…}"}">`）。
+     * 老正则从 `src="` 往后取到第一个引号为止，结果是 `地址,{` —— 地址被截断，标签后半截
+     * 还留在正文里当文字（实测爱看漫画：整章漫画变成一行行乱码）。
      */
     private fun String.preserveContentImages(pageUrl: String): String =
         CONTENT_IMG_TAG.replace(this) { match ->
-            val src = match.groupValues[1]
+            val src = IMG_SRC.find(match.value)?.groupValues?.get(1)?.imageSrcUrl() ?: return@replace ""
             if (src.startsWith("data:", ignoreCase = true)) "" else "\n![图片](${src.absolute(pageUrl)})\n"
         }
+
+    /** Legado 的 `<img src="地址,{"headers":"…"}">`：逗号后是这张图的请求选项，不是地址的一部分。 */
+    private fun String.imageSrcUrl(): String {
+        val raw = trim()
+        val comma = raw.indexOf(',')
+        if (comma > 0 && raw.substring(comma + 1).trimStart().startsWith("{")) return raw.substring(0, comma).trim()
+        return raw
+    }
 
     private fun String.cleanContent(): String = this        .replace(SCRIPT_BLOCK, "")
         .replace(STYLE_BLOCK, "")
@@ -1263,7 +1276,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         // 其余的走每个字段取值。语义不变，只是提到类级只编译一次。
         val JS_NUMBER_FRACTION = Regex("""-?\d+\.0+""")
         val TAG_DOT_INDEX = Regex("^[a-zA-Z0-9-]+\\.\\d+$")
-        val CONTENT_IMG_TAG = Regex("(?i)<img[^>]*?(?:data-original|data-src|src)\\s*=\\s*[\"']?([^\"'\\s>]+)")
+        val CONTENT_IMG_TAG = Regex("(?i)<img\\b[^>]*>")
+        /** 在一个 `<img …>` 标签里找 src / data-src / data-original 的值（到引号或空白为止）。 */
+        val IMG_SRC = Regex("(?i)(?:data-original|data-src|src)\\s*=\\s*[\"']?([^\"'\\s>]+)")
         val SCRIPT_BLOCK = Regex("(?i)<script[\\s\\S]*?</script>")
         val STYLE_BLOCK = Regex("(?i)<style[\\s\\S]*?</style>")
         val DIV_BLOCK = Regex("(?i)<div[\\s\\S]*?</div>")

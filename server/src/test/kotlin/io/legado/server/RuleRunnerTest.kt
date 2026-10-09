@@ -721,6 +721,20 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `img 里的 Legado 图片选项（地址,{headers}）不留在正文里`() {
+        // 漫画源把 `<img src="地址,{"headers":"…"}">` 整串塞进 src（引号没转义）。
+        // 老正则从 `src="` 取到第一个引号为止 → 地址被截成 `地址,{`，标签后半截还留在正文里。
+        val img = """<img src="https://img.example/1.jpg,{"headers":"{\"Referer\":\"https://m.kanman.com/\"}"}">"""
+        val body = """{"c":${kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonPrimitive.serializer(), kotlinx.serialization.json.JsonPrimitive(img))}}"""
+        val source = """{"bookSourceUrl":"https://m.kanman.com","ruleContent":{"content":"$.c"}}"""
+        val runner = RuleRunner { body }
+
+        val content = runner.content(source, "https://m.kanman.com/api/chapter")
+
+        assertEquals("![图片](https://img.example/1.jpg)", content.content.trim())
+    }
+
+    @Test
     fun `applies the trailing replace directive after expanding a brace template`() {
         // 00小说网的简介规则把整条写成「模板 + 尾部 ##正则##替换##」：
         //   "🕰 更新时间：\n{{@@[property$=update_time]@content##\\s.*}}\n📜 内容简介：\n{{@@#bookIntro@text}}##(^|[。！？……；]+[”」）】]?)##$1<br>"
