@@ -164,6 +164,12 @@ internal class NodeValue private constructor(private val html: Element?, private
 
     private fun valuePlain(rule: String): String? {
         if (rule.isBlank()) return null
+        // 字面量地址：`tocUrl` / `chapterUrl` 常直接写成 `https://…/api?bid=@get:{bid}`。
+        // 这不是选择器 —— 拿去当 CSS 选择器（属性名）取必然为空，`tocUrl` 就退回书页地址、
+        // 目录取不到（漫画源实测如此）。上游也是原样当 URL 用。
+        if (rule.startsWith("http://", ignoreCase = true) || rule.startsWith("https://", ignoreCase = true)) {
+            return rule
+        }
         return if (json != null) valueJson(if (isJsonPrefixedRule(rule)) stripJsonPrefix(rule) else rule)
         else html?.let { element ->
             if (isXpathRule(rule)) {
@@ -247,6 +253,19 @@ internal class NodeValue private constructor(private val html: Element?, private
     fun at(rule: String?): NodeValue {
         if (json == null || rule.isNullOrBlank() || !rule.trimStart().startsWith("$")) return this
         return runCatching { NodeValue.json(readJson(rule)) }.getOrDefault(this)
+    }
+
+    /**
+     * `@put:{k:…}` 存下的变量表：读出来 / 灌进去。
+     *
+     * 上游把这张表挂在**书的 ruleData** 上，所以「搜索时 put、目录/正文时 get」是合法的
+     * （漫画源典型：搜索里 `@put:{bid:$.comic_id}`，`tocUrl`/`chapterUrl` 再 `@get:{bid}`）。
+     * 我们的表只活在单个 NodeValue 上，跨调用就丢 —— RuleRunner 用这两个方法把表存起来再灌回去。
+     */
+    internal fun snapshotVariables(): Map<String, String> = ruleVariables.toMap()
+
+    internal fun seedVariables(initial: Map<String, String>) {
+        if (initial.isNotEmpty()) ruleVariables.putAll(initial)
     }
 
     private fun unwrapJsonValue(value: Any?): String? {

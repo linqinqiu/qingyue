@@ -721,6 +721,36 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `搜索时 @put 的变量能活到详情与目录，字面量 URL 规则不当选择器`() {
+        // 漫画源典型写法：搜索里 `@put:{bid:$.id}`，`tocUrl` / `chapterUrl` 再 `@get:{bid}`。
+        // 变量表原来只活在单次解析里 → 目录 0 章（用户 2026-10-09「漫画打不开」的根因）。
+        // 另外 tocUrl 是**字面量地址**、不是选择器 —— HTML 模式下必须原样当 URL 用。
+        val source = """{
+            "bookSourceUrl":"https://comic.example",
+            "searchUrl":"https://comic.example/search?k={{key}}",
+            "ruleSearch":{"bookList":"$.data","name":"$.name@put:{bid:$.id}","bookUrl":"https://comic.example/{{$.id}}/"},
+            "ruleBookInfo":{"tocUrl":"https://comic.example/toc?bid=@get:{bid}"},
+            "ruleToc":{"chapterList":"$.list","chapterName":"$.n","chapterUrl":"https://comic.example/c?bid=@get:{bid}&id={{$.id}}"}
+        }"""
+        val runner = RuleRunner { url ->
+            if (url.contains("/search")) """{"data":[{"id":777,"name":"某漫画"}]}"""
+            else """{"list":[{"id":1,"n":"第1话"},{"id":2,"n":"第2话"}]}"""
+        }
+
+        val results = runner.search(source, "漫画")
+        assertEquals(1, results.size)
+        assertEquals("某漫画", results[0].name)
+        assertEquals("https://comic.example/777/", results[0].bookUrl)
+
+        val details = runner.details(source, results[0].bookUrl)
+        assertEquals("tocUrl 要拿到搜索时 @put 的 bid", "https://comic.example/toc?bid=777", details.tocUrl)
+
+        val chapters = runner.chapters(source, details.tocUrl)
+        assertEquals("目录要能 @get 到 bid", 2, chapters.size)
+        assertEquals("https://comic.example/c?bid=777&id=1", chapters[0].url)
+    }
+
+    @Test
     fun `img 里的 Legado 图片选项（地址,{headers}）不留在正文里`() {
         // 漫画源把 `<img src="地址,{"headers":"…"}">` 整串塞进 src（引号没转义）。
         // 老正则从 `src="` 取到第一个引号为止 → 地址被截成 `地址,{`，标签后半截还留在正文里。

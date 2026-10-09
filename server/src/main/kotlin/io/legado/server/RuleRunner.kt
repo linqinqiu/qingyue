@@ -55,6 +55,26 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     private val json = Json { ignoreUnknownKeys = true }
     private val jsSandbox = JsSandbox(this)
 
+    /**
+     * Legado 的 `ruleData`：`@put:{k:…}` 存下的变量要活到**后面的调用**。
+     *
+     * 典型是漫画源：搜索/发现那一次 `@put:{bid:$.comic_id}`，随后 `tocUrl` / `chapterUrl` 再
+     * `@get:{bid}` —— 我们的变量表原来只挂在单次解析的 NodeValue 上，搜索一结束就没了，
+     * 于是目录取不到（0 章，用户 2026-10-09 报的「漫画打不开」的根因之一）。
+     *
+     * 键是 bookUrl（搜索/发现时存），详情解析出 tocUrl 之后再补一份 tocUrl 的键
+     * （`chapters()` 那一侧拿到的是 tocUrl）。上限做了保护，避免长跑进程里无限涨。
+     */
+    private val ruleData = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
+
+    private fun rememberRuleData(key: String?, vars: Map<String, String>) {
+        if (key.isNullOrBlank() || vars.isEmpty()) return
+        if (ruleData.size > MAX_RULE_DATA_KEYS) ruleData.clear()
+        ruleData[key] = vars
+    }
+
+    private fun recallRuleData(key: String?): Map<String, String> = key?.let { ruleData[it] } ?: emptyMap()
+
     fun search(sourceJson: String, keyword: String): List<SearchResult> {
         val source = sourceJson.objectValue()
         source.string("mainJs")?.takeIf { it.isNotBlank() }?.let { return JsSourceRunner(this, source).search(keyword) }
@@ -86,7 +106,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val items = if (isJsRule(listRule)) jsListNodes(NodeValue.document(body), listRule, body, sourceUrl) else nodes(body, listRule)
         return items.mapNotNull { item ->
             val url = item.value(rule.string("bookUrl"), jsSandbox, body, sourceUrl)?.absolute(sourceUrl) ?: return@mapNotNull null
-            SearchResult(
+            val result = SearchResult(
                 sourceId = sourceUrl,
                 name = item.value(rule.string("name"), jsSandbox, body, sourceUrl) ?: return@mapNotNull null,
                 author = item.value(rule.string("author"), jsSandbox, body, sourceUrl),
@@ -97,6 +117,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 wordCount = item.value(rule.string("wordCount"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
                 lastChapter = item.value(rule.string("lastChapter"), jsSandbox, body, sourceUrl)?.trim()?.takeIf { it.isNotBlank() },
             )
+            // 这一条解析里 `@put` 下的变量（漫画源典型是 comic_id）留一份，给后面的详情/目录/正文用
+            rememberRuleData(url, item.snapshotVariables())
+            result
         }
     }
 
@@ -372,6 +395,10 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             baseDoc = NodeValue.document(body)
         }
 
+        // 搜索/发现时 `@put` 下的变量灌回来：`tocUrl` 常写成 `@get:{bid}`（漫画源就是这样）
+        val seedVars = recallRuleData(bookUrl)
+        baseDoc.seedVariables(seedVars)
+
         // init 常写成「JS + 后置取值路径」的规则链（如 <js>…</js>$.data）：必须求值，不能当路径用。
         // 纯路径（如 $.data）仍走原有 at() 语义，避免把 JSON 对象退化成字符串。
         traces?.add(DebugTrace("「响应」", bookUrl.take(160), "${body.length} 字节", ""))
@@ -382,6 +409,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                     ?.takeIf { it.isNotBlank() }?.let { NodeValue.document(it) } ?: baseDoc
             else -> baseDoc.at(initRule)
         }
+        // `at()` / `NodeValue.document()` 会另起一个节点，变量得再灌一次
+        root.seedVariables(seedVars)
         fun value(key: String): String? {
             val ruleText = rule.string(key).orEmpty()
             val outcome = runCatching { root.value(rule.string(key), jsSandbox, body, bookUrl) }
@@ -397,12 +426,15 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             return outcome.getOrNull()
         }
         val name = (value("name") ?: "").trim()
+        val tocUrl = value("tocUrl")?.absolute(bookUrl) ?: bookUrl
+        // 目录那一侧（chapters）拿到的是 tocUrl，把变量也挂到 tocUrl 上 —— chapterUrl 常写 `@get:{bid}`
+        rememberRuleData(tocUrl, recallRuleData(bookUrl))
         return BookDetails(
             sourceId = source.string("bookSourceUrl")!!,
             name = name.ifBlank { "未命名书籍" },
             author = value("author"), intro = value("intro"),
             coverUrl = value("coverUrl")?.absolute(bookUrl),
-            tocUrl = value("tocUrl")?.absolute(bookUrl) ?: bookUrl,
+            tocUrl = tocUrl,
             kind = value("kind")?.trim()?.takeIf { it.isNotBlank() },
             wordCount = value("wordCount")?.trim()?.takeIf { it.isNotBlank() },
             lastChapter = value("lastChapter")?.trim()?.takeIf { it.isNotBlank() },
@@ -464,6 +496,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         pageUrl: String,
     ): Pair<List<Triple<String, String, Boolean>>, List<String>> {
         val dataPayload = dataUrlPayload(pageUrl)
+        // `chapterUrl` 常写 `@get:{bid}`（漫画源就是这样）：把搜索/详情那一次 @put 的变量灌进来
+        val seedVars = recallRuleData(pageUrl)
         val body: String
         val chapterNodes: List<NodeValue>
         if (dataPayload != null) {
@@ -477,6 +511,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val baseDoc = NodeValue.document(body)
             chapterNodes = if (isJsRule(listRule)) jsListNodes(baseDoc, listRule, body, pageUrl) else nodes(body, listRule)
         }
+        // 条目节点是现造的，变量得逐个灌（`@get:{bid}` 就写在 chapterUrl 里）
+        if (seedVars.isNotEmpty()) chapterNodes.forEach { it.seedVariables(seedVars) }
         val isVolumeRule = rule.string("isVolume")?.trim()
         val items = chapterNodes.mapNotNull { node ->
             val isVolume = isVolumeRule?.let { node.value(it, jsSandbox, body, pageUrl) }
@@ -488,6 +524,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             Triple(name, chapterHref ?: "", isVolume)
         }
         val nextUrls = if (nextRule.isEmpty()) emptyList() else NodeValue.document(body)
+            .also { it.seedVariables(seedVars) }
             .value(nextRule, jsSandbox, body, pageUrl)
             .orEmpty()
             .lineSequence()
@@ -591,7 +628,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             var firstBody: String? = null
             while (queue.isNotEmpty() && pageTexts.size < MAX_CONTENT_PAGES) {
                 val pageUrl = queue.removeFirst()
-                val (root, body) = contentPage(source, sourceUrl, pageUrl)
+                val (root, body) = contentPage(source, sourceUrl, pageUrl, recallRuleData(bookUrl))
                 if (firstRoot == null) { firstRoot = root; firstBody = body }
                 var pageText = root.value(contentRule, jsSandbox, body, pageUrl)?.preserveContentImages(pageUrl)?.cleanContent().orEmpty()
                 if (pageText.length < 500) {
@@ -644,13 +681,13 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     }
 
     /** 取正文的一页，返回（可继续取值的根节点，原始响应体）。聚合源的 `data:` 章节地址由规则自己取回正文。 */
-    private fun contentPage(source: JsonObject, sourceUrl: String?, pageUrl: String): Pair<NodeValue, String> {
+    private fun contentPage(source: JsonObject, sourceUrl: String?, pageUrl: String, vars: Map<String, String> = emptyMap()): Pair<NodeValue, String> {
         val dataPayload = dataUrlPayload(pageUrl)
-        if (dataPayload != null) return NodeValue.json(dataPayload) to dataPayload
+        if (dataPayload != null) return NodeValue.json(dataPayload).also { it.seedVariables(vars) } to dataPayload
         val (url, options) = splitUrlOptions(pageUrl)
         val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
         val body = fetchUrl(url, mergedOptions, null, sourceUrl, database)
-        return NodeValue.document(body) to body
+        return NodeValue.document(body).also { it.seedVariables(vars) } to body
     }
 
     fun parseLoginUi(sourceJson: String): List<SourceLoginUiItem> {
@@ -1270,6 +1307,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     private companion object {
         const val MAX_BODY_BYTES = 2 * 1024 * 1024
         private const val MAX_TRACE_CHARS = 240
+        /** ruleData（跨调用复用的 @put 变量）的键上限：超了整表清空 —— 丢了顶多重搜一次。 */
+        const val MAX_RULE_DATA_KEYS = 4096
         val URL_VARIABLE_PATTERN = Regex("\\{\\{(.+?)}}")
 
         // 下方几个正则原来在每次调用处现编译：cleanContent 走每章正文（离线缓存整本 = 上万次），
