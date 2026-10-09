@@ -14,9 +14,10 @@ import io.ktor.server.sessions.*
 import io.ktor.server.websocket.*
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlin.system.exitProcess
 import java.nio.file.Files
 
-fun main() {
+fun main(args: Array<String>) {
     val config = ServerConfig.fromEnvironment()
     /*
      * 停读的客户端会把一个线程整篇压在 socket 的阻塞写上（不是挂起）：实测 24 个"读了 8KB
@@ -40,11 +41,13 @@ fun main() {
             callGroupSize = AppConfig.callGroupSize
         },
     ) {
-        legadoApplication(config)
+        // --cds-dump：只为生成 CDS 类归档（tools/make-cds.mjs 用）。服务照常起来，
+        // 脚本趁这段时间预热几个接口，然后本进程正常退出 —— 归档由 JVM 的 shutdown hook 写盘。
+        legadoApplication(config, cdsDump = args.contains("--cds-dump"))
     }.start(wait = true)
 }
 
-fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnvironment()) {
+fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnvironment(), cdsDump: Boolean = false) {
     // 初始化结构化日志系统
     LogService.initialize(config.databasePath)
     logSystem("青阅服务器启动", mapOf("version" to BuildInfo.version, "host" to config.host, "port" to config.port.toString()))
@@ -78,6 +81,16 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
         bookCache.start()
         val purgedCovers = coverCache.purgeGeneratedLocalCovers(database)
         if (purgedCovers > 0) log.info("已回收 {} 张自动生成的本地书封面", purgedCovers)
+    }
+    // --cds-dump：给生成脚本 ~8 秒预热几个接口（让请求路径的类也进归档），然后正常退出。
+    if (cdsDump) {
+        environment.monitor.subscribe(ApplicationStarted) {
+            Thread {
+                Thread.sleep(8000)
+                log.info("cds-dump：正常退出以写 CDS 归档")
+                exitProcess(0)
+            }.apply { isDaemon = true }.start()
+        }
     }
 
     install(ContentNegotiation) {

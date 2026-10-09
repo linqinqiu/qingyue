@@ -316,7 +316,7 @@ try {
   await page.waitForSelector('.logs-error', { timeout: 8000 }).catch(() => null)
   const failed = await readModal(page)
   check('⑤取失败时明说失败，而不是显示"没有日志"',
-    !!failed && failed.errorBar && !failed.empty && /这不是"没有日志"/.test(failed.errorText),
+    !!failed && failed.errorBar && !failed.empty && /取日志失败/.test(failed.errorText),
     failed?.errorText.slice(0, 60) ?? '(既没有错误条也没有列表)')
   check('⑤取失败时计数位不写"0 条"这种误导说法', /没取到/.test(failed?.count ?? ''), failed?.count ?? '')
   check('⑤错误条上给了「重试」', (failed?.actions ?? []).length >= 0 && /重试/.test(failed?.errorText ?? ''), '')

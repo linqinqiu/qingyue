@@ -53,6 +53,8 @@ local-patches.diff
 # 但放行 README/AGENTS/CHANGELOG/docs 通篇引用的门禁脚本（tools/verify/*.mjs）及其共享依赖 env/zip-make/multipart，
 # 否则文档叫贡献者跑的门禁根本不在仓库里。要增删分发件改这里逐条列。
 /tools/*
+# 顶层这个不是探针而是启动链路的一环（AGENTS/CHANGELOG 都让贡献者跑它），单独放行。
+!/tools/make-cds.mjs
 !/tools/verify/
 /tools/verify/*
 !/tools/verify/baselines/

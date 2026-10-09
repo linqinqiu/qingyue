@@ -204,7 +204,7 @@ export function LogsModal({ onClose }: { onClose: () => void }) {
 
         {state === 'failed' && (
           <div className="logs-error">
-            <span>取日志失败：{error || '服务端没有响应'}。这不是"没有日志"，是这一屏没拿到数据。</span>
+            <span>取日志失败：{error || '服务端没有响应'}。</span>
             <button type="button" className="logs-btn" onClick={() => void load()}>重试</button>
           </div>
         )}

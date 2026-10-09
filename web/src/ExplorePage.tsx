@@ -55,7 +55,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
       setSources(list)
       setSourcesFailed(false)
       setSourceId(current => current || list[0]?.id || '')
-    }).catch(() => { setSourcesFailed(true); setMessage('发现书源列表没取到 —— 下面显示 0 个不是"没有书源"，是这一次请求失败了') })
+    // 取失败只把状态标出来：计数位与下拉占位已经写着「没取到书源列表」，
+    // 不必再补一句"下面显示 0 个不是没有书源"——那种解释界面自己的话对使用者没用。
+    }).catch(() => { setSourcesFailed(true) })
   }, [])
 
   useEffect(() => {

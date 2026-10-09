@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { openSync, readdirSync } from 'node:fs';
+import { existsSync, openSync, readdirSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { childEnvironment, ensureDirectories, resolveRuntime } from './scripts/runtime.mjs';
@@ -104,6 +104,15 @@ probe.listen(runtime.port, runtime.host, () => {
       // 不指定的话 JVM 临时目录是 C:\Users\<用户>\AppData\Local\Temp，装到哪都会往系统盘写。
       `-Djava.io.tmpdir=${runtime.tmpDir}`,
     ];
+    // CDS 类归档（tools/make-cds.mjs 生成）：冷启动实测 ~7.8s → ~4.8s。
+    // 归档是跟这一份 jar 绑定的 —— 比 jar 旧就不用它（JVM 本来也会忽略并打一条警告），并提示重建。
+    const cdsArchive = path.join(runtime.root, 'server', 'build', 'cds', 'app.jsa');
+    const jarPath = path.join(runtime.libs, jar);
+    if (existsSync(cdsArchive) && statSync(cdsArchive).mtimeMs >= statSync(jarPath).mtimeMs) {
+      jvmArgs.push(`-XX:SharedArchiveFile=${cdsArchive}`);
+    } else if (existsSync(cdsArchive)) {
+      console.log('CDS 归档比 jar 旧，本次跳过 —— 重建后跑一次 node tools/make-cds.mjs');
+    }
     // detached + unref：服务作为独立进程存活，不随调用方退出而被回收。
     const child = spawn(java, [...jvmArgs, '-jar', path.join(runtime.libs, jar)], {
       env, stdio: ['ignore', log, log], detached: true, windowsHide: true,
