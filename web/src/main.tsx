@@ -335,6 +335,10 @@ function BookDetailModal({
   }, [book.details.coverUrl, choices])
   const [coverTried, setCoverTried] = useState(0)
   const cover = coverCandidates[coverTried]
+  /** 外域封面走服务端代理（0.6.22），浏览器只加载同源地址 */
+  const coverSrc = cover ? api.coverProxy(cover, book.details.sourceId) : null
+  /** 点详情封面放大查看（用户 2026-10-09：只在书籍详情页放大，其余地方不动）。 */
+  const [coverZoom, setCoverZoom] = useState(false)
 
   const runInspection = useCallback((forceRefresh = false) => {
     abortControllerRef.current?.abort()
@@ -386,10 +390,8 @@ function BookDetailModal({
   }, [onOpen])
 
   /**
-   * 目录预览只挂载水位以内的章节按钮。
-   * 一次全放 5,000 个按钮会把弹窗卡住，但每批只 300 章时大目录要点十几次才看完 ——
-   * 用户的感觉就是"点了半天才出来"。步长提到 1,000，再给一条"一次全部展开"，
-   * 配合 CSS content-visibility 让离屏行不参与布局与绘制。
+   * 目录预览一次全给（0.6.21）：整份目录都挂成按钮，不再分水位。
+   * 离屏行靠 CSS content-visibility 不参与布局与绘制，大目录也不会卡。
    */
   const visibleChapters = useMemo(() => book.chapters.map(item => (
     <button
@@ -452,12 +454,14 @@ function BookDetailModal({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // 封面大图叠在详情弹窗之上：一次 Esc 只关最上面那层
+        if (coverZoom) { setCoverZoom(false); return }
         handleClose()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleClose])
+  }, [handleClose, coverZoom])
 
   const handleSelectChoice = (choice: SourceChoice) => {
     const key = `${choice.result.sourceId}\u0000${choice.result.bookUrl}`
@@ -496,8 +500,10 @@ function BookDetailModal({
       >
         <header className="dialog-head book-detail-modal-header">
           <div className="book-detail-heading">
-            {cover ? (
-              <img className="book-detail-cover" src={cover} alt="" referrerPolicy="no-referrer" onError={() => setCoverTried(count => count + 1)} />
+            {coverSrc ? (
+              <button type="button" className="book-detail-cover-btn" aria-label="放大查看封面" title="放大查看封面" onClick={() => setCoverZoom(true)}>
+                <img className="book-detail-cover" src={coverSrc} alt="" referrerPolicy="no-referrer" onError={() => setCoverTried(count => count + 1)} />
+              </button>
             ) : (
               // 以前这里只有书名第一个字，等于一块带字的色板；换成与书架同一套文字书封
               <div className="book-detail-cover book-detail-cover-text"><CoverFallback name={book.details.name} author={book.details.author} /></div>
@@ -593,6 +599,18 @@ function BookDetailModal({
           </div>
         </div>
       </div>
+      {coverZoom && coverSrc && (
+        /* 与阅读器正文配图同一套看图层（.overlay-backdrop.is-viewer） */
+        <div
+          className="overlay-backdrop is-viewer"
+          onClick={event => { event.stopPropagation(); setCoverZoom(false) }}
+          role="dialog"
+          aria-label="封面预览"
+        >
+          <button type="button" className="reader-image-lightbox-close" aria-label="关闭预览" onClick={() => setCoverZoom(false)}><Icon name="close" /></button>
+          <img src={coverSrc} alt="" onClick={event => event.stopPropagation()} />
+        </div>
+      )}
     </div>
   )
 }
@@ -1700,68 +1718,67 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
       )}
       {search.message && <p className="form-error library-message">{search.message}</p>}
       {groups.length > 0 && (
-        <>
-          <section className="library-result-filters" aria-label="筛选搜索结果">
-            <label>
-              <Icon name="search" />
-              <input
-                value={search.filters.query}
-                onChange={event => search.setFilters(current => ({ ...current, query: event.target.value }))}
-                placeholder="筛选书名或作者"
-              />
-            </label>
-            <span className="library-sort-picker">
-              排序
-              <Select
-                ariaLabel="搜索结果排序"
-                value={search.filters.sortMode}
-                onChange={value => search.setFilters(current => ({ ...current, sortMode: value as SortMode }))}
-                options={[
-                  { value: 'smart', label: '智能推荐' },
-                  { value: 'sources', label: '书源最多' },
-                  { value: 'exact', label: '精准优先' },
-                  { value: 'name', label: '书名 A-Z' },
-                ]}
-              />
-            </span>
-          </section>
-          <section className="library-results">
-            <header>
-              <h2>搜索结果</h2>
-              <div className="library-results-tools">
-                <small>{visibleGroups.length} 本书{hasFilters && ` / ${groups.length}`}</small>
-                {/* 与书架同一套三档：网格看封面、列表看简介、紧凑列表一屏塞最多。 */}
-                <div className="shelf-layout-picker" role="group" aria-label="搜索结果布局">
-                  <button
-                    type="button"
-                    className={resultLayout.mode === 'grid' ? 'active' : ''}
-                    aria-label="封面网格"
-                    title="封面网格：一行多张封面，挑书先看脸"
-                    onClick={() => chooseResultLayout({ mode: 'grid' })}
-                  >
-                    <Icon name="columns" />
-                  </button>
-                  <button
-                    type="button"
-                    className={resultLayout.mode === 'list' ? 'active' : ''}
-                    aria-label="列表"
-                    title="列表：一行一本，右边显示简介"
-                    onClick={() => chooseResultLayout({ mode: 'list' })}
-                  >
-                    <Icon name="list" />
-                  </button>
-                  <button
-                    type="button"
-                    className={resultLayout.mode === 'compact' ? 'active' : ''}
-                    aria-label="紧凑列表"
-                    title="紧凑列表：只看书名、作者与来源数，一屏放最多"
-                    onClick={() => chooseResultLayout({ mode: 'compact' })}
-                  >
-                    <Icon name="menu" />
-                  </button>
-                </div>
+        <section className="library-results">
+          <header>
+            <h2>搜索结果</h2>
+            <div className="library-results-tools">
+              {/* 筛选与排序原来单独占一条工具条（用户 2026-10-09：挪进结果表头，省一整行） */}
+              <label className="library-filter-inline">
+                <Icon name="search" />
+                <input
+                  value={search.filters.query}
+                  onChange={event => search.setFilters(current => ({ ...current, query: event.target.value }))}
+                  placeholder="筛选书名或作者"
+                  aria-label="筛选书名或作者"
+                />
+              </label>
+              <small>{visibleGroups.length} 本书{hasFilters && ` / ${groups.length}`}</small>
+              <span className="library-sort-picker">
+                排序
+                <Select
+                  ariaLabel="搜索结果排序"
+                  value={search.filters.sortMode}
+                  onChange={value => search.setFilters(current => ({ ...current, sortMode: value as SortMode }))}
+                  options={[
+                    { value: 'smart', label: '智能推荐' },
+                    { value: 'sources', label: '书源最多' },
+                    { value: 'exact', label: '精准优先' },
+                    { value: 'name', label: '书名 A-Z' },
+                  ]}
+                />
+              </span>
+              {/* 与书架同一套三档：网格看封面、列表看简介、紧凑列表一屏塞最多。 */}
+              <div className="shelf-layout-picker" role="group" aria-label="搜索结果布局">
+                <button
+                  type="button"
+                  className={resultLayout.mode === 'grid' ? 'active' : ''}
+                  aria-label="封面网格"
+                  title="封面网格：一行多张封面，挑书先看脸"
+                  onClick={() => chooseResultLayout({ mode: 'grid' })}
+                >
+                  <Icon name="columns" />
+                </button>
+                <button
+                  type="button"
+                  className={resultLayout.mode === 'list' ? 'active' : ''}
+                  aria-label="列表"
+                  title="列表：一行一本，右边显示简介"
+                  onClick={() => chooseResultLayout({ mode: 'list' })}
+                >
+                  <Icon name="list" />
+                </button>
+                <button
+                  type="button"
+                  className={resultLayout.mode === 'compact' ? 'active' : ''}
+                  aria-label="紧凑列表"
+                  title="紧凑列表：只看书名、作者与来源数，一屏放最多"
+                  onClick={() => chooseResultLayout({ mode: 'compact' })}
+                >
+                  <Icon name="menu" />
+                </button>
               </div>
-            </header>
+            </div>
+          </header>
             {/*
               三档共用同一份 DOM（与书架同一套做法）：切换只改容器类名，
               由 CSS 决定封面、简介、hover 层谁显示 —— 换档不重新拉数据，也不改变点击行为。
@@ -1769,7 +1786,9 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
             <div className={`search-grid search-mode-${resultLayout.mode}`}>
               {visibleGroups.map(group => {
                 const isExact = isExactMatch(group, search.keyword)
-                const cover = sanitizeImageUrl(group.sources.map(source => source.coverUrl).find(Boolean))
+                // 封面取第一个真给了地址的源；referer 也用它 —— 防盗链图站按来源放行
+                const coverSource = group.sources.find(source => source.coverUrl?.trim())
+                const cover = sanitizeImageUrl(coverSource?.coverUrl)
                 const blurb = pickBlurb(group)
                 return (
                   <button
@@ -1780,7 +1799,9 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
                     aria-label={`打开《${group.name}》${group.author ? `，作者 ${group.author}` : ''}，${group.sources.length} 个书源`}
                   >
                     <span className="search-card-cover">
-                      <SearchCover cover={cover} name={group.name} author={group.author} />
+                      <SearchCover cover={cover} name={group.name} author={group.author} referer={coverSource?.sourceId} />
+                      {/* 列表态封面只有 48px，完整文字书封塞不下 —— 换两字版（DOM 共用，CSS 按档切换） */}
+                      <span className="search-card-cover-mini"><CoverFallback name={group.name} author={group.author} compact /></span>
                       <span className="search-card-hover">
                         <strong>{group.name}</strong>
                         <p>{group.author || '未知作者'}</p>
@@ -1803,7 +1824,6 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
             </div>
             {visibleGroups.length === 0 && <p className="library-filter-empty">没有符合当前筛选条件的书籍。</p>}
           </section>
-        </>
       )}
       {search.openBook && (
         <BookDetailModal

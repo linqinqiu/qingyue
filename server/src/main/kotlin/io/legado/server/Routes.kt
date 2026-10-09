@@ -1546,6 +1546,40 @@ fun Route.apiRoutes(
             call.respond(LocalFileContent(file.toFile(), type))
         }
         /**
+         * 封面代理（0.6.22）：搜索/发现/详情的封面原来直指外域 URL，浏览器经常取不到
+         * （本机系统代理、防盗链、http 混掺）—— 书架早就是 `/covers/{key}` 这条路，所以只有书架正常
+         * （用户 2026-10-09：手机端 00小说网封面全显示、青阅的却不行）。本路由按需在服务端抓取、
+         * 校验、落盘缓存，浏览器只加载同源地址；7 天内再命中直接出盘。
+         * 闸门全是现成的（`CoverCache.cacheContentImage`）：SSRF 校验（只许公网 http/https）、
+         * 只收图片类型且拒 SVG（同源 SVG 可带脚本）、5 MiB 上限、gzip 解码、重定向不带 Referer。
+         */
+        get("/covers/proxy") {
+            val url = call.request.queryParameters["url"].orEmpty()
+            if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_image", "封面地址无效")); return@get
+            }
+            // 防盗链图站按 Referer 判来源：调用方把书源地址（sourceId）带上来
+            val referer = call.request.queryParameters["referer"]?.takeIf { it.startsWith("http", ignoreCase = true) }
+            try {
+                val cached = coverCache.cacheContentImage(url, referer)
+                val file = coverCache.file(cached.key) ?: return@get call.respond(HttpStatusCode.NotFound)
+                call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 7 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
+                call.response.header("X-Content-Type-Options", "nosniff")
+                call.respond(LocalFileContent(file.toFile(), ContentType.parse(cached.contentType)))
+            } catch (error: Exception) {
+                // 一张封面取不到不是事故：走 LogService 留一行警告，接口回 502 让前端退化成占位书封
+                Unit.logNetwork(
+                    "封面代理取图失败",
+                    mapOf(
+                        "host" to (runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "未知"),
+                        "原因" to (error.message ?: error.javaClass.simpleName),
+                        "url" to url.take(120),
+                    ),
+                )
+                call.respond(HttpStatusCode.BadGateway, ApiError("image_failed", error.message ?: "封面抓取失败"))
+            }
+        }
+        /**
          * 本地 EPUB 的内嵌插图（用户 2026-10-02：本地阅读器要「支持图片」）。
          *
          * 包里的图不会自己出现在网上，只能从原始文件里按 zip entry 取字节。三条边界写死在这里：

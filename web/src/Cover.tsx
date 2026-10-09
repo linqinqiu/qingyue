@@ -21,11 +21,12 @@ export function CoverFallback({ name, author, compact }: { name: string; author?
 /**
  * 搜索结果封面。源站给的封面地址经常是失效链接或防盗链图，
  * 以前图片报错只是 `visibility:hidden`，留下的就是一块没有字的灰板 —— 这里回落到文字占位。
+ * 外域地址一律走服务端代理（0.6.22），浏览器直连外域经常取不到图。
  */
-export function SearchCover({ cover, name, author }: { cover: string | null; name: string; author?: string }) {
+export function SearchCover({ cover, name, author, referer }: { cover: string | null; name: string; author?: string; referer?: string }) {
   const [broken, setBroken] = useState(false)
   if (!cover || broken) return <CoverFallback name={name} author={author} />
-  return <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+  return <img src={api.coverProxy(cover, referer)} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
 }
 
 /** 本机缓存里的封面（按 coverKey 取）。 */
@@ -43,7 +44,7 @@ export function BookCover({ coverKey, name, author, compact }: { coverKey?: stri
  * `<img>` 以透明层叠在上面，`onLoad` 才淡入；加载失败就让它一直透明，占位留在原地 ——
  * 不再出现"一块没有字的灰板"。
  */
-export function DeferredCover({ cover, name, author }: { cover: string | null; name: string; author?: string }) {
+export function DeferredCover({ cover, name, author, referer }: { cover: string | null; name: string; author?: string; referer?: string }) {
   const [loaded, setLoaded] = useState(false)
   const [broken, setBroken] = useState(false)
   const showImage = !!cover && !broken
@@ -52,7 +53,7 @@ export function DeferredCover({ cover, name, author }: { cover: string | null; n
       <CoverFallback name={name} author={author} />
       {showImage && (
         <img
-          src={cover!}
+          src={api.coverProxy(cover!, referer)}
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"

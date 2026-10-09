@@ -244,7 +244,7 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
             {books.map((book, index) => (
               <button type="button" key={`${book.sourceId}::${book.bookUrl}::${index}`} className="explore-card" onClick={() => void open(book)}>
                 <span className="explore-cover">
-                  <DeferredCover cover={coverOf(book) ?? null} name={book.name} author={book.author} />
+                  <DeferredCover cover={coverOf(book) ?? null} name={book.name} author={book.author} referer={book.sourceId} />
                 </span>
                 <strong title={book.name}>{book.name}</strong>
                 <small>{book.author || '未知作者'}</small>

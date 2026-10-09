@@ -562,6 +562,16 @@ export const api = {
       body: JSON.stringify({ sourceId, bookUrl, ruleKey }),
     }),
   cover: (key: string) => `/api/covers/${encodeURIComponent(key)}`,
+  /**
+   * 封面代理（0.6.22）：外域封面直连经常取不到（本机系统代理、防盗链、http 混掺），
+   * 让服务端代取并落盘缓存，浏览器只加载同源地址。非 http(s) 的（data:、已是本站的）原样返回。
+   */
+  coverProxy: (url: string, referer?: string) => {
+    if (!/^https?:\/\//i.test(url)) return url
+    const params = new URLSearchParams({ url })
+    if (referer) params.set('referer', referer)
+    return `/api/covers/proxy?${params.toString()}`
+  },
   bookImage: (url: string, page?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`,
   /** 浏览器直传手机备份包：选文件即导入，服务端读完临时文件就删。 */
   importBackupFile: (file: File, password?: string) => {
