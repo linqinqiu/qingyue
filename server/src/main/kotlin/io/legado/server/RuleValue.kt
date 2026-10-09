@@ -33,6 +33,23 @@ internal class NodeValue private constructor(private val html: Element?, private
         trimmedRule = substituteGetVariables(trimmedRule)
         if (trimmedRule.isBlank()) return null
 
+        // Legado 的 `##正则##替换` 是整条规则的**最后一步**：先求值主规则，再拿结果做替换。
+        // 必须在 `{{}}` 展开之前就把「花括号外」的替换段摘出来 —— 否则模板展开后整条
+        // （连同指令原文）一起过替换，模式会把指令自身也改写一遍，`##…##$1<br>` 反而留在
+        // 简介里（用户 2026-10-09：00小说网的简介规则正是「模板 + 尾部 ##…##$1<br>」）。
+        // 花括号里的 `##` 属于占位符自己的替换（`{{$.create_time##T|\+.*## }}`），不在这一层摘。
+        val hashCut = if (trimmedRule.contains("##")) firstTopLevelHashIndex(trimmedRule) else -1
+        val replaceSuffix = if (hashCut >= 0) trimmedRule.substring(hashCut) else ""
+        if (replaceSuffix.isNotEmpty()) trimmedRule = trimmedRule.substring(0, hashCut)
+
+        val result = evaluateRule(trimmedRule, jsSandbox, rawBody, baseUrl)
+        return if (replaceSuffix.isEmpty() || result == null) result else applyRegexReplace(result, replaceSuffix)
+    }
+
+    /** [value] 的主干：摘掉「花括号外的 `##` 替换段」之后真正求值的那部分。 */
+    private fun evaluateRule(rule: String, jsSandbox: JsSandbox?, rawBody: String?, baseUrl: String?): String? {
+        var trimmedRule = rule
+
         // Legado 的 `规则1||规则2||…` 备选语法：返回第一个取到值的分支。聚合源的字段规则几乎人人都写，
         // 不支持就等于整条记录被 mapNotNull 丢掉，表现为「搜索完成：0 项」而不是报错。
         // 只在花括号外层切，`{{$.book_id||$.BookID}}` 里的 `||` 属于内层路径的备选。
@@ -299,6 +316,31 @@ internal class NodeValue private constructor(private val html: Element?, private
             index += 2
         }
         return result
+    }
+
+    /**
+     * 找整条规则里**花括号外**的第一个 `##`（`##正则##替换` 段的起点），没有则 -1。
+     *
+     * 深度口径与 [splitLegadoBranches] 的 `topLevelSeparators` 一致：`{}`/`[]` 里的 `##`
+     * 属于占位符或 JSONPath 谓词自己的内容（如 `{{$.create_time##T|\+.*## }}`），
+     * 不能当成整条规则的替换段 —— 直接 `split("##")` 会把两段错位配对，替换结果整个跑偏。
+     */
+    private fun firstTopLevelHashIndex(rule: String): Int {
+        var depth = 0
+        var quote: Char? = null
+        var index = 0
+        while (index < rule.length - 1) {
+            val ch = rule[index]
+            when {
+                quote != null -> if (ch == quote) quote = null
+                ch == '\'' || ch == '"' -> quote = ch
+                ch == '{' || ch == '[' -> depth++
+                ch == '}' || ch == ']' -> depth = (depth - 1).coerceAtLeast(0)
+                ch == '#' && depth == 0 && rule[index + 1] == '#' -> return index
+            }
+            index++
+        }
+        return -1
     }
 
     private fun readJson(path: String): Any? = runCatching {

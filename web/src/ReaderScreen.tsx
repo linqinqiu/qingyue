@@ -5,8 +5,8 @@ import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import { Select } from './Select'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, swipeDirection, ViewportBounds } from './readerInteractions'
-import { TapAction, zoneAt } from './tapZones'
-import { TapZoneConfig } from './TapZoneConfig'
+import { mapCells, TapAction, zoneAt } from './tapZones'
+import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, sectionAtPage, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
@@ -52,6 +52,7 @@ function ReaderSettingsControls({
   settings,
   onChange,
   onOpenReplaceRules,
+  onEditTapZones,
   localBook,
   tocRuleOptions,
   onReparseLocal,
@@ -59,6 +60,8 @@ function ReaderSettingsControls({
   settings: ReaderSettings
   onChange: (next: ReaderSettings) => void
   onOpenReplaceRules?: () => void
+  /** 打开"在正文上编辑点击区域"那层。见 TapZoneEditor。 */
+  onEditTapZones?: () => void
   /** 当前是导入到本机的书才给；在线书没有"目录规则"这件事。 */
   localBook?: { name: string; tocRule?: string | null } | null
   tocRuleOptions?: TocRuleOption[]
@@ -109,14 +112,22 @@ function ReaderSettingsControls({
       <SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} />
     </section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
-    <TapZoneConfig
-      grid={settings.pageMode === 'paginate' ? settings.tapZones.paginate : settings.tapZones.scroll}
-      modeLabel={settings.pageMode === 'paginate' ? '平移分页' : '连续滚动'}
-      onGrid={grid => update({ tapZones: settings.pageMode === 'paginate'
-        ? { ...settings.tapZones, paginate: grid }
-        : { ...settings.tapZones, scroll: grid } })}
-      onPreset={(paginate, scroll) => update({ tapZones: { paginate, scroll } })}
-    />
+    {/*
+      点击区域改到正文上编辑（用户 2026-10-09：「这个改成底下一小行，可以折叠进去，目的是显示更多书籍内容」）：
+      抽屉里只留一颗入口，真正的编辑器是盖在正文上的一层 —— 调分区时看得见书，控制条收在底部一行。
+    */}
+    <section className="setting-section">
+      <span className="setting-label">点击区域</span>
+      <button type="button" className="rules-setting-btn is-wide" onClick={onEditTapZones}>
+        <span className="rules-setting-btn-label"><Icon name="sliders" />在正文上编辑点击区域</span>
+        <Icon name="arrowRight" />
+      </button>
+      <small className="setting-hint">
+        当前「{settings.pageMode === 'paginate' ? '平移分页' : '连续滚动'}」分
+        {' '}{mapCells(settings.pageMode === 'paginate' ? settings.tapZones.paginate : settings.tapZones.scroll)} 区；
+        进去在正文上拖横竖虚线改分区，改完立刻生效，不用重开这本书。
+      </small>
+    </section>
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
     {/*
       这一档只管**手上这一本**（用户 2026-10-03：「抽屉里只留『这本用的哪条 + 重切』」）。
@@ -394,6 +405,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [chapterQuery, setChapterQuery] = useState('')
   const deferredQuery = useDeferredValue(chapterQuery)
   const [activeDrawer, setActiveDrawer] = useState<'toc' | 'settings' | null>(null)
+  /** 「在正文上编辑点击区域」那层开着没有（见 TapZoneEditor）。 */
+  const [tapZoneEditing, setTapZoneEditing] = useState(false)
   const [toolbarsVisible, setToolbarsVisible] = useState(false)
   const [boundaryMessage, setBoundaryMessage] = useState('')
   const [inShelf, setInShelf] = useState(true)
@@ -2208,6 +2221,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         settings={settings}
         onChange={onSettingsChange}
         onOpenReplaceRules={() => setShowReplaceRules(true)}
+        onEditTapZones={() => { setActiveDrawer(null); setTapZoneEditing(true) }}
         localBook={currentBook.details.sourceId === 'loc_book' ? { name: bookName, tocRule: shelfTocRule } : null}
         tocRuleOptions={tocRuleOptions}
         onReparseLocal={currentBook.details.sourceId === 'loc_book' ? reparseLocalBook : undefined}
@@ -2217,6 +2231,26 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     {/* Backdrop for Drawers */}
     {activeDrawer && (activeDrawer !== 'toc' || !settings.sidebarPinned) && (
       <div className="reader-drawer-backdrop" onClick={() => setActiveDrawer(null)} aria-hidden="true" />
+    )}
+
+    {/*
+      「在正文上编辑点击区域」那层：盖在正文之上（正文仍渲染，看得见字），
+      画横竖虚线分区、控制条收在底部一行。只编**当前翻页方式**那张表 —— 分页看竖线、滚动看横线。
+    */}
+    {tapZoneEditing && (
+      <TapZoneEditor
+        map={settings.pageMode === 'paginate' ? settings.tapZones.paginate : settings.tapZones.scroll}
+        mode={settings.pageMode}
+        onMap={map => onSettingsChange({
+          ...settings,
+          tapZones: settings.pageMode === 'paginate'
+            ? { ...settings.tapZones, paginate: map }
+            : { ...settings.tapZones, scroll: map },
+        })}
+        onMode={mode => onSettingsChange({ ...settings, pageMode: mode })}
+        onPreset={(paginate, scroll) => onSettingsChange({ ...settings, tapZones: { paginate, scroll } })}
+        onClose={() => setTapZoneEditing(false)}
+      />
     )}
 
     {/* Central Reading Canvas */}

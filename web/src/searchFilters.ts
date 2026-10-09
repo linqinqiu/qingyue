@@ -15,6 +15,31 @@ export function pickBlurb(group: SearchGroup): string {
   return latest ? `最新：${latest}` : ''
 }
 
+/**
+ * 书源简介常带 HTML 片段：`<br>` 是断行、其余标签是排版。
+ *
+ * 我们按纯文本渲染（`<p>{intro}</p>`），不处理就会把 `<br>` 当字面量显示出来 ——
+ * 00小说网的简介规则正是往句末插 `<br>`（`##(^|[。！？……；]+…)##$1<br>`），
+ * 于是简介里排着一串 `<br>`（用户 2026-10-09：「怎么这么显示，不大好」）。
+ *
+ * 这里只做两件事：`<br>` → 换行、去掉已知的排版标签；换行由 `.book-intro p` 的
+ * `white-space: pre-line` 保留。**不剥任意 `<…>`** —— 简介里出现 `3<5` 这种写法时，
+ * 按"尖括号"剥会把正常文字吃掉。
+ */
+export function formatIntro(raw: string): string {
+  return raw
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?:p|div|span|b|i|u|strong|em|font|h[1-6]|li|ul|ol|blockquote)\b[^>]*>/gi, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+|\n+$/g, '')
+}
+
 export type SearchGroup = {
   key: string
   name: string

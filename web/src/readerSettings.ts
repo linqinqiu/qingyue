@@ -1,4 +1,4 @@
-import { DEFAULT_GRIDS, sanitizeGrid, type TapGrid } from './tapZones'
+import { DEFAULT_MAPS, looksLikeGrid, migrateGrid, sanitizeMap, type TapMap } from './tapZones'
 
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
@@ -57,10 +57,11 @@ export type ReaderSettings = {
    */
   txtTocRule: string
   /**
-   * 点击分区（用户 2026-10-04：「可以自定义点击区域范围并设置，自定义管理」）。
-   * 两种翻页方式各一张格子表 —— 默认值就是改动前那三区，不改不漂移。
+   * 点击分区（用户 2026-10-04：「可以自定义点击区域范围并设置，自定义管理」；
+   * 2026-10-09：「区域设置改提供横竖虚线，自定义，但是要区分翻页方式的影响」）。
+   * 两种翻页方式各一张虚线表 —— 默认值就是改动前那三区，不改不漂移。
    */
-  tapZones: { paginate: TapGrid; scroll: TapGrid }
+  tapZones: { paginate: TapMap; scroll: TapMap }
 }
 
 const storageKey = 'legado-reader-settings-v2'
@@ -92,7 +93,7 @@ export const defaultReaderSettings: ReaderSettings = {
   ttsCustomVoice: '',
   ttsCustomHeader: '',
   txtTocRule: 'auto',
-  tapZones: { paginate: DEFAULT_GRIDS.paginate, scroll: DEFAULT_GRIDS.scroll },
+  tapZones: { paginate: DEFAULT_MAPS.paginate, scroll: DEFAULT_MAPS.scroll },
 }
 
 export function clampScrollPosition(value: number): number {
@@ -232,6 +233,11 @@ export function ttsSessionKey(settings: ReaderSettings): string {
   ].join('|')
 }
 
+/** 旧版存的是"格子表"（`{rows, cols, actions}`），新版是"虚线表"（`{x, y, actions}`）：读时迁一次。 */
+function loadTapMap(value: unknown, fallback: TapMap): TapMap {
+  return looksLikeGrid(value) ? migrateGrid(value, fallback) : sanitizeMap(value, fallback)
+}
+
 export function loadReaderSettings(): ReaderSettings {
   try {
     const raw = window.localStorage.getItem(storageKey) || window.localStorage.getItem('legado-reader-settings-v1')
@@ -264,10 +270,11 @@ export function loadReaderSettings(): ReaderSettings {
       ttsCustomVoice: typeof saved.ttsCustomVoice === 'string' ? saved.ttsCustomVoice : '',
       ttsCustomHeader: typeof saved.ttsCustomHeader === 'string' ? saved.ttsCustomHeader : '',
       txtTocRule: parseTocRuleKey(saved.txtTocRule),
-      // 缺项/写错都回落到出厂那张表（不清洗就会点到 undefined 上，表现为"这一格没反应"）
+      // 缺项/写错都回落到出厂那张表（不清洗就会点到 undefined 上，表现为"这一格没反应"）；
+      // 旧版存的是"格子表"，新版是"虚线表"，读的时候迁一次。
       tapZones: {
-        paginate: sanitizeGrid((saved.tapZones as Record<string, unknown> | undefined)?.paginate, DEFAULT_GRIDS.paginate),
-        scroll: sanitizeGrid((saved.tapZones as Record<string, unknown> | undefined)?.scroll, DEFAULT_GRIDS.scroll),
+        paginate: loadTapMap((saved.tapZones as Record<string, unknown> | undefined)?.paginate, DEFAULT_MAPS.paginate),
+        scroll: loadTapMap((saved.tapZones as Record<string, unknown> | undefined)?.scroll, DEFAULT_MAPS.scroll),
       },
     }
   } catch {

@@ -16,7 +16,7 @@ import { ChangelogPage } from './ChangelogPage'
 import { AboutPage } from './AboutPage'
 import { CustomizeModal } from './CustomizeModal'
 import { ServerPortModal } from './ServerPortModal'
-import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
+import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, formatIntro, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './searchStore'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { SourceLoginModal } from './SourceLoginModal'
@@ -594,7 +594,7 @@ function BookDetailModal({
           {book.details.intro && (
             <div className="book-detail-section">
               <div className={`book-intro ${introExpanded ? 'expanded' : ''}`}>
-                <p>{book.details.intro}</p>
+                <p>{formatIntro(book.details.intro)}</p>
                 {book.details.intro.length > 120 && (
                   <button className="intro-toggle" onClick={() => setIntroExpanded(value => !value)}>
                     {introExpanded ? '收起简介' : '展开简介'}

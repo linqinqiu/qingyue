@@ -721,6 +721,37 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `applies the trailing replace directive after expanding a brace template`() {
+        // 00小说网的简介规则把整条写成「模板 + 尾部 ##正则##替换##」：
+        //   "🕰 更新时间：\n{{@@[property$=update_time]@content##\\s.*}}\n📜 内容简介：\n{{@@#bookIntro@text}}##(^|[。！？……；]+[”」）】]?)##$1<br>"
+        // {{}} 分支展开模板后会提前 return；不补一遍「花括号外」的 ##替换，指令原文就漏进简介
+        // （用户 2026-10-09）。同时花括号里那段 `##\s.*` 属于占位符自己的替换，
+        // 不能被误当成整条规则的替换段（整条 split("##") 会把两段错位配对）。
+        val source = """{
+            "bookSourceUrl":"https://www.00xiaoshuo.net/",
+            "ruleBookInfo":{
+                "init":"",
+                "name":"[property$=book_name]@content",
+                "intro":"🕰  更新时间：\n{{@@[property$=update_time]@content##\\s.*}}\n📜  内容简介：\n{{@@#bookIntro@text}}##(^|[。！？……；]+[”」）】]?)##$1<br>"
+            }
+        }"""
+        val html = """<html><head>
+            <meta property="book_name" content="桃源医仙">
+            <meta property="update_time" content="2026-10-08 12:34:56">
+            </head><body>
+            <div id="bookIntro">第一句。第二句！第三句？</div>
+            </body></html>"""
+
+        val details = RuleRunner { html }.details(source, "https://www.00xiaoshuo.net/book/1")
+        val intro = details.intro ?: ""
+        assertFalse("尾部 ##替换## 指令漏进了简介: $intro", intro.contains("##"))
+        assertFalse("替换段没生效，$1<br> 原样显示: $intro", intro.contains("\$1"))
+        assertTrue("句末没换成 <br>: $intro", intro.contains("第一句。<br>"))
+        assertTrue("占位符里的 ##\\s.* 没剥掉时间尾巴: $intro",
+            intro.contains("2026-10-08") && !intro.contains("12:34:56"))
+    }
+
+    @Test
     fun `parses explore tabs from plain and JavaScript exploreUrl`() {
         val plain = """{"bookSourceUrl":"https://agg.example","exploreUrl":"榜单::/rank\n其他::/other"}"""
         val js = """{
