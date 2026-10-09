@@ -3174,6 +3174,9 @@ function App() {
       if (cancelled) return
       attempts += 1
       if (attempts === 4) setBootHint('正在等待本机服务启动…（它可能正在重启，稍等片刻）')
+      // 等了十几秒还没来，多半是服务压根没在跑 —— 给一句能照着做的。
+      // 桌面那个青阅是 PWA 快捷方式，不会启动本机服务；真正能起服务的是同目录的 start.cmd。
+      if (attempts === 12) setBootHint('本机服务还没起来。请双击桌面上的「青阅」启动它 —— 起来后会自动打开这一页。')
       const controller = new AbortController()
       const probeTimeout = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
       try {

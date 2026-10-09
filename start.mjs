@@ -55,21 +55,22 @@ ensureDirectories(runtime);
 const browseHost = runtime.host === '0.0.0.0' || runtime.host === '::' ? '127.0.0.1' : runtime.host;
 const url = `http://${browseHost}:${runtime.port}`;
 
-/** 等端口真的开始 listen —— 服务冷启动要几十秒，起来之前打开浏览器只会看到"无法访问"。 */
-function waitForPort(timeoutMs = 120000) {
+/** 服务是否已经就绪（/healthz 能答）。端口 listen 不代表能服务：冷启动要十几秒。 */
+async function isReady(target) {
+  try {
+    const res = await fetch(`${target}/healthz`, { signal: AbortSignal.timeout(2000) });
+    return res.ok;
+  } catch { return false; }
+}
+
+/** 等 /healthz 真的能答 —— 起来之前打开浏览器只会看到"正在打开阅读空间…"。 */
+async function waitForHealth(timeoutMs = 120000) {
   const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve) => {
-    const attempt = () => {
-      const socket = net.connect({ host: browseHost, port: runtime.port });
-      socket.once('connect', () => { socket.destroy(); resolve(true); });
-      socket.once('error', () => {
-        socket.destroy();
-        if (Date.now() > deadline) return resolve(false);
-        setTimeout(attempt, 500);
-      });
-    };
-    attempt();
-  });
+  while (Date.now() < deadline) {
+    if (await isReady(url)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
 }
 
 function openBrowser(target) {
@@ -78,6 +79,13 @@ function openBrowser(target) {
     else if (process.platform === 'darwin') spawn('open', [target], { detached: true, stdio: 'ignore' }).unref();
     else spawn('xdg-open', [target], { detached: true, stdio: 'ignore' }).unref();
   } catch { /* 打不开就只打印地址，不是致命错误 */ }
+}
+
+// 幂等：已经在跑就直接开界面 —— 重复点图标不该报"端口被占"，也不该再起第二个实例。
+if (await isReady(url)) {
+  console.log(`青阅已在运行 ${url}`);
+  if (args.open) openBrowser(url);
+  process.exit(0);
 }
 
 const probe = net.createServer();
@@ -107,9 +115,9 @@ probe.listen(runtime.port, runtime.host, () => {
     console.log(`日志     ${runtime.logFile}`);
     console.log(`临时目录 ${runtime.tmpDir}`);
 
-    const ready = await waitForPort();
+    const ready = await waitForHealth();
     if (!ready) {
-      console.error(`等了很久端口 ${runtime.port} 还没就绪，看看日志：${runtime.logFile}`);
+      console.error(`等了很久服务 ${url} 还没就绪，看看日志：${runtime.logFile}`);
       process.exit(1);
     }
     console.log(`服务已就绪 ${url}`);
