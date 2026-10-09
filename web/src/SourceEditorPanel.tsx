@@ -397,6 +397,11 @@ export const SourceEditor: React.FC<{
                 >
                   <Icon name={open ? 'chevronDown' : 'chevronRight'} />
                   <span>{group.name}</span>
+                  <i
+                    className="source-group-meter"
+                    style={{ '--p': `${Math.round((filled / group.fields.length) * 100)}%` } as React.CSSProperties}
+                    aria-hidden
+                  />
                   <small>{filled} / {group.fields.length} 条有值</small>
                 </button>
                 {open && group.fields.map(field => (

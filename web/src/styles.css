@@ -4800,28 +4800,29 @@ input[type=range] { min-height: 24px; }
 .source-form-tabs {
   flex: 0 0 auto;
   display: flex;
-  gap: 2px;
-  padding: 0 16px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
   overflow-x: auto;
   scrollbar-width: thin;
 }
 .source-form-tabs button {
-  position: relative;
   flex: 0 0 auto;
-  min-height: var(--ctl);
-  padding: 8px 13px;
-  border: 0;
+  min-height: var(--ctl-sm);
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--muted);
   font-size: var(--t-md);
   white-space: nowrap;
   cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
 }
-.source-form-tabs button:hover { color: var(--accent-ink); }
-.source-form-tabs button.active { color: var(--accent-ink); font-weight: 650; }
-.source-form-tabs button.active::after { position: absolute; right: 10px; bottom: 0; left: 10px; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent-solid); content: ''; }
+.source-form-tabs button:hover { color: var(--accent-ink); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.source-form-tabs button.active { color: var(--accent-ink); font-weight: 650; background: var(--surface); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 
 /* 分组改成"一页里的折叠段"：外层还是那两栏密度，只是每一组的标题横跨整行。
    折叠不等于隐藏能力 —— 收起时标题上照旧写着「N / M 条有值」，不用展开也知道这组填没填。 */
@@ -4847,20 +4848,26 @@ input[type=range] { min-height: 24px; }
 .source-field-group + .source-field-group { padding-top: var(--s-5); }
 .source-field-group-head, .source-field-group > header {
   display: flex; align-items: center; gap: 8px; grid-column: 1 / -1;
-  width: 100%; padding: 7px 0; color: var(--ink); text-align: left;
+  width: 100%; padding: 9px 0; color: var(--ink); text-align: left;
   background: none; border: 0; font: inherit; cursor: pointer;
 }
 .source-field-group > header { cursor: default; }
 .source-field-group-head > span, .source-field-group > header > span { font-family: Georgia, "Noto Serif SC", serif; font-size: var(--t-lg); font-weight: 600; }
-.source-field-group-head > small, .source-field-group > header > small { margin-left: auto; color: var(--muted); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+/* 完成度微条：收起状态下不用读「N / M」也知道这组填到几分之几 */
+.source-group-meter { flex: 0 0 52px; height: 3px; margin-left: auto; border-radius: 2px; background: var(--line); overflow: hidden; }
+.source-group-meter::before { content: ''; display: block; width: var(--p, 0%); height: 100%; border-radius: 2px; background: var(--accent-solid); }
+.source-field-group-head > small { color: var(--muted); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.source-field-group > header > small { margin-left: auto; color: var(--muted); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
 .source-field-group-head:hover > span { color: var(--accent-ink); }
 .source-field-group.is-matched { border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
-@media (max-width: 900px) { .source-field-group { grid-template-columns: minmax(0, 1fr); } }
-.source-field { display: grid; gap: 5px; min-width: 0; }
-.source-field-label { display: flex; align-items: baseline; gap: 8px; color: var(--ink); font-size: var(--t-lg); font-weight: 600; }
-.source-field-label code { overflow: hidden; color: var(--muted); font-size: var(--t-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.source-field-required { flex: 0 0 auto; padding: 1px 5px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); font-size: var(--t-xs); font-style: normal; }
-.source-field-hint { color: var(--muted); font-size: var(--t-sm); line-height: 1.6; }
+@media (max-width: 900px) { .source-field-group { grid-template-columns: minmax(0, 1fr); } .source-group-meter { display: none; } }
+.source-field { display: grid; gap: 4px; min-width: 0; }
+.source-field-label { display: flex; align-items: baseline; gap: 7px; color: var(--ink); font-size: var(--t-md); font-weight: 600; }
+/* JSON 路径是给核对用的技术细节：平时半隐，悬停/聚焦时才升到全亮 —— 不再 95 条路径齐喊 */
+.source-field-label code { overflow: hidden; color: color-mix(in srgb, var(--muted) 50%, transparent); font-size: var(--t-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; transition: color .15s; }
+.source-field:hover .source-field-label code, .source-field:focus-within .source-field-label code { color: var(--muted); }
+.source-field-required { flex: 0 0 auto; padding: 0 5px; border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius: var(--r-pill); color: var(--danger); font-size: var(--t-xs); font-style: normal; line-height: 1.5; }
+.source-field-hint { color: var(--muted); font-size: var(--t-sm); line-height: 1.55; }
 .source-field-input, .source-field-textarea, .source-field select {
   width: 100%;
   min-width: 0;
@@ -4875,6 +4882,8 @@ input[type=range] { min-height: 24px; }
 .source-field-input { min-height: var(--ctl); }
 .source-field-textarea { resize: vertical; }
 .source-field-input:focus, .source-field-textarea:focus, .source-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--surface); }
+.source-field-input, .source-field-textarea, .source-field select { transition: border-color .15s, background .15s, box-shadow .15s; }
+.source-field-input:hover, .source-field-textarea:hover, .source-field select:hover { border-color: color-mix(in srgb, var(--muted) 40%, var(--line)); }
 .source-field-inline { grid-template-columns: 1fr; }
 .source-field-switch { display: flex; align-items: center; gap: 8px; font-size: var(--t-lg); font-weight: 600; cursor: pointer; }
 .source-field-switch input { width: 16px; height: 16px; accent-color: var(--accent-solid); }
