@@ -48,6 +48,8 @@ fun main(args: Array<String>) {
 }
 
 fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnvironment(), cdsDump: Boolean = false) {
+    // 同源闸门比对的是"服务自己是谁"，不是请求头里那个可被 DNS 重绑定摆布的 Host（见 Guard.kt）
+    ServerIdentity.init(config.host, config.port)
     // 初始化结构化日志系统
     LogService.initialize(config.databasePath)
     logSystem("青阅服务器启动", mapOf("version" to BuildInfo.version, "host" to config.host, "port" to config.port.toString()))

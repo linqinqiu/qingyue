@@ -464,14 +464,18 @@ export const api = {
   progress: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<ReadingProgress | undefined>(`/api/reading-progress?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}`, { signal }),
   saveProgress: async (sourceId: string, bookUrl: string, chapterUrl: string, chapterIndex: number, scrollPosition: number) => {
     const progressItem = { sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition, updatedAt: Date.now() }
-    enqueueOfflineProgress(progressItem)
+    // 先冲掉此前积压的（flush 自带"成功即出队"），本次直写成功就不再入队 ——
+    // 原来"入队 → 直写 → flush"会把刚入队的这条再发一遍（每次存进度都双写）；
+    // 且 flush 排在直写前并 await，旧位置不会晚于新位置到达服务端。
+    await flushOfflineProgress(async (item) => {
+      await request<ReadingProgress>('/api/reading-progress', { method: 'PUT', body: JSON.stringify(item) })
+    }).catch(() => {})
     try {
       const res = await request<ReadingProgress>('/api/reading-progress', { method: 'PUT', body: JSON.stringify({ sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition }) })
-      void flushOfflineProgress(async (item) => {
-        await request<ReadingProgress>('/api/reading-progress', { method: 'PUT', body: JSON.stringify(item) })
-      })
       return res
     } catch {
+      // 直写失败才进离线队列，等服务恢复由下次 saveProgress 的 flush 补发
+      enqueueOfflineProgress(progressItem)
       return { sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition, updatedAt: progressItem.updatedAt }
     }
   },

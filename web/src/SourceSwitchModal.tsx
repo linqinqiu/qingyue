@@ -3,7 +3,8 @@ import { api, Chapter, SearchResult, SearchStreamEvent, streamSearch } from './a
 import { cleanTitle } from './searchFilters'
 import { sourceLabel } from './sourceOrder'
 import { Icon } from './icons'
-import { toast } from './Toast'import { useEscapeClose } from './useEscapeClose'
+import { toast } from './Toast'
+import { useEscapeClose } from './useEscapeClose'
 
 
 export type SourceCandidate = {

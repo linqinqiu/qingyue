@@ -1156,7 +1156,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
 
     /** Rhino 里所有数字都是 double，`{{(page-1)*20}}` 会求值成 `0.0`；网址里必须是 `0`。 */
     private fun trimJsNumberFraction(text: String): String =
-        if (Regex("""-?\d+\.0+""").matches(text)) text.substringBefore('.') else text
+        if (JS_NUMBER_FRACTION.matches(text)) text.substringBefore('.') else text
 
     private fun nodes(body: String, rule: String): List<NodeValue> {
         // @xpath 方言优先：xpath 里的 `|` 并集不能被当成 Legado 的 `||` 备选来切分
@@ -1198,7 +1198,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 } else {
                     cssParts.add(".$cls")
                 }
-            } else if (trimmed.matches(Regex("^[a-zA-Z0-9-]+\\.\\d+$"))) {
+            } else if (trimmed.matches(TAG_DOT_INDEX)) {
                 val (tag, idxStr) = trimmed.split(".", limit = 2)
                 val idx = idxStr.toIntOrNull()
                 if (idx != null) cssParts.add("$tag:nth-of-type(${idx + 1})") else cssParts.add(trimmed)
@@ -1215,17 +1215,17 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
      * 懒加载源普遍写 `data-src`/`data-original`，一并认。`data:` 内联图会撑爆缓存，丢掉。
      */
     private fun String.preserveContentImages(pageUrl: String): String =
-        Regex("(?i)<img[^>]*?(?:data-original|data-src|src)\\s*=\\s*[\"']?([^\"'\\s>]+)").replace(this) { match ->
+        CONTENT_IMG_TAG.replace(this) { match ->
             val src = match.groupValues[1]
             if (src.startsWith("data:", ignoreCase = true)) "" else "\n![图片](${src.absolute(pageUrl)})\n"
         }
 
-    private fun String.cleanContent(): String = this        .replace(Regex("(?i)<script[\\s\\S]*?</script>"), "")
-        .replace(Regex("(?i)<style[\\s\\S]*?</style>"), "")
-        .replace(Regex("(?i)<div[\\s\\S]*?</div>"), "")
-        .replace(Regex("(?i)<br\\s*/?>"), "\n")
-        .replace(Regex("(?i)</?p[^>]*>"), "\n")
-        .replace(Regex("<[^>]+>"), "")
+    private fun String.cleanContent(): String = this        .replace(SCRIPT_BLOCK, "")
+        .replace(STYLE_BLOCK, "")
+        .replace(DIV_BLOCK, "")
+        .replace(BR_TAG, "\n")
+        .replace(P_TAG, "\n")
+        .replace(ANY_TAG, "")
         .let { org.jsoup.parser.Parser.unescapeEntities(it, false) }
         .lines()
         .map { it.trim() }
@@ -1255,6 +1255,18 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         const val MAX_BODY_BYTES = 2 * 1024 * 1024
         private const val MAX_TRACE_CHARS = 240
         val URL_VARIABLE_PATTERN = Regex("\\{\\{(.+?)}}")
+
+        // 下方几个正则原来在每次调用处现编译：cleanContent 走每章正文（离线缓存整本 = 上万次），
+        // 其余的走每个字段取值。语义不变，只是提到类级只编译一次。
+        val JS_NUMBER_FRACTION = Regex("""-?\d+\.0+""")
+        val TAG_DOT_INDEX = Regex("^[a-zA-Z0-9-]+\\.\\d+$")
+        val CONTENT_IMG_TAG = Regex("(?i)<img[^>]*?(?:data-original|data-src|src)\\s*=\\s*[\"']?([^\"'\\s>]+)")
+        val SCRIPT_BLOCK = Regex("(?i)<script[\\s\\S]*?</script>")
+        val STYLE_BLOCK = Regex("(?i)<style[\\s\\S]*?</style>")
+        val DIV_BLOCK = Regex("(?i)<div[\\s\\S]*?</div>")
+        val BR_TAG = Regex("(?i)<br\\s*/?>")
+        val P_TAG = Regex("(?i)</?p[^>]*>")
+        val ANY_TAG = Regex("<[^>]+>")
 
         /**
          * 续取页数上限。上游只靠 visited 集合防回环，服务端替用户发请求，

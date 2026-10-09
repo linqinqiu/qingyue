@@ -1,6 +1,8 @@
 package io.legado.server
 
 import io.ktor.http.*
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.InetAddress
 import java.net.URI
 import java.net.http.HttpClient
@@ -8,6 +10,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
 import java.util.zip.GZIPInputStream
@@ -27,7 +30,7 @@ class CoverCache(private val directory: Path, private val fetcher: ((String) -> 
         val (contentType, body) = fetcher?.invoke(url) ?: download(url)
         require(contentType.lowercase().startsWith("image/")) { "封面不是图片" }
         require(body.size <= MAX_BYTES) { "封面超过 5 MiB 限制" }
-        Files.write(stored, body)
+        writeAtomic(key, body)
         return CachedCover(key, contentType.substringBefore(';'))
     }
 
@@ -72,7 +75,7 @@ class CoverCache(private val directory: Path, private val fetcher: ((String) -> 
         val type = rawType.substringBefore(';').trim().lowercase()
         require(type.startsWith("image/") && type != "image/svg+xml") { "正文图片类型不被允许：${type.ifBlank { "未知" }}" }
         require(body.size <= MAX_BYTES) { "正文图片超过 5 MiB 限制" }
-        Files.write(stored, body)
+        writeAtomic(key, body)
         return CachedCover(key, sniffContentType(stored))
     }
 
@@ -108,12 +111,47 @@ class CoverCache(private val directory: Path, private val fetcher: ((String) -> 
             val builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(20)).header("User-Agent", "LegadoServer/0.1").GET()
             // 重定向后不再补发 Referer：跳去别的域名时把原站地址带出去等于泄露来源。
             referer?.let { builder.header("Referer", it) }
-            val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
-            if (response.statusCode() in 300..399) { uri = uri.resolve(response.headers().firstValue("location").orElseThrow { IllegalArgumentException("封面重定向缺少地址") }); validate(uri); return@repeat }
+            val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
+            if (response.statusCode() in 300..399) {
+                response.body().close()
+                uri = uri.resolve(response.headers().firstValue("location").orElseThrow { IllegalArgumentException("封面重定向缺少地址") }); validate(uri); return@repeat
+            }
             require(response.statusCode() in 200..299) { "封面上游返回 HTTP ${response.statusCode()}" }
-            return response.headers().firstValue("content-type").orElse("") to decode(response.headers().firstValue("content-encoding").orElse(""), response.body())
+            val body = response.body().use { readBounded(it) }
+            return response.headers().firstValue("content-type").orElse("") to decode(response.headers().firstValue("content-encoding").orElse(""), body)
         }
         throw IllegalArgumentException("封面重定向次数超过限制")
+    }
+
+    /**
+     * 边读边限：恶意上游可以回一个巨大的响应体 —— 原来用 ofByteArray 整包读进内存
+     * 之后才检查 5 MiB 上限，等于先挨打后验伤。超限在读的过程中就抛。
+     */
+    private fun readBounded(stream: InputStream): ByteArray {
+        val buffer = ByteArrayOutputStream()
+        val chunk = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val n = stream.read(chunk)
+            if (n < 0) break
+            total += n
+            require(total <= MAX_BYTES) { "封面超过 5 MiB 限制" }
+            buffer.write(chunk, 0, n)
+        }
+        return buffer.toByteArray()
+    }
+
+    /** 落盘原子化：并发首取同一封面时不会互相覆盖出半截文件（读到一半的图会被当合法缓存）。 */
+    private fun writeAtomic(key: String, body: ByteArray) {
+        val target = directory.resolve(key)
+        val tmp = directory.resolve("$key.tmp-${System.nanoTime()}")
+        try {
+            Files.write(tmp, body)
+            try { Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE) }
+            catch (_: java.nio.file.AtomicMoveNotSupportedException) { Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING) }
+        } finally {
+            Files.deleteIfExists(tmp)
+        }
     }
 
     /**

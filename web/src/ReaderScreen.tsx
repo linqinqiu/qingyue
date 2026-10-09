@@ -683,7 +683,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     if (!next || !next.url || preloadedContentRef.current.has(next.url) || preloadingRef.current.has(next.url)) return
     preloadingRef.current.add(next.url)
     void api.content(currentBook.details.sourceId, next.url, currentBook.bookUrl)
-      .then(result => preloadedContentRef.current.set(next.url, result.content))
+      .then(result => {
+        const map = preloadedContentRef.current
+        map.set(next.url, result.content)
+        // 只增不清的 Map 会跟着阅读无界增长（长书读一章缓存一章），留最近的十几章足够
+        if (map.size > 12) {
+          const oldest = map.keys().next().value
+          if (oldest !== undefined) map.delete(oldest)
+        }
+      })
       .catch(() => undefined)
       .finally(() => preloadingRef.current.delete(next.url))
   }, [currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
@@ -695,7 +703,14 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     if (!prev || !prev.url || preloadedContentRef.current.has(prev.url) || preloadingRef.current.has(prev.url)) return
     preloadingRef.current.add(prev.url)
     void api.content(currentBook.details.sourceId, prev.url, currentBook.bookUrl)
-      .then(result => preloadedContentRef.current.set(prev.url, result.content))
+      .then(result => {
+        const map = preloadedContentRef.current
+        map.set(prev.url, result.content)
+        if (map.size > 12) {
+          const oldest = map.keys().next().value
+          if (oldest !== undefined) map.delete(oldest)
+        }
+      })
       .catch(() => undefined)
       .finally(() => preloadingRef.current.delete(prev.url))
   }, [currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
@@ -1039,25 +1054,30 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [changeChapter, chapterIndex, content, currentBook.chapters.length, loading, settings.pageMode])
 
   const toggleShelf = async () => {
-    if (inShelf) {
-      if (!confirm(`移出“${bookName}”将清除书架、阅读进度和缓存封面，确定继续吗？`)) return
-      await api.removeFromBookshelf(currentBook.details.sourceId, currentBook.bookUrl)
-      setInShelf(false)
-      toast.info(`《${bookName}》已移出书架`)
-      return
+    try {
+      if (inShelf) {
+        if (!confirm(`移出“${bookName}”将清除书架、阅读进度和缓存封面，确定继续吗？`)) return
+        await api.removeFromBookshelf(currentBook.details.sourceId, currentBook.bookUrl)
+        setInShelf(false)
+        toast.info(`《${bookName}》已移出书架`)
+        return
+      }
+      const fallbackCover = currentBook.details.coverUrl || currentBook.details.alternateSources?.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
+      await api.addToBookshelf({
+        sourceId: currentBook.details.sourceId,
+        bookUrl: currentBook.bookUrl,
+        name: bookName,
+        author: currentBook.details.author,
+        tocUrl: currentBook.details.tocUrl,
+        coverUrl: fallbackCover || undefined,
+        alternateSources: currentBook.details.alternateSources,
+      })
+      setInShelf(true)
+      toast.success(`《${bookName}》已加入书架`)
+    } catch (error) {
+      // 调用点是 void toggleShelf()：不接住就成 unhandled rejection，用户还以为加架成功了
+      toast.error(error instanceof Error ? error.message : '书架操作失败')
     }
-    const fallbackCover = currentBook.details.coverUrl || currentBook.details.alternateSources?.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
-    await api.addToBookshelf({
-      sourceId: currentBook.details.sourceId,
-      bookUrl: currentBook.bookUrl,
-      name: bookName,
-      author: currentBook.details.author,
-      tocUrl: currentBook.details.tocUrl,
-      coverUrl: fallbackCover || undefined,
-      alternateSources: currentBook.details.alternateSources,
-    })
-    setInShelf(true)
-    toast.success(`《${bookName}》已加入书架`)
   }
 
   const handleCacheBook = async () => {

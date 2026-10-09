@@ -150,11 +150,22 @@ export function sortSearchGroups(groups: SearchGroup[], sortMode: SortMode, keyw
         return a.name.localeCompare(b.name, 'zh-Hans-CN')
       })
     }
-    case 'sources':
+    case 'sources': {
+      // 与 'smart' 档同一套缓存：comparator 里现算 relevance 的话，筛选框每敲一键就全量重排 × 2 次打分
+      const scoreCache = new Map<string, number>()
+      const getScore = (g: SearchGroup) => {
+        let sc = scoreCache.get(g.key)
+        if (sc === undefined) {
+          sc = calculateRelevanceScore(g, keyword)
+          scoreCache.set(g.key, sc)
+        }
+        return sc
+      }
       return result.sort((a, b) => {
         if (b.sources.length !== a.sources.length) return b.sources.length - a.sources.length
-        return calculateRelevanceScore(b, keyword) - calculateRelevanceScore(a, keyword)
+        return getScore(b) - getScore(a)
       })
+    }
     case 'exact': {
       const q = cleanTitle(keyword).trim().toLowerCase()
       const getExactRank = (g: SearchGroup) => {

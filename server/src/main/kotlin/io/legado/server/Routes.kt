@@ -694,13 +694,15 @@ fun Route.apiRoutes(
             call.respond(database.listExploreSources())
         }
         post("/explore") {
+            if (!call.requireSameOriginWrite()) return@post
             val request = call.receive<ExploreRequest>()
             val source = database.getSource(request.sourceId) ?: run {
                 call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在"))
                 return@post
             }
             try {
-                call.respond(runner.explore(source.json, request.url, request.page.coerceAtLeast(1)))
+                // 阻塞的网络取书不能占 CIO call-group 线程（见 Application.kt 对 callGroupSize 的调参说明）
+                call.respond(withContext(Dispatchers.IO) { runner.explore(source.json, request.url, request.page.coerceAtLeast(1)) })
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 call.respond(HttpStatusCode.BadGateway, ApiError("explore_failed", error.message ?: "发现页取书失败"))
@@ -880,9 +882,10 @@ fun Route.apiRoutes(
                     call.respond(HttpStatusCode.Conflict, ApiError("rss_source_disabled", "该订阅源已停用，先在列表里点「已停用」把它启用"))
                     return@get
                 }
-                call.respondCatching { runner.rssTabs(payload) }
+                call.respondCatching { withContext(Dispatchers.IO) { runner.rssTabs(payload) } }
             }
             post("/articles") {
+                if (!call.requireSameOriginWrite()) return@post
                 val request = call.receive<RssArticlesRequest>()
                 val payload = database.getRssSource(request.sourceUrl)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
@@ -891,17 +894,18 @@ fun Route.apiRoutes(
                     return@post
                 }
                 try {
-                    call.respond(runner.rssArticles(payload, request.url, request.page.coerceAtLeast(1)))
+                    call.respond(withContext(Dispatchers.IO) { runner.rssArticles(payload, request.url, request.page.coerceAtLeast(1)) })
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
                     call.respond(HttpStatusCode.BadGateway, ApiError("rss_articles_failed", error.message ?: "订阅列表解析失败"))
                 }
             }
             post("/content") {
+                if (!call.requireSameOriginWrite()) return@post
                 val request = call.receive<RssContentRequest>()
                 val payload = database.getRssSource(request.sourceUrl)
                     ?: return@post call.respond(HttpStatusCode.NotFound, ApiError("not_found", "订阅源不存在"))
-                call.respondCatching { runner.rssContent(payload, request.link) }
+                call.respondCatching { withContext(Dispatchers.IO) { runner.rssContent(payload, request.link) } }
             }
         }
         post("/books/details") {
@@ -922,7 +926,7 @@ fun Route.apiRoutes(
                 return@post
             }
             val source = database.getSource(request.sourceId) ?: run { call.respond(HttpStatusCode.NotFound, ApiError("not_found", "书源不存在")); return@post }
-            call.respondCatching { runner.details(source.json, request.bookUrl) }
+            call.respondCatching { withContext(Dispatchers.IO) { runner.details(source.json, request.bookUrl) } }
         }
         post("/books/chapters") {
             if (!call.requireSameOriginWrite()) return@post
@@ -948,6 +952,7 @@ fun Route.apiRoutes(
             }
             call.respondCatching {
                 try {
+                    withContext(Dispatchers.IO) {
                     withTimeout(4000) {
                         val direct = runCatching { runner.chapters(source.json, request.bookUrl) }.getOrNull()
                         // 目录地址常常不等于书页地址（`tocUrl` 要从详情里再取一次），
@@ -960,6 +965,7 @@ fun Route.apiRoutes(
                             database.saveTocCache(request.sourceId, request.bookUrl, chapters)
                         }
                         chapters
+                    }
                     }
                 } catch (error: Throwable) {
                     // 客户端真取消（JobCancellationException）要原样上抛，别兜底后对着已断的连接 respond；
@@ -1085,8 +1091,10 @@ fun Route.apiRoutes(
                 call.respond(cached)
             } else call.respondCatching {
                 try {
+                    withContext(Dispatchers.IO) {
                     runner.content(source.json, request.chapterUrl, bookName, bookUrl).also { content ->
                         bookUrl?.let { database.cacheBookContent(request.sourceId, it, request.chapterUrl, content) }
+                    }
                     }
                 } catch (error: Throwable) {
                     if (cached != null && cached.content.isNotBlank()) cached
@@ -1875,6 +1883,7 @@ internal suspend fun <T, R> boundedConcurrentMap(values: List<T>, limit: Int, ac
 
 private suspend fun ApplicationCall.respondCatching(block: suspend () -> Any) {
     try { respond(block()) }
+    catch (error: CancellationException) { throw error }
     catch (error: RuleExecutionException) { respond(HttpStatusCode.BadGateway, ApiError("source_execution_failed", error.message ?: "书源执行失败")) }
     catch (error: Exception) { respond(HttpStatusCode.BadGateway, ApiError("source_execution_failed", error.message ?: "书源执行失败")) }
 }
@@ -1956,16 +1965,9 @@ private val debugJson = Json { encodeDefaults = true }
  * 有 Origin 则必须命中书源 `bookSourceUrl` / `loginUrl` 的注册域（或该主机名确实出现在这份书源配置里，
  * 兼容用自定义标识当 URL 的聚合源）。命中时回显该 Origin 并带 `Vary: Origin`，不再使用 `*`。
  */
-/** Origin 的主机与端口都和请求的 Host 一致才算同源（Origin 由浏览器写，页面改不了）。 */
-private fun sameOriginCall(call: ApplicationCall): Boolean {
-    val origin = call.request.headers[HttpHeaders.Origin]?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-    val uri = runCatching { URI(origin) }.getOrNull() ?: return false
-    val originHost = uri.host?.lowercase()?.trim('[', ']')?.takeIf { it.isNotEmpty() } ?: return false
-    val requestHost = call.request.host().lowercase().substringBefore(':').trim('[', ']')
-    if (originHost != requestHost) return false
-    val originPort = if (uri.port > 0) uri.port else if (uri.scheme == "https") 443 else 80
-    return originPort == call.request.port()
-}
+/** Origin 的主机与端口都指向服务自己的绑定身份（判定在 Guard.kt，0.6.23 起与写闸门同一份）。 */
+private fun sameOriginCall(call: ApplicationCall): Boolean =
+    isSameOriginIdentity(call.request.headers[HttpHeaders.Origin]?.trim())
 
 private fun allowCookieSyncOrigin(call: ApplicationCall, database: Database, sourceJson: String? = null): Boolean {
     val origin = call.request.headers[HttpHeaders.Origin]?.trim()?.takeIf { it.isNotEmpty() } ?: return true
@@ -2022,9 +2024,17 @@ private fun webViewErrorPage(message: String): String {
     """.trimIndent()
 }
 
-private suspend fun parseImportedReplaceRules(bodyText: String): List<ReplaceRule> {
+/** 导入净化规则时的远端拉取：共享一个 client（每请求 new 一个既泄漏连接又拖慢握手），读超时 20s。 */
+private val importFetchClient = java.net.http.HttpClient.newBuilder()
+    .connectTimeout(java.time.Duration.ofSeconds(10))
+    .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
+    .build()
+
+private suspend fun parseImportedReplaceRules(bodyText: String, depth: Int = 0): List<ReplaceRule> {
     val cleanText = bodyText.trim().removePrefix("\uFEFF")
     if (cleanText.isBlank()) return emptyList()
+    // {"url": ...} 里还可以再含 {"url": ...}：没有深度上限就是一条跟随到底的外呼链
+    if (depth > 3) return emptyList()
 
     val json = Json { ignoreUnknownKeys = true; isLenient = true }
     val jsonElement = runCatching { json.parseToJsonElement(cleanText) }.getOrNull() ?: return emptyList()
@@ -2034,10 +2044,10 @@ private suspend fun parseImportedReplaceRules(bodyText: String): List<ReplaceRul
         val url = jsonElement["url"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
         if (!url.isNullOrBlank()) {
             validateSubscriptionUrl(url)
-            val client = java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build()
-            val req = java.net.http.HttpRequest.newBuilder().uri(java.net.URI(url)).GET().build()
-            val resp = withContext(Dispatchers.IO) { client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(Charsets.UTF_8)) }
-            return parseImportedReplaceRules(resp.body())
+            val req = java.net.http.HttpRequest.newBuilder().uri(java.net.URI(url))
+                .timeout(java.time.Duration.ofSeconds(20)).GET().build()
+            val resp = withContext(Dispatchers.IO) { importFetchClient.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(Charsets.UTF_8)) }
+            return parseImportedReplaceRules(resp.body(), depth + 1)
         }
     }
 

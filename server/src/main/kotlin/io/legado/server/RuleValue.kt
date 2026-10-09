@@ -50,7 +50,7 @@ internal class NodeValue private constructor(private val html: Element?, private
         }
 
         if (trimmedRule.contains("{{") && trimmedRule.contains("}}")) {
-            val templated = Regex("\\{\\{(.*?)}}").replace(trimmedRule) { match ->
+            val templated = BRACE_TEMPLATE.replace(trimmedRule) { match ->
                 // 只去前导空白：`{{$.t##T|\+.*## }}` 的替换串就是那个空格，整串 trim 会把时间粘成 `2023-09-0100:00:33`。
                 // `@@` 前缀（上游常见写法，如 `{{@@#bookIntro@text}}`、`{{@@td.0@text}}`）只是标记，
                 // 不是选择器的一部分 —— 不剥掉的话整条规则会去选一个叫 `@@#bookIntro` 的东西，取值必空。
@@ -196,28 +196,28 @@ internal class NodeValue private constructor(private val html: Element?, private
             if (base.isBlank()) return@runCatching applyIndexTokens(element.children().toList(), ops)
             return@runCatching applyIndexTokens(selectAllLegado(element, base), ops)
         }
-        val idOnly = Regex("^id\\.([a-zA-Z0-9_-]+)$").find(trimmed)
+        val idOnly = ID_ONLY.find(trimmed)
         if (idOnly != null) {
             val el = element.getElementById(idOnly.groupValues[1])
             return@runCatching if (el != null) listOf(el) else emptyList()
         }
-        val tagOnly = Regex("^tag\\.([a-zA-Z0-9_-]+)$").find(trimmed)
+        val tagOnly = TAG_ONLY.find(trimmed)
         if (tagOnly != null) {
             return@runCatching element.getElementsByTag(tagOnly.groupValues[1]).toList()
         }
-        val classOnly = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)$").find(trimmed)
+        val classOnly = CLASS_ONLY.find(trimmed)
         if (classOnly != null) {
             return@runCatching element.select(".${classOnly.groupValues[1]}")
         }
-        val indexed = Regex("^([a-zA-Z][a-zA-Z0-9-]*)\\.(\\d+)$").find(trimmed)
+        val indexed = TAG_INDEXED.find(trimmed)
         if (indexed != null) {
             val tag = indexed.groupValues[1]
             val ordinal = indexed.groupValues[2].toInt().coerceAtLeast(0)
             val matches = element.getElementsByTag(tag)
             return@runCatching matches.getOrNull(ordinal)?.let { listOf(it) } ?: emptyList()
         }
-        val classIndexed = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$").find(trimmed)
-            ?: Regex("^\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$").find(trimmed)
+        val classIndexed = CLASS_INDEXED.find(trimmed)
+            ?: CLASS_DOT_INDEXED.find(trimmed)
         if (classIndexed != null) {
             val className = classIndexed.groupValues[1]
             val ordinal = classIndexed.groupValues[2].toInt().coerceAtLeast(0)
@@ -269,7 +269,7 @@ internal class NodeValue private constructor(private val html: Element?, private
         // Legado 规则语法 `路径##正则##替换`：必须先剥离 ## 部分再交给 JsonPath，
         // 否则整串会当成 JSON 路径解析失败，条目会被 mapNotNull 全部丢弃（表现为搜索 0 结果）。
         val pathPart = rule.substringBefore("##").trim()
-        val template = Regex("\\{\\{(.*?)}}").replace(pathPart) { match ->
+        val template = BRACE_TEMPLATE.replace(pathPart) { match ->
             val inner = match.groupValues[1].trim()
             unwrapJsonValue(readJson(inner)) ?: ""
         }
@@ -310,6 +310,15 @@ internal class NodeValue private constructor(private val html: Element?, private
     companion object {
         /** Legado JSON 规则里的裸键简写（`book_name` == `$.book_name`）。 */
         private val BARE_JSON_KEY = Regex("[A-Za-z_][\\w-]*(\\.[A-Za-z_][\\w-]*)*")
+        /** `{{}}` 文本模板：value() 与 valueJson() 都要走，提到类级只编译一次（每字段取值都路过）。 */
+        private val BRACE_TEMPLATE = Regex("\\{\\{(.*?)}}")
+        // selectAllLegado 的六段选择器方言：最热的取值路径，只编译一次
+        private val ID_ONLY = Regex("^id\\.([a-zA-Z0-9_-]+)$")
+        private val TAG_ONLY = Regex("^tag\\.([a-zA-Z0-9_-]+)$")
+        private val CLASS_ONLY = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)$")
+        private val TAG_INDEXED = Regex("^([a-zA-Z][a-zA-Z0-9-]*)\\.(\\d+)$")
+        private val CLASS_INDEXED = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$")
+        private val CLASS_DOT_INDEXED = Regex("^\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$")
         private val JS_IDENT_PREFIX = Regex("^(?:java|cookie|source|book|chapter|result|baseUrl|key|page)\\b")
         private val PUT_VARIABLE = Regex("@put:\\{([^{}]*?)\\}", RegexOption.IGNORE_CASE)
         private val GET_VARIABLE = Regex("@get:\\{([^{}]*?)\\}", RegexOption.IGNORE_CASE)

@@ -339,13 +339,26 @@ function BookDetailModal({
   const coverSrc = cover ? api.coverProxy(cover, book.details.sourceId) : null
   /** 点详情封面放大查看（用户 2026-10-09：只在书籍详情页放大，其余地方不动）。 */
   const [coverZoom, setCoverZoom] = useState(false)
+  /** 换源/换书时弹窗不卸载：上一本书的封面报错计数不复位，下一本的有效封面永远显示不出来。 */
+  useEffect(() => {
+    setCoverTried(0)
+    setIntroExpanded(false)
+  }, [book.bookUrl])
 
+  /** 体检只认"这一批源是谁"（key），不认 choices 数组的身份 —— 搜索 store 每次状态更新都会
+      重建数组，按身份依赖会让体检被中止后**从零重新联网复检**。 */
+  const choicesKey = useMemo(
+    () => choices.map(c => `${c.result.sourceId}\u0000${c.result.bookUrl}`).join('\u0001'),
+    [choices],
+  )
+  const choicesRef = useRef(choices)
+  choicesRef.current = choices
   const runInspection = useCallback((forceRefresh = false) => {
     abortControllerRef.current?.abort()
     const controller = new AbortController()
     abortControllerRef.current = controller
     cancelInspectRef.current = false
-    const rawSources = choices.map(c => c.result)
+    const rawSources = choicesRef.current.map(c => c.result)
     if (forceRefresh) {
       clearStoredInspections(rawSources)
       setInspections(getInitialOrStoredInspections(rawSources))
@@ -367,7 +380,8 @@ function BookDetailModal({
         setChecking(false)
       }
     })
-  }, [choices])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choicesKey])
 
   useEffect(() => {
     runInspection()
@@ -813,6 +827,7 @@ function SubscriptionPage({ onSourcesChange, onNavigate }: { onSourcesChange: ()
 function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: SourceSummary | null; onSelect: (source: SourceSummary | null) => void; onSourcesChange: (sources: SourceSummary[]) => void }) {
   const [sources, setSources] = useState<SourceSummary[]>([])
   const [query, setQuery] = useState('')
+  const loadGeneration = useRef(0)
   const [groupFilter, setGroupFilter] = useState('')
   const [notice, setNotice] = useState('')
   const [importing, setImporting] = useState(false)
@@ -842,12 +857,16 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   }, [])
 
   const load = useCallback(async () => {
+    // 防抖只挡键盘连击，不挡"慢的旧响应晚到"：'a' 的请求比 'ab' 的晚回来会把列表覆盖回旧结果
+    const generation = ++loadGeneration.current
     try {
       const values = await api.sources(query)
+      if (generation !== loadGeneration.current) return
       setSources(values)
       setSourcesState('ready')
       onSourcesChange(values)
     } catch (error) {
+      if (generation !== loadGeneration.current) return
       setSourcesState('failed')
       setNotice(error instanceof Error ? error.message : '无法载入书源')
     }
@@ -1475,12 +1494,23 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   )
 }
 
+/** 关键词 → 编译好的正则：每张结果卡每次渲染都 new RegExp 纯属浪费，按关键词缓存（小型 FIFO）。 */
+const highlightRegexCache = new Map<string, RegExp>()
+function keywordRegex(keyword: string): RegExp {
+  let re = highlightRegexCache.get(keyword)
+  if (!re) {
+    re = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    if (highlightRegexCache.size > 20) highlightRegexCache.clear()
+    highlightRegexCache.set(keyword, re)
+  }
+  return re
+}
+
 function HighlightText({ text, keyword }: { text: string; keyword: string }) {
   const cleanK = cleanTitle(keyword).trim()
   if (!cleanK || !text) return <>{text}</>
 
-  const escaped = cleanK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  const parts = text.split(keywordRegex(cleanK))
 
   return (
     <>
@@ -3262,7 +3292,10 @@ function App() {
       tocUrl: book.details.tocUrl,
       coverUrl: fallbackCover || undefined,
       alternateSources: book.details.alternateSources,
-    }).catch(() => undefined)
+    }).catch(error => {
+      // 静默吞掉的后果是"书读着、进度却写到一本不在书架上的书"——至少要让人知道加架没成
+      toast.error(`《${book.details.name}》没能加入书架：${error instanceof Error ? error.message : '未知原因'}`)
+    })
     const value = { book, index }
     setReader(value)
     setReaderReturnPage(origin)

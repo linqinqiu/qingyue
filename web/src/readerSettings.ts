@@ -288,7 +288,11 @@ export function getReaderFontFamily(font: ReaderFont): string {
 }
 
 export function saveReaderSettings(settings: ReaderSettings): void {
-  window.localStorage.setItem(storageKey, JSON.stringify(settings))
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(settings))
+  } catch {
+    // 隐私模式/配额满：保存失败不该在 App 的 effect 里把整棵树炸掉（load 路径有守卫，save 原来没有）
+  }
 }
 
 
