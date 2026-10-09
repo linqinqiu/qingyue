@@ -57,7 +57,13 @@ LEGADO_PORT=9000 LEGADO_DATA_DIR=/srv/qingyue/data java -jar legado-server-<版�
 ```bash
 npm --prefix web run build
 ./gradlew :server:fatJar      # → server/build/libs/legado-server-<版本>-all.jar
+node tools/make-cds.mjs       # → server/build/cds/app.jsa（可选；冷启动快 ~3 秒）
 ```
+
+> **`make-cds.mjs` 生成的是 CDS 类归档**（把这次运行加载过的类存下来，下次直接从归档映射，
+> 省掉从 jar 里逐个读 + 校验的那几秒）。它**跟这一份 jar 绑定** ——
+> **每次 `:server:fatJar` 之后要重跑一次**；否则 `start.mjs` 会发现归档比 jar 旧而跳过它
+> （不会用坏的归档，只是少了那 ~3 秒）。实测冷启动：不带归档 ~8.3 秒 → 带归档 ~5.3 秒。
 
 ### Docker
 
@@ -90,7 +96,7 @@ cd web && npm install && npm run dev     # 前端开发服务器（热重载）
 | `LEGADO_TMP_DIR` | `<安装根>/tmp` | JVM 临时目录。不指定的话 SQLite 的原生库每次启动都往系统盘 `Temp` 解一份 |
 | `LEGADO_REPO` | 空 | `owner/repo` 形状，供「关于」页检查更新；不设就没这个入口 |
 
-`start.mjs` / `stop.mjs` 是可选封装（后台拉起、按端口停进程），以脚本自己所在目录为安装根，整个文件夹可以改名或搬盘。`start.mjs` 支持 `--port 1235` 换端口、`--host 0.0.0.0` 换绑定地址、`--no-open` 只起服务不开浏览器（默认起来后自动打开浏览器）。
+`start.mjs` / `stop.mjs` 是可选封装（后台拉起、按端口停进程），以脚本自己所在目录为安装根，整个文件夹可以改名或搬盘。`start.mjs` 支持 `--port 1235` 换端口、`--host 0.0.0.0` 换绑定地址、`--no-open` 只起服务不开浏览器（默认起来后自动打开浏览器）。同目录的 `start.cmd` 是给双击用的门面：服务没跑就起、等就绪再开界面；已经在跑就直接开界面。启动时会自动带上 CDS 归档（见上：`node tools/make-cds.mjs`，**重建 jar 后要重跑**）。
 
 ## 想给手机用之前
 
