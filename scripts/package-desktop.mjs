@@ -44,15 +44,7 @@ if (!fs.existsSync(webDist)) {
 // 2) fat jar：缺失就补构建（内存吃紧时给 gradle 限一下，避免 mmap 撞 errno=1455）。
 const jarName = `legado-server-${version}-all.jar`
 const jar = path.join(ROOT, 'server/build/libs', jarName)
-if (!fs.existsSync(jar)) {
-  console.log('NOTE  没有 fat jar，先构建…')
-  const gradle = fs.existsSync(path.join(ROOT, 'gradlew')) ? path.join(ROOT, 'gradlew') : 'gradle'
-  const ran = spawnSync(gradle, [':server:fatJar', '--offline'], {
-    cwd: ROOT, stdio: 'inherit',
-    env: { ...process.env, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME || 'E:/Apps/DevCache/.gradle' },
-  })
-  if (ran.status !== 0 || !fs.existsSync(jar)) fail('fat jar 构建失败，先看 gradle 输出')
-}
+if (!fs.existsSync(jar)) fail(`没有 ${path.relative(ROOT, jar)}，先跑 ./gradlew :server:fatJar`)
 
 // 3) jlink 运行时（复用上一次，--jlink 才重裁）。
 const MODULES = 'java.base,java.datatransfer,java.xml,java.prefs,java.desktop,java.logging,java.management,' +
