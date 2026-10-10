@@ -449,8 +449,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [customRangeStart, setCustomRangeStart] = useState(1)
   const [customRangeEnd, setCustomRangeEnd] = useState(50)
   const [offlineTtsConfirmOpen, setOfflineTtsConfirmOpen] = useState(false)
-  // 这一层是"要不要改用本地朗读"的确认弹窗，原来只认点击、不认 Esc
+  // 这两层都只认点击、不认 Esc —— 统一补上 Esc 关闭（PROPOSAL-018 W6 的"遮罩与关闭键必须走统一那一套"）
   useEscapeClose(() => setOfflineTtsConfirmOpen(false))
+  useEscapeClose(() => setLightboxSrc(null))
 
   const [cacheStatus, setCacheStatus] = useState<{ state: string; cached: number; total: number; error?: string }>({
     state: 'idle',
