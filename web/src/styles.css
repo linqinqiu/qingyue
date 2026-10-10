@@ -4504,7 +4504,7 @@ input[type=range] { min-height: 24px; }
 /* —— 版式基线 —— */
 .section-kicker { font-size: var(--t-sm); font-weight: 650; letter-spacing: .1em; }
 .page-title h1, .library-hero h1, .explore-header h1 { font-size: var(--t-3xl); }
-.page-title p, .library-hero p, .explore-header p { font-size: var(--t-lg); line-height: 1.7; }
+.page-title p, .library-hero p { font-size: var(--t-lg); line-height: 1.7; }
 .source-summary dd { font-variant-numeric: lining-nums tabular-nums; }
 .source-summary dt { font-size: var(--t-sm); }
 
