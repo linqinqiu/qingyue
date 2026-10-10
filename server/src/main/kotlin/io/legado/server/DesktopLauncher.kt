@@ -40,9 +40,8 @@ fun main(args: Array<String>) {
 
     // 端口优先级：port.txt（界面上最后改的那一下）> .env / 环境变量 > 固定 1234。
     // 必须显式定死：裸 jar 默认是 8080，不传就会"起了但连不上"。
-    val portFromFile = readPortFile(imageRoot)
-    val port = portFromFile ?: pick("LEGADO_PORT", "1234").toIntOrNull() ?: 1234
     val host = pick("LEGADO_HOST", "127.0.0.1")
+    var port = readPortFile(imageRoot) ?: pick("LEGADO_PORT", "1234").toIntOrNull() ?: 1234
 
     // 数据目录：.env / 环境变量显式给的优先；相对路径相对"镜像根"（exe 所在目录）解析；
     // 都没给就落在 <镜像根>/data（便携、不写系统盘）。不静默迁移，首屏用 .env 记住选择即可。
@@ -56,6 +55,32 @@ fun main(args: Array<String>) {
     tmpDir.toFile().mkdirs()
     System.setProperty("java.io.tmpdir", tmpDir.toString())
 
+    // 端口策略（决策必须在 ServerConfig/url 构造之前完成）：
+    //  - 端口上已经是青阅自己（/healthz 报青阅）→ 已在运行：只开界面然后退出，不留第二个进程；
+    //  - 端口被**别的程序**占用 → 不再拒绝启动（用户 2026-10-10：「可以自定义端口，不要固定」）：
+    //    从下一个端口起顺延找空闲的，用上后写回 port.txt 记住 —— 下次启动稳定在这个端口，
+    //    界面里"服务端口"那一栏看到的也是它。20 个端口内都占满才认输。
+    if (isPortOpen(host, port)) {
+        if (isQingyueOn(host, port)) {
+            val runningUrl = "http://${if (host == "0.0.0.0" || host == "::") "127.0.0.1" else host}:$port"
+            logDesktop("青阅已在运行 $runningUrl")
+            if (!noOpen) openBrowser(runningUrl)
+            exitProcess(0)
+        }
+        val shifted = shiftToFreePort(host, port, imageRoot) ?: run {
+            val msg = "端口 $port–${port + 20} 全被别的程序占用，青阅无法启动。请腾出一个或在 .env 里设 LEGADO_PORT。"
+            logDesktop(msg); showError(msg); exitProcess(1)
+        }
+        port = shifted
+    } else if (!canBind(host, port)) {
+        // 端口上没人监听、但也绑不上（防火墙/权限）：同样顺延。
+        val shifted = shiftToFreePort(host, port, imageRoot) ?: run {
+            val msg = "端口 $port 无法绑定，且 $port–${port + 20} 内没有空闲端口。"
+            logDesktop(msg); showError(msg); exitProcess(1)
+        }
+        port = shifted
+    }
+
     val config = ServerConfig(
         host = host,
         port = port,
@@ -68,22 +93,6 @@ fun main(args: Array<String>) {
 
     val browseHost = if (host == "0.0.0.0" || host == "::") "127.0.0.1" else host
     val url = "http://$browseHost:$port"
-
-    // 幂等 + 单实例：已经在跑就直接开界面（重复点图标不该报错），也不该再起第二个实例。
-    // 已运行的那个实例自己带着托盘，所以第二个实例只负责把界面打开、然后退出，绝不常驻——
-    // 否则在支持托盘的环境里它会作为"已运行"托盘一直挂着，破坏"不留第二个进程"。
-    if (isPortOpen(host, port)) {
-        logDesktop("青阅已在运行 $url")
-        if (!noOpen) openBrowser(url)
-        exitProcess(0)
-    }
-    // 端口被占（但不归我们管）也拒绝启动，给出人话，不留第二个进程。
-    if (!canBind(host, port)) {
-        val msg = "端口 $port 被占用，青阅无法启动。先关掉占用它的程序，或在 .env 里设 LEGADO_PORT 换一个。"
-        logDesktop(msg)
-        showError(msg)
-        exitProcess(1)
-    }
 
     logDesktop("青阅 ${BuildInfo.version} 启动中 $url")
     logDesktop("安装目录 $imageRoot")
@@ -143,6 +152,35 @@ private fun isPortOpen(host: String, port: Int): Boolean = try {
 private fun canBind(host: String, port: Int): Boolean = try {
     java.net.ServerSocket().use { it.bind(InetSocketAddress(host, port)); true }
 } catch (_: Throwable) { false }
+
+/** 从 from..to 里找第一个能绑上的端口；一个都没有返回 null。 */
+private fun findFreePort(host: String, from: Int, to: Int): Int? {
+    for (p in from..to) if (canBind(host, p)) return p
+    return null
+}
+
+/**
+ * 被占用后顺延：挑一个空闲端口并写回 port.txt 记住（下次启动稳定在它上面，
+ * 界面里"服务端口"读到的也是它）。返回 null 表示范围内全满。
+ */
+private fun shiftToFreePort(host: String, occupied: Int, imageRoot: Path): Int? {
+    val shifted = findFreePort(host, occupied + 1, occupied + 20) ?: return null
+    imageRoot.resolve("port.txt").toFile().writeText("$shifted\n")
+    logDesktop("端口 $occupied 被占用，自动改用 $shifted（已写进 port.txt 记住）")
+    return shifted
+}
+
+/** 端口上跑的是不是青阅自己：/healthz 的应答体里有应用名才算（别的程序占着端口不算）。 */
+private fun isQingyueOn(host: String, port: Int): Boolean {
+    return try {
+        val client = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(1200)).build()
+        val res = client.send(
+            HttpRequest.newBuilder(URI("http://$host:$port/healthz")).timeout(Duration.ofMillis(1200)).GET().build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
+        res.body().contains("青阅")
+    } catch (_: Throwable) { false }
+}
 
 private fun waitForHealth(url: String, timeoutMs: Long = 120_000): Boolean {
     val client = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(2000)).build()

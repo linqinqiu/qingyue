@@ -406,6 +406,9 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 stmt.executeUpdate()
             }
             db.commit()
+            // 删除也是写入路径（第 239 行的规矩）：不失效的话，删除后 sourceSummariesCache
+            // 还是旧清单 —— 界面上"删了还显示"，E2E 场景 5 的 95 断言逮到的就是它。
+            invalidateSourceCaches()
             removed
         } catch (error: Exception) {
             runCatching { db.rollback() }

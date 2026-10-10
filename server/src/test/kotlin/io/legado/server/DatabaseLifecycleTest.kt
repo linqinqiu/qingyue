@@ -39,7 +39,9 @@ class DatabaseLifecycleTest {
                     }
                 }
                 val expectedTables = setOf(
-                    "app_user", "session", "source", "reading_progress",
+                    // 没有 app_user / session：本服务**不设身份**（绑定地址是唯一的门，见 ADR 与 AGENTS.md），
+                    // 这两张表是早期按"将要做的认证层"写的幻影，服务端从未建过它们。
+                    "source", "reading_progress",
                     "cover_cache", "book_shelf", "book_content_cache",
                     "book_cache_status", "source_subscription"
                 )

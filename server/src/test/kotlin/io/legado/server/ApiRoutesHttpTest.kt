@@ -58,9 +58,11 @@ class ApiRoutesHttpTest {
                 install(HttpCookies)
             }
 
-            // 1. Unauthenticated request to /api/sources should fail with 401
-            val unauthResp = client.get("/api/sources")
-            assertEquals(HttpStatusCode.Unauthorized, unauthResp.status)
+            // 1. 服务不设身份（绑定地址是唯一的门）：不带任何凭据的读请求就是 200 公开读，
+            //    这里原按"将要做认证层"写成期望 401 —— 认证层从未实现，401 在服务端根本不存在。
+            val publicResp = client.get("/api/sources")
+            assertEquals(HttpStatusCode.OK, publicResp.status)
+            assertEquals(0, publicResp.body<List<SourceSummary>>().size)
 
 
             // 2. Import valid sources

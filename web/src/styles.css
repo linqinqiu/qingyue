@@ -40,6 +40,10 @@ svg { width: 18px; height: 18px; flex: none; }
 .theme-light { --canvas: #f8f9f7; --surface: #ffffff; --surface-muted: #f6f8f5; --ink: #202522; --muted: #666f68; --line: #e7eae6; --accent: #247a58; --accent-soft: #eaf4ee; --accent-ink: #176145; --accent-solid: #1f6a4c; --accent-solid-hover: #17543b; --on-accent: #ffffff; --danger: #bf4a43; --danger-solid: #b0433c; --on-danger: #ffffff; --shadow: 0 12px 30px rgba(24, 36, 28, .08); color-scheme: light; }
 .theme-paper { --canvas: #eef3e7; --surface: #f8fbf2; --surface-muted: #eef5e8; --ink: #374137; --muted: #5f6860; --line: #dce5d8; --accent: #4c7d49; --accent-soft: #e3efe0; --accent-ink: #315f36; --accent-solid: #41693f; --accent-solid-hover: #35572f; --on-accent: #ffffff; --danger: #ad5146; --danger-solid: #9c453b; --on-danger: #ffffff; --shadow: 0 12px 30px rgba(37, 57, 35, .08); color-scheme: light; }
 .theme-dark { --canvas: #202522; --surface: #292e2b; --surface-muted: #232825; --ink: #eef1ec; --muted: #a9b0aa; --line: #3b433d; --accent: #67b58d; --accent-soft: #303f35; --accent-ink: #90d7ad; --accent-solid: #67b58d; --accent-solid-hover: #7cc79e; --on-accent: #0f241a; --danger: #f29384; --danger-solid: #f29384; --on-danger: #2b110d; --shadow: 0 12px 30px rgba(0, 0, 0, .25); color-scheme: dark; }
+.theme-qingzhu { --canvas: #f2f7f4; --surface: #ffffff; --surface-muted: #eef4f0; --ink: #1f2a26; --muted: #64736c; --line: #dfe9e3; --accent: #2e8b6e; --accent-soft: #e3f2ea; --accent-ink: #1e6b52; --accent-solid: #277a5f; --accent-solid-hover: #1d5f49; --on-accent: #ffffff; --danger: #bf4a43; --danger-solid: #b0433c; --on-danger: #ffffff; --shadow: 0 12px 30px rgba(20, 50, 38, .08); color-scheme: light; }
+.theme-mulan { --canvas: #f3f6fb; --surface: #ffffff; --surface-muted: #eff3f9; --ink: #20293a; --muted: #66718a; --line: #e2e8f2; --accent: #3f6fb5; --accent-soft: #e7eef9; --accent-ink: #2c548e; --accent-solid: #3763a5; --accent-solid-hover: #2b4f86; --on-accent: #ffffff; --danger: #bf4a43; --danger-solid: #b0433c; --on-danger: #ffffff; --shadow: 0 12px 30px rgba(24, 36, 60, .08); color-scheme: light; }
+.theme-meigui { --canvas: #fbf4f4; --surface: #ffffff; --surface-muted: #f8eeee; --ink: #332427; --muted: #7a656a; --line: #f0dfe1; --accent: #b5546b; --accent-soft: #f8e7eb; --accent-ink: #93405a; --accent-solid: #a44a60; --accent-solid-hover: #8d3d52; --on-accent: #ffffff; --danger: #bf4a43; --danger-solid: #b0433c; --on-danger: #ffffff; --shadow: 0 12px 30px rgba(60, 24, 32, .08); color-scheme: light; }
+.theme-shimo { --canvas: #191b1e; --surface: #212429; --surface-muted: #1c1f23; --ink: #e8eaee; --muted: #9aa1ab; --line: #33383f; --accent: #8ab4c8; --accent-soft: #2b333a; --accent-ink: #b3d3e4; --accent-solid: #8ab4c8; --accent-solid-hover: #a3c5d6; --on-accent: #10202b; --danger: #f29384; --danger-solid: #f29384; --on-danger: #2b110d; --shadow: 0 12px 30px rgba(0, 0, 0, .3); color-scheme: dark; }
 .app-shell { min-height: 100vh; min-height: 100dvh; background: var(--canvas); color: var(--ink); }
 .app-loading { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
 /* 加载页那颗转圈：说明"在动"而不是卡死（服务冷启动要十几秒）。 */
@@ -338,6 +342,22 @@ svg { width: 18px; height: 18px; flex: none; }
 .theme-swatch-dark {
   background: #202522;
   box-shadow: inset 0 0 0 2px #67b58d;
+}
+.theme-swatch-qingzhu {
+  background: #f2f7f4;
+  box-shadow: inset 0 0 0 2px #2e8b6e;
+}
+.theme-swatch-mulan {
+  background: #f3f6fb;
+  box-shadow: inset 0 0 0 2px #3f6fb5;
+}
+.theme-swatch-meigui {
+  background: #fbf4f4;
+  box-shadow: inset 0 0 0 2px #b5546b;
+}
+.theme-swatch-shimo {
+  background: #191b1e;
+  box-shadow: inset 0 0 0 2px #8ab4c8;
 }
 .theme-check-icon {
   position: absolute;
@@ -981,6 +1001,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .theme-choice i { position: relative; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: #fff; }
 .theme-choice.swatch-paper i { background: #eaf1e5; }
 .theme-choice.swatch-dark i { background: #292d2b; }
+.theme-choice.swatch-qingzhu i { background: #e3f2ea; }
+.theme-choice.swatch-mulan i { background: #e7eef9; }
+.theme-choice.swatch-meigui i { background: #f8e7eb; }
+.theme-choice.swatch-shimo i { background: #212429; }
 .theme-choice.selected i { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .theme-choice.selected svg { position: absolute; right: 3px; bottom: 3px; width: 13px; height: 13px; padding: 2px; border-radius: 50%; background: var(--accent); }
 .font-select { position: relative; }
@@ -1038,7 +1062,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reset-settings { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-muted); color: var(--ink); font-size: 12px; cursor: pointer; }
 
 /* Main Reading Canvas */
-.reader-main { width: 100%; min-height: 100vh; transition: margin-left .25s ease, width .25s ease; }
+/* 阅读背景（readerSettings.readerBg*）：颜色 + 可选背景图（带压暗层）铺在阅读区上，
+   文字容器保持透明才能透出来。全空 = 跟随主题画布，一个字节都不写。 */
+.reader-main { width: 100%; min-height: 100vh; background-color: var(--reader-bg-color, transparent); background-image: var(--reader-bg-image, none); background-size: cover; background-position: center; transition: margin-left .25s ease, width .25s ease; }
 /* 「左右边距」的唯一出口。窄屏下由下面的媒体查询改成"按比例收窄"，
    这样这个滑杆在任何屏宽都真的在改版心 —— 以前 ≤720px 直接把 width 写死成
    `min(100% - 36px, 580px)`，等于手机上调多少都没反应。 */
@@ -1157,6 +1183,11 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 /* Paginated Mode Styles (Zero Squeeze) */
 .reader-paginated-wrap { position: relative; width: 100%; height: 100vh; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; }
+.reader-text-input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.reader-text-input:focus { outline: none; border-color: var(--accent); }
+.bg-row { display: flex; align-items: center; gap: 10px; }
+.reader-bg-color { width: 44px; height: 30px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
+
 .reader-paginated-viewport { position: relative; flex: 1 1 auto; width: min(var(--reader-max-width, 860px), calc(100% - var(--reader-pad, 80px) * 2)); margin: 40px auto 10px; overflow: hidden; user-select: none; }
 .reader-paginated-viewport.is-double-column::after {
   content: '';
@@ -4513,6 +4544,12 @@ input[type=range] { min-height: 24px; }
 }
 .theme-dark {
   /* 暗底上"近处硬边"要更亮一点才看得出边界，远处保持深黑，否则整片糊掉 */
+  --elev-1: 0 1px 1px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .38), 0 8px 20px rgba(0, 0, 0, .30);
+  --elev-2: 0 2px 6px rgba(0, 0, 0, .5), 0 12px 28px rgba(0, 0, 0, .48), 0 20px 44px rgba(0, 0, 0, .40);
+  --elev-3: 0 10px 24px rgba(0, 0, 0, .55), 0 30px 68px rgba(0, 0, 0, .62);
+}
+.theme-shimo {
+  /* 石墨同为暗底，阴影与夜读同一套 */
   --elev-1: 0 1px 1px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .38), 0 8px 20px rgba(0, 0, 0, .30);
   --elev-2: 0 2px 6px rgba(0, 0, 0, .5), 0 12px 28px rgba(0, 0, 0, .48), 0 20px 44px rgba(0, 0, 0, .40);
   --elev-3: 0 10px 24px rgba(0, 0, 0, .55), 0 30px 68px rgba(0, 0, 0, .62);

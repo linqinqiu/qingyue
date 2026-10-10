@@ -8,7 +8,7 @@ import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagr
 import { mapCells, TapAction, zoneAt } from './tapZones'
 import { isMediaType } from './bookType'
 import { TapZoneEditor } from './TapZoneEditor'
-import { clampScrollPosition, defaultReaderSettings, getReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
+import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, sectionAtPage, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
@@ -57,6 +57,7 @@ type ReaderScreenProps = {
 
 const themes = [
   ['light', '晓白'], ['paper', '护眼'], ['dark', '夜读'],
+  ['qingzhu', '青竹'], ['mulan', '暮蓝'], ['meigui', '玫瑰'], ['shimo', '石墨'],
 ] as const
 
 function IconButton({ label, icon, onClick, className = '', onDoubleClick, hint, disabled = false }: { label: string; icon: Parameters<typeof Icon>[0]['name']; onClick: () => void; className?: string; onDoubleClick?: () => void; hint?: string; disabled?: boolean }) {
@@ -111,7 +112,10 @@ function ReaderSettingsControls({
   }
   return <div className="drawer-scroll-content">
     <section className="setting-section"><span className="setting-label">主题</span><div className="theme-grid">{themes.map(([theme, label]) => <button key={theme} className={`theme-choice swatch-${theme} ${settings.theme === theme ? 'selected' : ''}`} onClick={() => update({ theme })}><i>{settings.theme === theme && <Icon name="check" />}</i><small>{label}</small></button>)}</div></section>
-    <section className="setting-section"><span className="setting-label">字体</span><label className="font-select"><select value={settings.font} onChange={event => update({ font: event.target.value as ReaderSettings['font'] })}><option value="song">思源宋体</option><option value="hei">黑体 / 苹方</option><option value="kai">华文楷体</option><option value="fangsong">华文仿宋</option><option value="system">系统字体</option></select><Icon name="chevronDown" /></label></section>
+    <section className="setting-section"><span className="setting-label">字体</span><label className="font-select"><select value={settings.font} onChange={event => update({ font: event.target.value as ReaderSettings['font'] })}><option value="song">思源宋体</option><option value="hei">黑体 / 苹方</option><option value="kai">华文楷体</option><option value="fangsong">华文仿宋</option><option value="yuan">圆体</option><option value="mono">等宽字体</option><option value="system">系统字体</option><option value="custom">自定义字体名…</option></select><Icon name="chevronDown" /></label>
+      {settings.font === 'custom' && <input type="text" className="reader-text-input" value={settings.customFont} placeholder="本机已装字体，如：霞鹜文楷 / LXGW WenKai" onChange={event => update({ customFont: event.target.value })} />}
+      {settings.font === 'custom' && <small className="setting-hint">填本机已装字体的名字（多个用逗号隔开，先找到的先用）；字体文件需要自己装进系统。</small>}
+    </section>
     <section className="setting-section compact-settings">
       <span className="setting-label">排版</span>
       <div className="font-stepper"><span>字号</span><button aria-label="减小字号" onClick={() => update({ fontSize: Math.max(15, settings.fontSize - 1) })}>−</button><output>{settings.fontSize}</output><button aria-label="增大字号" onClick={() => update({ fontSize: Math.min(28, settings.fontSize + 1) })}>+</button></div>
@@ -129,6 +133,15 @@ function ReaderSettingsControls({
       </div>
       <SettingRange label="左右边距" value={settings.contentPadding} min={20} max={120} step={2} display={`${settings.contentPadding}`} onChange={contentPadding => update({ contentPadding })} />
       <SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} />
+      <section className="setting-section"><span className="setting-label">阅读背景</span>
+        <div className="bg-row">
+          <input type="color" className="reader-bg-color" value={settings.readerBgColor || '#ffffff'} onChange={event => update({ readerBgColor: event.target.value })} aria-label="背景颜色" />
+          <button type="button" className="ghost-button" onClick={() => update({ readerBgColor: '', readerBgImage: '' })}>清除背景</button>
+        </div>
+        <input type="text" className="reader-text-input" value={settings.readerBgImage} placeholder="背景图 URL（http(s):// 或站内路径，可留空）" onChange={event => update({ readerBgImage: event.target.value })} />
+        <SettingRange label="背景压暗" value={settings.readerBgDim} min={0} max={0.6} step={0.05} display={`${Math.round(settings.readerBgDim * 100)}%`} onChange={dim => update({ readerBgDim: dim })} />
+        <small className="setting-hint">颜色与背景图铺在阅读区上，压暗让文字保持可读；全部清空则跟随主题。背景图只存在这台浏览器里。</small>
+      </section>
     </section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
     {settings.pageMode === 'paginate' && (
@@ -2037,7 +2050,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     '--reader-content-padding': `${settings.contentPadding}px`,
     '--reader-max-width': `${settings.maxWidth}px`,
     '--reader-sidebar-width': `${settings.sidebarWidth}px`,
-    '--reader-font-family': getReaderFontFamily(settings.font),
+    '--reader-font-family': effectiveReaderFontFamily(settings),
+    '--reader-bg-color': settings.readerBgColor || 'transparent',
+    // 背景图带一层压暗（readerBgDim）：再亮的图也不至于把墨色文字顶没。
+    '--reader-bg-image': settings.readerBgImage
+      ? `linear-gradient(rgb(0 0 0 / ${settings.readerBgDim}), rgb(0 0 0 / ${settings.readerBgDim})), url("${settings.readerBgImage}")`
+      : 'none',
   } as CSSProperties
 
   // Pointer & Gesture interactions

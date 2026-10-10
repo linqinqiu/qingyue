@@ -38,14 +38,14 @@ test('皮肤 id - 会被拼成类名，所以只留 [a-z0-9-_] 且限长', () =>
 test('皮肤列表 - 只有填了 CSS 的自定义皮肤才会出现（不摆点了没反应的控件）', () => {
   assert.deepEqual(availableSkins(settings()).map(s => [s.id, s.builtin]), BUILTIN_SKINS.map(s => [s.id, true]))
   const withSkin = settings({ customSkinId: 'midnight', customSkinCss: '.theme-midnight { --canvas: #0f1213; }' })
-  assert.deepEqual(availableSkins(withSkin)[3], { id: 'midnight', name: '自定义（midnight）', builtin: false })
-  assert.equal(availableSkins(settings()).length, 3)
+  assert.deepEqual(availableSkins(withSkin)[7], { id: 'midnight', name: '自定义（midnight）', builtin: false })
+  assert.equal(availableSkins(settings()).length, 7)
   // 只填 id 不填 CSS 不算一套皮肤
-  assert.equal(availableSkins(settings({ customSkinId: 'midnight' })).length, 3)
+  assert.equal(availableSkins(settings({ customSkinId: 'midnight' })).length, 7)
   // id 清洗后非空 + 有 CSS => 算一套（清洗本身不是拒绝的理由）
-  assert.equal(availableSkins(settings({ customSkinId: 'mid night', customSkinCss: 'x{y:z}' })).length, 4)
+  assert.equal(availableSkins(settings({ customSkinId: 'mid night', customSkinCss: 'x{y:z}' })).length, 8)
   // 清洗后为空的 id 不算皮肤 —— 否则列表里会多出一个选不中的项
-  assert.equal(availableSkins(settings({ customSkinId: '中文', customSkinCss: 'x{y:z}' })).length, 3)
+  assert.equal(availableSkins(settings({ customSkinId: '中文', customSkinCss: 'x{y:z}' })).length, 7)
 })
 
 test('自定义皮肤是叠在内置皮肤之上的，不是替换它', () => {

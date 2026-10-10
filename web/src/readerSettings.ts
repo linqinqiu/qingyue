@@ -3,8 +3,11 @@ import { DEFAULT_MAPS, looksLikeGrid, migrateGrid, sanitizeMap, type TapMap } fr
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
 /** 内置那三档的 id（自定义皮肤要叠在其中一档之上，所以这个集合要能被类型化地表达）。 */
-export type BuiltinSkinId = 'light' | 'paper' | 'dark'
-export type ReaderFont = 'song' | 'hei' | 'kai' | 'fangsong' | 'system'
+export type BuiltinSkinId = 'light' | 'paper' | 'dark' | 'qingzhu' | 'mulan' | 'meigui' | 'shimo'
+/**
+ * 内置字体栈（本机已装优先，逐级回落）；`custom` 表示用 `customFont` 里用户自己填的字体名。
+ */
+export type ReaderFont = 'song' | 'hei' | 'kai' | 'fangsong' | 'system' | 'yuan' | 'mono' | 'custom'
 export type ReaderPageMode = 'scroll' | 'paginate'
 /**
  * 分页模式的翻页动画（参照 legado-with-MD3 的 PageAnim，取 Web 里能做真的三种；
@@ -71,6 +74,20 @@ export type ReaderSettings = {
    */
   txtTocRule: string
   /**
+   * 自定义字体名（本机已装的字体，如「霞鹜文楷 / LXGW WenKai」）。`font === 'custom'` 时生效，
+   * 直接作为 `--reader-font-family`。原样是用户的输入，存取都要过 `parseCustomFont` 滤掉
+   * 能拼坏 CSS 的字符。上传字体文件的通道是另一回事（要服务端存取），这里只认本机字体名。
+   */
+  customFont: string
+  /**
+   * 小说阅读背景（用户 2026-10-10：「小说界面背景」可以自定义）：
+   * 纯色 + 可选的背景图（URL）+ 压暗比例。三者叠加在阅读区上，文字仍按主题墨色渲染；
+   * 全空 = 跟随主题画布。图片只存这个浏览器（localStorage），不上传服务端。
+   */
+  readerBgColor: string
+  readerBgImage: string
+  readerBgDim: number
+  /**
    * 点击分区（用户 2026-10-04：「可以自定义点击区域范围并设置，自定义管理」；
    * 2026-10-09：「区域设置改提供横竖虚线，自定义，但是要区分翻页方式的影响」）。
    * 两种翻页方式各一张虚线表 —— 默认值就是改动前那三区，不改不漂移。
@@ -109,6 +126,10 @@ export const defaultReaderSettings: ReaderSettings = {
   ttsCustomVoice: '',
   ttsCustomHeader: '',
   txtTocRule: 'auto',
+  customFont: '',
+  readerBgColor: '',
+  readerBgImage: '',
+  readerBgDim: 0.25,
   tapZones: { paginate: DEFAULT_MAPS.paginate, scroll: DEFAULT_MAPS.scroll },
 }
 
@@ -132,8 +153,31 @@ export function clampNumber(value: unknown, min: number, max: number, fallback: 
 }
 
 export function parseReaderFont(font: unknown): ReaderFont {
-  if (font === 'hei' || font === 'kai' || font === 'fangsong' || font === 'system') return font
+  if (font === 'hei' || font === 'kai' || font === 'fangsong' || font === 'system' || font === 'yuan' || font === 'mono' || font === 'custom') return font
   return 'song'
+}
+
+/**
+ * 自定义字体名只允许"字体名该有的字符"：字母/数字/空格/逗号/引号/连字符/CJK。
+ * 能拼坏 CSS 的（`{ } < > @ ; \` 反斜杠）一律剥掉——这个串会被直接放进 font-family。
+ */
+export function parseCustomFont(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.replace(/[{}<>@;\\]/g, '').trim().slice(0, 120)
+}
+
+/** 背景色只认 #RGB/#RRGGBB/#RRGGBBAA；空串 = 跟随主题。 */
+export function parseBgColor(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return /^#[0-9a-fA-F]{3,8}$/.test(value.trim()) ? value.trim().toLowerCase() : ''
+}
+
+/** 背景图只认 http(s) 绝对地址、站内相对路径（/ 开头）或 data:image；带引号的一律不要。 */
+export function parseBgImage(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim().slice(0, 600)
+  if (/^(https?:\/\/|\/|data:image\/)/.test(trimmed) && !trimmed.includes('"') && !trimmed.includes('\\')) return trimmed
+  return ''
 }
 
 export function parsePageMode(mode: unknown): ReaderPageMode {
@@ -153,11 +197,15 @@ export function parseSkinId(id: unknown): string {
   return typeof id === 'string' ? id.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '').slice(0, 32) : ''
 }
 
-/** 内置三套皮肤。名字只写一处，两套外壳与「自定义」弹窗共用（各自定义一份迟早会漂移）。 */
+/** 内置四套皮肤。名字只写一处，两套外壳与「自定义」弹窗共用（各自定义一份迟早会漂移）。 */
 export const BUILTIN_SKINS: ReadonlyArray<{ id: BuiltinSkinId; name: string }> = [
   { id: 'light', name: '晓白' },
   { id: 'paper', name: '护眼' },
   { id: 'dark', name: '夜读' },
+  { id: 'qingzhu', name: '青竹' },
+  { id: 'mulan', name: '暮蓝' },
+  { id: 'meigui', name: '玫瑰' },
+  { id: 'shimo', name: '石墨' },
 ]
 
 /** 当前可选的皮肤：内置三套 + 填了 CSS 的自定义那一套（没填就不出现在列表里，不摆空控件）。 */
@@ -292,6 +340,10 @@ export function loadReaderSettings(): ReaderSettings {
       ttsCustomVoice: typeof saved.ttsCustomVoice === 'string' ? saved.ttsCustomVoice : '',
       ttsCustomHeader: typeof saved.ttsCustomHeader === 'string' ? saved.ttsCustomHeader : '',
       txtTocRule: parseTocRuleKey(saved.txtTocRule),
+      customFont: parseCustomFont(saved.customFont),
+      readerBgColor: parseBgColor(saved.readerBgColor),
+      readerBgImage: parseBgImage(saved.readerBgImage),
+      readerBgDim: clampNumber(saved.readerBgDim, 0, .6, defaultReaderSettings.readerBgDim),
       // 缺项/写错都回落到出厂那张表（不清洗就会点到 undefined 上，表现为"这一格没反应"）；
       // 旧版存的是"格子表"，新版是"虚线表"，读的时候迁一次。
       tapZones: {
@@ -310,10 +362,25 @@ export const readerFontFamilies: Record<ReaderFont, string> = {
   kai: '"Kaiti SC", "STKaiti", "KaiTi", "SimKai", "KaiTi_GB2312", "STKaiti-SC-Regular", "BiauKai", "DFKai-SB", 楷体，楷体_GB2312, serif',
   fangsong: '"FangSong", "STFangsong", "FangSong_GB2312", "STFangsong-SC-Regular", "SimFang", 仿宋，仿宋_GB2312, serif',
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif',
+  yuan: '"Yuanti SC", "YouYuan", "幼圆", "Hiragino Maru Gothic ProN", "Source Han Sans SC Rounded", ui-rounded, "PingFang SC", sans-serif',
+  mono: '"Sarasa Mono SC", "更纱黑体", "Cascadia Code", "JetBrains Mono", "Consolas", "Source Han Mono SC", "Noto Sans Mono CJK SC", monospace',
+  custom: 'inherit',
 }
 
 export function getReaderFontFamily(font: ReaderFont): string {
   return readerFontFamilies[font] || readerFontFamilies.song
+}
+
+/**
+ * 真正发进 `--reader-font-family` 的字体栈：`font === 'custom'` 且填了自定义名时用用户那份，
+ * 其余走内置表。自定义名是用户输入，出 `parseCustomFont` 时已经是干净的了。
+ */
+export function effectiveReaderFontFamily(settings: ReaderSettings): string {
+  if (settings.font === 'custom') {
+    const custom = settings.customFont.trim()
+    if (custom) return custom
+  }
+  return getReaderFontFamily(settings.font)
 }
 
 export function saveReaderSettings(settings: ReaderSettings): void {

@@ -28,7 +28,9 @@ const arg = (f, d = null) => { const i = process.argv.indexOf(f); return i > 0 &
 const hasFlag = (f) => process.argv.includes(f)
 const SMOKE = hasFlag('--smoke')
 
-const port = Number(arg('--port', '1234'))
+// 门禁端口刻意避开 1234：本机开发服务（start.mjs）常驻 1234，起壳会命中"青阅已在运行"
+// 分支秒退，所有判据就都打到开发服务上了（实测一次假红）。--port 给的是基址，实际用基址+40。
+const port = Number(arg('--port', '1234')) + 40
 
 const exe = arg('--exe') || path.join(ROOT, 'dist', 'desktop', 'qingyue', 'qingyue.exe')
 if (!fs.existsSync(exe)) fail(`找不到 ${exe} —— 先 node scripts/package-desktop.mjs`)
@@ -175,6 +177,26 @@ if (!SMOKE) {
     } else fail('数据目录：真实书架实例没起来')
     killProc(r.pid); await waitPortFree(pR)
   }
+}
+
+// 端口被**别的程序**占用 → 自动顺延到下一个空闲端口，并写 port.txt 记住（用户 2026-10-10：「不要固定」）。
+if (!SMOKE) {
+  const occupied = port + 7
+  const squatter = net.createServer(() => { })
+  await new Promise(resolve => squatter.listen(occupied, '127.0.0.1', resolve))
+  const shiftedApp = spawnExe(occupied, tmpDataDir)
+  const shiftedPort = occupied + 1
+  const okShift = await waitHealthOn(shiftedPort, 90000)
+  const portFile = path.join(path.dirname(exe), 'port.txt')
+  const recorded = fs.existsSync(portFile) && fs.readFileSync(portFile, 'utf8').trim() === String(shiftedPort)
+  killProc(shiftedApp.pid)
+  await waitPortFree(shiftedPort)
+  squatter.close()
+  if (fs.existsSync(portFile)) fs.rmSync(portFile)
+  if (!okShift) fail(`端口顺延失败：${occupied} 被占后没有在 ${shiftedPort} 起来`)
+  ok(`端口被占自动顺延：${occupied} 被占 → 服务起在 ${shiftedPort}`)
+  if (recorded) ok('顺延端口已写进 port.txt 记住')
+  else fail('顺延端口没写进 port.txt')
 }
 
 console.log('桌面化门禁全部通过 ✅')

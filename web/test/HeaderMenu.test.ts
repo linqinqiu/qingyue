@@ -9,12 +9,12 @@ import { Logo } from '../src/Logo'
 import { defaultReaderSettings, ReaderSettings } from '../src/readerSettings'
 
 test('HeaderMenu - APP_THEMES configuration', () => {
-  assert.equal(APP_THEMES.length, 3)
+  // 皮肤单一来源是 BUILTIN_SKINS（readerSettings.ts）；这里钉清单与名单一致。
   const themeIds = APP_THEMES.map(t => t.id)
-  assert.deepEqual(themeIds, ['light', 'paper', 'dark'])
+  assert.deepEqual(themeIds, ['light', 'paper', 'dark', 'qingzhu', 'mulan', 'meigui', 'shimo'])
   
   const themeNames = APP_THEMES.map(t => t.name)
-  assert.deepEqual(themeNames, ['晓白', '护眼', '夜读'])
+  assert.deepEqual(themeNames, ['晓白', '护眼', '夜读', '青竹', '暮蓝', '玫瑰', '石墨'])
 })
 
 test('HeaderMenu - AppHeader static rendering', () => {
