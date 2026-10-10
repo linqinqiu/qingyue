@@ -154,7 +154,23 @@ const collect = () => {
 }
 
 const browser = await puppeteer.launch(launchOptions())
+
+/**
+ * PWA 安装横幅（`.pwa-install-banner`）是 `position: fixed; bottom: 16px`，由 `beforeinstallprompt`
+ * 触发 —— 这个事件在无头 Chrome 里**时有时无**，一旦出现就成了"最低的那个墨迹节点"，把每一页的
+ * **底部死白**从真实的 20–40% 压到 0–3%。判据于是随"这次事件有没有触发"忽红忽绿：实测**同一构建**
+ * 连跑两次，书库底部死白一次 3%、一次 40%；`--compare` 因此能把没碰过的页（书库/订阅）判成回归。
+ * 测量前统一摘掉它（连同更新提示），数字才可复现 —— 冻结基线本身也是在没有横幅的状态下立的。
+ */
+const hideNonDeterministicOverlays = () => page.evaluateOnNewDocument(() => {
+  const style = document.createElement('style')
+  style.textContent = '.pwa-install-banner,.pwa-update-toast{display:none !important}'
+  const attach = () => { if (document.head) document.head.appendChild(style) }
+  if (document.head) attach(); else document.addEventListener('DOMContentLoaded', attach, { once: true })
+})
+
 let page = await browser.newPage()
+await hideNonDeterministicOverlays()
 let viewport = { width: 1440, height: 900 }
 
 /**
@@ -174,6 +190,7 @@ const goto = async url => {
       console.log(`导航第 ${attempt + 1} 次没成：${String(error.message).slice(0, 70)}`)
       await page.close().catch(() => undefined)
       page = await browser.newPage()
+      await hideNonDeterministicOverlays()
       await page.setViewport({ ...viewport, deviceScaleFactor: 1 })
     }
   }
