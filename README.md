@@ -12,16 +12,6 @@
 
 ---
 
-## 截图
-
-| 书库 | 书架 | 发现 |
-| --- | --- | --- |
-| ![书库](docs/images/library.png) | ![书架](docs/images/shelf.png) | ![发现](docs/images/explore.png) |
-
-| 书源 | 阅读器 | 手机端书架 |
-| --- | --- | --- |
-| ![书源](docs/images/sources.png) | ![阅读器](docs/images/reader.png) | ![手机端](docs/images/mobile-shelf.png) |
-
 ## 这个仓库里有什么 / 没有什么
 
 **有**：书源规则的解析执行器（`@xpath:` / `@json:` / `@js:` / `@regex:` 这些取值语法）、书架与阅读进度、发现页、订阅源、正文净化规则、离线缓存、朗读、手机备份包导入，以及配套的 Web 界面。

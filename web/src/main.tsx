@@ -2740,7 +2740,6 @@ function ShelfPage({
               <button
                 type="button"
                 className="shelf-batch-action"
-                disabled={selectedBooks.size === 0}
                 onClick={selectAllBooks}
                 title="全选当前页所有书籍"
               >
