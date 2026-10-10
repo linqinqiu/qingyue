@@ -4,12 +4,12 @@ import { ContextMenuItem, showContextMenu } from './ContextMenu'
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import { Select } from './Select'
-import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, swipeDirection, ViewportBounds } from './readerInteractions'
+import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateWheelStep, swipeDirection, ViewportBounds } from './readerInteractions'
 import { mapCells, TapAction, zoneAt } from './tapZones'
 import { isMediaType } from './bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
-import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, sectionAtPage, sectionProgress } from './readerFlow'
+import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, resolveMeasuredPage, sectionAtPage, sectionProgress } from './readerFlow'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
 import { toast } from './Toast'
@@ -544,6 +544,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const targetInitialPageRef = useRef<'first' | 'last' | null>(null)
   const initialPagePositionRef = useRef<number | null>(null)
   const wheelTimerRef = useRef<number | null>(null)
+  // 滚轮增量累计量（像素）与"没在滚了就清零"的定时器：见 readerInteractions.paginateWheelStep
+  const wheelAccumRef = useRef(0)
+  const wheelIdleRef = useRef<number | null>(null)
   // Ref to the latest playTtsChunk so that async onEnd callbacks always invoke the freshest version,
   // avoiding stale closure issues when cross-chapter auto-play triggers after chapter content reloads.
   const playTtsChunkRef = useRef<(idx: number, mode?: TtsSpeakMode) => void>(() => undefined)
@@ -1150,7 +1153,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     } else if (settings.ttsEngine === 'webSpeech') {
       stopAllEngines()
     }
-    targetInitialPageRef.current = targetPage === 'auto' ? null : targetPage
+    // 翻页模式的页码是**相对当前窗口**的，而这里马上要清掉续接窗口并重挂容器（下面两行），
+    // 旧页码对新锚点没有任何含义。原来 'auto' 什么都不设，测量收尾那一轮只做夹取，
+    // 于是从目录跳章、底部「上一章/下一章」、进度滑条、朗读的上一/下一章按钮都会**停在旧页码上**：
+    // 在第 12 页点目录跳到一章只有三页的书，落点是第 3 页而不是第 1 页。
+    targetInitialPageRef.current = targetPage === 'auto'
+      ? (settings.pageMode === 'paginate' ? 'first' : null)
+      : targetPage
     // 既不清 content 也不清 loadedChapterUrl：这两个值成对描述"屏幕上挂的是哪一章"。
     // 历史上这里两者都清，是为了杜绝切章瞬间朗读误读上一章旧正文（AGENTS.md 的跨章竞态守卫）——
     // 那个目的现在由 ttsParagraphs 承担（过渡期间给朗读管线空数组），视觉侧不必跟着挖空。
@@ -1168,7 +1177,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setFlowHead([])
     pendingPrependRef.current = null
     if (!keepContainer) setFlowKey(currentBook.chapters[nextIndex]?.url ?? `jump-${nextIndex}`)
-  }, [chapterIndex, currentBook.chapters.length, persist, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
+  }, [chapterIndex, currentBook.chapters.length, persist, settings.pageMode, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
 
   // 滚动模式的"滚到底再往下推一下就进下一章"。判据必须是"已经触底 + 继续向下滚"，
   // 只按位置阈值会在正常阅读途中翻章；1.2 秒冷却挡住一次惯性滚动连跳多章。
@@ -1588,22 +1597,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       measuredStartsRef.current = []
     }
 
-    if (targetInitialPageRef.current === 'last') {
-      targetInitialPageRef.current = null
-      initialPagePositionRef.current = null
-      setPageIndex(layout.pageCount - 1)
-    } else if (targetInitialPageRef.current === 'first') {
-      targetInitialPageRef.current = null
-      initialPagePositionRef.current = null
-      setPageIndex(0)
-    } else if (initialPagePositionRef.current !== null) {
-      const pos = initialPagePositionRef.current
-      initialPagePositionRef.current = null
-      const target = Math.min(layout.pageCount - 1, Math.max(0, Math.round(pos * (layout.pageCount - 1))))
-      setPageIndex(target)
-    } else {
-      setPageIndex(curr => Math.min(curr, layout.pageCount - 1))
+    const pageTarget = targetInitialPageRef.current
+    const restoredPosition = initialPagePositionRef.current
+    targetInitialPageRef.current = null
+    initialPagePositionRef.current = null
+    if (pageTarget === null && restoredPosition === null) {
+      // 同一个锚点内重量一次（改字号、拖窗口、续接挂章）：原地不动，只做夹取
+      setPageIndex(curr => resolveMeasuredPage(null, null, curr, layout.pageCount))
+      return
     }
+    setPageIndex(resolveMeasuredPage(pageTarget, restoredPosition, 0, layout.pageCount))
   }, [columnGap, content, loading, settings.columnMode])
 
   useLayoutEffect(() => {
@@ -2215,10 +2218,17 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   const onWheelPaginate = (event: React.WheelEvent) => {
     if (settings.pageMode !== 'paginate' || activeDrawer || wheelTimerRef.current !== null) return
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
-    if (Math.abs(delta) < 25) return
-    wheelTimerRef.current = window.setTimeout(() => { wheelTimerRef.current = null }, 220)
-    if (delta > 0) goNextPage()
+    const { action, rest } = paginateWheelStep(event.deltaX, event.deltaY, event.deltaMode, wheelAccumRef.current)
+    wheelAccumRef.current = rest
+    if (action === null) {
+      // 还没攒够一格：继续攒，但停手 180ms 就把零头丢掉，免得下次一上手被旧累计量带翻一页
+      if (wheelIdleRef.current !== null) window.clearTimeout(wheelIdleRef.current)
+      wheelIdleRef.current = window.setTimeout(() => { wheelAccumRef.current = 0; wheelIdleRef.current = null }, 180)
+      return
+    }
+    if (wheelIdleRef.current !== null) { window.clearTimeout(wheelIdleRef.current); wheelIdleRef.current = null }
+    wheelTimerRef.current = window.setTimeout(() => { wheelTimerRef.current = null }, 140)
+    if (action === 'next') goNextPage()
     else goPrevPage()
   }
 

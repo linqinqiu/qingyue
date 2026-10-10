@@ -8,9 +8,12 @@ import {
   isDoubleColumnActive,
   isTapGesture,
   paginateTapZone,
+  paginateWheelStep,
   scrollTapZone,
   swipeDirection,
+  wheelPixels,
 } from '../src/readerInteractions'
+import { resolveMeasuredPage } from '../src/readerFlow'
 import {
   defaultReaderSettings,
   getReaderFontFamily,
@@ -355,6 +358,57 @@ test('ReaderPagination - findFirstFullyVisibleParagraphIndex: finds first fully 
     { index: 3, rect: { top: -200, bottom: 1200, left: 100, right: 700 } }
   ]
   assert.equal(findFirstFullyVisibleParagraphIndex(giantParagraph, scrollViewport), 3, 'Falls back to visible paragraph if taller than screen')
+})
+
+// ---------- 滚轮翻页的三种 deltaMode 口径（用户 2026-10-10 报「翻页有问题」的第一条根因） ----------
+
+test('wheelPixels - 行/页/像素三种口径归一到同一个单位', () => {
+  assert.equal(wheelPixels(3, 1), 48, 'deltaMode=1（行）一格约 3 行')
+  assert.equal(wheelPixels(100, 0), 100, 'deltaMode=0（像素）原样')
+  assert.equal(wheelPixels(1, 2, 16, 600), 600, 'deltaMode=2（页）按视口高')
+  // 反向对照：不换算的话行模式的一格（3）连旧阈值 25 都够不着 —— 那就是"触控板翻不动"的成因
+  assert.ok(wheelPixels(3, 1) > 25, '换算后必须越过原来的 25px 阈值，否则行模式永远翻不动')
+  assert.ok(3 < 25, '未换算的行模式增量确实低于旧阈值')
+})
+
+test('paginateWheelStep - 触控板的多次小增量累计成一页，攒够就翻并清零', () => {
+  let acc = 0
+  const seen: Array<'next' | 'prev' | null> = []
+  for (let i = 0; i < 8; i += 1) {
+    const step = paginateWheelStep(0, 12, 0, acc) // 触控板轻扫：每事件约 12px
+    acc = step.rest
+    seen.push(step.action)
+  }
+  assert.equal(seen.filter(Boolean).length, 1, '8 次 ×12px（共 96）应当正好翻一页，不是 0 页也不是 8 页')
+  assert.deepEqual(seen.slice(0, 5), [null, null, null, null, null], '前 5 次（60px）还没到 64px 步长')
+  assert.equal(seen[5], 'next', '第 6 次攒到 72px 才翻页')
+
+  // 鼠标一格 100px：一次就翻，且不留余量
+  const notch = paginateWheelStep(0, 100, 0, 0)
+  assert.deepEqual(notch, { action: 'next', rest: 0 })
+
+  // 反向对照：如果沿用"只看单次事件"的判法，触控板这 8 下一下都翻不动
+  const perEventOnly = [12, 12, 12, 12, 12, 12, 12, 12].map(d => paginateWheelStep(0, d, 0, 0).action)
+  assert.ok(perEventOnly.every(a => a === null), '不带累计量就永远返回 null —— 这正是修前的行为')
+
+  // 往回滚翻上一页
+  assert.equal(paginateWheelStep(0, -100, 0, 0).action, 'prev')
+  // 横向手势（触控板双指横扫）取主轴
+  assert.equal(paginateWheelStep(-90, 3, 0, 0).action, 'prev')
+})
+
+// ---------- 测量收尾时的页码落点（第二条根因：跳章停在旧页码上） ----------
+
+test('resolveMeasuredPage - 跳章给 first 就落第一页，哪怕旧页码更大、新章更短', () => {
+  assert.equal(resolveMeasuredPage('first', null, 12, 3), 0, '在第 12 页跳进一章只有 3 页的书：落第 1 页')
+  assert.equal(resolveMeasuredPage('last', null, 0, 7), 6, '回翻到上一章末尾')
+  assert.equal(resolveMeasuredPage(null, 0.5, 0, 21), 10, '按保存的百分比恢复')
+  assert.equal(resolveMeasuredPage(null, 0.5, 0, 3), 1, '恢复位置被夹进短章')
+  assert.equal(resolveMeasuredPage(null, null, 12, 3), 2, '同一锚点内重量只做夹取，不甩走眼前的字')
+  assert.equal(resolveMeasuredPage(null, null, 1, 20), 1, '夹取时原地不动')
+  // 反向对照：旧行为等价于 target=null —— 它保留的是 12，被夹成 2，用户看到的是"跳进这一章的中间"
+  assert.notEqual(resolveMeasuredPage(null, null, 12, 3), 0, '不映射 first 就落不到章首，这就是修前的 bug')
+  assert.equal(resolveMeasuredPage('first', 0.5, 12, 3), 0, '换锚点时意图优先于恢复位置')
 })
 
 
