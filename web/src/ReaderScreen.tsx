@@ -27,6 +27,24 @@ import {
   putOfflineChapter,
 } from './offlineStorage'
 
+/**
+ * 图片预热：把一段正文里的 `![图](url)` 地址提前发给服务端图片代理，
+ * 趁用户在看首屏时把后续图片取回落盘缓存（代理命中 7 天有效），
+ * 滚动/翻页下去就不必每张都等服务端联网一次。漫画章节正文就是一张张图，
+ * 这一项直接决定翻页顺不顺。
+ * 只预热外域图（站内资产本就在本地）；失败静默 —— 渲染层 `<img>` 会自己退化成占位图。
+ */
+function warmContentImages(text: string, page: string | undefined) {
+  if (!text) return
+  for (const raw of text.split('\n')) {
+    const image = contentImageUrl(raw)
+    if (!image || isSameSiteAsset(image)) continue
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = api.bookImage(image, page)
+  }
+}
+
 export type OpenBook = { details: BookDetails; bookUrl: string; chapters: Chapter[]; progress?: ReadingProgress }
 
 type ReaderScreenProps = {
@@ -113,6 +131,13 @@ function ReaderSettingsControls({
       <SettingRange label="版心宽度" value={settings.maxWidth} min={560} max={1400} step={20} display={`${settings.maxWidth}px`} onChange={maxWidth => update({ maxWidth })} />
     </section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
+    {settings.pageMode === 'paginate' && (
+      <section className="setting-section"><span className="setting-label">翻页动画</span><div className="page-modes">
+        <button className={settings.pageAnim === 'slide' ? 'selected' : ''} onClick={() => update({ pageAnim: 'slide' })}>平移过渡</button>
+        <button className={settings.pageAnim === 'fade' ? 'selected' : ''} onClick={() => update({ pageAnim: 'fade' })}>淡化</button>
+        <button className={settings.pageAnim === 'none' ? 'selected' : ''} onClick={() => update({ pageAnim: 'none' })}>无动画</button>
+      </div><small className="setting-hint">翻页时怎么过渡。连续滚动模式没有页，用不上这一项。</small></section>
+    )}
     {/*
       点击区域改到正文上编辑（用户 2026-10-09：「这个改成底下一小行，可以折叠进去，目的是显示更多书籍内容」）：
       抽屉里只留一颗入口，真正的编辑器是盖在正文上的一层 —— 调分区时看得见书，控制条收在底部一行。
@@ -392,6 +417,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const pendingPrependRef = useRef<string | null>(null)
   /** 分页模式下每一章占的页区间（量自排版后的 DOM），以及顶窗口之后该落到第几页。 */
   const pageSpansRef = useRef<{ start: number; end: number }[]>([])
+  /** 量得的每章起始**栏**号（DOM 真值）。后退接章的页码补偿按它落页 —— 算术推的 spans 在
+   *  垫栏/强制分栏有一处出入时就差半页（paginate-flow-check ④：接之前第 2 段落 vs 之后第 5 段落）。 */
+  const measuredStartsRef = useRef<number[]>([])
+  const columnsPerPageRef = useRef(1)
   /** 屏幕上真的对齐了吗（按 DOM 量出来的，不是按算术推的）—— 挪窗口的闸门看这个。 */
   const pageAlignedRef = useRef(true)
   const pendingPageRef = useRef<number | null>(null)
@@ -468,6 +497,24 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [stride, setStride] = useState(640)
   const [isDoubleColumn, setIsDoubleColumn] = useState(false)
   const columnGap = 40
+
+  /**
+   * 翻页动画（参照 legado-with-MD3 的 PageAnim，Web 里做真的三种）：
+   * `slide` 给 track 挂过渡类 —— 只在**逐页翻**（页码差 1）时挂；接章补偿/窗口挪动是几页的跳，
+   * 滑过去反而像"又跳了一次"，所以大跳一律即时切。`fade` 在页码变化时把 track 淡出再淡回。
+   * `none` 即时切换（改动前的行为）。连续滚动没有页，整段不生效。
+   */
+  const pageAnim = settings.pageMode === 'paginate' ? settings.pageAnim : 'none'
+  const prevPageIndexRef = useRef(pageIndex)
+  const [fading, setFading] = useState(false)
+  const slideAnimOn = pageAnim === 'slide' && Math.abs(pageIndex - prevPageIndexRef.current) === 1
+  useEffect(() => { prevPageIndexRef.current = pageIndex }, [pageIndex])
+  useEffect(() => {
+    if (pageAnim !== 'fade') return
+    setFading(true)
+    const timer = window.setTimeout(() => setFading(false), 150)
+    return () => window.clearTimeout(timer)
+  }, [pageIndex, pageAnim])
 
   const currentRef = useRef<{ chapter: Chapter; position: number } | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -628,10 +675,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const sourceType = currentBook.details.sourceType ?? 0
   const mediaSrc = useMemo(() => {
     if (!isMediaType(sourceType)) return null
-    if (mediaUrl) return mediaUrl
-    const trimmed = content.trim()
-    return /^https?:\/\/\S+$/.test(trimmed) ? trimmed : null
-  }, [sourceType, mediaUrl, content])
+    // 优先用服务端给的 mediaUrl；离线缓存没有它，但音频源的 content 本身就是那串地址，故兜底。
+    const raw = mediaUrl ? mediaUrl : (() => {
+      const trimmed = content.trim()
+      return /^https?:\/\/\S+$/.test(trimmed) ? trimmed : null
+    })()
+    if (!raw) return null
+    // 外域地址走服务端媒体代理（注入 Referer + 转发 Range），本站内的原样返回。
+    if (isSameSiteAsset(raw)) return raw
+    return api.bookMedia(raw, chapter.url)
+  }, [sourceType, mediaUrl, content, chapter.url])
   // 过渡期间大标题跟着正文走（挂着上一章的标题），新章名只出现在「正在载入」那条里 ——
   // 标题是新的、正文是旧的，比两者都旧更容易让人以为串了章。
   const shownChapterTitle = isStaleContent ? (currentRef.current?.chapter.title || chapter?.title) : chapter?.title
@@ -1297,6 +1350,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       setContent(nextContent)
       setMediaUrl(nextMediaUrl)
       setLoadedChapterUrl(chapter.url)
+      // 漫画/图文章节：趁用户看首屏，把正文里的图片提前喂给服务端代理取回落盘缓存，
+      // 后面滚动/翻页不必每张都等服务端联网（referer 用本章地址，图站防盗链才放得过去）。
+      warmContentImages(nextContent, chapter.url)
       // 续接推进时 position 给 null：下面那个定位 effect 见到 null 就直接返回，
       // 于是"跨章"不再伴随任何 scrollTo —— 这正是"不是一体的吗"要的答案。
       const advancing = flowAdvanceRef.current
@@ -1357,6 +1413,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         const result = await api.content(currentBook.details.sourceId, candidate.url, currentBook.bookUrl).catch(() => null)
         if (!result || cancelled) break
         preloadedContentRef.current.set(candidate.url, result.content)
+        // 预载的下一章若含图（漫画常见），趁现在把它的图也预热，翻过去时直接命中缓存。
+        warmContentImages(result.content, candidate.url)
         filled.push({ chapter: candidate, content: result.content })
       }
       if (!cancelled) setFlowTail(filled)
@@ -1466,20 +1524,26 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       // 于是"补齐到整页"永远算出 0，界面照旧重复一栏。用 Range 量才拿得到每一栏的那块碎片。
       // 也正因为如此，垫的那一栏必须落在 section **外面**：算在里面的话章数会被自己数多一栏，
       // 下一轮又算成不用垫 —— 来回振荡。
+      //
+      // 数"多少栏"还不能直接对碎片左缘去重：段落有**首行缩进**时，每一栏里都多出一个
+      // "缩进后的第一行"左缘 —— 一个真栏被数成两个（探针书实测：一章 8 栏数成 13、
+      // 前言 1 栏数成 2）。偶数的假栏数 → 该垫的垫成 0 → 下一章落在奇数栏，接章补偿
+      // 与翻页窗口全都差半页。修法：左缘先按 stride 分桶量化，缩进的左缘落进所在栏的桶，
+      // 桶数才是真栏数（paginate-flow-check ④ 的几何转储逮到的就是这个）。
+      const bodyLeft = body.getBoundingClientRect().left
+      const measuredStride = layout.columnWidth + columnGap
       const columnCounts = sections.map(node => {
         const range = document.createRange()
         range.selectNodeContents(node)
         const lefts = new Set([...range.getClientRects()]
           .filter(rect => rect.width > 1)
-          .map(rect => Math.round(rect.left)))
+          .map(rect => Math.round((rect.left - bodyLeft) / measuredStride)))
         return Math.max(1, lefts.size)
       })
       const nextFillers = pageAlignmentPads(columnCounts, columnsPerPage)
       const starts = pageAlignmentStarts(columnCounts, columnsPerPage)
       // 对齐闸门按**量出来的**起始栏判，不按算术：算术说垫了、DOM 里还没渲染出来，
       // 这一刻挪窗口照样会重复一栏。
-      const bodyLeft = body.getBoundingClientRect().left
-      const measuredStride = layout.columnWidth + columnGap
       const measuredStarts = sections.map(node => {
         const range = document.createRange()
         range.selectNodeContents(node)
@@ -1488,6 +1552,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         return Math.round((left - bodyLeft) / measuredStride)
       })
       pageAlignedRef.current = measuredStarts.every(col => col % columnsPerPage === 0)
+      measuredStartsRef.current = measuredStarts
+      columnsPerPageRef.current = columnsPerPage
       setPageFillers(current => (current.length === nextFillers.length
         && current.every((value, index) => value === nextFillers[index]) ? current : nextFillers))
       pageSpansRef.current = starts.map((start, index) => ({
@@ -1506,6 +1572,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       }
     } else {
       pageSpansRef.current = []
+      measuredStartsRef.current = []
     }
 
     if (targetInitialPageRef.current === 'last') {
@@ -1564,12 +1631,20 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   ])
 
   /**
-   * 往前接进来的那一章占掉几页，立刻把页码补上 —— 画面就停在原来那一页，"上一页"才真的只是上一页。
+   * 往前接进来的那一章挂上之后，立刻把页码补到"眼前这一栏一个字不动"。
    *
-   * 单独一个 layout effect、并且自己调 `measurePagination()`：原来这段写在 measurePagination 里面，
-   * 依赖"别的那个 effect 会因 flowHead 变了而重跑"，实测（双栏、书「像素游戏成真了…」）
-   * 接进来的那一章确实挂上了（62 段、文档宽度从 ~14.4k 涨到 17510px），页码却一动不动 ——
-   * 时机不该由两个 effect 互相指望。这里同步量、同步补，量不到就下一帧再试，不静默吞掉。
+   * 补偿按**量得的起始栏**落页：接章前窗口的第 0 节（无论它当时是锚点还是之前的头章）
+   * 在接完之后排到第 1 节，它的实测起始栏除以每页栏数就是页码该在的那一页 ——
+   * 目标只有一个：这一栏字必须还在原地。
+   *
+   * 原来按"接进来的那章占几页"（`pageSpans` 的算术推算）补，实测（双栏、探针书）
+   * 页码补了、眼前那栏字却滑到几段之外（paginate-flow-check ④「接之前第 2 段落 vs
+   * 之后第 5 段落」）—— 算术与 DOM 在垫栏/强制分栏上有一处出入，这里就错半页；
+   * 量出来的不会错。单独一个 layout effect、并且自己调 `measurePagination()`：
+   * 原来这段写在 measurePagination 里面，依赖"别的那个 effect 会因 flowHead 变了而重跑"，
+   * 实测（双栏、书「像素游戏成真了…」）接进来的那一章确实挂上了（62 段、文档宽度从
+   * ~14.4k 涨到 17510px），页码却一动不动 —— 时机不该由两个 effect 互相指望。
+   * 这里同步量、同步补，量不到就下一帧再试，不静默吞掉。
    */
   useLayoutEffect(() => {
     const url = pendingPrependRef.current
@@ -1578,15 +1653,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     if (windowChaptersRef.current[0]?.url !== url) return
     measurePagination()
     const sections = windowChaptersRef.current.length
-    if (pageSpansRef.current.length !== sections) return
+    const starts = measuredStartsRef.current
+    if (starts.length !== sections || sections < 2) return
     // 章末垫的那一栏是"量完再渲染"的：没对齐之前这一章的起始页还会挪半栏，
     // 这时候补页码就会差半页（实测：接上之后眼前那一栏字变成了往后一栏）。
     // 不对齐就留着标记，等 pageFillers 落地后那一轮重量再来 —— 与前进侧"只在真对齐时挪窗口"同一条闸门。
     if (!pageAlignedRef.current) return
-    const span = pageSpansRef.current[0]
-    const pages = span ? span.end - span.start : 0
+    // 接章前窗口的第 0 节，接完后排第 1：它的实测起始栏就是眼前这一页的新页码。
+    const keptColumn = starts[1]
     pendingPrependRef.current = null
-    if (pages > 0) setPageIndex(prev => prev + pages)
+    setPageIndex(Math.round(keptColumn / columnsPerPageRef.current))
   }, [content, loading, measurePagination, settings.pageMode, windowChapters])
 
   const goNextPage = useCallback(() => {
@@ -2418,8 +2494,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     <section ref={readerMainRef} className="reader-main">
       {settings.pageMode === 'paginate' ? (
         <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate} onContextMenu={onBodyContextMenu}>
-          <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}`}>
-            <div className="reader-paginated-track" style={{ transform: `translateX(-${pageIndex * stride}px)` }}>
+          <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}${pageAnim === 'fade' && fading ? ' is-fading' : ''}`}>
+            <div className={`reader-paginated-track${slideAnimOn ? ' is-anim-slide' : ''}`} style={{ transform: `translateX(-${pageIndex * stride}px)` }}>
               {/*
                 分页模式也是一篇连续文档：一章一个 <section> 排在同一条分栏流里，
                 翻页翻过章边界只是"下一页"，不是重挂一棵子树再回到章首。

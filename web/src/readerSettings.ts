@@ -6,6 +6,13 @@ export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
 export type BuiltinSkinId = 'light' | 'paper' | 'dark'
 export type ReaderFont = 'song' | 'hei' | 'kai' | 'fangsong' | 'system'
 export type ReaderPageMode = 'scroll' | 'paginate'
+/**
+ * 分页模式的翻页动画（参照 legado-with-MD3 的 PageAnim，取 Web 里能做真的三种；
+ * 仿真卷页要 canvas 逐帧重画，先不承诺）：
+ * `slide` 平移过渡（默认，整条栏流滑过去）、`fade` 淡化（旧页淡出新页淡入）、`none` 即时切换。
+ * 只在 `pageMode === 'paginate'` 下生效。
+ */
+export type ReaderPageAnim = 'slide' | 'fade' | 'none'
 export type ReaderColumnMode = 'auto' | 'single' | 'double'
 export type TtsEngineType = 'webSpeech' | 'edge' | 'custom'
 
@@ -29,6 +36,7 @@ export type ReaderSettings = {
   contentPadding: number
   font: ReaderFont
   pageMode: ReaderPageMode
+  pageAnim: ReaderPageAnim
   maxWidth: number
   columnMode: ReaderColumnMode
   sidebarPinned: boolean
@@ -84,6 +92,7 @@ export const defaultReaderSettings: ReaderSettings = {
   contentPadding: 80,
   font: 'song',
   pageMode: 'scroll',
+  pageAnim: 'slide',
   maxWidth: 860,
   columnMode: 'auto',
   sidebarPinned: false,
@@ -129,6 +138,10 @@ export function parseReaderFont(font: unknown): ReaderFont {
 
 export function parsePageMode(mode: unknown): ReaderPageMode {
   return mode === 'paginate' ? 'paginate' : 'scroll'
+}
+
+export function parsePageAnim(anim: unknown): ReaderPageAnim {
+  return anim === 'fade' || anim === 'none' ? anim : 'slide'
 }
 
 /**
@@ -262,6 +275,7 @@ export function loadReaderSettings(): ReaderSettings {
       contentPadding: clampNumber(saved.contentPadding, 20, 120, defaultReaderSettings.contentPadding),
       font: parseReaderFont(saved.font),
       pageMode: parsePageMode(saved.pageMode),
+      pageAnim: parsePageAnim(saved.pageAnim),
       maxWidth: parseMaxWidth(saved.maxWidth),
       columnMode: parseColumnMode(saved.columnMode),
       sidebarPinned: typeof saved.sidebarPinned === 'boolean' ? saved.sidebarPinned : defaultReaderSettings.sidebarPinned,

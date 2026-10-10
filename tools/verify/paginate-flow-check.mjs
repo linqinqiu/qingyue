@@ -281,11 +281,29 @@ try {
         if (body?.contains(node) && (node.dataset?.paragraphIndex !== undefined || node.tagName === 'P')) break
         node = node.parentElement
       }
+      // 接章诊断：每节的实测起始栏（相对 body 左缘、按 stride 折算）、栏数、垫栏个数、track 位移。
+      const bodyLeft = body?.getBoundingClientRect().left ?? 0
+      const colWidth = Number(/(\d+(?:\.\d+)?)px/.exec(body?.style.columnWidth ?? '')?.[1] ?? 0)
+      const stride = colWidth > 0 ? colWidth + 40 : 1
+      const transform = /translateX\(-?(\d+(?:\.\d+)?)px\)/.exec(
+        document.querySelector('.reader-paginated-track')?.getAttribute('style') ?? '')?.[1] ?? '0'
+      const geometry = [...document.querySelectorAll('.reader-page-chapter')].map(node => {
+        const range = document.createRange(); range.selectNodeContents(node)
+        const rects = [...range.getClientRects()].filter(r => r.width > 1)
+        const left = rects.length ? Math.min(...rects.map(r => r.left)) : bodyLeft
+        return {
+          t: node.querySelector('h1')?.textContent?.trim().slice(0, 4),
+          col: Math.round((left - bodyLeft) / stride),
+          cols: new Set(rects.map(r => Math.round(r.left))).size,
+        }
+      })
       return {
         page: Number(match?.[1] ?? -1),
         total: Number(match?.[2] ?? -1),
         sections: document.querySelectorAll('.reader-page-chapter').length,
         text: (node?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 24),
+        geometry, fillers: document.querySelectorAll('.reader-column-filler').length,
+        transformCol: Math.round(Number(transform) / stride),
       }
     }
     const settle = async () => {
@@ -313,7 +331,9 @@ try {
     + `${backward.afterPrepend.page}/${backward.afterPrepend.total} ${backward.afterPrepend.sections} 章`)
   check('④接上之后眼前这一页不许动（页码后移了，看到的还是同一栏字）',
     backward.afterPrepend.text !== '' && backward.afterPrepend.text === backward.atStart.text,
-    `接之前「${backward.atStart.text}」 vs 之后「${backward.afterPrepend.text}」`)
+    `接之前「${backward.atStart.text}」 vs 之后「${backward.afterPrepend.text}」`
+    + ` · 接前${JSON.stringify(backward.atStart.geometry)}垫${backward.atStart.fillers}位移${backward.atStart.transformCol}栏`
+    + ` · 接后${JSON.stringify(backward.afterPrepend.geometry)}垫${backward.afterPrepend.fillers}位移${backward.afterPrepend.transformCol}栏`)
   check('④再按一次就真的往回一页：页码减一、字往前退了一栏',
     backward.afterStepBack.page === backward.afterPrepend.page - 1
       && backward.afterStepBack.text !== backward.afterPrepend.text,

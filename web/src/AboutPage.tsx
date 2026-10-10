@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, type AboutInfo, type UpdateCheckResult } from './api'
+import { DISCLAIMER_TEXT, PRODUCT_INTRO, TERMS_TEXT } from './agreement'
 
 /**
  * 「关于」（用户 2026-10-02：「加入关于（名称，开发者，更新日志，检查更新，用户协议，开源许可，免责声明）」）。
@@ -38,10 +39,7 @@ const REFERENCED: Array<[string, string, string]> = [
 ]
 
 const LICENSE_TEXT = '本项目以 GNU GPL-3.0 发布，完整条款见仓库根目录的 LICENSE 文件。你可以自由运行、研究、修改并分发本程序，但修改后的版本必须以同一协议公开。'
-
-const TERMS_TEXT = '青阅是一个自托管的本地程序：它跑在你自己的机器上，数据放在你自己的目录里，服务默认只监听 127.0.0.1。使用它意味着你自己保管这些数据、自己负责访问了哪些站点。本程序不提供账号、不上传你的书架、不替你保存任何云端内容。'
-
-const DISCLAIMER_TEXT = '本程序只是"按你给出的规则去取并渲染公开网页内容"的工具，本身不含任何书源、订阅源或发现源，也不内置任何作品。你导入的规则与地址所指向的内容由第三方站点提供，其合法性由内容提供方与使用者负责；请在你所在地区的法律允许范围内使用，并遵守目标站点的访问条款。作者不对因使用本程序产生的任何后果承担责任。'
+// 用户协议 / 免责声明 / 产品介绍的文案在 `agreement.ts`（与首启弹层共用一份，抄两份迟早漂移）。
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -116,6 +114,10 @@ export function AboutPage({
           </p>
         )}
       </header>
+
+      <Section title="产品介绍">
+        <p>{PRODUCT_INTRO}</p>
+      </Section>
 
       <Section title="用户协议">
         <p>{TERMS_TEXT}</p>

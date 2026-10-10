@@ -577,6 +577,16 @@ export const api = {
     return `/api/covers/proxy?${params.toString()}`
   },
   bookImage: (url: string, page?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`,
+  /**
+   * 媒体流式代理（音频/视频/文件直链）：浏览器 `<audio>/<video>` 带不上 Referer，防盗链源直接 403 播不了；
+   * 服务端代取并流式回传、注入本章地址当 Referer、原样转发 Range。非 http(s)（已同源的）原样返回。
+   */
+  bookMedia: (url: string, referer?: string) => {
+    if (!/^https?:\/\//i.test(url)) return url
+    const params = new URLSearchParams({ url })
+    if (referer) params.set('referer', referer)
+    return `/api/book/media?${params.toString()}`
+  },
   /** 浏览器直传手机备份包：选文件即导入，服务端读完临时文件就删。 */
   importBackupFile: (file: File, password?: string) => {
     const form = new FormData()

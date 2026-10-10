@@ -14,6 +14,7 @@ import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, th
 import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
 import { AboutPage } from './AboutPage'
+import { FirstRunAgreement } from './FirstRunAgreement'
 import { CustomizeModal } from './CustomizeModal'
 import { ServerPortModal } from './ServerPortModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, formatIntro, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './searchFilters'
@@ -3518,6 +3519,7 @@ function App() {
       <ToastContainer />
       <ContextMenuLayer />
       <PwaManager />
+      <FirstRunAgreement />
       <AppHeader
         page={page}
         settings={settings}

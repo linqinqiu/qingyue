@@ -1180,6 +1180,23 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
    h1 本来就带 break-before: column，两个断点挨在一起会被合成一次换栏，
    等于什么都没垫（实测就是这样第一次没修好）。给它 1px 高度，让它真的占掉一整栏。 */
 .reader-column-filler { break-before: column; break-after: column; height: 1px; visibility: hidden; }
+/* 翻页动画（readerSettings.pageAnim）：slide 只在逐页翻时挂类（大跳不滑，见 ReaderScreen）；
+   fade 靠短促的透明度下潜再回来。连续滚动模式两者都不生效。 */
+.reader-paginated-track { transition: opacity 140ms ease; }
+.reader-paginated-track.is-anim-slide { transition: transform 240ms ease, opacity 140ms ease; }
+.reader-paginated-viewport.is-fading .reader-paginated-track { opacity: .25; }
+
+/* 首次打开的用户协议与免责声明（FirstRunAgreement）：外壳用统一那套（overlay-backdrop + dialog-shell），
+   这里只管内容排版；读完 5 秒才能点同意。 */
+.overlay-backdrop.is-agreement { --dw-m: 680px; }
+.agreement-card { padding: 24px 26px; gap: 12px; }
+.agreement-card h1 { margin: 0; font-size: 20px; }
+.agreement-card h2 { margin: 14px 0 4px; font-size: 15px; }
+.agreement-card p { margin: 0; font-size: 13.5px; line-height: 1.8; color: var(--ink-soft, #444); }
+.agreement-intro { font-weight: 600; color: var(--ink, #1c1c1c) !important; }
+.agreement-body { overflow: auto; min-height: 0; padding-right: 6px; }
+.agreement-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.agreement-actions .primary-button[disabled] { opacity: .55; cursor: default; }
 .reader-paginated-footer { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px, 5vw, 40px) 10px; color: var(--muted); font-size: 12px; user-select: none; }
 
 /* Desktop Sidebar Pinning */

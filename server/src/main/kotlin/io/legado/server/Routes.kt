@@ -1653,6 +1653,50 @@ fun Route.apiRoutes(
                 call.respond(HttpStatusCode.BadGateway, ApiError("image_failed", error.message ?: "图片抓取失败"))
             }
         }
+        /**
+         * 媒体流式代理（音频/视频/EPUB 直链）：浏览器原生 `<audio>/<video>` 无法自定义请求头，
+         * 带不上 Referer，遇到防盗链源就 403 播不了；且需要 Range 支持才能拖动进度、才能被浏览器接受为可播放媒体。
+         * 这里由服务端代取并流式回传：注入 Referer、原样转发/回传 Range。媒体文件可能很大，
+         * 不落盘缓存（与 5MiB 上限的封面缓存不同），只在传输途中于内存里中转。
+         */
+        get("/book/media") {
+            val url = call.request.queryParameters["url"].orEmpty()
+            if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_media", "媒体地址无效")); return@get
+            }
+            // `referer` 用这一章的地址：媒体站按防盗链判来源，不带就回 403。
+            val referer = call.request.queryParameters["referer"]?.takeIf { it.startsWith("http", ignoreCase = true) }
+            val range = call.request.headers["Range"]
+            withContext(Dispatchers.IO) {
+                try {
+                    val media = fetchMediaStream(url, referer, range)
+                    val status = when {
+                        range != null && media.statusCode == 206 -> HttpStatusCode.PartialContent
+                        else -> HttpStatusCode.OK
+                    }
+                    call.response.headers.apply {
+                        append("Accept-Ranges", "bytes")
+                        append("Cache-Control", "private, max-age=300")
+                        media.contentType?.let { append("Content-Type", it) }
+                        media.contentLength?.let { append("Content-Length", it) }
+                        media.contentRange?.let { append("Content-Range", it) }
+                    }
+                    call.respondOutputStream(status = status) {
+                        media.stream.use { input -> input.copyTo(this) }
+                    }
+                } catch (error: Exception) {
+                    Unit.logNetwork(
+                        "媒体代理失败",
+                        mapOf(
+                            "host" to (runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "未知"),
+                            "原因" to (error.message ?: error.javaClass.simpleName),
+                            "url" to url.take(120),
+                        ),
+                    )
+                    call.respond(HttpStatusCode.BadGateway, ApiError("media_failed", error.message ?: "媒体抓取失败"))
+                }
+            }
+        }
         get("/reading-progress") {
             val sourceId = call.request.queryParameters["sourceId"]
             val bookUrl = call.request.queryParameters["bookUrl"]
@@ -2033,6 +2077,56 @@ private val importFetchClient = java.net.http.HttpClient.newBuilder()
     .connectTimeout(java.time.Duration.ofSeconds(10))
     .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
     .build()
+
+/**
+ * 媒体流式代理用的 client：连接超时 10s、读超时 30s、重定向自己处理（跨域跳转不再补发 Referer，避免泄露来源）。
+ * 媒体文件可能很大，用 `ofInputStream()` 拿到流再边读边回传，不整包进内存。
+ */
+private val mediaFetchClient = java.net.http.HttpClient.newBuilder()
+    .connectTimeout(java.time.Duration.ofSeconds(10))
+    .followRedirects(java.net.http.HttpClient.Redirect.NEVER)
+    .build()
+
+private data class FetchedMedia(
+    val statusCode: Int,
+    val contentType: String?,
+    val contentLength: String?,
+    val contentRange: String?,
+    val stream: java.io.InputStream,
+)
+
+/**
+ * 代取一段媒体并原样回传。支持 Range 透传（浏览器拖动进度条），不支持 Range 的上游回 200 时我们也回 200 全量流（退化成不能拖动，但仍能播放）。
+ * 重定向最多 4 跳，跨域跳转后不再带 Referer。
+ */
+private fun fetchMediaStream(url: String, referer: String?, range: String?): FetchedMedia {
+    var uri = URI(url)
+    NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "媒体")
+    repeat(4) {
+        val builder = java.net.http.HttpRequest.newBuilder(uri)
+            .timeout(java.time.Duration.ofSeconds(30))
+            .header("User-Agent", "LegadoServer/0.1")
+            .GET()
+        referer?.let { builder.header("Referer", it) }
+        range?.let { builder.header("Range", it) }
+        val resp = mediaFetchClient.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofInputStream())
+        val status = resp.statusCode()
+        if (status in 300..399) {
+            resp.body().close()
+            val loc = resp.headers().firstValue("location").orElse(null)
+                ?: throw IllegalArgumentException("媒体重定向缺少地址")
+            uri = uri.resolve(URI(loc))
+            NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "媒体")
+            return@repeat
+        }
+        require(status in 200..299 || status == 206) { "媒体上游返回 HTTP $status" }
+        val cType = resp.headers().firstValue("content-type").orElse(null)
+        val cLen = resp.headers().firstValue("content-length").orElse(null)
+        val cRange = resp.headers().firstValue("content-range").orElse(null)
+        return FetchedMedia(status, cType, cLen, cRange, resp.body())
+    }
+    throw IllegalArgumentException("媒体重定向次数超过限制")
+}
 
 private suspend fun parseImportedReplaceRules(bodyText: String, depth: Int = 0): List<ReplaceRule> {
     val cleanText = bodyText.trim().removePrefix("\uFEFF")
