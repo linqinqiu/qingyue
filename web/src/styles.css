@@ -460,7 +460,9 @@ svg { width: 18px; height: 18px; flex: none; }
 .workspace-scroll { width: min(1320px, 100%); display: grid; gap: 26px; padding: clamp(22px, 4vw, 52px); margin: 0 auto; }
 .source-editor, .reading-desk { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .subscription-panel { margin-bottom: 22px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
-.subscription-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 54px 32px; }
+/* W4：订阅页原来是一条 920px 居中窄列（1440 屏两侧死白 43%）。收到与书库同一档几何
+   （min(1240px) 居中 + 同一条页边距），既把死白压下来，也和书库、书架一条线。 */
+.subscription-page { width: min(1240px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: clamp(26px, 4vw, 56px) clamp(18px, 4vw, 44px); }
 .subscription-page .subscription-panel { margin-top: 28px; }
 .subscription-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .subscription-panel h2 { margin-top: 4px; font-family: Georgia, "Noto Serif SC", serif; font-size: 20px; font-weight: 600; }
