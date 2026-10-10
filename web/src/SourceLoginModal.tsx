@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { api, ExternalLoginStatus, SourceBrowserCookies, SourceLoginUiItem, SourceLoginUiResponse } from './api'
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
+import { Select } from './Select'
 import { SourceWebViewModal } from './SourceWebViewModal'
 
 interface SourceLoginModalProps {
@@ -436,15 +437,13 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
       return (
         <div key={`${key}-${index}`} style={flexStyle} className="login-ui-item-field">
           <label className="login-ui-field-label">{label}</label>
-          <select
+          <Select
             className="login-ui-select"
             value={value}
-            onChange={e => handleInputChange(key, e.target.value)}
-          >
-            {options.map((opt, i) => (
-              <option key={`${opt}-${i}`} value={opt}>{opt}</option>
-            ))}
-          </select>
+            onChange={v => handleInputChange(key, v)}
+            ariaLabel={label || '选择'}
+            options={options.map(opt => ({ value: opt, label: opt }))}
+          />
         </div>
       )
     }

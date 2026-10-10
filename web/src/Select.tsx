@@ -45,9 +45,11 @@ type SelectProps = {
   searchable?: boolean
   /** 整只控件不可用（比如批量操作还没选中任何书时，不该让人以为能点）。 */
   disabled?: boolean
+  /** 挂到触发器那颗 button 上，给外部 `<label htmlFor>` 用（button 也是可标注元素）。 */
+  id?: string
 }
 
-export function Select({ value, options, onChange, ariaLabel, placeholder = '请选择', className = '', searchable, disabled = false }: SelectProps) {
+export function Select({ value, options, onChange, ariaLabel, placeholder = '请选择', className = '', searchable, disabled = false, id }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const [active, setActive] = useState(0)
@@ -202,6 +204,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = '请
     <span className={`ui-select ${className}`.trim()} data-open={open || undefined}>
       <button
         type="button"
+        id={id}
         ref={triggerRef}
         className="ui-select-trigger"
         aria-haspopup="listbox"

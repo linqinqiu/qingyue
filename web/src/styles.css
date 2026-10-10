@@ -417,7 +417,7 @@ svg { width: 18px; height: 18px; flex: none; }
 .sidebar-notice { margin: 0 16px 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .source-list-label { display: flex; justify-content: space-between; padding: 10px 20px; color: var(--muted); border-top: 1px solid var(--line); font-size: 12px; }
 .source-list { display: grid; overflow-y: auto; overflow-x: hidden; align-content: start; min-width: 0; }
-.source-list button { min-height: 48px; display: grid; gap: 2px; padding: 8px 16px; background: transparent; color: var(--ink); text-align: left; border-left: 3px solid transparent; width: 100%; box-sizing: border-box; min-width: 0; }
+.source-list button { min-height: var(--row-h); display: grid; gap: 2px; padding: 8px 16px; background: transparent; color: var(--ink); text-align: left; border-left: 3px solid transparent; width: 100%; box-sizing: border-box; min-width: 0; }
 .source-list button:hover { background: var(--surface-muted); }
 .source-list button.selected { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent-ink); }
 .source-list small { color: var(--muted); font-size: 11px; }
@@ -960,8 +960,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .chapter-search input { width: 100%; padding: 0; border: 0; background: transparent; font-size: 13px; color: var(--ink); }
 .chapter-search svg { width: 15px; flex-shrink: 0; }
 .reader-chapters { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: block; contain: strict; will-change: scroll-position; -webkit-overflow-scrolling: touch; }
-.reader-chapter-item { width: 100%; height: 40px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 0; border-left: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; font-size: 13px; line-height: 1.3; cursor: pointer; user-select: none; }
-.reader-chapter-volume { width: 100%; height: 40px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; background: var(--surface-muted); color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.3; border-left: 3px solid var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: none; }
+.reader-chapter-item { width: 100%; height: var(--row-h-list); box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 0; border-left: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; font-size: 13px; line-height: 1.3; cursor: pointer; user-select: none; }
+.reader-chapter-volume { width: 100%; height: var(--row-h-list); box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; background: var(--surface-muted); color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.3; border-left: 3px solid var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: none; }
 .reader-chapter-item:hover { background: var(--surface-muted); color: var(--ink); }
 .reader-chapter-item.current { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .reader-chapter-item i { width: 5px; height: 5px; flex: none; border-radius: 50%; background: transparent; }
@@ -1990,15 +1990,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   color: var(--ink);
 }
 
-.login-ui-select {
-  padding: 8px 12px;
-  font-size: 14px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
-  width: 100%;
-}
+/* 登录 UI 的下拉（W3 起走站内 Select）：几何落到触发器上，外壳只管占满整行 */
+.login-ui-select { width: 100%; }
+.login-ui-select .ui-select-trigger { padding: 8px 12px; font-size: 14px; border-radius: 6px; background: var(--surface); }
 
 .login-ui-item-info {
   padding: 6px 0;
@@ -3781,6 +3775,9 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
   font-size: 12px;
 }
 
+/* 分组筛选下拉（W3 起走站内 Select）：原生那颗原来靠内联压成 34px/12px，这里收到同一档 */
+.rule-group-filter .ui-select-trigger { min-height: 34px; padding: 5px 9px; font-size: var(--t-sm); }
+
 .rule-form-grid-2 {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -3888,12 +3885,7 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
   padding: 2px;
 }
 
-.batch-checkbox-wrap input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
+.batch-checkbox-wrap input[type="checkbox"] { cursor: pointer; }
 
 .source-list-item-content {
   flex: 1;
@@ -4027,7 +4019,6 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
 .health-modal-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
 .health-modal-actions .subtle-button { min-height: 30px; padding: 0 12px; font-size: 12px; }
 .health-scope-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
-.health-scope-toggle input { width: 14px; height: 14px; accent-color: var(--accent); }
 
 /* 体检结论 → 分组标签。三档各一行：标签、数量、样例、打标签/撤销 */
 .health-grouping { display: grid; gap: 6px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); }
@@ -4484,6 +4475,8 @@ input[type=range] { min-height: 24px; }
   /* 间距 4 的倍数 */
   --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 28px; --s-7: 40px;
   --r-1: 6px; --r-2: 8px; --r-3: 12px; --r-4: 16px; --r-pill: 999px;
+  /* 行高档位（W3）：B 类页（主从页）的行一档，清单页的行一档。 */
+  --row-h: 48px; --row-h-list: 40px;
   --ctl-sm: 30px; --ctl: 34px; --ctl-lg: 40px;
   --page-max: 1240px;
   --gutter: clamp(18px, 4vw, 44px);
@@ -4966,7 +4959,6 @@ input[type=range] { min-height: 24px; }
 .source-field-input:hover, .source-field-textarea:hover, .source-field select:hover { border-color: color-mix(in srgb, var(--muted) 40%, var(--line)); }
 .source-field-inline { grid-template-columns: 1fr; }
 .source-field-switch { display: flex; align-items: center; gap: 8px; font-size: var(--t-lg); font-weight: 600; cursor: pointer; }
-.source-field-switch input { width: 16px; height: 16px; accent-color: var(--accent-solid); }
 .source-editor-raw { flex: 1 1 auto; min-height: 300px; }
 
 .source-create-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: var(--ctl); margin-bottom: var(--s-2); }
@@ -4986,9 +4978,8 @@ input[type=range] { min-height: 24px; }
 .rss-filter { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-4); }
 .rss-filter input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-1); padding: 9px 11px; background: var(--surface-muted); color: var(--ink); outline: none; }
 .rss-filter .ui-select { flex: none; min-width: 168px; }
-/* 「只看能读的」那条勾：上面 .rss-filter input 是给文本框的，这里要逐项还原成原生复选框 */
+/* 「只看能读的」那条勾：`.rss-filter input` 是给文本框的，勾的形状交给全局 `input[type=checkbox]` 那一档 */
 .rss-readable-toggle { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--muted); font-size: var(--t-sm); white-space: nowrap; cursor: pointer; }
-.rss-readable-toggle input { flex: none; width: 14px; height: 14px; min-width: 0; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
 /* 这条要盖过 `.subscription-panel form` 的 flex：否则按钮会被 textarea 拉成一条高块 */
 .subscription-panel .rss-import { display: grid; gap: var(--s-2); margin-top: var(--s-4); }
 .rss-import textarea { border: 1px solid var(--line); border-radius: var(--r-1); padding: 10px 11px; background: var(--surface-muted); color: var(--ink); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--t-sm); resize: vertical; }
@@ -5136,6 +5127,18 @@ input[type=range] { min-height: 24px; }
 .subscription-tabs button small { margin-left: 6px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--surface-muted); color: var(--muted); font-size: var(--t-xs); font-weight: 500; }
 .subscription-tabs button.active small { background: var(--accent-soft); color: var(--accent-ink); }
 
+/* 复选统一到一档（W3）：16px、一个强调色令牌 `--accent-solid`。以前 14/15/16px 混用、
+   `--accent` 与 `--accent-solid` 混用，还有几处完全没声明（吃 UA 默认 ~13px）；更麻烦的是有些勾
+   落在 `.source-filter input` / `.rss-filter input` 这类**给文本框的**规则里，会连边框/底色/内边距
+   一起吃成文本框的样子。这里统一重置，并放在那些规则**之后**，靠顺序盖过它们（同特异度）。
+   下面各处的尺寸/强调色声明随之删掉，只留布局相关的（gap/间距等）。 */
+input[type="checkbox"] {
+  width: 16px; height: 16px; min-width: 0;
+  margin: 0; padding: 0; border: 0; background: transparent;
+  accent-color: var(--accent-solid);
+  flex: none;
+}
+
 /* 站内下拉：原生 select 的弹层字号/选中态跟系统走，且选项多了只能首字母跳转 */
 .ui-select { position: relative; display: inline-flex; min-width: 0; }
 .ui-select-trigger { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); width: 100%; min-height: var(--ctl-md, 38px); padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface-muted); color: var(--ink); font-size: var(--t-md); text-align: left; }
@@ -5254,7 +5257,6 @@ input[type=range] { min-height: 24px; }
 
 /* ② 选源：只列启用中的，停用要显式勾出来 */
 .library-scope-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--t-sm); white-space: nowrap; cursor: pointer; }
-.library-scope-toggle input { width: 14px; height: 14px; accent-color: var(--accent); }
 .library-scope .ui-select-trigger { min-width: 230px; max-width: 420px; background: var(--surface); }
 @media (max-width: 640px) { .library-scope .ui-select-trigger { min-width: 0; width: 100%; } }
 
@@ -5371,9 +5373,7 @@ input[type=range] { min-height: 24px; }
 /* 就地展开的编辑器：规则表本身已经在弹窗里，再叠一层弹窗就没人知道自己在改哪一条 */
 .toc-rule-editor { display: grid; gap: 10px; padding: 12px 10px; background: var(--surface-muted); border-top: 1px solid var(--line); }
 .toc-rule-editor-enable { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: var(--t-sm); }
-.toc-rule-editor-enable input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
 .toc-rule-switch { display: flex; align-items: center; gap: 5px; padding-top: 2px; color: var(--muted); font-size: var(--t-xs); cursor: pointer; }
-.toc-rule-switch input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-solid); }
 .toc-rule.is-broken { opacity: .62; }
 .toc-rule.is-broken .toc-rule-switch { cursor: not-allowed; }
 .toc-rule-main { display: grid; gap: 3px; min-width: 0; }

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type SourceRecord, type SourceSummary } from './api'
 import { Icon } from './icons'
 import { SOURCE_FIELD_GROUPS, type SourceField } from './bookSourceFields'
+import { Select } from './Select'
 
 type Json = Record<string, unknown>
 
@@ -78,9 +79,13 @@ const SourceFieldRow: React.FC<{
     return (
       <div className="source-field">
         {label}
-        <select id={id} value={index} onChange={e => onChange(field, Number(e.target.value))}>
-          {field.array.map((name, i) => <option key={name} value={i}>{name}</option>)}
-        </select>
+        <Select
+          id={id}
+          value={String(index)}
+          onChange={v => onChange(field, Number(v))}
+          ariaLabel={field.title}
+          options={field.array.map((name, i) => ({ value: String(i), label: name }))}
+        />
         {hint}
       </div>
     )

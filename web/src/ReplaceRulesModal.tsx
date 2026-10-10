@@ -3,6 +3,7 @@ import { api, ReplaceRule, ReplaceRulePreviewResponse } from './api'
 import { toast } from './Toast'
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
+import { Select } from './Select'
 
 interface Props {
   isOpen: boolean
@@ -353,19 +354,16 @@ export const ReplaceRulesModal: React.FC<Props> = ({
             )}
 
             {groups.length > 0 && (
-              <select
+              <Select
                 value={selectedGroup}
-                onChange={e => setSelectedGroup(e.target.value)}
-                className="rule-form-input"
-                style={{ width: 'auto', height: '34px', padding: '0 8px', fontSize: '12px' }}
-              >
-                <option value="all">全部分组 ({rules.length})</option>
-                {groups.map(g => (
-                  <option key={g} value={g}>
-                    {g} ({rules.filter(r => r.group?.trim() === g).length})
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedGroup}
+                ariaLabel="按分组筛选规则"
+                className="rule-group-filter"
+                options={[
+                  { value: 'all', label: `全部分组 (${rules.length})` },
+                  ...groups.map(g => ({ value: g, label: `${g} (${rules.filter(r => r.group?.trim() === g).length})` })),
+                ]}
+              />
             )}
           </div>
         </div>
