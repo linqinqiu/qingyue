@@ -103,8 +103,9 @@ export function ChangelogPage({ serverVersion }: { serverVersion: string }) {
 
   return (
     <section className="changelog-page">
-      {/* 标题由悬浮层头给（0.6.27），正文只留一句"当前跑的是哪一版" */}
-      <p className="page-lead">{serverVersion ? `当前运行的是 ${serverVersion}。` : '版本号以服务端报回的为准。'}</p>
+      {/* 标题由悬浮层头给（0.6.27）。只报"当前跑的是哪一版"这个事实；拿不到就什么都不说，
+          不写"版本号以服务端报回的为准"这种讲实现的话。 */}
+      {serverVersion && <p className="page-lead">当前运行的是 {serverVersion}。</p>}
       {loading && <p className="changelog-loading">正在读取…</p>}
       {!!error && (
         <Notice

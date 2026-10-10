@@ -529,7 +529,6 @@ function BookDetailModal({
               <div className="book-detail-cover book-detail-cover-text"><CoverFallback name={book.details.name} author={book.details.author} /></div>
             )}
             <div className="book-detail-info">
-              <span className="section-kicker">书籍详情</span>
               <h2>{book.details.name}</h2>
               <p>
                 {book.details.author || '未知作者'}
@@ -1972,7 +1971,6 @@ function BookInfoEditModal({
       >
         <header className="dialog-head">
           <div>
-            <span className="section-kicker">书籍信息</span>
             <h2>编辑书籍信息</h2>
           </div>
           <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭">

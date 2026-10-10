@@ -131,8 +131,9 @@ export function BackupPage() {
 
   return (
     <section className="backup-page">
-      {/* 标题由悬浮层头给（0.6.27），正文只留一句说清"这一步在做什么"的引导语 */}
-      <p className="page-lead">选一个 Legado 导出的 zip 就能恢复。全程只在这台电脑与它自己的服务之间传输，不经过任何网盘或网络服务。</p>
+      {/* 标题由悬浮层头给（0.6.27）。正文不再写"全程在本机/不经过网盘"这类讲实现的句子 ——
+          "包不落盘"那句（下面主操作面板里）才是用户真正要的那句。 */}
+      <p className="page-lead">选一个 Legado 导出的 zip 就能恢复。</p>
 
       <section className="backup-panel">
         <div className="backup-actions">
@@ -167,7 +168,7 @@ export function BackupPage() {
               aria-label="凭据解密密码"
             />
             <p className="backup-hint">
-              只有 <code>cookies.json</code> 需要它 —— 备份包里的凭据是整份 AES 加密的。
+              只有 <code>cookies.json</code> 需要它。
               不填也照样导入其余全部内容，凭据那一节会单独告诉你没解开。密码只在本次请求内存里用一次，不写日志。
             </p>
           </div>
@@ -189,10 +190,6 @@ export function BackupPage() {
 
       <section className="backup-panel">
         <h2>原样收下的条目</h2>
-        <p className="backup-hint">
-          应用里还没有对应界面的条目不会被丢掉 —— 服务会原样收在数据目录里、随时可下载；
-          阅读样式与朗读引擎还能一键套到本机设置。
-        </p>
         <dl className="backup-scope">
           {KEPT_SECTIONS.map(([name, detail]) => (
             <div key={name}>
