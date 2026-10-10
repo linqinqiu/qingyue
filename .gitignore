@@ -121,5 +121,7 @@ local-patches.diff
 !/tools/verify/next-mount-check.mjs
 !/tools/verify/next-ui-check.mjs
 !/tools/verify/package-check.mjs
+# 桌面化门禁（PROPOSAL-017 / ADR-017 一期验证）
+!/tools/verify/desktop-check.mjs
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，
 # 不再含任何本机绝对路径，所以从忽略名单里放出来随仓库分发。

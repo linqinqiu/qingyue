@@ -1,7 +1,7 @@
 ---
 id: PROPOSAL-017
 title: 桌面化封装 —— 把「青阅」打成一个能双击的 Windows 程序
-status: draft # draft | review | accepted | implemented | rejected
+status: accepted # draft | review | accepted | implemented | rejected
 author: Agent & User
 date: 2026-10-03
 ---
@@ -160,3 +160,33 @@ B 作为二期，且以"先做一个能开能关能读的最小尖峰"为准入�
 **没借鉴的一条**：他的 npm 分发通道（`npm/platform/workbuddy-switch-<tag>` 带 `bin/`）对我们没有对应物 ——
 我们的产物是单个 jar + 一个自带运行时的包，塞进 npm 只会多一条要维护的发布路径。
 将来若真要做"一条命令装好"，再单开一份提案讨论，不改本文件的结论。
+
+## 9. 实现记录（2026-10-10，Phase A 已完成）
+
+一期（路线 A：jpackage app-image + jlink 运行时）已落地并通过门禁 `tools/verify/desktop-check.mjs`：
+
+- 新增 `server/src/main/kotlin/io/legado/server/DesktopLauncher.kt`：`jpackage --main-class` 入口。
+  职责只有三件——探测端口（占用即退出，充当单实例锁）、带 `LEGADO_*` 起服务（复用
+  `createLegadoEngine`，不改 `Guard.kt`、不加鉴权）、服务就绪后开浏览器、系统托盘给
+  「打开 / 退出」，退出时优雅关服务。**webview 直接开 `http://127.0.0.1:<port>`，壳只当进程管家 + 窗口。**
+- `Application.kt` 抽出 `createLegadoEngine(config, cdsDump)`，让 `main` 与桌面壳共用同一套启动代码。
+- 新增 `scripts/package-desktop.mjs`：确保前端 + fat jar → `jlink` 裁运行时 → `jpackage --type app-image`
+  出 `青阅.exe`（自带运行时、不要求装 Java）→ 可选 `--data-dir` 写 `.env` → zip。产物
+  `dist/qingyue-desktop-<ver>.zip`（~53MB，顶层 `青阅/`）。
+- 门禁 `tools/verify/desktop-check.mjs`：干净 PATH 下起壳 → /healthz 可达、同源自壳内写操作通过、
+  非同源写请求 403、单实例（第二个实例不起新端口监听）、退出后端口释放。
+
+### 5 件待拍板事项的落地（采用原「我的建议」列）
+
+| # | 议题 | 落地 |
+| --- | --- | --- |
+| 1 | 数据目录 | 默认 `<镜像>/data`（便携、不写系统盘）；打包时 `--data-dir <路径>` 写 `.env` 指向现有书架（本机首次打包用，不静默迁移） |
+| 2 | 端口 | 固定 1234 且显式传给服务端（裸 jar 默认 8080 已规避）；占用即报错退出（兼单实例锁） |
+| 3 | 一期是否独立窗口 | 先 A（jpackage + 浏览器），Tauri 留二期 |
+| 4 | 发行形态 | 本机 app-image 目录 + zip（`.msi` 需 WiX，本机没有，未做） |
+| 5 | 关窗口行为 | 托盘「退出」→ `System.exit(0)` 触发 Ktor shutdown hook 优雅关服务 |
+
+### 已知（Phase A 范围内）
+
+- 镜像根若落在只读目录（如 `Program Files`），写 `port.txt`/数据会失败——本机解压到普通目录即可，属预期。
+- B 组（Tauri 窗口壳）未做，按 ADR-017 以尖峰为准入门槛。

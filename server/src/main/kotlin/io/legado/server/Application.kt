@@ -17,34 +17,40 @@ import kotlinx.serialization.json.Json
 import kotlin.system.exitProcess
 import java.nio.file.Files
 
+/**
+ * 构建并（按需）启动青阅服务引擎。抽出来是为了让 `main`（裸跑 jar / CDS 归档）和
+ * 桌面壳（`DesktopLauncher`）共用同一份启动代码 —— 桌面壳用 `start(wait = false)` 拿到引擎，
+ * 自己管生命周期（开浏览器、托盘退出、优雅关闭），而不是把引擎堵在 main 线程上。
+ *
+ * 停读的客户端会把一个线程整篇压在 socket 的阻塞写上（不是挂起）：实测 24 个"读了 8KB
+ * 就不再往下读"的连接，就能让一个无关的 `/healthz` 等 15 秒 —— 表现就是"端口还在听，
+ * 服务像死了"。这条现在做成了可重跑的门禁：`tools/verify/stalled-client-check.mjs`。
+ *
+ * 能调的旋钮是引擎的分组线程数：`callGroupSize` 决定"跑请求处理与写响应"那一组有多大，
+ * 默认等于 CPU 核数 —— 也就是说几台停读的浏览器就能把整组占满，连搜索要的算力一起拖死。
+ * 给到 64 之后，阻塞写占的是这一组（本来就是为"可能在等"而存在的组），
+ * 而 DefaultDispatcher 那批线程留给规则引擎与搜索。
+ *
+ * 形状上的坑记一笔：`embeddedServer(CIO, host, port) { … }` 那条重载**没有** configure 参数，
+ * 尾随 lambda 是 module 而不是引擎配置 —— 要调引擎就得走 environment + configure 这条，
+ * 主机端口改由 `connector { }` 给。
+ */
+fun createLegadoEngine(config: ServerConfig, cdsDump: Boolean = false) = embeddedServer(
+    CIO,
+    environment = applicationEnvironment(),
+    configure = {
+        connector { host = config.host; port = config.port }
+        callGroupSize = AppConfig.callGroupSize
+    },
+) {
+    // --cds-dump：只为生成 CDS 类归档（tools/make-cds.mjs 用）。服务照常起来，
+    // 脚本趁这段时间预热几个接口，然后本进程正常退出 —— 归档由 JVM 的 shutdown hook 写盘。
+    legadoApplication(config, cdsDump = cdsDump)
+}
+
 fun main(args: Array<String>) {
     val config = ServerConfig.fromEnvironment()
-    /*
-     * 停读的客户端会把一个线程整篇压在 socket 的阻塞写上（不是挂起）：实测 24 个"读了 8KB
-     * 就不再往下读"的连接，就能让一个无关的 `/healthz` 等 15 秒 —— 表现就是"端口还在听，
-     * 服务像死了"。这条现在做成了可重跑的门禁：`tools/verify/stalled-client-check.mjs`。
-     *
-     * 能调的旋钮是引擎的分组线程数：`callGroupSize` 决定"跑请求处理与写响应"那一组有多大，
-     * 默认等于 CPU 核数 —— 也就是说几台停读的浏览器就能把整组占满，连搜索要的算力一起拖死。
-     * 给到 64 之后，阻塞写占的是这一组（本来就是为"可能在等"而存在的组），
-     * 而 DefaultDispatcher 那批线程留给规则引擎与搜索。
-     *
-     * 形状上的坑记一笔：`embeddedServer(CIO, host, port) { … }` 那条重载**没有** configure 参数，
-     * 尾随 lambda 是 module 而不是引擎配置 —— 要调引擎就得走 environment + configure 这条，
-     * 主机端口改由 `connector { }` 给。
-     */
-    embeddedServer(
-        CIO,
-        environment = applicationEnvironment(),
-        configure = {
-            connector { host = config.host; port = config.port }
-            callGroupSize = AppConfig.callGroupSize
-        },
-    ) {
-        // --cds-dump：只为生成 CDS 类归档（tools/make-cds.mjs 用）。服务照常起来，
-        // 脚本趁这段时间预热几个接口，然后本进程正常退出 —— 归档由 JVM 的 shutdown hook 写盘。
-        legadoApplication(config, cdsDump = args.contains("--cds-dump"))
-    }.start(wait = true)
+    createLegadoEngine(config, cdsDump = args.contains("--cds-dump")).start(wait = true)
 }
 
 fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnvironment(), cdsDump: Boolean = false) {

@@ -1,7 +1,7 @@
 ---
 id: ADR-017
 title: 桌面化采用「jlink 精简运行时 + jpackage app-image」先落地，WebView 壳以尖峰为准入门槛
-status: proposed # proposed | accepted | superseded | deprecated
+status: accepted # proposed | accepted | superseded | deprecated
 date: 2026-10-03
 ---
 
@@ -74,3 +74,12 @@ date: 2026-10-03
 
 数据目录去向、端口固定还是自动挑、一期是否必须独立窗口、发行形态（目录/zip/msi）、关窗口是否停服务 ——
 逐条列在 PROPOSAL-017 §6，本文档不代替用户决定。
+
+## 7. 实现记录（2026-10-10）
+
+一期 A 已落地（见 PROPOSAL-017 §9）：`DesktopLauncher.kt` + `scripts/package-desktop.mjs` + 门禁
+`tools/verify/desktop-check.mjs`，产物 `dist/qingyue-desktop-<ver>.zip`（~53MB）。`createLegadoEngine`
+抽出后 `main` 与桌面壳共用启动代码；桌面壳不改 `Guard.kt`、不引入第二个运行时。验证：干净 PATH 下
+双击即可服务可达、同源自壳写操作通、非同源 403、单实例、退出释放端口。**原 §6 五件待拍板均按
+推荐默认落地**（数据目录便携 + 可选 `--data-dir`、端口固定 1234、一期只做 A、app-image+zip、托盘退出即停服务）。
+B（Tauri 窗口壳）仍按尖峰为准入门槛，未开工。
