@@ -355,6 +355,29 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         }
     }
 
+    /**
+     * 体检用：一次性把目标书源的完整记录取回来（id -> SourceRecord），别在并发闸门里逐个查库（N+1）。
+     * ids 为 null 时取全部启用源；给了 ids 就按 id 取（**含停用源** —— 体检允许点名停用的那批）。
+     */
+    fun listSourceRecords(ids: List<String>?): Map<String, SourceRecord> = connect { db ->
+        val distinctIds = ids?.distinct()?.takeIf { it.isNotEmpty() }
+        val sql = if (distinctIds == null) {
+            "select id, payload, version, updated_at from source where enabled = 1"
+        } else {
+            "select id, payload, version, updated_at from source where id in (${distinctIds.joinToString(",") { "?" }})"
+        }
+        db.prepareStatement(sql).use { statement ->
+            distinctIds?.forEachIndexed { index, id -> statement.setString(index + 1, id) }
+            statement.executeQuery().use { rs ->
+                buildMap {
+                    while (rs.next()) {
+                        put(rs.getString(1), SourceRecord(rs.getString(1), rs.getString(2), rs.getLong(3), rs.getLong(4)))
+                    }
+                }
+            }
+        }
+    }
+
     fun saveSource(parsed: ParsedSource, expectedVersion: Long?): SourceRecord = write { db ->
         db.autoCommit = false
         try {

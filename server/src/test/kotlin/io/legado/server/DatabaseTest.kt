@@ -152,6 +152,26 @@ class DatabaseTest {
     }
 
     @Test
+    fun `health check source records load in one batch and include named disabled sources`() {
+        val path = temporaryDatabase()
+        try {
+            val database = Database(path); database.initialize()
+            database.importSources(listOf(
+                """{"bookSourceUrl":"https://enabled.example","bookSourceName":"可用"}""",
+                """{"bookSourceUrl":"https://disabled.example","bookSourceName":"停用","enabled":false}""",
+            ))
+
+            // 不给 ids：只取启用源（与体检"没点名就只体检启用中"的口径一致）
+            assertEquals(setOf("https://enabled.example"), database.listSourceRecords(null).keys)
+            // 点名 ids：停用源也要取到（体检允许点名停用源），且 payload 完整带回来
+            val named = database.listSourceRecords(listOf("https://disabled.example"))
+            assertEquals(setOf("https://disabled.example"), named.keys)
+            assertTrue(named.getValue("https://disabled.example").json.contains("停用"))
+            database.close()
+        } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
+    }
+
+    @Test
     fun `subscription records preserve failure state and can be removed`() {
         val path = temporaryDatabase()
         try {

@@ -177,6 +177,10 @@ fun Route.apiRoutes(
                 allSources.filter { it.enabled }
             }
 
+            // 目标书源的完整记录一次性取回（键 = id）：原来是在并发闸门里逐个 database.getSource 查库，
+            // 属于 N+1 —— 几百个源挤在那 16 个并发槽里排队查库，跟真正的外呼抢时间。批量后查库退到闸门之外。
+            val recordsById = withContext(Dispatchers.IO) { database.listSourceRecords(req.ids) }
+
             val startTotalNs = System.nanoTime()
             val health = SourceHealth(runner)
             val semaphore = Semaphore(16)
@@ -185,7 +189,7 @@ fun Route.apiRoutes(
                 targetSources.map { summary ->
                     async(Dispatchers.IO) {
                         semaphore.withPermit {
-                            val record = database.getSource(summary.id)
+                            val record = recordsById[summary.id]
                             if (record == null) {
                                 SourceHealthCheckItem(
                                     id = summary.id,
