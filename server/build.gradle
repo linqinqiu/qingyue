@@ -15,6 +15,12 @@ test {
     // 表现是 `insufficient memory for the Java Runtime Environment … mmap failed to map 400556032 bytes`
     // —— 红的是 JVM 起不来，不是任何一条用例失败（实测过一次，崩溃日志落在 server/ 下）。
     maxHeapSize = '768m'
+    // 测试库都是 `Files.createTempFile` 建的（落在 java.io.tmpdir）。某些开发环境（沙箱/杀软）
+    // 会对系统临时目录里的 sqlite 文件上锁，表现为大面积「另一个程序正在使用此文件」假失败；
+    // 用 LEGADO_TEST_TMP 把测试临时文件挪到普通目录即可。CI 不设它，行为不变。
+    systemProperty "java.io.tmpdir", System.getenv("LEGADO_TEST_TMP") ?: System.getProperty("java.io.tmpdir")
+    // 失败时打全量异常（默认 SHORT 只有类名和行号，跨平台差异排查要消息与栈）。
+    testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
     finalizedBy jacocoTestReport
 }
 

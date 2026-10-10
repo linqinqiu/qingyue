@@ -45,7 +45,9 @@ jobs:
       - name: Run Web & Server Verification Tests
         run: |
           npm --prefix web run check
-          npx tsx web/test/run-all.ts
+          # 必须经 web 包跑（cwd=web）：从仓库根用 npx tsx 找不到 web/tsconfig.json，
+          # JSX 回落 classic 编译报 "React is not defined"，且 npx 会临时拉一个不匹配锁定版本的 tsx。
+          npm --prefix web test
           chmod +x gradlew
           ./gradlew :server:test --no-daemon
 

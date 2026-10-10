@@ -11,7 +11,9 @@ RUN --mount=type=cache,id=legado-npm-cache,target=/root/.npm \
 COPY web/ ./
 RUN npm run build
 
-FROM ${DOCKER_REGISTRY}gradle:8.13-jdk21 AS server-build
+FROM ${DOCKER_REGISTRY}gradle:8.13-jdk17 AS server-build
+# 构建镜像必须自带 JDK 17：server/build.gradle 把 toolchain 钉在 17，容器里只有别的版本时
+# Gradle 报 "Cannot find a Java installation ... languageVersion=17"（曾用 jdk21 镜像踩过）。
 WORKDIR /src
 COPY gradle/ gradle/
 COPY gradle/libs.versions.toml gradle/libs.versions.toml
