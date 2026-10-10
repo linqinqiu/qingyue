@@ -5,7 +5,7 @@
 //
 //   node tools/verify/frame-metrics.mjs before            # 写 out/frame-metrics-before.json
 //   node tools/verify/frame-metrics.mjs after --compare   # 与 before 逐页比，超阈值判红
-//   node tools/verify/frame-metrics.mjs now --frozen      # 书库与 baselines/frame-frozen-20261009.json 比，出界即红
+//   node tools/verify/frame-metrics.mjs now --frozen      # 书库与 baselines/frame-frozen-20261010.json 比，出界即红
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -267,7 +267,7 @@ console.log(`\nwrote ${file}`)
  * 判的是"数字没变"，不是"我看着没变"。
  */
 if (process.argv.includes('--frozen')) {
-  const frozenFile = path.join(ROOT, 'tools', 'verify', 'baselines', 'frame-frozen-20261009.json')
+  const frozenFile = path.join(ROOT, 'tools', 'verify', 'baselines', 'frame-frozen-20261010.json')
   if (!fs.existsSync(frozenFile)) { console.error(`冻结基线不在：${frozenFile}`); process.exit(1) }
   const frozen = JSON.parse(fs.readFileSync(frozenFile, 'utf8')).screens
   let fails = 0

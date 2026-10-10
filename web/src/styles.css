@@ -5389,9 +5389,9 @@ input[type=range] { min-height: 24px; }
 .customize-saved { color: var(--muted); font-size: 12px; }
 
 /* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
-.about-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
+.about-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0; padding: 36px 32px 64px; }
 /* —— 「设置」页：一行一件事，右侧一个动作。它不重复实现编辑器，只负责分类与跳转 —— */
-.settings-page { max-width: 760px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
+.settings-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0; padding: 36px 32px 64px; }
 .settings-section { margin-top: 30px; }
 .settings-section h2 { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; }
 .settings-rows { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
@@ -5427,10 +5427,12 @@ input[type=range] { min-height: 24px; }
 .about-table td:last-child { width: 88px; color: var(--muted); white-space: nowrap; }
 @media (max-width: 640px) { .about-page { padding: 32px 18px 44px; } }
 
-/* —— C 类页（设置 / 备份 / 关于）宽屏两栏 ——
-   PROPOSAL-018 §3.2 的目标是"两侧死白 ≤25%"。单栏限宽居中做不到：920 的列在 1440 屏上
-   两侧各留 260px（实测设置页 50%、备份 40%、关于 39%）。≥1200px 时把分组左右并排、
-   页头横跨两栏，内容实占 ~76%。窄屏（<1200px）仍是单栏居中，与原来一致。 */
+/* —— C 类页（设置 / 备份 / 关于）去居中 + 宽屏两栏 ——
+   PROPOSAL-018 §3.2：C 类页不再居中。原来是"限宽 760/920 居中"——1180 屏上设置页两侧
+   死白 41%、1440 屏 25%。改法：① 单栏不再居中（margin:0，靠左排），限宽 960（1180 屏
+   实测两侧死白 41%→24%）；② ≥1200px 仍把分组左右并排、页头横跨两栏（1440 屏两侧死白
+   25%）。**断点保持 1200 不降到 1180**：1180 若走两栏，内容变矮会让底部死白从 0% 涨到
+   20%（"底部不得变差"那条判据会红）—— 两侧死白 24% 已经达标，不必拿底部空白去换。 */
 @media (min-width: 1200px) {
   .settings-page, .backup-page, .about-page {
     max-width: 1120px;
@@ -5447,7 +5449,7 @@ input[type=range] { min-height: 24px; }
 }
 
 /* —— 「更新日志」页 —— */
-.changelog-page { max-width: 920px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
+.changelog-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0; padding: 36px 32px 64px; }
 .changelog-loading, .changelog-empty { color: var(--muted); font-size: 14px; }
 .changelog-list { display: grid; gap: 8px; margin-top: 28px; }
 .changelog-release { display: grid; gap: 14px; padding: 20px 0; border-top: 1px solid var(--line); }
