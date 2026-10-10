@@ -162,3 +162,32 @@ export function sectionProgress(box: SectionBox, scrollTop: number, viewport: nu
   const ratio = (scrollTop - box.top) / scrollable
   return Math.min(1, Math.max(0, ratio))
 }
+
+/** 一次排版测量之后页码的落点意图：`null` = 不改变当前位置。 */
+export type PageTarget = 'first' | 'last' | null
+
+/**
+ * 量完一轮之后，页码该落在哪一页。
+ *
+ * 四种意图分两类，混用就会出"跳到第 N 章却落在中间"：
+ * - `'first'` / `'last'` / 恢复进度 —— **换了锚点**，旧页码没有意义，按意图重算；
+ * - `null` 且没有恢复位置 —— 只是**同一个锚点内重量了一次**（改字号、拖窗口、续接挂章），
+ *   这时原地不动，只做夹取，否则用户眼前这一页会被甩走。
+ *
+ * 夹取用 `Math.min(currentPage, pageCount - 1)`：短章只有三页时"第 12 页"要落到末页，
+ * 而不是留在 12 让 `translateX` 把空白推上屏幕。
+ */
+export function resolveMeasuredPage(
+  target: PageTarget,
+  restoredPosition: number | null,
+  currentPage: number,
+  pageCount: number,
+): number {
+  if (pageCount <= 0) return 0
+  if (target === 'first') return 0
+  if (target === 'last') return pageCount - 1
+  if (restoredPosition !== null) {
+    return Math.min(pageCount - 1, Math.max(0, Math.round(restoredPosition * (pageCount - 1))))
+  }
+  return Math.min(Math.max(0, currentPage), pageCount - 1)
+}
