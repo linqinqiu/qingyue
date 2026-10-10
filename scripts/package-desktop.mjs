@@ -87,7 +87,7 @@ fs.mkdirSync(destDir, { recursive: true })
 const icon = path.join(ROOT, 'assets', 'app.ico')
 const jpkgArgs = [
   '--type', 'app-image',
-  '--name', '青阅',
+  '--name', 'qingyue',
   '--app-version', version,
   '--input', staging,
   '--main-jar', jarName,
@@ -99,8 +99,8 @@ const jpkgArgs = [
 if (fs.existsSync(icon)) jpkgArgs.push('--icon', icon)
 const ran = spawnSync(jbin('jpackage'), jpkgArgs, { cwd: ROOT, stdio: 'inherit' })
 if (ran.status !== 0) fail('jpackage 失败')
-const imageRoot = path.join(destDir, '青阅')
-if (!fs.existsSync(path.join(imageRoot, '青阅.exe'))) fail('没生成 青阅.exe')
+const imageRoot = path.join(destDir, 'qingyue')
+if (!fs.existsSync(path.join(imageRoot, 'qingyue.exe'))) fail('没生成 qingyue.exe')
 
 // 5) 把图标也放进镜像根，DesktopLauncher 的托盘/错误提示要读它。
 if (fs.existsSync(icon)) fs.copyFileSync(icon, path.join(imageRoot, 'app.ico'))
@@ -116,7 +116,7 @@ if (dataDir) {
 const appJar = fs.readdirSync(path.join(imageRoot, 'app')).find(n => n.endsWith('-all.jar'))
 if (!appJar) fail('app/ 里没有 fat jar —— stop.mjs 的 CommandLine 匹配会静默跳过它')
 if (!fs.existsSync(path.join(imageRoot, 'runtime', 'bin', 'java.exe'))) fail('runtime/bin/java.exe 缺失')
-console.log(`OK  ${path.relative(ROOT, imageRoot)}/青阅.exe`)
+console.log(`OK  ${path.relative(ROOT, imageRoot)}/qingyue.exe`)
 console.log(`    运行时：${runtimeNote}；数据默认 ${dataDir ? dataDir : '<镜像>/data'}`)
 
 // 8) zip（顶层目录 = 青阅）。
@@ -135,7 +135,7 @@ if (!hasFlag('--no-zip')) {
   const chunks = [], central = []
   let offset = 0
   for (const file of files) {
-    const name = `青阅/${path.relative(imageRoot, file).split(path.sep).join('/')}`
+    const name = `qingyue/${path.relative(imageRoot, file).split(path.sep).join('/')}`
     const data = fs.readFileSync(file)
     const deflated = zlib.deflateRawSync(data, { level: 9 })
     const useDeflate = deflated.length < data.length
@@ -161,9 +161,9 @@ if (!hasFlag('--no-zip')) {
   eocd.writeUInt32LE(cd.length, 12); eocd.writeUInt32LE(offset, 16)
   fs.writeFileSync(zipPath, Buffer.concat([...chunks, cd, eocd]))
   const bytes = fs.statSync(zipPath)
-  console.log(`OK  dist/${zipName} · ${(bytes.size / 1024 / 1024).toFixed(1)} MB · ${files.length} 条 · 顶层 青阅/`)
+  console.log(`OK  dist/${zipName} · ${(bytes.size / 1024 / 1024).toFixed(1)} MB · ${files.length} 条 · 顶层 qingyue/`)
   console.log(`    sha256 ${crypto.createHash('sha256').update(fs.readFileSync(zipPath)).digest('hex').slice(0, 16).toUpperCase()}…`)
 }
 
 fs.rmSync(staging, { recursive: true, force: true })
-console.log('下一步：双击 dist/desktop/青阅/青阅.exe（或在干净 PATH 下跑 tools/verify/desktop-check.mjs 验）')
+console.log('下一步：双击 dist/desktop/qingyue/qingyue.exe（或在干净 PATH 下跑 tools/verify/desktop-check.mjs 验）')

@@ -28,7 +28,7 @@ const SMOKE = hasFlag('--smoke')
 const port = Number(arg('--port', '1234'))
 const url = `http://127.0.0.1:${port}`
 
-const exe = arg('--exe') || path.join(ROOT, 'dist', 'desktop', '青阅', '青阅.exe')
+const exe = arg('--exe') || path.join(ROOT, 'dist', 'desktop', 'qingyue', 'qingyue.exe')
 if (!fs.existsSync(exe)) fail(`找不到 ${exe} —— 先 node scripts/package-desktop.mjs`)
 
 // 同源自壳内写操作要真的写一下：用一次性临时数据目录，不污染真书架（跑完清掉）。
