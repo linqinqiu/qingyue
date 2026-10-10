@@ -70,14 +70,11 @@ fun main(args: Array<String>) {
     val url = "http://$browseHost:$port"
 
     // 幂等 + 单实例：已经在跑就直接开界面（重复点图标不该报错），也不该再起第二个实例。
+    // 已运行的那个实例自己带着托盘，所以第二个实例只负责把界面打开、然后退出，绝不常驻——
+    // 否则在支持托盘的环境里它会作为"已运行"托盘一直挂着，破坏"不留第二个进程"。
     if (isPortOpen(host, port)) {
         logDesktop("青阅已在运行 $url")
-        if (SystemTray.isSupported()) {
-            showTray("青阅已在运行", url, imageRoot, noOpen)
-            CountDownLatch(1).await() // 托盘在就不退出
-        } else {
-            if (!noOpen) openBrowser(url)
-        }
+        if (!noOpen) openBrowser(url)
         exitProcess(0)
     }
     // 端口被占（但不归我们管）也拒绝启动，给出人话，不留第二个进程。
