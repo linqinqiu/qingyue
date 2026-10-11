@@ -201,3 +201,42 @@
   6. `pendingSourceFocus` 是模块级 `let`（`main.tsx:118`）而不是 state，所以那个 `[]` 依赖的挂载 effect 读它不是闭包陈旧——是从书源详情跳过来的交接，写法成立。
 - 验证：`npm --prefix web run check` 干净；`npx tsx web/test/run-all.ts` **428/428**（+2），串行单跑；`web/dist` 随源码重建。
 - 影响 AI-1：无。
+
+## [2026-10-11] TASK 任务 C·模块 6「PWA」—— 四条缓存规则全是死的（workbox 拿绝对 URL 去试正则）
+- 根因一句话：`urlPattern` / `navigateFallbackDenylist` 传入的是正则，而 workbox 用 **`event.request.url`（绝对 URL）** 去 `test`。
+  原来四条都写成 `^\/api\/...`，锚在串首 → **一次都匹配不上**。产物里可以直接看到（`web/dist/sw.js`）：
+  `registerRoute(/^\/api\/tts\//, new NetworkOnly, "GET")` —— 而真实 URL 是 `https://127.0.0.1:1299/api/tts/...`。
+- 后果（三条，都不报错）：
+  1. `legado-covers` / `legado-meta-api` 两个缓存**从没被创建过**：AGENTS §5 里"SW 缓存…正文离线"那条承诺里的 API 侧一半是空写的；
+  2. `navigateFallbackDenylist: [/^\/api\//]` 同样失效 → 用户把 `/api/...` 当地址栏导航打开时，会被**应用壳**回答而不是接口自己的响应；
+  3. 规则指向的地址本身也不存在：`/api/book/cover`（真名 `/api/covers/{key}`、`/api/covers/proxy`）、`/api/shelf`（真名 `/api/bookshelf`）、
+     `/api/book/toc`（目录是 `POST /api/books/chapters` —— workbox 的 runtimeCaching 只接 GET，给它配规则永远不会命中）。
+- 修法：规则一律改成 `^https?:\/\/[^/]+\/...`；封面指到 `/api/covers`，元信息指到 `/api/bookshelf`（GET 才缓存，
+  目录/正文走的是 POST，离线正文本来就有 IndexedDB 那条路，不假装有）；删掉 `/api/search/stream` 那条
+  （workbox 根本看不见 WebSocket，写得再对也是死代码，留着会误导下一个人）。
+- 验证（**真浏览器，不是静态断言**）：改完重打 dist+jar，在 1299 隔离实例上注销旧 SW、清缓存、重新注册，然后
+  - `legado-meta-api` 缓存**真的出现了**，里面正是 `http://127.0.0.1:1299/api/bookshelf`（修前这个缓存名压根不存在）；
+  - `/api/tts/*` 在任何缓存里都查不到（NetworkOnly 生效）；
+  - 直接取 `/api/bookshelf` 拿到 `200 application/json`，不是被壳回答。
+  四条判据 `web/test/PwaCacheRules.test.ts` 也钉住了同类回归：一条**自证**（`^/api/` 对绝对 URL 就是 false、去掉锚就是 true）、
+  一条要求每条规则必须以 `^https?:\/\//` 起头、一条核对规则指向的路径在 `Routes.kt` 里真存在（附"不许再出现不存在路径"的反向对照）、
+  一条钉住 tts 的 NetworkOnly 不许被顺手删。
+- 判据自己也绊了两次，都记下来：第一版把注释里的 `^\/api\/` 也当正则摘出来（`SyntaxError: \ at end of pattern`）→ 只扫代码行；
+  第二版 `urlPattern:` 后面的切片带前导空格，`startsWith` 永远输 → 加 `trim()`。**两次都是判据坏，不是产品坏**。
+
+## [2026-10-11] TASK 任务 C·模块 7「状态管理」—— 查过，没找到缺陷（含一处我误判）
+- 逐条按高危类查的，结论都写在这儿，免得下一轮重新怀疑：
+  1. `useSyncExternalStore` 的快照稳定性：`sourceHealthRun.ts:44 getHealthRun = () => state` 返回同一对象引用，改状态走 `replace()` 整体换 ——
+     不会踩"getSnapshot 每次返回新对象 → 无限重渲染"那条；`searchStore.getSnapshot` 同理。
+  2. IndexedDB 连接：`offlineStorage.ts:45` 缓存 `dbPromise`，并且 `onversionchange` / `onclose` 都会把缓存的连接丢掉 —— 比"每次调用 open 一次"好，
+     也没有连接泄漏。
+  3. 隐私模式 / 配额：全站 10 处 `localStorage.setItem` 逐个看了归属，**全部在 try 里**。（我第一版脚本回看 4 行找 `try {`，
+     把 `offlineStorage.ts:405` 误判成"裸露"，实际它在 `flushOfflineProgress` 的 try 块里，第 386 行开的 —— 判据窗口太窄，不是产品问题。）
+  4. 订阅退订：`PwaManager` 的 focus/visibilitychange/`setInterval` 与 `ContextMenu` 的 5 个 window 级监听都有配对清理；
+     `useEscapeClose` 有清理。
+- 唯一动的一处：`Toast.tsx dismiss()` 对**已经不存在的 id** 仍然 `notify()` 一轮 —— 手动关掉的提示，它自己那条 `setTimeout(dismiss)` 稍后还会再来一次。
+  订阅者是整棵树（`ToastContainer` 挂在主壳与阅读器壳两处），搜索/缓存进度期间这类空转会叠很多次。改成"什么都没移除就不通知"，
+  并加一条用例：`show → dismiss → 再 dismiss 同一个 id` 时通知数不得再涨（先断言 show/dismiss 各通知一轮，防它演空戏）。
+- 验证：`tsc -b` 干净；`npx tsx web/test/run-all.ts` **434/434**（本模块 +6：PWA 5 条 + Toast 1 条），串行单跑；`web/dist` 随源码重建。
+- 影响 AI-1：一条 —— `workbox` 那几条规则现在指 `/api/covers*` 与 `/api/bookshelf`。**若以后把书架改成需要鉴权、或换路径**，
+  这条缓存规则要跟着改（它已经由 `PwaCacheRules.test.ts` 与 `Routes.kt` 对钉住，路径漂了用例会红，不会静默失效）。

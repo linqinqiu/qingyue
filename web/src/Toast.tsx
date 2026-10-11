@@ -43,7 +43,11 @@ class ToastStore {
   }
 
   dismiss(id: string) {
+    const before = this.toasts.length
     this.toasts = this.toasts.filter(t => t.id !== id)
+    // 手动关过的提示，它那条 `setTimeout(dismiss)` 稍后还会再来一次；什么都不移除时不要再通知一轮
+    // —— 订阅者是整棵树的重渲染，搜索与缓存进度期间这条会叠很多次
+    if (this.toasts.length === before) return
     this.notify()
   }
 

@@ -34,3 +34,20 @@ test('toast store - full method suite and timeout dismiss', async () => {
     unsubscribe()
   }
 })
+
+test('toast store - 什么都没移除时不再通知一轮（手动关与定时器会撞在一起）', () => {
+  let notifies = 0
+  const unsubscribe = toast.subscribe(() => { notifies += 1 })
+  try {
+    const id = toast.show('会被手动关掉', 'info', 5000)
+    const afterShow = notifies
+    assert.ok(afterShow >= 2, 'show 至少要通知一轮，否则这条判据在演空戏')
+    toast.dismiss(id)
+    const afterManual = notifies
+    assert.equal(afterManual, afterShow + 1, '手动关闭该通知一轮')
+    toast.dismiss(id) // 它那条 setTimeout(dismiss) 稍后会原样再来一次
+    assert.equal(notifies, afterManual, '移除不了任何东西就不该再让整棵树重渲染一次')
+  } finally {
+    unsubscribe()
+  }
+})

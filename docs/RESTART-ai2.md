@@ -45,7 +45,7 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 | A 前端代码地图 | ✅ 已交付 `docs/code-map-frontend.md` | 引用逐条回扫过；`api.chapters`、`Toast.tsx` 这类凭印象写的都改掉过 |
 | B 翻页定位与修复（P0） | ✅ 已修 + 11 条浏览器实证 | ① 滚轮不看 `deltaMode`（行模式/触控板翻不动）② 跳章停在旧页码 ③ 顺带修 `TapZoneEditor` 缺 `import React`（基线上一直红着四条） |
 | 协作规则落文件 | ✅ 本轮（`web/AGENTS.md`、`server/AGENTS.md` 代起草、根 `AGENTS.md` §0、`docs/RESTART-ai*.md`） | 越界写 `server/` 与根 `AGENTS.md` 是用户点名要求的，已在日志记 NOTE |
-| C 前端逐模块审查（P1） | 🔶 进行中 | 已交付：模块 1 阅读器渲染（补全站缺失的错误边界）、模块 2 搜索 UI（流式判重 O(N×M)→常驻表；progress 每源一条→250ms 攒批）、模块 3 目录虚拟列表（同址章节撞 key、行高三处双写、`ReaderScreen.tsx` 缺 `import React`）、模块 4 书源管理 UI（批量复选框没有可访问名字 → 加 `aria-label` + 全站判据带自证）。用例 **428/428**。**下一个模块：离线缓存 UI**，其后 PWA / 状态管理；R4 还剩「阅读器渲染性能」。注意：右键菜单不是移动端唯一入口（明细面板与批量栏都有可见按钮），别再为它加手势层 |
+| C 前端逐模块审查（P1） | 🔶 进行中 | 已交付：1 阅读器渲染（错误边界）、2 搜索 UI（流式判重 + progress 攒批）、3 目录虚拟列表（撞 key / 行高三处双写 / import React）、4 书源管理 UI（复选框可访问名字 + 全站判据）、**6 PWA（四条 workbox 规则全因 `^/api/` 锚在串首而从不生效——缓存从没建过；已改绝对 URL 锚法并在真浏览器验证 `legado-meta-api` 真的出现了）**、**7 状态管理（查过没有缺陷，只动了 Toast 空转 notify）**。用例 **434/434**，离线缓存 UI（模块 5）待做，R4 还剩「阅读器渲染性能」。硬记一条：**workbox 的 `urlPattern`/`navigateFallbackDenylist` 是拿绝对 URL 去试的，永远别写 `^/api/`** |
 | D README 重写（P1） | ⚠️ 未开始，但**别当绿地** | `a9ddfed` 已由 AI-1 重写过一轮；我只补缺口，不整篇重刷 |
 | E 门面文档（P2） | ⏳ | `docs/architecture.md`、`docs/deploy.md`、`web/AGENTS.md`（已有，继续完善） |
 
