@@ -19,17 +19,23 @@ export type ReaderPageAnim = 'slide' | 'fade' | 'none'
 export type ReaderColumnMode = 'auto' | 'single' | 'double'
 export type TtsEngineType = 'webSpeech' | 'edge' | 'custom'
 
+/** 一套自定义皮肤（用户可存许多套，见 `customSkins`）。 */
+export type CustomSkin = {
+  id: string
+  name: string
+  css: string
+  base: BuiltinSkinId
+}
+
 export type ReaderSettings = {
   theme: ReaderTheme
   /**
-   * 自定义皮肤的 id 与 CSS。开源项目允许换皮肤，所以给一条真能生效的通道：
-   * CSS 落进一个 `<style data-skin>`，id 拼成 `.theme-<id>` 类名（因此必须过白名单字符）。
-   * 只存 localStorage —— 这是这台机器自己的外观，不上传服务端，也不进备份包。
+   * 自定义皮肤**库**（用户 2026-10-11：「所有的自定义是可以自己定义保存……可以自定义许多个，并有记录保存」）：
+   * 每一套 = id（拼成 `.theme-<id>` 类名）+ 显示名 + 完整 CSS + 叠在哪一档内置皮肤之上。
+   * 全部只存 localStorage —— 这是这台机器自己的外观，不上传服务端，也不进备份包。
+   * 当前启用哪一套由 `theme`（等于那一套的 id）决定；`theme` 是内置档时库里哪套都不生效。
    */
-  customSkinId: string
-  customSkinCss: string
-  /** 自定义皮肤叠在哪一套之上（见 `themeClassNames`）：只覆盖用户写到的变量，其余沿用这一套。 */
-  customSkinBase: BuiltinSkinId
+  customSkins: CustomSkin[]
   fontSize: number
   lineHeight: number
   letterSpacing: number
@@ -98,9 +104,7 @@ export type ReaderSettings = {
 const storageKey = 'legado-reader-settings-v2'
 export const defaultReaderSettings: ReaderSettings = {
   theme: 'light',
-  customSkinId: '',
-  customSkinCss: '',
-  customSkinBase: 'light',
+  customSkins: [],
   fontSize: 19,
   lineHeight: 1.95,
   letterSpacing: 0,
@@ -208,18 +212,56 @@ export const BUILTIN_SKINS: ReadonlyArray<{ id: BuiltinSkinId; name: string }> =
   { id: 'shimo', name: '石墨' },
 ]
 
-/** 当前可选的皮肤：内置三套 + 填了 CSS 的自定义那一套（没填就不出现在列表里，不摆空控件）。 */
+/** 当前可选的皮肤：内置七套 + 库里每一套自定义皮肤（没写 CSS 的不出现，不摆点了没反应的控件）。 */
 export function availableSkins(settings: ReaderSettings): Array<{ id: string; name: string; builtin: boolean }> {
-  const id = parseSkinId(settings.customSkinId)
-  const custom = id && (settings.customSkinCss ?? '').trim()
-    ? [{ id, name: `自定义（${id}）`, builtin: false }]
-    : []
+  const custom = (settings.customSkins ?? [])
+    .filter(skin => skin.id && skin.css.trim())
+    .map(skin => ({ id: skin.id, name: skinLabel(skin), builtin: false }))
   return [...BUILTIN_SKINS.map(skin => ({ ...skin, builtin: true })), ...custom]
 }
 
-/** 自定义皮肤的**叠在哪一套之上**（只认内置三档，别的值退回默认档）。 */
+/** 自定义皮肤没写基档时的默认档。 */
+export const DEFAULT_SKIN_BASE: BuiltinSkinId = 'light'
+
+/** 自定义皮肤的**叠在哪一套之上**（只认内置档，别的值退回默认档）。 */
 export function parseSkinBase(base: unknown): BuiltinSkinId {
-  return BUILTIN_SKINS.some(skin => skin.id === base) ? base as BuiltinSkinId : defaultReaderSettings.customSkinBase
+  return BUILTIN_SKINS.some(skin => skin.id === base) ? base as BuiltinSkinId : DEFAULT_SKIN_BASE
+}
+
+/**
+ * 清洗一套自定义皮肤：id 过 `parseSkinId`（拼类名用），name 去换行并限长，css 限长（注入走 textContent），
+ * base 只认内置档。id 清洗后为空、或 css 为空 → 返回 null（这一套不成立，不进库）。
+ */
+export function parseCustomSkin(value: unknown): CustomSkin | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const id = parseSkinId(raw.id)
+  const css = typeof raw.css === 'string' ? raw.css.slice(0, 20000) : ''
+  if (!id || !css.trim()) return null
+  const name = typeof raw.name === 'string' ? raw.name.replace(/[\r\n]+/g, ' ').trim().slice(0, 40) : ''
+  return { id, name, css, base: parseSkinBase(raw.base) }
+}
+
+/** 清洗皮肤库：逐套过 `parseCustomSkin`，丢掉不成立的；同 id 只留最后一套。 */
+export function parseCustomSkins(value: unknown): CustomSkin[] {
+  if (!Array.isArray(value)) return []
+  const byId = new Map<string, CustomSkin>()
+  for (const item of value) {
+    const skin = parseCustomSkin(item)
+    if (skin) byId.set(skin.id, skin)
+  }
+  return [...byId.values()]
+}
+
+/** 库里一套皮肤的显示名：用户没起名就用 id 兜底。 */
+export function skinLabel(skin: CustomSkin): string {
+  return skin.name.trim() || `自定义（${skin.id}）`
+}
+
+/** 当前启用的那一套自定义皮肤（`theme` 命中库里某个 id 时），否则 undefined。 */
+export function activeCustomSkin(settings: ReaderSettings): CustomSkin | undefined {
+  const id = parseSkinId(settings.theme)
+  return (settings.customSkins ?? []).find(skin => skin.id === id)
 }
 
 /**
@@ -231,8 +273,8 @@ export function parseSkinBase(base: unknown): BuiltinSkinId {
  * 写到的由注入的 `<style>` 覆盖（它在 `<head>` 末尾，同特异性下后者胜）。
  */
 export function themeClassNames(settings: ReaderSettings): string[] {
-  const custom = parseSkinId(settings.customSkinId)
-  if (custom && settings.theme === custom) return [`theme-${parseSkinBase(settings.customSkinBase)}`, `theme-${custom}`]
+  const active = activeCustomSkin(settings)
+  if (active) return [`theme-${parseSkinBase(active.base)}`, `theme-${active.id}`]
   return [`theme-${settings.theme}`]
 }
 
@@ -306,15 +348,24 @@ function loadTapMap(value: unknown, fallback: TapMap): TapMap {
   return looksLikeGrid(value) ? migrateGrid(value, fallback) : sanitizeMap(value, fallback)
 }
 
+/**
+ * 皮肤库的读取 + 一次性迁移：新版读 `customSkins` 数组；旧版只有单套
+ * （`customSkinId` / `customSkinCss` / `customSkinBase`），把它迁成库里的第一套，别丢用户已存的皮肤。
+ */
+function loadCustomSkins(saved: Record<string, unknown>): CustomSkin[] {
+  const list = parseCustomSkins(saved.customSkins)
+  if (list.length) return list
+  const migrated = parseCustomSkin({ id: saved.customSkinId, css: saved.customSkinCss, base: saved.customSkinBase })
+  return migrated ? [migrated] : []
+}
+
 export function loadReaderSettings(): ReaderSettings {
   try {
     const raw = window.localStorage.getItem(storageKey) || window.localStorage.getItem('legado-reader-settings-v1')
     const saved = JSON.parse(raw ?? '{}') as Partial<ReaderSettings> & { font?: string }
     return {
       theme: typeof saved.theme === 'string' && saved.theme.trim() ? saved.theme.trim() : defaultReaderSettings.theme,
-      customSkinId: parseSkinId(saved.customSkinId),
-      customSkinCss: typeof saved.customSkinCss === 'string' ? saved.customSkinCss : '',
-      customSkinBase: parseSkinBase(saved.customSkinBase),
+      customSkins: loadCustomSkins(saved as unknown as Record<string, unknown>),
       fontSize: clampNumber(saved.fontSize, 15, 28, defaultReaderSettings.fontSize),
       lineHeight: clampNumber(saved.lineHeight, 1.45, 2.4, defaultReaderSettings.lineHeight),
       letterSpacing: clampNumber(saved.letterSpacing, -.25, 1.5, defaultReaderSettings.letterSpacing),

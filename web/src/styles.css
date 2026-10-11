@@ -5399,6 +5399,18 @@ input[type="checkbox"] {
 .customize-error { margin: 0; color: var(--danger); font-size: 13px; }
 .customize-note { margin: 0; color: var(--muted); font-size: 12px; }
 .customize-note code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.skin-library-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.skin-library { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
+.skin-library-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface); }
+.skin-library-row.active { background: var(--surface-muted); }
+.skin-library-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.skin-library-name { font-size: var(--t-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skin-library-meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skin-library-meta code { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.skin-library-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.skin-library-actions .is-danger { color: var(--danger); }
+.skin-editor { display: grid; gap: 10px; margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.skin-editor h4 { margin: 0; font-size: 13px; font-weight: 600; }
 /* ==========================================================================
  * 「本地书分章规则」弹窗（2026-10-03：从「自定义」里搬出来，挂在书架导入旁边）
  * 壳沿用「自定义」弹窗那一套尺寸与圆角：同一应用里两种弹窗几何只会显得随机。

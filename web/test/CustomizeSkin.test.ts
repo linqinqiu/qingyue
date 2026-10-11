@@ -6,22 +6,34 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { CustomizeModal } from '../src/CustomizeModal'
 import {
+  activeCustomSkin,
   availableSkins,
   BUILTIN_SKINS,
+  DEFAULT_SKIN_BASE,
   defaultReaderSettings,
+  parseCustomSkin,
+  parseCustomSkins,
   parseSkinBase,
   parseSkinId,
+  skinLabel,
   themeClassNames,
+  type CustomSkin,
   type ReaderSettings,
 } from '../src/readerSettings'
 
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
 const settings = (patch: Partial<ReaderSettings> = {}): ReaderSettings => ({ ...defaultReaderSettings, ...patch })
+const skin = (patch: Partial<CustomSkin> = {}): CustomSkin => ({
+  id: 'midnight', name: '', css: '.theme-midnight { --canvas: #0f1213; }', base: 'light', ...patch,
+})
 
 /**
  * 「自定义」这一栏（用户 2026-10-01：「咱们这个是开源允许自定义」）。
  * 里面只有皮肤一件事 —— 界面框架 v2 那一波（侧栏 + 页头条 + 全宽）已按用户拍板整条撤掉，
  * 所以这里也钉住"只有一套外壳"这件事，别让侧栏哪天又悄悄长回来。
+ *
+ * 2026-10-11 起皮肤从**单套**扩成**库**（用户：「所有的自定义是可以自己定义保存……
+ * 可以自定义许多个，并有记录保存」）—— 下面钉住库的增删改切换与旧数据的迁移。
  */
 
 test('皮肤 id - 会被拼成类名，所以只留 [a-z0-9-_] 且限长', () => {
@@ -35,51 +47,84 @@ test('皮肤 id - 会被拼成类名，所以只留 [a-z0-9-_] 且限长', () =>
   for (const junk of [undefined, null, 42, {}]) assert.equal(parseSkinId(junk), '')
 })
 
-test('皮肤列表 - 只有填了 CSS 的自定义皮肤才会出现（不摆点了没反应的控件）', () => {
+test('皮肤列表 - 内置七套 + 库里每一套自定义皮肤', () => {
   assert.deepEqual(availableSkins(settings()).map(s => [s.id, s.builtin]), BUILTIN_SKINS.map(s => [s.id, true]))
-  const withSkin = settings({ customSkinId: 'midnight', customSkinCss: '.theme-midnight { --canvas: #0f1213; }' })
-  assert.deepEqual(availableSkins(withSkin)[7], { id: 'midnight', name: '自定义（midnight）', builtin: false })
   assert.equal(availableSkins(settings()).length, 7)
-  // 只填 id 不填 CSS 不算一套皮肤
-  assert.equal(availableSkins(settings({ customSkinId: 'midnight' })).length, 7)
-  // id 清洗后非空 + 有 CSS => 算一套（清洗本身不是拒绝的理由）
-  assert.equal(availableSkins(settings({ customSkinId: 'mid night', customSkinCss: 'x{y:z}' })).length, 8)
-  // 清洗后为空的 id 不算皮肤 —— 否则列表里会多出一个选不中的项
-  assert.equal(availableSkins(settings({ customSkinId: '中文', customSkinCss: 'x{y:z}' })).length, 7)
+  assert.deepEqual(availableSkins(settings({ customSkins: [skin()] }))[7], { id: 'midnight', name: '自定义（midnight）', builtin: false })
+  assert.equal(availableSkins(settings({ customSkins: [skin()] })).length, 8)
+  // 起过名字就用名字
+  assert.equal(availableSkins(settings({ customSkins: [skin({ name: '午夜' })] }))[7].name, '午夜')
+  // 没写 CSS 的那一套不进列表（点了没反应的控件不摆）
+  assert.equal(availableSkins(settings({ customSkins: [skin({ css: '   ' })] })).length, 7)
+  // 库里多套都在
+  assert.equal(availableSkins(settings({ customSkins: [skin(), skin({ id: 'dawn' })] })).length, 9)
 })
 
 test('自定义皮肤是叠在内置皮肤之上的，不是替换它', () => {
   assert.deepEqual(themeClassNames(settings()), ['theme-light'])
   assert.deepEqual(themeClassNames(settings({ theme: 'dark' })), ['theme-dark'])
-  const custom = settings({ customSkinId: 'midnight', customSkinCss: '.theme-midnight { --canvas: #0f1213; }', customSkinBase: 'dark', theme: 'midnight' })
+  const custom = settings({ customSkins: [skin({ base: 'dark' })], theme: 'midnight' })
   assert.deepEqual(themeClassNames(custom), ['theme-dark', 'theme-midnight'],
     '只写两三条变量的皮肤必须有一整套内置变量兜底，否则界面会变成"字和底一个颜色"')
   // 填了自定义皮肤但当前选的还是内置那档时，不要把基类和皮肤类同时挂上
   assert.deepEqual(themeClassNames({ ...custom, theme: 'paper' }), ['theme-paper'])
   assert.equal(parseSkinBase('paper'), 'paper')
-  assert.equal(parseSkinBase('midnight'), defaultReaderSettings.customSkinBase, '基档只认内置三档')
-  assert.equal(parseSkinBase(undefined), defaultReaderSettings.customSkinBase)
+  assert.equal(parseSkinBase('midnight'), DEFAULT_SKIN_BASE, '基档只认内置档')
+  assert.equal(parseSkinBase(undefined), DEFAULT_SKIN_BASE)
 })
 
-test('CustomizeModal 静态渲染：皮肤三档 + 自定义那一栏的 CSS 与基档', () => {
+test('皮肤库清洗：id 过白名单、空 id / 空 CSS 丢掉、同 id 只留最后一套', () => {
+  assert.deepEqual(parseCustomSkins('不是数组'), [])
+  assert.deepEqual(parseCustomSkins([{ id: 'MidNight', name: ' 午夜 ', css: 'a{b:c}' }]),
+    [{ id: 'midnight', name: '午夜', css: 'a{b:c}', base: 'light' }])
+  // id 清洗后为空（中文）、或 CSS 为空的那一套不成立 —— 不进库，也就不会多出一个选不中的项
+  assert.deepEqual(parseCustomSkins([{ id: '中文', css: 'a{b:c}' }, { id: 'ok', css: '   ' }]), [])
+  assert.equal(parseCustomSkins([{ id: 'dup', css: 'a{b:1}' }, { id: 'dup', css: 'a{b:2}' }])[0].css, 'a{b:2}')
+  // base 只认内置档
+  assert.equal(parseCustomSkin({ id: 'x', css: 'a{b:c}', base: '不存在的档' })?.base, DEFAULT_SKIN_BASE)
+  assert.equal(parseCustomSkin(null), null)
+  assert.equal(parseCustomSkin({ id: '', css: 'x' }), null)
+})
+
+test('当前启用的是哪一套自定义皮肤；显示名缺省回落 id', () => {
+  const lib = [skin({ id: 'a' }), skin({ id: 'b' })]
+  assert.equal(activeCustomSkin(settings({ customSkins: lib, theme: 'b' }))?.id, 'b')
+  assert.equal(activeCustomSkin(settings({ customSkins: lib, theme: 'dark' })), undefined, '内置档时库里哪套都不生效')
+  assert.equal(activeCustomSkin(settings({ customSkins: lib, theme: 'midnight' })), undefined, '库里没有的 id 不算启用')
+  assert.equal(skinLabel(skin({ name: '' })), '自定义（midnight）')
+  assert.equal(skinLabel(skin({ name: '午夜' })), '午夜')
+})
+
+test('旧版单套皮肤会迁进皮肤库，不丢用户已存的皮肤', () => {
+  // loadCustomSkins 是私有的，走公开的 loadReaderSettings 不便（要 window），
+  // 所以这里直接验迁移的两半：旧字段能被 parseCustomSkin 收成一套，且空 CSS 的旧值不收。
+  const migrated = parseCustomSkin({ id: 'midnight', css: '.theme-midnight { --canvas: #0f1213; }', base: 'dark' })
+  assert.deepEqual(migrated, { id: 'midnight', name: '', css: '.theme-midnight { --canvas: #0f1213; }', base: 'dark' })
+  assert.equal(parseCustomSkin({ id: 'midnight', css: '' }), null, '旧版只填了 id 没填 CSS 的，迁过来也是空的，不收')
+})
+
+test('CustomizeModal 静态渲染：皮肤列表 + 皮肤库 + 编辑器', () => {
   const html = renderToStaticMarkup(React.createElement(CustomizeModal, {
     settings: settings(), onChange: () => undefined, onClose: () => undefined,
   }))
   assert.match(html, /皮肤/)
-  assert.match(html, /自定义皮肤/)
+  assert.match(html, /自定义皮肤库/)
   assert.match(html, /localStorage/, '要说清楚只存本机：不上传服务端、不进备份包')
   assert.match(html, /叠在哪一套之上/, '要问清自定义皮肤叠在哪一档上（只改一两个变量才不至于花屏）')
-  assert.ok(!html.includes('自定义（'), '没填 CSS 时皮肤列表里不该出现一个用不了的自定义皮肤')
+  assert.match(html, /新建皮肤/)
+  assert.ok(!html.includes('自定义（'), '库里没东西时，皮肤列表里不该出现一个用不了的自定义皮肤')
   assert.ok(!html.includes('界面布局'), '界面框架 v2 已撤销：这里不该再有一档"布局"可选')
 })
 
-test('CustomizeModal 里填了 CSS 之后，皮肤列表就多出那一套', () => {
+test('CustomizeModal 里库里每一套都进皮肤列表，并给出编辑 / 删除', () => {
   const html = renderToStaticMarkup(React.createElement(CustomizeModal, {
-    settings: settings({ customSkinId: 'midnight', customSkinCss: '.theme-midnight { --canvas: #0f1213; }' }),
+    settings: settings({ customSkins: [skin()] }),
     onChange: () => undefined, onClose: () => undefined,
   }))
   assert.match(html, /自定义（midnight）/)
-  assert.match(html, /theme-swatch-custom/, '自定义皮肤要有自己的色片样式，不能长得像内置那三档')
+  assert.match(html, /theme-swatch-custom/, '自定义皮肤要有自己的色片样式，不能长得像内置那档')
+  assert.match(html, /编辑/)
+  assert.match(html, /删除/)
 })
 
 /**
@@ -139,6 +184,10 @@ test('样式表里两张新界面都有规则（更新日志页、自定义弹�
   assert.match(css, /\.theme-swatch-custom/)
   assert.match(css, /\.menu-section-action/)
   assert.match(css, /\.theme-name/)
+  // 皮肤库那几条也得有样式：类名不在样式表里 = 渲染出来是一个没有布局的裸列表
+  assert.match(css, /\.skin-library \{/)
+  assert.match(css, /\.skin-library-row \{/)
+  assert.match(css, /\.skin-editor \{/)
   // 搬出去的弹窗还得有自己的内容样式：类名不在样式表里 = 渲染出来是一个没有滚动的裸 div
   assert.match(css, /\.toc-rules-body \{/)
   assert.match(css, /\.toc-rule \{/)
