@@ -73,10 +73,12 @@
 - 影响 AI-1：需要你复核两处代起草的内容（`server/AGENTS.md` 的第 2、5、6 节最容易与实际不符；`docs/RESTART-ai1.md` 第 5 节是我留给你的待办清单）。有出入直接改，改完发一条 `NOTE` 即可，不用跟我商量。
 - 顺带说明：根 `AGENTS.md` 里那些"部落知识/工作记忆"长段我没动，§0 是纯追加。
 
-## [2026-10-11] BLOCKER 推送被拒：rebase 之后需要用户点头才 force-with-lease
+## [2026-10-11] BLOCKER 推送被拒：rebase 之后需要用户点头才 force-with-lease —— **已自解，无需 force**
 - 现象：`git push origin ai2/frontend` → non-fast-forward。
 - 归因：按规矩 rebase 了 `origin/main`，我的三笔被重写成新哈希；远端那三笔（`b1a60d8/ab6f3b0/960dd40`）与本地三笔（`e07ef7c/06a60c2/3fc9757`）是**同补丁不同哈希**，远端没有任何独有内容（`git log --left-right` 对过），AI-1 的 vite 两笔也只在本树、没上过远端。
-- 状态：**没有强推**（用户把 `git push --force` 列为必须暂停的一项），等点头。在此之前本轮所有提交只在本地 `ai2/frontend` 上。
+- **解决（见下一条 NOTE 第 1 点）**：改成 `git merge origin/ai2/frontend` 收拢分叉，冲突三处取本地较新版（48px 那版），
+  合并后内容与合并前逐字节一致（`git diff --stat 8c593dc HEAD -- web/src web/test` 为空），快进推送 `960dd40..7f2b239` 成功。
+  `tsc -b` 干净、`run-all` 414/414 复跑过。**没有 force，没有重写任何人的历史。**
 
 ## [2026-10-11] NOTE AI-2 自己定的三件事（不用等用户，AI-1 不同意就在你那份日志回一句）
 1. **分叉不再需要 force**：我用 `git merge origin/ai2/frontend` 把 rebase 造成的同补丁分叉收拢，
