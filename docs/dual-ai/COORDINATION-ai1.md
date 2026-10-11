@@ -7,20 +7,14 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-11 16:45 |
-| 我现在在做 | 收拢双 AI 装置到 `docs/dual-ai/`、合入 `ai2/frontend`、恢复设置页居中 |
-| 下一件事 | 自定义皮肤库（增 / 改 / 删 / 切换） |
+| 更新时间 | 2026-10-11 16:50 |
+| 我现在在做 | 装置收拢 / 合入 ai2/frontend / 设置页居中 / 自定义皮肤库 —— 四件都做完，待推送 |
+| 下一件事 | 把 main 推到 origin（网络恢复后）；等 AI-2 认可 `docs/dual-ai/README.md` |
 | 等对方 | AI-2 认可 `docs/dual-ai/README.md`（原 `COLLABORATION.md` 已并入），并刷新自己的状态板 |
-| 待发版 | 是（AI-2 的离线统计 / 目录切片 + AI-1 的设置页居中，尚未落到产物） |
+| 待发版 | 是（AI-2 的离线统计 / 目录切片 + AI-1 的设置页居中 / 皮肤库，尚未落到产物） |
 | 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
 | 我不碰 | `web/**`、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 自测实例 | 8081（库 `data/ai1.db`，日志 `logs/ai1/server.log`） |
-
-## [2026-10-11] COLLAB-REQUEST 把 `docs/COLLABORATION.md` 并进 `docs/dual-ai/README.md`
-- 用户拍板：两套唯一事实源并存（`docs/dual-ai/README.md` 与 `docs/COLLABORATION.md`）就是新的错乱 → **以 `docs/dual-ai/README.md` 为主，把 `COLLABORATION.md` 并进来**。
-- 做了：`README.md` 吸收规程六节（领地 / 情况→动作 / 状态板 / 发版队列 / 红因归属 / 违规与事故）；删 `docs/COLLABORATION.md`；`web/test/CollabProtocol.test.ts` 与 `docs/architecture.md` §7 改指新址；清掉 README 里的绝对盘符路径与个人 fork 账号（`opensource-hygiene-check` 9/2 → 11/0）。
-- 顺带：`ai2/frontend` 已 **merge** 进 main（`3797d38`，未重写历史）——AI-2 下次 `git fetch && git rebase origin/main` 变快进，不再撞文件搬迁。
-- 请 AI-2：认可本改动；并刷新你自己的状态板（原条目还指着 `docs/COLLABORATION.md`）。
 
 ## [2026-10-11] TASK 建立双 AI 协作基础文件
 - 内容：在 `main` 分支建立三份协作文件 —— `docs/API-CONTRACT.md`（后端对外接口契约初稿，从 `server/` 代码提取）、`docs/COORDINATION-ai1.md`（本文件，AI-1 日志）、`docs/COORDINATION-ai2.md`（AI-2 日志，只读）。
@@ -77,3 +71,14 @@
 - **端口定稿**：AI-1 后端 = **8081**（库 `data/ai1.db`、日志 `logs/ai1/server.log`，由 `qingyue-ai1/.env` 提供）。此前 `server/AGENTS.md` 误写 8080/`ai1.sqlite`/`ai1.log`，**已修正**；根 `AGENTS.md` §0、`web/AGENTS.md`、`docs/dual-ai-setup.md` 本就是 8081，现全仓一致。
 - **AGENTS.md 去重**：根 `AGENTS.md` §0 是通用总纲的唯一权威。`server/AGENTS.md` 已精简——删掉与根 §0 重复的「角色 / 目录 / 端口 / 提交格式 / 协作 / 重开」，只留 AI-1 独有（隔离运行 `.env`、服务端测试口径、接口契约流程）。
 - **请 AI-2 同步**：`web/AGENTS.md` §1–§4 同样是根 §0 的复述，建议精简为只留 **§5（前端验证 + 403 坑）** 与 **§6（八条前端潜规则）** 等前端独有内容。`web/AGENTS.md` 是 AI-2 领地，AI-1 不动。
+
+## [2026-10-11] COLLAB-REQUEST 把 `docs/COLLABORATION.md` 并进 `docs/dual-ai/README.md`
+- 用户拍板：两套唯一事实源并存（`docs/dual-ai/README.md` 与 `docs/COLLABORATION.md`）就是新的错乱 → **以 `docs/dual-ai/README.md` 为主，把 `COLLABORATION.md` 并进来**。
+- 做了：`README.md` 吸收规程六节（领地 / 情况→动作 / 状态板 / 发版队列 / 红因归属 / 违规与事故）；删 `docs/COLLABORATION.md`；`web/test/CollabProtocol.test.ts` 与 `docs/architecture.md` §7 改指新址；清掉 README 里的绝对盘符路径与个人 fork 账号（`opensource-hygiene-check` 9/2 → 11/0）。
+- 顺带：`ai2/frontend` 已 **merge** 进 main（`3797d38`，未重写历史）——AI-2 下次 `git fetch && git rebase origin/main` 变快进，不再撞文件搬迁。
+- 请 AI-2：认可本改动；并刷新你自己的状态板（原条目还指着 `docs/COLLABORATION.md`）。
+
+## [2026-10-11] NOTE AI-1 直接改了 web/ 三处（用户点名）
+- ②设置页 / 关于页恢复居中（`web/src/styles.css`，撤 PROPOSAL-018 §3.2 的去居中）；③自定义皮肤扩成**皮肤库**（`readerSettings.ts` / `main.tsx` / `CustomizeModal.tsx` / `styles.css` + `web/test/CustomizeSkin.test.ts`）。
+- 依据：用户 2026-10-11 直接点名要 AI-1 做这两件（属 README §1 的「用户点名越界」，已记本条）。
+- 影响 AI-2：这几个文件我动过，你下次改之前先 `git fetch`；皮肤库把旧的 `customSkinId` / `customSkinCss` / `customSkinBase` 换成了 `customSkins: CustomSkin[]`（旧值会自动迁进库，不丢数据）。
