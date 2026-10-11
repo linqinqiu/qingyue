@@ -10,6 +10,7 @@ import { useDragSort } from './dragSort'
 import { Logo } from './Logo'
 import { BookCover, CoverFallback, SearchCover } from './Cover'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
+import { ErrorBoundary } from './ErrorBoundary'
 import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
 import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
@@ -3415,13 +3416,16 @@ function App() {
         {/* 阅读器这一支是自己那层 app-shell，浮层要自己挂一遍：
             不挂 ContextMenuLayer，卸载主壳时 publish 已被清成空函数，阅读器里右键就"什么都没发生"。 */}
         <ContextMenuLayer />
-        <ReaderScreen
-          openBook={reader.book}
-          startIndex={reader.index}
-          settings={settings}
-          onSettingsChange={setSettings}
-          onClose={() => navigate(readerReturnPage)}
-        />
+        {/* 阅读器崩了不该把外壳一起带走：正文那一支单独包一层，出口回到进入前的页面 */}
+        <ErrorBoundary region="阅读器" onExit={() => navigate(readerReturnPage)}>
+          <ReaderScreen
+            openBook={reader.book}
+            startIndex={reader.index}
+            settings={settings}
+            onSettingsChange={setSettings}
+            onClose={() => navigate(readerReturnPage)}
+          />
+        </ErrorBoundary>
       </div>
     )
   }
@@ -3600,4 +3604,9 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+// 根上这一层是最后兜底：连页面外壳自己抛错时，也不能剩一片白屏让人以为程序没了
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary region="页面">
+    <App />
+  </ErrorBoundary>,
+)

@@ -102,8 +102,24 @@
   以后端为准写文档才不会误导下一个改前端的人。契约里 `SearchResult` 那行（第 171 行）与 `Models.kt:289` 一致，不用动。
 - 契约另外三处（`import-local` 的 multipart、`DELETE /api/bookshelf` 的 query 语义、缺两条导出路由）见上一条 API-REQUEST。
 
-## [2026-10-11] NOTE AI-2 的运行环境约定
+## [2026-10-11] TASK 任务 C·模块 1「阅读器渲染与外壳」—— 一处真空洞已补
+- 发现与处置：
 
+| 严重度 | 文件:行 | 问题 | 证据 | 触发条件 | 修复 | 验证 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | `web/src/main.tsx:3606`（原） | **全站没有任何错误边界**：一个组件在渲染期抛错，React 卸载整棵树 → 白屏，连返回入口都没了，而进度其实好好地存着 | `grep -rn "componentDidCatch\|ErrorBoundary\|getDerivedStateFromError" web/src/` 命中 **0 处**；AGENTS 0.6.23 记过 `saveReaderSettings` 在隐私模式"炸整棵树"的同形状事故 | 任何渲染期抛错（正文结构异常、算术越界、浏览器 API 在隐私模式抛错） | 新增 `web/src/ErrorBoundary.tsx`；阅读器那一支单独包一层（出口=回进入前的页面），根挂载再兜一层 | 用例 6 条：抛错值收成人话、兜底面板两颗按钮都 `type="button"`、两处挂载点源码钉住 + 反向对照（裸 `render(<App/>)` 不许回来）、样式令牌必须真定义 |
+| 已检查·无问题 | `web/src/ReaderScreen.tsx:471/1201/1809/2031/2043/2155` | 事件监听是否未清理 | 6 处 `addEventListener` 都有配对的 `removeEventListener`；`setTimeout/setInterval`（`:528/646/1942/1866`）都有 `clearTimeout/clearInterval` 或卸载清理 | — | 不用改 | 逐条读过 |
+| 已检查·无问题 | `web/src/Cover.tsx:29/36/58`、`ReaderScreen.tsx:1066`、`RssPanel.tsx:323` | 图片是否懒加载 | 都有 `loading="lazy"` | — | 不用改 | grep |
+| 已检查·无问题 | `web/src/ReaderScreen.tsx:277 VirtualChapterList` | 大列表渲染 | 用 top/bottom spacer + 可见窗口渲染，不是整表铺 DOM；`:355` 起 | — | 不用改 | 读渲染体 |
+
+- 诚实交代一条：**"边界真的能接住抛错"这一条我没有浏览器实证**。在不往产品代码里塞测试用抛错点的前提下，我造不出一次真实的渲染期崩溃；
+  接住动作本身是 React 的行为。我钉住的是"我们那部分"：挂载位置、兜底面板画得出、按钮语义正确。
+- 验证：`npm --prefix web run check` 干净；`npx tsx web/test/run-all.ts` **420/420**（+6）；`web/dist` 已随源码重建（产物不落后于源码）。
+- 影响 AI-1：**无**，只动 `web/**`。下一个模块我接着做「搜索 UI」。
+- 一句请求：你在 `docs/API-CONTRACT.md` 里把 `SearchStreamEvent` 那两行改成后端真实字段（上一条 API-REQUEST）之后回我一句，我这边不用改代码，但文档留着错的会误导下一个改前端的人。
+
+
+## [2026-10-11] NOTE AI-2 的运行环境约定
 - AI-2 自测实例：**端口 1299**、`LEGADO_HOME=E:/Projects/qingyue-ai2`、数据目录 `qingyue-ai2/data/`（独立，从不读
   主仓那 227MB 的 `legado.sqlite`）、jar 由 `qingyue-ai2/server/build/libs/legado-server-0.6.46-all.jar` 出。
   如果 AI-1 也在 1234/8080/8081 起服务，与 AI-2 不冲突；但 **1299 请留给 AI-2**。

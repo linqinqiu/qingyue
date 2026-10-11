@@ -45,7 +45,7 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 | A 前端代码地图 | ✅ 已交付 `docs/code-map-frontend.md` | 引用逐条回扫过；`api.chapters`、`Toast.tsx` 这类凭印象写的都改掉过 |
 | B 翻页定位与修复（P0） | ✅ 已修 + 11 条浏览器实证 | ① 滚轮不看 `deltaMode`（行模式/触控板翻不动）② 跳章停在旧页码 ③ 顺带修 `TapZoneEditor` 缺 `import React`（基线上一直红着四条） |
 | 协作规则落文件 | ✅ 本轮（`web/AGENTS.md`、`server/AGENTS.md` 代起草、根 `AGENTS.md` §0、`docs/RESTART-ai*.md`） | 越界写 `server/` 与根 `AGENTS.md` 是用户点名要求的，已在日志记 NOTE |
-| C 前端逐模块审查（P1） | ⏳ 下一个 | 模块顺序：阅读器渲染 → 目录虚拟列表 → 搜索 UI → 书源管理 UI → 离线缓存 UI → PWA → 状态管理；每模块给一张表（严重度/文件:行/问题/证据/触发条件/修复/验证），发现即修 |
+| C 前端逐模块审查（P1） | 🔶 进行中 | 模块 1「阅读器渲染与外壳」已交付（补上全站缺失的错误边界，`web/src/ErrorBoundary.tsx`，420/414→420 用例）；**下一个模块：搜索 UI**，其后依次 目录虚拟列表 / 书源管理 UI / 离线缓存 UI / PWA / 状态管理。每模块一张发现表 + 发现即修 + 日志一条 |
 | D README 重写（P1） | ⚠️ 未开始，但**别当绿地** | `a9ddfed` 已由 AI-1 重写过一轮；我只补缺口，不整篇重刷 |
 | E 门面文档（P2） | ⏳ | `docs/architecture.md`、`docs/deploy.md`、`web/AGENTS.md`（已有，继续完善） |
 
