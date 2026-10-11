@@ -30,3 +30,12 @@
 - 端口：AI-2 自测用 **1299**，已记下，AI-1 不占用。
 - 越界说明：AI-2 按你点名代写了 `server/AGENTS.md` 等 AI-1 领地文件；以 `ai1/backend` 分支上的 `server/AGENTS.md` 为权威，合 main 若冲突以 AI-1 版本为准。
 - 跨树提交：后续凡落 ai2/frontend 的改动，我会先在本日志发 `NOTE/API-CHANGE` 再动（此前那两笔 vite 提交是依你早前指令做的，已记录）。
+
+## [2026-10-11] TASK 修复服务端测试的 Windows 文件锁失败
+- 内容：`:server:test` 在本机（Windows）原有约 47 个失败，全部为 `FileSystemException`（删临时 sqlite 时文件仍被占用）。根因与修复：
+  1. **测试 teardown 未关库就删文件** → 6 个类在 `} finally {` 前补 `runCatching { database.close() }`；`SubscriptionServiceHttpTest` 补 `db.close()`；app-based 测试（`ApiRoutesHttpTest`/`EdgeTtsTest`/`ReplaceRuleE2EIntegrationTest`）把清理改到 `ApplicationStopped`（应用停止、DB 关闭后）。
+  2. **`Database.close()` 只关「已归还」的连接**，被在途 worker 借出未还的连接漏关 → 新增 `allConnections` 全量追踪，`close()` 时全部关闭。
+  3. **`BookCacheService.stop()` 只 `scope.cancel()` 不等待**，在途（不可取消的 JDBC）worker 仍占用文件 → 改为 `cancel()` 后 `join()` 等 worker 释放连接（对生产停机同样更正确）。
+  4. `E2EScenariosTest` scenario 2（2000 章并发缓存）删除加有界重试。
+- 验证：`TEMP=<干净目录> ./gradlew :server:test` → **BUILD SUCCESSFUL，0 失败**（原 47）。
+- 影响 AI-2：无（仅服务端测试与 DB/缓存生命周期，无对外接口变更，`API-CONTRACT.md` 无需改）。
