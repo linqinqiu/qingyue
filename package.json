@@ -1,9 +1,13 @@
 {
   "name": "legado-server",
-  "version": "0.6.46",
+  "version": "0.6.47",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "keywords": [
     "legado",
     "legado3",
@@ -21,15 +25,16 @@
   "scripts": {
     "build": "node scripts/tasks.mjs build",
     "test": "node scripts/tasks.mjs test",
+    "check": "npm --prefix web run check",
     "dev": "npm --prefix web run dev",
     "start": "node start.mjs"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lukelzlz/legado-server.git"
+    "url": "git+https://github.com/linqinqiu/qingyue.git"
   },
   "bugs": {
-    "url": "https://github.com/lukelzlz/legado-server/issues"
+    "url": "https://github.com/linqinqiu/qingyue/issues"
   },
-  "homepage": "https://github.com/lukelzlz/legado-server#readme"
+  "homepage": "https://github.com/linqinqiu/qingyue#readme"
 }

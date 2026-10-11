@@ -13,6 +13,7 @@ import { mapCells, TapAction, zoneAt } from './tapZones'
 import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
+import { moveReaderMenu, READER_MENU_ITEMS, ReaderMenuAction, toggleReaderMenu } from './readerMenu'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, resolveMeasuredPage, sectionAtPage, sectionProgress } from './readerFlow'
 import { computeCenterScrollOffset, computeVirtualWindow } from './virtualSlice'
 import { SourceSwitchModal } from '../sources/SourceSwitchModal'
@@ -172,6 +173,38 @@ function ReaderSettingsControls({
       </small>
     </section>
     <section className="setting-section"><span className="setting-label">分栏排版</span><div className="page-modes column-modes"><button className={settings.columnMode === 'auto' ? 'selected' : ''} onClick={() => update({ columnMode: 'auto' })}>自适应</button><button className={settings.columnMode === 'single' ? 'selected' : ''} onClick={() => update({ columnMode: 'single' })}>单栏</button><button className={settings.columnMode === 'double' ? 'selected' : ''} onClick={() => update({ columnMode: 'double' })}>双栏</button></div><small className="setting-hint">{settings.columnMode === 'auto' ? '宽屏 (≥800px) 自动开启双页分栏' : settings.columnMode === 'double' ? '固定双栏双页排版' : '固定单栏排版'}</small></section>
+    {/*
+      工具栏可配置（用户 2026-10-11「阅读菜单可配置」）。清单来自 readerMenu.ts ——
+      与右上角工具栏的渲染是同一份，这里只改「显示哪些 / 什么顺序」，不重写按钮。
+    */}
+    <section className="setting-section">
+      <span className="setting-label">工具栏</span>
+      <div className="reader-menu-config">
+        {READER_MENU_ITEMS.map(item => {
+          const shown = settings.menuItems.includes(item.id)
+          const index = settings.menuItems.indexOf(item.id)
+          return (
+            <div key={item.id} className={`reader-menu-row${shown ? '' : ' is-hidden'}`}>
+              <button
+                type="button"
+                className="reader-menu-toggle"
+                aria-pressed={shown}
+                onClick={() => update({ menuItems: toggleReaderMenu(settings.menuItems, item.id) })}
+              >
+                <Icon name={shown ? 'check' : 'close'} />{item.label}
+              </button>
+              {shown && (
+                <span className="reader-menu-move">
+                  <button type="button" aria-label={`上移${item.label}`} disabled={index <= 0} onClick={() => update({ menuItems: moveReaderMenu(settings.menuItems, item.id, -1) })}>↑</button>
+                  <button type="button" aria-label={`下移${item.label}`} disabled={index >= settings.menuItems.length - 1} onClick={() => update({ menuItems: moveReaderMenu(settings.menuItems, item.id, 1) })}>↓</button>
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <small className="setting-hint">右上角显示哪些按钮、按什么顺序。至少留一个。</small>
+    </section>
     {/*
       这一档只管**手上这一本**（用户 2026-10-03：「抽屉里只留『这本用的哪条 + 重切』」）。
       "下一本导入用哪条"不在这儿改 —— 那是在书架「导入本地」旁边的「分章规则」弹窗里，
@@ -2258,6 +2291,33 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   const cachePercent = Math.min(100, Math.round((cacheStatus.cached / Math.max(1, cacheStatus.total || currentBook.chapters.length)) * 100))
 
+  /**
+   * 工具栏按钮由 `settings.menuItems` 决定（显示与顺序都在设置抽屉的「工具栏」里配）。
+   * 清单的唯一来源是 `readerMenu.ts`，别在这儿另起一套。
+   */
+  const readerMenuButton = (id: ReaderMenuAction) => {
+    switch (id) {
+      case 'switchSource':
+        return <IconButton key={id} label="切换书源" icon="sliders" onClick={() => setShowSourceSwitch(true)} />
+      case 'settings':
+        return <IconButton key={id} label="阅读设置" icon="settings" onClick={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')} />
+      case 'fullscreen':
+        return <IconButton key={id} label={isFullscreen ? '退出全屏' : '全屏阅读'} icon="expand" onClick={toggleFullscreen} />
+      case 'tts':
+        return <IconButton
+          key={id}
+          label={mediaSrc ? '本类型不支持朗读' : !ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
+          icon={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'}
+          onClick={toggleTts}
+          onDoubleClick={resetTtsBarPosition}
+          hint="双击可把朗读悬浮条放回默认位置"
+          disabled={!!mediaSrc}
+        />
+      default:
+        return null
+    }
+  }
+
   return <main className={`reader-workspace ${themeClassNames(settings).join(' ')} ${toolbarsVisible ? 'toolbars-open' : 'toolbars-hidden'} ${settings.sidebarPinned ? 'sidebar-pinned' : ''}`} style={readerStyle}>
     {/* Floating Header */}
     <header className="reader-header">
@@ -2278,17 +2338,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       </div>
       <strong className="reader-header-title" title={bookName}>{bookName}</strong>
       <div className="reader-header-actions">
-        <IconButton label="切换书源" icon="sliders" onClick={() => setShowSourceSwitch(true)} />
-        <IconButton label="阅读设置" icon="settings" onClick={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')} />
-        <IconButton label={isFullscreen ? '退出全屏' : '全屏阅读'} icon="expand" onClick={toggleFullscreen} />
-        <IconButton
-          label={mediaSrc ? '本类型不支持朗读' : !ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
-          icon={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'}
-          onClick={toggleTts}
-          onDoubleClick={resetTtsBarPosition}
-          hint="双击可把朗读悬浮条放回默认位置"
-          disabled={!!mediaSrc}
-        />
+        {settings.menuItems.map(id => readerMenuButton(id))}
       </div>
     </header>
 

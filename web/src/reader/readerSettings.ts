@@ -1,4 +1,5 @@
 import { DEFAULT_MAPS, looksLikeGrid, migrateGrid, sanitizeMap, type TapMap } from './tapZones'
+import { DEFAULT_READER_MENU, parseReaderMenu, type ReaderMenuAction } from './readerMenu'
 
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
@@ -99,6 +100,11 @@ export type ReaderSettings = {
    * 两种翻页方式各一张虚线表 —— 默认值就是改动前那三区，不改不漂移。
    */
   tapZones: { paginate: TapMap; scroll: TapMap }
+  /**
+   * 右上角工具栏显示哪些按钮、按什么顺序（用户 2026-10-11：「阅读菜单可配置」）。
+   * 出厂值 = 改动前那一排；配置项见 `readerMenu.ts`（唯一来源，工具栏与配置面板共用）。
+   */
+  menuItems: ReaderMenuAction[]
 }
 
 const storageKey = 'legado-reader-settings-v2'
@@ -135,6 +141,7 @@ export const defaultReaderSettings: ReaderSettings = {
   readerBgImage: '',
   readerBgDim: 0.25,
   tapZones: { paginate: DEFAULT_MAPS.paginate, scroll: DEFAULT_MAPS.scroll },
+  menuItems: DEFAULT_READER_MENU,
 }
 
 export function clampScrollPosition(value: number): number {
@@ -401,6 +408,7 @@ export function loadReaderSettings(): ReaderSettings {
         paginate: loadTapMap((saved.tapZones as Record<string, unknown> | undefined)?.paginate, DEFAULT_MAPS.paginate),
         scroll: loadTapMap((saved.tapZones as Record<string, unknown> | undefined)?.scroll, DEFAULT_MAPS.scroll),
       },
+      menuItems: parseReaderMenu(saved.menuItems),
     }
   } catch {
     return defaultReaderSettings

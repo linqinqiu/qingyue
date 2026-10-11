@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, openSync, readdirSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -112,11 +112,65 @@ async function rebuildCds() {
   }
 }
 
-// 幂等：已经在跑就直接开界面 —— 重复点图标不该报"端口被占"，也不该再起第二个实例。
+/** 端口上正在监听的 PID。 */
+function pidsOnPort(target) {
+  try {
+    const lines = execFileSync('netstat', ['-ano'], { encoding: 'utf8' }).split(/\r?\n/)
+      .filter((line) => new RegExp(`:${target}\\s`).test(line) && /LISTENING/i.test(line));
+    return [...new Set(lines.map((line) => line.trim().split(/\s+/).pop()))];
+  } catch { return []; }
+}
+
+/**
+ * 端口上"跑着本项目 jar、且启动时间早于当前 jar 的 mtime"的 PID —— 也就是需要重启的陈旧实例。
+ *
+ * 为什么按"进程启动时间 vs jar 的 mtime"而不是直接看 jar 文件：jar 被重建覆盖时，旧进程仍持有
+ * 旧内容（Windows 允许覆盖被打开的文件），磁盘上 jar 的 mtime 已经是新的 —— 只看文件看不出陈旧。
+ * 只有"进程启动早于 jar 的 mtime"才说明它加载的是重建前的那一份。
+ * 拿不到启动时间（非 Windows / PowerShell 不可用）时返回空数组，退化成原来的幂等行为。
+ */
+function staleRunningPids(target, jarPath) {
+  if (process.platform !== 'win32') return [];
+  let jarMtime;
+  try { jarMtime = statSync(jarPath).mtimeMs; } catch { return []; }
+  const portPids = pidsOnPort(target);
+  if (!portPids.length) return [];
+  let rows;
+  try {
+    rows = execFileSync('powershell', ['-NoProfile', '-Command',
+      `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | ForEach-Object { $_.ProcessId.ToString() + '|' + ([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds() + '|' + $_.CommandLine }`,
+    ], { encoding: 'utf8' }).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  } catch { return []; }
+  const stale = [];
+  for (const row of rows) {
+    const [pid, ms, ...rest] = row.split('|');
+    if (!portPids.includes(pid)) continue;
+    if (!/legado-server-.*-all\.jar/.test(rest.join('|'))) continue;
+    const start = Number(ms);
+    if (Number.isFinite(start) && start > 0 && start < jarMtime) stale.push(pid);
+  }
+  return stale;
+}
+
+// 幂等 + 防陈旧：已经在跑时，若它跑的是比磁盘上这份 jar 更老的构建（jar 重建过、旧进程还占着端口），
+// 先停旧再起新；否则只开界面 —— 重复点图标不该报"端口被占"，也不该再起第二个实例。
 if (await isReady(url)) {
-  console.log(`青阅已在运行 ${url}`);
-  if (args.open) openBrowser(url);
-  process.exit(0);
+  const stale = staleRunningPids(runtime.port, path.join(runtime.libs, jar));
+  if (!stale.length) {
+    console.log(`青阅已在运行 ${url}`);
+    if (args.open) openBrowser(url);
+    process.exit(0);
+  }
+  console.log('运行中的实例比当前 jar 更旧（jar 重建过）—— 先停旧实例再起新的');
+  for (const pid of stale) {
+    try { execFileSync('taskkill', ['/PID', pid, '/F']); console.log(`已停止旧实例 PID ${pid}`); }
+    catch (error) { console.log(`停止 PID ${pid} 失败：${error instanceof Error ? error.message : error}`); }
+  }
+  // 等端口真的空出来（进程退出 + 内核回收需要一点时间），否则下面的探针会误判"端口被占"
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline && (await isReady(url))) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
 }
 
 const probe = net.createServer();

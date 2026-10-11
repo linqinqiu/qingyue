@@ -56,6 +56,14 @@ Kotlin JVM 17 + Ktor 3.4 + SQLite（WAL）。前端 React 19 + TypeScript + Vite
 - **手机备份包**：见下面单独一节。
 - **写操作保护**：浏览器发出的跨站写请求一定带 `Origin`，与本机 Host 不一致就 403。抓取侧对重定向后的地址复验，拒绝内网与链路本地目标；正文进界面前做净化，图片走代理。
 
+## 环境要求
+
+| | 版本 | 说明 |
+| --- | --- | --- |
+| JDK | **17+** | `server/build.gradle` 的 toolchain 锁 17；CI 用 Temurin 21 也能编。只有「直接跑 jar / 从源码跑」需要，整合包与桌面版自带运行时 |
+| Node | **20+**（CI 用 22，见 `.nvmrc`） | 构建或跑前端时需要 |
+| Gradle | 用仓库自带的 `./gradlew` | 不用另装 |
+
 ## 怎么跑起来
 
 ### Windows 桌面程序（免 Java）
@@ -116,7 +124,7 @@ cd web && npm install && npm run dev     # 前端开发服务器（热重载）
 | `LEGADO_LOG_FILE` | `<安装根>/server.log` | 运行日志 |
 | `LEGADO_TMP_DIR` | `<安装根>/tmp` | JVM 临时目录。不指定的话 SQLite 的原生库每次启动都往系统盘 `Temp` 解一份 |
 | `LEGADO_HOME` | 当前目录 | 安装根：`port.txt`、`server.log`、`tmp/` 都从它下面派生。由启动器传入（`scripts/runtime.mjs`），裸跑 jar 一般不用管 |
-| `LEGADO_REPO` | 空 | `owner/repo` 形状，供「关于」页检查更新；不设就没这个入口 |
+| `LEGADO_REPO` | `linqinqiu/qingyue` | `owner/repo` 形状，供「关于」页检查更新；默认本项目自己的仓库，换 fork 时改它 |
 
 `start.mjs` / `stop.mjs` 是可选封装（后台拉起、按端口停进程），以脚本自己所在目录为安装根，整个文件夹可以改名或搬盘。`start.mjs` 支持 `--port 1235` 换端口、`--host 0.0.0.0` 换绑定地址、`--no-open` 只起服务不开浏览器（默认起来后自动打开浏览器）。端口也可以**在界面上改**（设置 → 服务 → 服务端口，重启后生效，写的是安装根下的 `port.txt`）；优先级 `--port` > `port.txt` > `.env` / 环境变量 > 1234。同目录的 `start.cmd` 是给双击用的门面：服务没跑就起、等就绪再开界面；已经在跑就直接开界面。
 
