@@ -5637,3 +5637,26 @@ input[type="checkbox"] {
 .page-dialog .backup-page { padding-block-start: var(--s-5); }
 /* 正文引导语：替代原来的整页大标题（标题已由 .dialog-head 给，正文不再重复一遍 h1） */
 .page-dialog .page-lead { margin: 0 0 var(--s-4); color: var(--muted); font-size: var(--t-lg); line-height: 1.7; }
+
+/* —— 渲染崩掉的兜底面板（ErrorBoundary）—— */
+/* 阅读器那一支崩了时它替换的是正文区域：占满可用高度但不铺满整屏（外壳与书架还在）。 */
+.error-boundary {
+  min-height: 240px;
+  display: flex; flex-direction: column; justify-content: center; gap: var(--s-3);
+  padding: var(--s-6) var(--s-7);
+  margin: var(--s-5) auto;
+  max-width: min(680px, 92%);
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r-3);
+}
+.error-boundary h2 { margin: 0; font-size: var(--t-xl); }
+.error-boundary p { margin: 0; line-height: 1.7; }
+.error-boundary-detail {
+  font-size: var(--t-sm); color: var(--muted);
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-muted); border-radius: var(--r-2);
+  /* 抛出的原文可能很长且不换行：夹住它，别把面板顶宽出屏幕（390 宽上踩过这个） */
+  max-height: 8em; overflow: auto; overflow-wrap: anywhere; word-break: break-word;
+}
+.error-boundary-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+.error-boundary-hint { color: var(--muted); font-size: var(--t-sm); }

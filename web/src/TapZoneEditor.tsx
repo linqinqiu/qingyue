@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+// 这个组件在 `web/test/tap-zone-editor.test.ts` 里被 `renderToStaticMarkup` 静态渲染，
+// 那条链路走 classic JSX（`React.createElement`），只有 Vite 构建才走 automatic runtime。
+// 少这一行时构建与页面都正常，只有套件红四条 —— 与 ShortcutHelp/useEscapeClose 那次同形。
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'

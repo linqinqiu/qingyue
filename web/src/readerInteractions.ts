@@ -43,6 +43,42 @@ export function isInteractiveReaderTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('button, a, input, textarea, select, label, summary, [contenteditable="true"]'))
 }
 
+/**
+ * 滚轮增量归一化成 CSS 像素。
+ *
+ * `WheelEvent.deltaMode` 有三种口径：0=像素（触控板与多数鼠标）、1=行、2=页。
+ * 不乘这个系数量出来的"幅度"根本不是一个单位 —— 翻页模式原来写的是
+ * `Math.abs(delta) < 25 return`，于是行模式下一格滚轮（约 3）与触控板轻扫（1~20 像素）
+ * 都够不着阈值，表现是"鼠标能翻、触控板翻不动"。
+ */
+export function wheelPixels(delta: number, deltaMode: number, lineHeight = 16, pageHeight = 600): number {
+  const unit = deltaMode === 1 ? lineHeight : deltaMode === 2 ? pageHeight : 1
+  return delta * unit
+}
+
+/**
+ * 翻页模式的一格滚轮：把多次小增量**累计**成一次翻页。
+ *
+ * 返回 `{ action, rest }`，调用方把 `rest` 存回去。只按单次事件判阈值会让慢速轻扫永远翻不动
+ * （见 `wheelPixels` 那三种口径），累计之后触控板每一下都在攒，攒够 `step` 像素翻一页。
+ */
+export function paginateWheelStep(
+  deltaX: number,
+  deltaY: number,
+  deltaMode: number,
+  accumulated: number,
+  step = 48,
+  lineHeight = 16,
+  pageHeight = 600,
+): { action: 'next' | 'prev' | null; rest: number } {
+  const x = wheelPixels(deltaX, deltaMode, lineHeight, pageHeight)
+  const y = wheelPixels(deltaY, deltaMode, lineHeight, pageHeight)
+  const primary = Math.abs(x) > Math.abs(y) ? x : y
+  const total = accumulated + primary
+  if (Math.abs(total) < step) return { action: null, rest: total }
+  return { action: total > 0 ? 'next' : 'prev', rest: 0 }
+}
+
 export function isDoubleColumnActive(columnMode: 'auto' | 'single' | 'double', viewportWidth: number): boolean {
   return columnMode === 'double' || (columnMode === 'auto' && viewportWidth >= 800)
 }
@@ -159,3 +195,11 @@ export const contentImageUrl = (line: string): string | null => CONTENT_IMAGE_LI
 
 /** 站内绝对路径直接就是能用的地址，不需要再过图片代理。 */
 export const isSameSiteAsset = (url: string): boolean => url.startsWith('/api/')
+
+/**
+ * 目录虚拟列表一行的像素高（虚拟化算的是「第 i 行位移 = i × 行高」）。
+ *
+ * 同一个数还写在 `styles.css` 的 `--row-h-list`。行高与实际渲染不一致时，
+ * 5,000 章的目录滚到底会差出整屏，所以两处必须相等 —— 由测试当场钉。
+ */
+export const TOC_ROW_HEIGHT = 40

@@ -70,20 +70,20 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2,ttf}'],
         navigateFallback: '/index.html',
-        // /next 是新骨架（另一份 index.html）。不放进黑名单的话，已经装了这份 SW 的浏览器
-        // 会把对 /next/ 的导航用**旧界面**的 shell 回答 —— 看着就像"挂载没生效"。
-        navigateFallbackDenylist: [/^\/api\//, /^\/next(\/|$)/],
+        // workbox 是拿**绝对 URL**（`https://127.0.0.1:1234/api/...`）去试这些正则的。
+        // 之前全部写成 `^\/api\/...`，锚在串首 → 一条都匹配不上：四条运行时缓存与这条黑名单
+        // 实际都是死的（封面/元信息缓存从没建过，`/api/` 的导航也确实会被应用壳回答）。
+        // 所以这里一律不许用 `^/`；改完由 `web/test/PwaCacheRules.test.ts` 钉住。
+        navigateFallbackDenylist: [/^https?:\/\/[^/]+\/api\//, /^https?:\/\/[^/]+\/next(\/|$)/],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\/tts\//,
+            // 朗读是持续字节流，绝不能进缓存。（0.6.16 那条"排除实时音频流"当时就是空写的。）
+            urlPattern: /^https?:\/\/[^/]+\/api\/tts\//,
             handler: 'NetworkOnly',
           },
           {
-            urlPattern: /^\/api\/search\/stream/,
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: /^\/api\/book\/cover/,
+            // 封面：书架/搜索/发现都走 `/api/covers/{key}` 与 `/api/covers/proxy`
+            urlPattern: /^https?:\/\/[^/]+\/api\/covers(\/|$)/,
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'legado-covers',
@@ -94,7 +94,9 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^\/api\/(shelf|book\/toc)/,
+            // 书架清单是 GET，可离线看；目录与正文走 POST（`/api/books/chapters`、`/api/books/content`），
+            // workbox 的 runtimeCaching 只接 GET，给它们配规则永远不会命中 —— 离线正文另有 IndexedDB 那条路
+            urlPattern: /^https?:\/\/[^/]+\/api\/bookshelf($|[?#])/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'legado-meta-api',
@@ -109,6 +111,9 @@ export default defineConfig({
       },
     }),
   ],
-  server: { proxy: { '/api': 'http://localhost:8080' } },
+  // 显式绑 127.0.0.1（IPv4 回环）：否则默认绑 ::1，127.0.0.1:5174 不通。
+  // 代理目标也用 127.0.0.1：后端 LEGADO_HOST=127.0.0.1 只听 IPv4，用 localhost 会解析到 ::1 而超时。
+  // 钉死 5174 + strictPort：避免端口被占时静默漂到 5175，导致代理/同源判定失真（AI-2 隔离约定 P0）。
+  server: { host: '127.0.0.1', port: 5174, strictPort: true, proxy: { '/api': 'http://127.0.0.1:8081' } },
 })
 

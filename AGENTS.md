@@ -1,5 +1,30 @@
 # Repository Guidelines & Constitutional Conventions
 
+## 0. 双 AI 分工（2026-10-11 起生效，读任何一节之前先读这一节）
+
+同一个仓库由两个 AI 并行开发，三棵 git worktree 共享历史，靠"分支 + 目录归属 + 独立端口/库/日志"隔离。
+本项目的目录名是 `web/`（不是 `frontend/`），构建文件是 Groovy（`server/build.gradle`，没有 `build.gradle.kts`）。
+
+| 工作树 | 分支 | 工具 | 负责 | 局部约定文件 |
+| :--- | :--- | :--- | :--- | :--- |
+| `E:/Projects/qingyue-ai1` | `ai1/backend` | WorkBuddy CLI（AI-1） | 后端、规则引擎、安全、`tools/`、构建、契约 | `server/AGENTS.md` |
+| `E:/Projects/qingyue-ai2` | `ai2/frontend` | Qoder（AI-2） | 前端 `web/`、阅读体验、仓库门面文档 | `web/AGENTS.md` |
+| `E:/Projects/legado-server` | `main` | — | 合流目标（远端 `github.com/linqinqiu/qingyue`） | 本文件 |
+
+**1. 角色与目录边界**：AI-1 只写 `server/**`、`tools/**`、`.github/**`、根 `AGENTS.md`/`CHANGELOG.md`/`LICENSE`/`CONTRIBUTING.md`/`SECURITY.md`/`.gitignore`/`build.gradle*`、`docs/API-CONTRACT.md`、`docs/COORDINATION-ai1.md`；AI-2 只写 `web/**`、`README.md`、`docs/architecture.md`、`docs/deploy.md`、`docs/compatibility.md`、`docs/code-map-frontend.md`、`docs/COORDINATION-ai2.md`。越界只有在用户点名时才可，且必须在自己的协作日志里记 NOTE。
+
+**2. 端口 / DB / 日志**：AI-1 = 后端 **8081**、库 `data/ai1.db`、日志 `logs/ai1/`；AI-2 = 自测实例 **1299**（库 `qingyue-ai2/data/legado.sqlite`，日志 `qingyue-ai2/server.log`）、dev server **5174**（`strictPort`，代理指向 8081）；用户日常实例 1234（`qingyue-ai1`/主仓默认，谁都不许把探针写进它的数据目录）。端口优先级：`--port` > `port.txt` > `LEGADO_PORT`/`.env` > 1234。
+
+**3. 提交信息格式**：`ai1: <模块>: <动作>` / `ai2: <模块>: <动作>`。一次提交只做一件事；跨树改动不得借用对方前缀。
+
+**4. 协作规则（读哪些、写哪些）**：开工前 `git fetch origin && git rebase origin/main` → 读根 `AGENTS.md` → 自己的 `server/AGENTS.md` 或 `web/AGENTS.md` → `docs/API-CONTRACT.md` → **对方的** `docs/COORDINATION-ai*.md`（重点 `API-CHANGE`/`API-REQUEST`/`BLOCKER`）→ 自己的日志。每完成一个任务：追加自己那份日志（`## [日期] [类型] [标题]`）→ commit → push → 下一个。契约由 AI-1 单方面维护，AI-2 只读，要变更就发 `API-REQUEST`，**不改契约、不写 stub 假数据蒙混**。
+
+**5. 每次重开的启动指令**：AI-1 读 `docs/RESTART-ai1.md`，AI-2 读 `docs/RESTART-ai2.md`。两份文件里写"第一条命令做什么、先读哪些文件、当前进行中的任务与它的验证口径"。
+
+> 已实测并在用的两条硬事实：
+> ① 同源闸门（`Guard.kt` `isSameOriginIdentity`）按 **Origin 的主机+端口 vs 服务自身绑定** 判，因此 dev server 5174 代理下的写请求一律 403 —— 前端验证走"构建产物 + 同源实例"。
+> ② `tools/verify/` 的门禁全部按 `STAMP` 自造/自清探针且**必须串行**；跑红先分清判据旧了、探针脏了、机器被自己占满了，还是产品坏了。
+
 ## 1. Project Core Mission & Objective
 
 > **核心项目定位**：将 **Legado（开源阅读 Android 平台应用）** 完整迁移与重构为可在标准服务器与 Docker 容器中独立运行的高性能**无头后端（Ktor + Kotlin JVM + SQLite）**与现代化**Web 客户端（React 19 + TypeScript + Vite）**。

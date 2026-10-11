@@ -234,3 +234,35 @@ export function isPopularMatch(group: SearchGroup): boolean {
   return group.sources.length >= 3
 }
 
+/**
+ * 流式搜索的判重键：同源 + 同地址才算同一条。
+ * 跨书源的同一本书要都留着 —— 用户就是在这排结果里挑源，去掉会变成搜索结果少了一半源。
+ */
+export const streamDedupeKey = (item: { sourceId: string; bookUrl: string }): string =>
+  `${item.sourceId}\u0000${item.bookUrl}`
+
+/**
+ * 把一条流式封包并进已有结果：只增不减，判重靠调用方长期持有的 seen 表。
+ *
+ * 为什么是传表进来而不是当场 new Set：原来每条封包都重建一次已知集合，成本是
+ * O(已收条数 x 封包数)。服务端每完成一个源就发一条 results，整库搜索五千个源就是
+ * 五千次重建，而这段正好发生在结果一边往屏上长的时候 —— 界面最卡的那一段。
+ */
+export function mergeStreamedResults(seen: Set<string>, additions: SearchResult[]): SearchResult[] {
+  const fresh: SearchResult[] = []
+  for (const item of additions) {
+    const key = streamDedupeKey(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    fresh.push(item)
+  }
+  return fresh
+}
+
+/** progress 封包的合并窗口：服务端每个源完成都发一条，直连 setState 会把一次搜索打成几千次重渲染。 */
+export const PROGRESS_FLUSH_MS = 250
+
+/** 只有 progress 可以攒到下一批再放；start/done/error 必须立刻落 state（它们各带终态语义，攒了就等于状态行说谎）。 */
+export function progressCanCoalesce(type: string): boolean {
+  return type === 'progress'
+}
