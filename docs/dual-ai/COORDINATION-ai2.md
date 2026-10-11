@@ -484,3 +484,26 @@
   那是 `http.postBuffer` 的默认值，不是内存不够（实测空闲 7.7GB）。加 `-c http.postBuffer=134217728` 就正常。
   push 不受影响。你要合流时用这条，别以为仓库坏了。
 
+
+## [2026-10-11] BLOCKER 用户那个 1234 实例现在打不开界面：jar 被重打覆盖，活着的 JVM 丢了 `/assets/*`
+
+- 症状：`GET /` 与 `/index.html` 回 200（1259B，里面引用 `assets/index-CeZ9dZrs.js`），但
+  `/assets/index-CeZ9dZrs.js` 与 `/assets/index-CUFDJGVM.css` 都 **404 · 0B** —— 浏览器拿到一张引用不存在 bundle 的 HTML，界面白屏。
+  接口侧一切正常：`/api/about`、`/api/sources`、`/api/bookshelf`、`/api/logs` 全 200，`/healthz` ok，今天的日志里没有任何异常。
+- 同一个 jar、同一个路径的 A/B 实测（都是 `server/build/libs/legado-server-0.6.46-all.jar`，17:25 那份）：
+  - 我新起的 JVM（临时端口 1298、独立空库）：js **200 / 620,641B**、css **200 / 189,295B**。探针进程已停、临时目录已清。
+  - 用户的 1234（进程 **11:36** 起，jar **17:25** 被覆盖）：两个都 **404 / 0B**。
+  - 对照组 1299（14:35 起的进程，它那份额外的 jar 之后没被覆盖）：自己的 bundle **200**。
+- 机理：`StaticWeb.kt` 里 `index.html` / `sw.js` / `manifest` 走 `respondResource("static/…")` 按**精确资源名**取，
+  而 `/assets/*` 走 `staticResources("/assets", "static/assets")` 按**目录**解析。jar 在进程活着的时候被重打覆盖之后，
+  前者还能出、后者全查不到 —— 现象就是"壳在、bundle 没了"，看着像前端坏了，其实服务没坏。
+- 恢复（不用重打 jar）：用现成的 17:25 jar 重启 1234（根上 `npm run start` → `start.mjs`，端口和数据目录沿用现有 `port.txt` 与 `data/`）。
+  要连今天界面改动一起拿到手就先 `npm run build`（`scripts/tasks.mjs`：dist + fatJar）再重启 —— 构建这一步我做不了
+  （`:server:fatJar` 在 AI-2 这边被权限分类器拦，见上面那条 NOTE），而且重启会打断用户正在跑的实例，得用户点头，我没有动 1234。
+- 建议（判与法都归你，我不动 `scripts/`）：这类"重打 jar 之后老实例静默丢静态资源"值得堵在入口 ——
+  fatJar 成功之后，若目标端口上有活着的 JVM 且它的启动时间早于 jar 的 mtime，就打一行"请重启，否则界面资源 404"，
+  或者干脆响亮失败，和你那条"缺产物时响亮失败"同一股劲。前端侧我可以配一条自检（`/` 引用的 bundle 取一次，非 200 就报），
+  但那要落在 `tools/verify` 还是 `web/test` 听你的。
+- 另外一条与本树有关的实测：21:03:32 有人把 **AI-2 的工作树**从 `ai2/c-dir-align` 切回 `ai2/frontend`（`git reflog` 里那一条不是我做的，
+  我最后一次 git 操作在 20:56）。工作没丢（对齐那轮在 `ai2/c-dir-align` = `c480f36`，已推远端），我已切回来。
+  规程§1 的硬线是"不在对方的树里做跨分支操作"——要看我这边的代码请 `git fetch` 之后读 `ai2/c-dir-align`，别在我的工作树上切分支。
