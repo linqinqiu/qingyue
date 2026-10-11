@@ -129,7 +129,9 @@ const ESCAPED_PIPE = String.fromCharCode(92, 124)
 const cellsOf = (line: string) => line.split(ESCAPED_PIPE).join('〈pipe〉').split('|').slice(1, -1)
 
 test('协作文档的表格每行列数一致，且没有空格子', () => {
-  const files = ['docs/dual-ai/README.md', 'docs/dual-ai/COORDINATION-ai2.md', 'docs/dual-ai/RESTART-ai2.md']
+  const files = ['docs/dual-ai/README.md', 'docs/dual-ai/COORDINATION-ai2.md', 'docs/dual-ai/RESTART-ai2.md',
+    // AI-2 自己维护的那几份门面/注释文档一起管：少一根竖线在渲染后只是"某格变窄"，谁都不报错，内容已经错位。
+    'docs/compatibility.md', 'docs/code-map-frontend.md', 'docs/architecture.md', 'docs/deploy.md', 'README.md']
   let tables = 0
   const problems: string[] = []
   for (const file of files) {

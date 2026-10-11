@@ -153,30 +153,53 @@ cd web && npm install && npm run dev     # 前端开发服务器（热重载）
 ## 目录结构
 
 ```text
-server/                     Ktor 服务端（Kotlin JVM）
+server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
   src/main/kotlin/io/legado/server/
     Application.kt          启动入口与 Ktor 特性装配
-    ServerConfig.kt         环境变量到默认值
-    Guard.kt                写操作同源闸门
-    Routes.kt               REST 与 WebSocket 路由
-    RuleRunner.kt           书源规则执行器（Rhino + Jsoup + JsonPath）
-    SourceHealth.kt         体检：带关键词实跑一次搜索再分档
-    TxtTocRule.kt           本地书分章规则表与打分选规则
-    BookCacheService.kt     离线缓存调度
-    CoverCache.kt           封面拉取、存储与防盗链代理
-    SubscriptionService.kt  订阅源定时与批量同步
-    Database.kt             SQLite 数据层与连接生命周期
-    DesktopLauncher.kt      桌面壳入口（jpackage）：探端口、开浏览器、托盘退出
+    ServerConfig.kt · AppConfig.kt   环境变量到默认值
+    StaticWeb.kt            界面静态资源挂载（同端口的 `/` 与 `/next`）
+    BuildInfo.kt · DesktopLauncher.kt  版本清单 · 桌面壳（探端口、开浏览器、托盘退出）
+    http/                   Guard.kt 写操作同源闸门 · NetworkSecurity.kt · Routes.kt REST 与 WebSocket
+    rules/                  RuleRunner.kt 规则执行（Rhino + Jsoup + JsonPath + XPath）· JsSandbox.kt · JsGuard.kt · RuleSplit.kt · RuleValue.kt
+    data/                   Database.kt SQLite 数据层与连接生命周期
+    source/                 SourceCodec.kt 书源编解码 · SourceHealth.kt 体检分档 · SourceDebugger.kt 分阶段调试 · WebViewProxy.kt 整站反代 · ExternalBrowserLogin.kt
+    content/                ContentPipeline.kt · ContentProcessor.kt 正文净化 · LooseJson.kt 宽松 JSON
+    cache/                  BookCacheService.kt 离线缓存调度 · CoverCache.kt 封面与防盗链代理
+    localbook/              LocalBookParser.kt TXT/EPUB 解析入库 · TxtTocRule.kt 分章规则表与打分
+    tts/                    EdgeTtsService.kt · TtsSessionService.kt 会话级连续音频流
+    backup/                 BackupImporter.kt · BackupStore.kt · LegacyBackup.kt
+    subscription/           SubscriptionService.kt 订阅同步
+    ops/                    LogService.kt · UpdateCheck.kt
+    model/                  Models.kt 全部请求 / 响应体
 web/                        前端（React 19 + TS + Vite，构建产物进同一个 jar）
-  src/                      界面与逻辑 —— 模块清单、关键链路（书源导入 / 搜索 / 目录 / 正文 / 翻页 / 进度 / 离线 / 朗读）与前端边界见 docs/code-map-frontend.md
+  src/main.tsx              应用外壳 + hash 路由 + 全局快捷键 + 书库 / 书架 / 书源 / 订阅四个页面
+  src/reader/               阅读器与朗读：翻页与滚动几何、点击分区、分句、悬浮条位置、设置读写
+  src/sources/              书源：结构化字段表、编辑、体检、换源、登录五条路、内置反代浏览器、批量
+  src/lib/                  api 端点表、流式搜索 store、IndexedDB 离线库、结果清洗、报错翻译
+  src/components/           浮层一档、下拉 / Toast / 右键菜单、日志、订阅 RSS、PWA 更新、皮肤
+  src/pages/                关于、更新日志、备份、发现、设置
+  src/shelf/                封面、空态引导、书架布局与拖动排序
+  src/icons.tsx · styles.css  全站单色图标 · 样式与皮肤令牌
   test/                     单元与静态判据，入口是 test/run-all.ts（它逐个 import 登记，新加测试文件要同时加那一行，否则"存在但从未运行"）
   AGENTS.md                 前端的工程口径：判据怎么写、什么才算验过
 tools/verify/               在真实浏览器和真实服务上跑的门禁脚本
-scripts/package-desktop.mjs 桌面程序打包（jlink + jpackage → qingyue.exe）
-docs/                       实现说明、会话记录、部署文档
+scripts/                    tasks.mjs（build / package / dev 单一入口）· runtime.mjs 启动运行时 · package-desktop.mjs 桌面打包
+docs/                       见下面「文档」一节
 compose.server.yml          Docker Compose 编排
 Dockerfile.server           多阶段构建（前端 + 服务端）
 ```
+
+## 文档
+
+| 想知道什么 | 看哪份 |
+| :--- | :--- |
+| 我的书源能不能跑、哪些字段真被执行、和上游 App 差在哪 | [`docs/compatibility.md`](docs/compatibility.md) |
+| 整体架构与模块边界 | [`docs/architecture.md`](docs/architecture.md) |
+| 部署（jar / Docker / Compose / 桌面程序） | [`docs/deploy.md`](docs/deploy.md) |
+| 前端每个文件做什么、跨文件链路、读后记里的问题清单 | [`docs/code-map-frontend.md`](docs/code-map-frontend.md) |
+| 贡献规则、双 AI 协作与合流 | [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`docs/dual-ai/README.md`](docs/dual-ai/README.md) |
+| 历史推演与踩坑归档 | [`docs/sessions/`](docs/sessions/) |
+
 
 ## 测试
 
