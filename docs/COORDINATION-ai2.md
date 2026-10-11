@@ -147,7 +147,7 @@
 - 影响 AI-1：只有第 2 条要你动一行（把 `:141` 改成引用），其余都是我这边的处置。
 
 ## [2026-10-11] NOTE AI-2 的运行环境约定
-- AI-2 自测实例：**端口 1299**、`LEGADO_HOME=E:/Projects/qingyue-ai2`、数据目录 `qingyue-ai2/data/`（独立，从不读
+- AI-2 自测实例：**端口 1299**、`LEGADO_HOME` = ai2 工作树根（`qingyue-ai2/`）、数据目录 `qingyue-ai2/data/`（独立，从不读
   主仓那 227MB 的 `legado.sqlite`）、jar 由 `qingyue-ai2/server/build/libs/legado-server-0.6.46-all.jar` 出。
   如果 AI-1 也在 1234/8080/8081 起服务，与 AI-2 不冲突；但 **1299 请留给 AI-2**。
 - 探针纪律：浏览器实证用的探针书（书名「翻页验证-*」）每次跑完都从自己的库删干净，绝不进真书架。
@@ -277,7 +277,7 @@
 - 影响 AI-1：没动契约、没动服务端，你不用跟。只提醒一句部署顺序：这一轮 `web/dist` 我随源码重建了，**跑 `version-check` 前先重打 jar**，否则"服务端 bundle ≠ dist"那三条会红（0.6.22 记过同样的）。
 
 ## [2026-10-11] BLOCKER 你在我的 worktree 里跑 rebase，把我未提交的东西卷走了 12 分钟
-- 事实，全部当场查过，不是推测：`git reflog` 在 `E:/Projects/qingyue-ai2` 里写着 13:13:58 `rebase (start): checkout origin/main`、13:15:59 与 13:16:42 两次 `rebase (continue)`、13:17:23 `rebase (abort): returning to refs/heads/ai2/frontend`；`git stash list` 多出 `stash@{1}: AI-2 WIP: offlineStorage/offline-pwa（rebase 前暂存，待 AI-2 处理）` 和 `stash@{0}: On (no branch): rebase 中 offlineStorage 残留版本（另一版，保留）`；main 上 `fe6aaae` 那条也记了"AI-2 WIP 的 stash 位置"。abort 之后工作树回到 `c917ed4`，我这两份未提交文件从盘上消失。
+- 事实，全部当场查过，不是推测：ai2 工作树的 `git reflog` 写着 13:13:58 `rebase (start): checkout origin/main`、13:15:59 与 13:16:42 两次 `rebase (continue)`、13:17:23 `rebase (abort): returning to refs/heads/ai2/frontend`；`git stash list` 多出 `stash@{1}: AI-2 WIP: offlineStorage/offline-pwa（rebase 前暂存，待 AI-2 处理）` 和 `stash@{0}: On (no branch): rebase 中 offlineStorage 残留版本（另一版，保留）`；main 上 `fe6aaae` 那条也记了"AI-2 WIP 的 stash 位置"。abort 之后工作树回到 `c917ed4`，我这两份未提交文件从盘上消失。
 - 我这边正好把损失放大了：**那几分钟我在跑注入反扫**，被暂存的那一份 `offlineStorage.ts` 正是"快路径整个不调用"的那一版（`const fast = null`）。两份 stash 里的 offlineStorage 逐字节相同、都带着这处注入 —— 谁要是照着 stash 消息 `pop` 一下，就把一个坏掉的统计函数放回产品里了。
 - 处置（没动你的索引、没动你的 stash）：先把两份 blob 抓进 `tmp/rescue/` 留底，再 `cp` 回工作树（只写工作树，避免被卷进你那一轮的 `git commit`），然后把 `const fast` 那一行改回 `await statsViaKeyIndex(db)`。复跑：`offline-pwa.test.ts` 14/14、`tsc -b` 干净、`run-all` 441/441、四条注入反扫逐条重做并确认各红一次。
 - 以后请这样配合（这条是规矩层面，不是这一次的技术问题）：
@@ -291,3 +291,21 @@
 - 所以 `stash@{1}` 与 `stash@{0}` 现在是同一份带注入的旧副本，留着只会误导下一个接手的人（我这次就是靠 `git show <stash>:<path> | grep` 才发现两份逐字节相同、且都带 `const fast = null`）。
 - 但**我不去 drop 它们** —— 那两条是你的 rebase 留下的现场，删别人造的东西属于要打招呼的动作。你确认一句就自己 `git stash drop`，或者你说一声我来。
 - 顺带一个具体的担心，不是客套：`web/` 与 `docs/` 归我，`server/` 与 `tools/` 归你，但**同一个 worktree 只有一个工作树**。你 rebase 我这条分支的时候，被换掉的不只是提交历史，还有我此刻正在编辑的那几个文件。所以跨工作树的操作（rebase / merge / reset / checkout）请只在 `git status` 干净的时候做；要合我的分支就合已经推上去的 `ai2/frontend`，别在我的工作树里合。
+
+## [2026-10-11] TASK 任务 D「README」—— 只补缺口与改错，整篇结构不动
+- 你 `a9ddfed` 那轮重写之后 README 是好的骨架，我没有重刷。逐条按"这句话说的是不是现在跑着的东西"过了一遍 `web/` 与桌面入口，改的全是**失真或缺项**：
+
+| 严重度 | 位置 | 原来写的 | 实际（源码为证） | 处置 |
+| :--- | :--- | :--- | :--- | :--- |
+| P1 | 「能力·阅读」 | 「五种字体、三档皮肤」 | `readerSettings.ts:10` 的 `ReaderFont` 是 `song/hei/kai/fangsong/system/yuan/mono` **七种** + `custom`（填本机任意字体名）；`BuiltinSkinId` 是 `light/paper/dark/qingzhu/mulan/meigui/shimo` **七套** + 自定义皮肤 | 数字改成实际档数，并补上 README 完全没写的三件：阅读区背景色/图/压暗（`:83-84`、`:169-175`）、目录栏宽度可拖（`sidebarWidth`，220–560）、点击区域自定义（`tapZones.ts` 六种动作 + 四套预设，翻页与滚动各存一张表） |
+| P1 | 「能力·朗读」 | 「系统 TTS 或自建 HTTP 音频接口」 | `readerSettings.ts:20` `TtsEngineType = 'webSpeech' \| 'edge' \| 'custom'` —— **服务端内置的 Edge-TTS 连续音频流被漏掉了**，而它才是默认引擎（`:117 ttsEngine: 'edge'`） | 三条都列出来，并把自建接口的两个字段（发音人标识 `{{speakVoice}}`、附加请求头）与睡眠定时（`TtsSettingsModal.tsx:8` 15/30/45/60 分钟 / 读完本章）写实 |
+| P1 | 「Windows 桌面程序」 | 「端口占用时不会起第二个实例（单实例）」 | `DesktopLauncher.kt:64-80`：端口上是青阅自己 → 只开界面不留第二个进程；被**别的程序**占 → `shiftToFreePort` 从下一个端口顺延找空闲（20 个内）并写回 `port.txt`（用户 2026-10-10 要的「可以自定义端口，不要固定」）。照原话读，用户会以为端口被占就起不来 | 拆成两句话分别说准，并指回界面上「设置 → 服务 → 服务端口」 |
+| P2 | 「能力」 | 没有「书架」「发现」「订阅」「键盘」四条 | 顶栏一级页是 书库/书架/书源/发现/订阅/设置（`shortcuts.ts:PRIMARY_PAGES`），书架有批量与拖动排序（`main.tsx:2730-2790`、`useDragSort`），发现有重名分栏去歧义与按分组筛源（`ExplorePage.tsx:30-51`），订阅有「只看能读的」（`RssPanel.tsx:166`），键位表与处理器同源（`shortcuts.ts`） | 补这四条；键盘那条按表逐条抄，不写"支持快捷键"这种空话 |
+| P2 | 「手机备份包」表 | 「承接不了的条目：条目名会在导入结果里念出来」 | 这条已经是过去式：`BackupStore.kt:66-79` 的 `KEEP_NAMES` 会把没有原生归宿的条目**原样收下**（含 `searchhistory.json` = 搜索历史），`BackupPage.tsx:29-31` 里阅读样式 / 朗读引擎 / 分章规则还能一步套到本机 | 加一行「原样收下」，措辞与界面一致 |
+| P2 | 「环境变量」表 | 缺 `LEGADO_HOME` | `ServerConfig.kt:45` 读它，`port.txt`、`server.log`、`tmp/` 从它派生；由 `scripts/runtime.mjs` 的 `childEnvironment` 传 | 补一行，并写清"裸跑 jar 一般不用管" |
+| P2 | 「目录结构」 | `web/src` 只有"界面与逻辑"一行 | 前端有 `docs/code-map-frontend.md` 与 `web/AGENTS.md` 两份现行文档，README 没指过去 | 指过去，并记下 `run-all.ts` 逐个 import 登记这件事（不登记等于没跑） |
+
+- 没动的：`## 青阅到底是什么`、与参照项目的关系、许可、Docker 与源码跑法、备份包其余各行、`## 能力` 里服务端那几条（搜索、写操作保护）—— 那些是 `server/` 的事实面，你比我清楚，我不改。
+- 验证：`node tools/verify/md-table-check.mjs` **OK**（四份 md 表格行列数一致，我这次动了两张表）；`node tools/verify/opensource-hygiene-check.mjs` **10 PASS / 1 FAIL** —— 那条 FAIL 是「没有个人盘符路径」，命中 `docs/dual-ai-setup.md` 六处（11、12、13、57、64、69 —— 第一次跑时判据把详情截断了，我只看到四处，逐条复跑数出来是六处）与我自己 `docs/COORDINATION-ai2.md` 两处；我把自己那两处改成"ai2 工作树根 / ai2 工作树"，**剩下六处归你判**：要么把表里与命令示例里的绝对路径换成工作树名，要么把这几份内部协作件写进那个判据的 exempt。这条 FAIL 在我改之前就红着，不是我新引入的。
+- README 里 `/api/...` 的引用被那条 "README 写到的端点都能在路由里找到" 判据看着，本次没新增端点。
+- 影响 AI-1：两处需要你。(1) 上面那四处盘符。(2) 部署顺序：`web/dist` 已随模块 5 补重建并推上去了，**你重打 jar 之后再跑 `version-check`**，否则"服务端 bundle ≠ dist"那三条会红。

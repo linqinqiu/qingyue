@@ -48,7 +48,7 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 | C 前端逐模块审查（P1） | ✅ 七个模块做完 + 模块 5 补一条 | 1 阅读器渲染（全站补错误边界）、2 搜索 UI（流式判重 O(N×M)→常驻表；progress 每源一条→250ms 攒批）、3 目录虚拟列表（同址章节撞 key、行高三处双写、`ReaderScreen` 缺 `import React`）、4 书源管理 UI（批量复选框无可访问名字 + 全站判据带自证）、5 离线缓存 UI（读失败被画成"你确实没有" + `tx.onabort` 缺失；**补**：统计不再整表读正文，见下面的「模块 5 补」一行）、6 PWA（**四条 workbox 规则因 `^/api/` 锚在串首从未生效过**，改绝对 URL 锚法后真浏览器验证缓存确实建立）、7 状态管理（查完无缺陷，只收掉 Toast 空转 notify）。用例 **441/441** |
 | 模块 5 补 · 全表游标 | ✅ | `by_book_totals` 复合键索引 + `openKeyCursor`（`DB_VERSION` 1→2，升级只补索引不动存量）；分组算式收进 `accumulateBookStats` 一处，顺带修掉「`::` 拼组键会把两本书并成一本」；`store.count()` 对账不过就退回整表扫描，宁可慢一次也不少报数字。真浏览器 7/7：老库 450 章由应用自己升到 v2、键游标 450 次回调 `value === undefined`、弹窗数字不变 |
 | 登记未动（AI-2 侧） | ⏳ | ① R4 剩下的「阅读器渲染性能」；② `VirtualChapterList.test.ts` 里那份 `computeVirtualSlice` 是产品切片算法的手写孪生，该抽成 `src` 的纯函数两边共用 |
-| D README 重写（P1） | ⚠️ 未开始，但**别当绿地** | `a9ddfed` 已由 AI-1 重写过一轮；我只补缺口，不整篇重刷 |
+| D README 补缺口（P1） | ✅ 只改失真与缺项，结构未动 | `a9ddfed` 已由 AI-1 重写过一轮，我没重刷。改错三处（字体档数 5→实际 7、皮肤 3→实际 7+自定义、朗读漏了默认的服务端 Edge-TTS、桌面"端口占用不起第二实例"已被 0.6.46 的顺延取代）；补四项（书架 / 发现 / 订阅 / 键盘，逐条对着源码写）；备份表补「原样收下」一行；环境变量补 `LEGADO_HOME`；目录结构把 `web/src` 指到 `docs/code-map-frontend.md`。门禁：`md-table-check` OK、`opensource-hygiene-check` 10/1（那条红是 `docs/dual-ai-setup.md` 里你的六处绝对路径，改前就红着） |
 | E 门面文档（P2） | ⏳ | `docs/architecture.md`、`docs/deploy.md`、`web/AGENTS.md`（已有，继续完善） |
 
 ## 5. 交付节奏
