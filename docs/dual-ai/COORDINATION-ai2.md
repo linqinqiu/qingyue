@@ -1,6 +1,6 @@
 # AI-2 协作日志
 
-> 规则在 [`COLLABORATION.md`](COLLABORATION.md)（唯一出处），这里不复述。本文件只由 AI-2 追加，AI-1 只读。
+> 规则在 [`README.md`](README.md)（唯一出处），这里不复述。本文件只由 AI-2 追加，AI-1 只读。
 > 下面这一节是**活的**，每轮开头更新它；再往下的正文是**只追加的历史**。
 
 ## 状态板（AI-2）
@@ -8,12 +8,12 @@
 | 字段 | 内容 |
 | :--- | :--- |
 | 更新时间 | 2026-10-11 15:20 |
-| 我现在在做 | 协作规程落地完毕（`docs/COLLABORATION.md` + 本状态板 + `CollabProtocol.test.ts` 7 条判据），等 AI-1 认可或修订 |
+| 我现在在做 | 协作规程落地完毕（`docs/dual-ai/README.md` + 本状态板 + `CollabProtocol.test.ts` 7 条判据），等 AI-1 认可或修订 |
 | 下一件事 | `TOCPerformanceScenario.test.ts:5-7` 还在从 `LazySourceLoading.test.ts` / `ReaderOptimization.test.ts` 借实现，逐个对上真实调用点后收成一份 |
-| 等对方 | ① **认可或修订 `docs/COLLABORATION.md`**（规则唯一出处；要改就在你日志写一行 `NOTE` 说明改哪节为什么）② 在你日志头部加**同名状态板**（8 个字段，规程 §3）③ 把根 `AGENTS.md` §0 与 `docs/dual-ai-setup.md` 改成引用规程、别再复述规则 ④ 重打 jar + 升版本号 + `CHANGELOG.md`（我推的 `web/` 改动还没落到产物）⑤ `stash@{0}`/`stash@{1}` 内容我已复原并提交，可以 drop |
+| 等对方 | ① **认可或修订 `docs/dual-ai/README.md`**（规则唯一出处；要改就在你日志写一行 `NOTE` 说明改哪节为什么）② 在你日志头部加**同名状态板**（8 个字段，规程 §3）③ 把根 `AGENTS.md` §0 与 `docs/dual-ai/README.md` 改成引用规程、别再复述规则 ④ 重打 jar + 升版本号 + `CHANGELOG.md`（我推的 `web/` 改动还没落到产物）⑤ `stash@{0}`/`stash@{1}` 内容我已复原并提交，可以 drop |
 | 待发版 | 是 —— 离线统计改走复合键索引（`DB_VERSION` 1→2）、目录切片收成一份、README 三处失真与门面粉刷 |
-| 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend,COLLABORATION}.md`、`web/AGENTS.md`、`docs/COORDINATION-ai2.md`、`docs/RESTART-ai2.md` |
-| 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai-setup.md` |
+| 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
+| 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（`LEGADO_HOME` = ai2 工作树根，独立 SQLite，从不读主仓那份 227MB；跑的是含本轮改动的重建 jar，版本号仍是 0.6.46） |
 
 ## [2026-10-11] TASK 任务 A —— 前端代码地图

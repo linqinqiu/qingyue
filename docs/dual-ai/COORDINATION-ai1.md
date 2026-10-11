@@ -1,9 +1,26 @@
 # AI-1 协作日志
 
-> 只由 **AI-1** 追加，AI-2 只读。
-> 格式：## [日期] [类型] [标题]，类型为 `TASK` / `API-CHANGE` / `NOTE` / `BLOCKER`
+> 只由 **AI-1** 追加，AI-2 只读。规则见本目录 [`README.md`](README.md)（唯一出处），这里不复述。
+> 下面这一节是**活的**，每轮开头更新它；再往下的正文是**只追加的历史**。
 
-> 本文件为**历史日志**：双 AI 装置已从 `docs/` 顶层迁入 `docs/dual-ai/`（路径变了，内容未变）。
+## 状态板（AI-1）
+
+| 字段 | 内容 |
+| :--- | :--- |
+| 更新时间 | 2026-10-11 16:45 |
+| 我现在在做 | 收拢双 AI 装置到 `docs/dual-ai/`、合入 `ai2/frontend`、恢复设置页居中 |
+| 下一件事 | 自定义皮肤库（增 / 改 / 删 / 切换） |
+| 等对方 | AI-2 认可 `docs/dual-ai/README.md`（原 `COLLABORATION.md` 已并入），并刷新自己的状态板 |
+| 待发版 | 是（AI-2 的离线统计 / 目录切片 + AI-1 的设置页居中，尚未落到产物） |
+| 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
+| 我不碰 | `web/**`、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
+| 自测实例 | 8081（库 `data/ai1.db`，日志 `logs/ai1/server.log`） |
+
+## [2026-10-11] COLLAB-REQUEST 把 `docs/COLLABORATION.md` 并进 `docs/dual-ai/README.md`
+- 用户拍板：两套唯一事实源并存（`docs/dual-ai/README.md` 与 `docs/COLLABORATION.md`）就是新的错乱 → **以 `docs/dual-ai/README.md` 为主，把 `COLLABORATION.md` 并进来**。
+- 做了：`README.md` 吸收规程六节（领地 / 情况→动作 / 状态板 / 发版队列 / 红因归属 / 违规与事故）；删 `docs/COLLABORATION.md`；`web/test/CollabProtocol.test.ts` 与 `docs/architecture.md` §7 改指新址；清掉 README 里的绝对盘符路径与个人 fork 账号（`opensource-hygiene-check` 9/2 → 11/0）。
+- 顺带：`ai2/frontend` 已 **merge** 进 main（`3797d38`，未重写历史）——AI-2 下次 `git fetch && git rebase origin/main` 变快进，不再撞文件搬迁。
+- 请 AI-2：认可本改动；并刷新你自己的状态板（原条目还指着 `docs/COLLABORATION.md`）。
 
 ## [2026-10-11] TASK 建立双 AI 协作基础文件
 - 内容：在 `main` 分支建立三份协作文件 —— `docs/API-CONTRACT.md`（后端对外接口契约初稿，从 `server/` 代码提取）、`docs/COORDINATION-ai1.md`（本文件，AI-1 日志）、`docs/COORDINATION-ai2.md`（AI-2 日志，只读）。
