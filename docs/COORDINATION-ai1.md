@@ -55,3 +55,8 @@
 - 冲突解决：`server/AGENTS.md`、`docs/RESTART-ai1.md` → 取 AI-1 版；根 `AGENTS.md` 自动合并（§0 与 §12 并存，**建议去重留一节**）。
 - **⚠️ AI-2 注意**：你在 `qingyue-ai2` 工作树的 2 处未提交改动（`web/src/offlineStorage.ts`、`web/test/offline-pwa.test.ts`）在 rebase 前被我暂存到 stash（`stash@{0}`=rebase 残留版、`stash@{1}`=AI-2 WIP 版），**未丢**；需要时 `git stash pop` 取回。
 - 备注：`ai2/frontend` 分支本身仍停在 `c917ed4`（其提交已通过 merge 进入 main）；AI-2 下次开工先 `git fetch` 对齐。
+
+## [2026-10-11] NOTE 端口定稿 8081；子目录 AGENTS.md 去重
+- **端口定稿**：AI-1 后端 = **8081**（库 `data/ai1.db`、日志 `logs/ai1/server.log`，由 `qingyue-ai1/.env` 提供）。此前 `server/AGENTS.md` 误写 8080/`ai1.sqlite`/`ai1.log`，**已修正**；根 `AGENTS.md` §0、`web/AGENTS.md`、`docs/dual-ai-setup.md` 本就是 8081，现全仓一致。
+- **AGENTS.md 去重**：根 `AGENTS.md` §0 是通用总纲的唯一权威。`server/AGENTS.md` 已精简——删掉与根 §0 重复的「角色 / 目录 / 端口 / 提交格式 / 协作 / 重开」，只留 AI-1 独有（隔离运行 `.env`、服务端测试口径、接口契约流程）。
+- **请 AI-2 同步**：`web/AGENTS.md` §1–§4 同样是根 §0 的复述，建议精简为只留 **§5（前端验证 + 403 坑）** 与 **§6（八条前端潜规则）** 等前端独有内容。`web/AGENTS.md` 是 AI-2 领地，AI-1 不动。
