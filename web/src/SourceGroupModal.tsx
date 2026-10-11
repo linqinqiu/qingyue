@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Icon } from './icons'import { useEscapeClose } from './useEscapeClose'
+import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
 
 
 interface SourceGroupModalProps {

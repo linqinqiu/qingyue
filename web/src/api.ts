@@ -91,7 +91,12 @@ export type SourceHealthCheckItem = {
   ok: boolean
   latencyMs: number
   statusCode: number
-  statusCategory: string  // valid · slow · empty · blocked · needs_login · needs_webview · unreachable · tls · broken · invalid
+  /**
+   * 体检档位。`explore_only` / `no_search` 是**顶层 `searchUrl` 为空**那两类：服务端一个请求都没发
+   * （`SourceHealth.kt:56`），所以它们不是"连不上"，不能进「一键停用/删除」。
+   * `failedCount`（同类型的下一个字段）在服务端等于 `count { !it.ok }`，会把这两类一起算进去 —— 界面别用它。
+   */
+  statusCategory: string  // valid · slow · empty · blocked · needs_login · needs_webview · explore_only · no_search · unreachable · tls · broken · invalid
   error?: string
 }
 

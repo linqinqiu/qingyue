@@ -532,7 +532,9 @@ export async function downloadChaptersToOffline(
         failed++
       } finally {
         completed++
-        onProgress?.(existingSet.size + completed, chapters.length)
+        // 分子只能是"这一次切片里已经处理完几章"：existingSet 是整本书的已缓存集合，
+        // 拿它当分子会在已缓存 300 章时同步 50 章时念出「350 / 50 章」。
+        onProgress?.(chapters.length - total + completed, chapters.length)
       }
     }
   }

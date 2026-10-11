@@ -129,6 +129,17 @@ export function addCut(cuts: number[]): number[] {
   return [...cuts, at].sort((a, b) => a - b)
 }
 
+/**
+ * 删掉第 `index` 条虚线。
+ *
+ * 单独抽出来是因为编辑器里原先写的是 `cuts.filter((_, item) => item !== index)` ——
+ * 第二个回调参数是**值**不是下标，与整数 `index` 比较几乎永远不等，
+ * 于是"双击删一条线"静默无效：线还在，界面上也没有任何报错。
+ */
+export function removeCut(cuts: number[], index: number): number[] {
+  return cuts.filter((_, position) => position !== index)
+}
+
 /** 换分区（加/删一条虚线）时，把旧动作按"新格中心落在旧哪一格"搬过来，越界回落成 none。 */
 export function remapActions(map: TapMap, nextX: number[], nextY: number[]): TapMap {
   const oldCols = map.x.length + 1

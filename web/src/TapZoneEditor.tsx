@@ -7,6 +7,7 @@ import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import {
   addCut,
+  removeCut,
   clampCut,
   MAX_CUTS,
   mapCells,
@@ -135,7 +136,7 @@ export function TapZoneEditor({
             onPointerDown={onHandleDown('x', index)}
             onPointerMove={onHandleMove}
             onPointerUp={onHandleUp}
-            onDoubleClick={() => withCuts('x', map.x.filter((_, item) => item !== index))}
+            onDoubleClick={() => withCuts('x', removeCut(map.x, index))}
           />
         ))}
         {map.y.map((cut, index) => (
@@ -148,7 +149,7 @@ export function TapZoneEditor({
             onPointerDown={onHandleDown('y', index)}
             onPointerMove={onHandleMove}
             onPointerUp={onHandleUp}
-            onDoubleClick={() => withCuts('y', map.y.filter((_, item) => item !== index))}
+            onDoubleClick={() => withCuts('y', removeCut(map.y, index))}
           />
         ))}
       </div>

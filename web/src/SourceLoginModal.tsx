@@ -193,7 +193,7 @@ export const SourceLoginModal: React.FC<SourceLoginModalProps> = ({
   const bookmarkletCode = useMemo(() => {
     const serverOrigin = window.location.origin
     const targetSourceId = encodeURIComponent(sourceId)
-    return `javascript:(function(){var c=document.cookie;var u=location.href;if(!c){alert('当前页面没有可读到的 Cookie');return;}fetch('${serverOrigin}/api/sources/${targetSourceId}/login-cookie',{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:c,url:u})}).then(function(r){return r.json()}).then(function(d){alert('已把当前站点的 Cookie 同步进青阅')}).catch(function(e){alert('同步失败：'+e)});})();`
+    return `javascript:(function(){var c=document.cookie;var u=location.href;if(!c){alert('当前页面没有可读到的 Cookie');return;}fetch('${serverOrigin}/api/sources/${targetSourceId}/login-cookie',{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:c,url:u})}).then(function(r){return r.text().then(function(t){return{ok:r.ok,status:r.status,body:t}})}).then(function(x){if(!x.ok){var m='';try{var j=JSON.parse(x.body);m=j.message||j.error||''}catch(e){}alert('同步失败：'+(m||('HTTP '+x.status)));return}alert('已把当前站点的 Cookie 同步进青阅')}).catch(function(e){alert('同步失败：'+e)});})();`
   }, [sourceId])
 
   const handleInputChange = (key: string, val: string) => {

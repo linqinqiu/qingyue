@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, type DebugStep } from './api'
-import { Icon } from './icons'import { useEscapeClose } from './useEscapeClose'
+import { Icon } from './icons'
+import { useEscapeClose } from './useEscapeClose'
 
 
 export interface SourceDebugModalProps {
@@ -27,18 +28,9 @@ export function SourceDebugModal({ sourceId, sourceName, onClose }: SourceDebugM
     setRunning(false)
   }
 
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      streamRef.current?.close()
-      onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => {
-      window.removeEventListener('keydown', handler)
-      streamRef.current?.close()
-    }
-  }, [onClose])
+  // 卸载时收流；Esc 走下面 useEscapeClose 那一套。
+  // 这里原来还另挂了一份 window keydown：一次 Esc 调两次 onClose，且不参与"一次只关最上面一层"的让位约定。
+  useEffect(() => () => { streamRef.current?.close() }, [])
 
   const start = () => {
     streamRef.current?.close()

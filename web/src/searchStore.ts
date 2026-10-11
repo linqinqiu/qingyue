@@ -259,13 +259,16 @@ export class SearchStore {
   }
 
   startSearch = (keyword?: string, sourceId?: string) => {
-    this.openGroupGen++ // 作废任何在途的 openGroup
     const query = (keyword !== undefined ? keyword : this.state.keyword).trim()
     if (!query) return
 
     const source = sourceId !== undefined ? sourceId : this.state.selectedSourceId
-    // 服务端把「sourceIds 为空」当作不限制=搜全部启用源，所以 null（不限制）与 []（零个源）必须分清
+    // 服务端把「sourceIds 为空」当作不限制=搜全部启用源，所以 null（不限制）与 []（零个源）必须分清：
+    // 范围是空表时**一次请求都不发**，否则"只搜这一组"会变成"搜全库"（Database.kt 的 takeIf{isNotEmpty}）。
     const scopeIds = sourceId !== undefined ? (source ? [source] : undefined) : (this.state.selectedSourceIds ?? (source ? [source] : undefined))
+    if (scopeIds && scopeIds.length === 0) return
+
+    this.openGroupGen++ // 作废任何在途的 openGroup
 
     if (this.socket) {
       try {

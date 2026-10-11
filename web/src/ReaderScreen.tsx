@@ -29,7 +29,6 @@ import { OfflineCacheModal } from './OfflineCacheModal'
 import {
   downloadChaptersToOffline,
   getOfflineChaptersSet,
-  putOfflineChapter,
 } from './offlineStorage'
 
 /**
@@ -1366,6 +1365,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setCurrentBook(newOpenBook)
     setChapterIndex(chosen.targetChapterIndex)
     preloadedContentRef.current.clear()
+    // 换源等于"这本书的正文全部重来"：旧书的续接窗口挂在新 currentBook 下面会画出别的源的章节，
+    // 而朗读管线此刻不会再出声（chunks 跟着新书清空），悬浮条却停在播放态。
+    stopTts()
+    flowAdvanceRef.current = false
+    pendingKeepRef.current = null
+    pendingPrependRef.current = null
+    setFlowTail([])
+    setFlowHead([])
+    setFlowKey(chosen.chapters[chosen.targetChapterIndex]?.url ?? newOpenBook.bookUrl)
     sessionStorage.setItem('legado-open-book-v1', JSON.stringify({ book: newOpenBook, index: chosen.targetChapterIndex }))
   }
 

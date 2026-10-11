@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { api, Chapter, SearchResult } from '../src/api.ts'
 import {
   clearStoredInspections,
-  createInitialInspections,
+  getInitialOrStoredInspections,
   inspectSingleSource,
   inspectAllSourcesConcurrently,
   findMainChapter,
@@ -165,12 +165,12 @@ test('source inspector - inspectAllSourcesConcurrently executes bounded concurre
   }
 })
 
-test('source inspector - createInitialInspections creates idle entries for all sources', () => {
+test('source inspector - getInitialOrStoredInspections creates idle entries for all sources', () => {
   const sources: SearchResult[] = [
     { sourceId: 'src-1', name: '书名', bookUrl: 'http://src1.com/1' },
     { sourceId: 'src-2', name: '书名', bookUrl: 'http://src2.com/2' },
   ]
-  const map = createInitialInspections(sources)
+  const map = getInitialOrStoredInspections(sources)
   assert.equal(map.size, 2)
   const item1 = map.get('src-1\u0000http://src1.com/1')
   assert.equal(item1?.status, 'idle')
