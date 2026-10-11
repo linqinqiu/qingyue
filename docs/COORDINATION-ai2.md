@@ -62,6 +62,22 @@
   但按新规矩这类改动要先出现在 `COORDINATION-ai1.md` 里，AI-2 才知道要跟进（尤其 strictPort 会影响我起实例的方式）。
 - 请求：后续跨树的写，先在日志里发一条 `NOTE`/`API-CHANGE`，或直接跟我说改哪个文件；不要静默落到我的分支上。
 
+## [2026-10-11] NOTE 协作规则落文件：AI-2 按用户点名越界写了两份对方的文件
+- 用户当场指令："把规则写进 `server/AGENTS.md` 与 `web/AGENTS.md`（不存在则新建）与根 `AGENTS.md`（已有则合并），内容必须含角色/目录边界、端口与 DB 与日志、提交格式、协作规则、重开时的启动指令"。
+- 已写：
+  - `web/AGENTS.md`（新建，AI-2 领地，含 8 条前端潜规则）
+  - `docs/RESTART-ai2.md`、`docs/RESTART-ai1.md`（新建，第 5 条要求的启动指令落点）
+  - **`server/AGENTS.md`（新建 —— 这是 AI-1 的领地，越界是用户点名的，内容里已写明"权威维护者是 AI-1，不符请直接改本文件"）**
+  - **根 `AGENTS.md` 顶部新增 §0「双 AI 分工」（合并，其余章节一字未动）** —— 同样是指名越界。
+    改动走 `ai2/frontend` 分支，等用户合进 `main`；期间我在主仓工作树里试写过一次，已还原（`git restore AGENTS.md`），主仓现在只有我这轮的这三份新文件之外的历史改动。
+- 影响 AI-1：需要你复核两处代起草的内容（`server/AGENTS.md` 的第 2、5、6 节最容易与实际不符；`docs/RESTART-ai1.md` 第 5 节是我留给你的待办清单）。有出入直接改，改完发一条 `NOTE` 即可，不用跟我商量。
+- 顺带说明：根 `AGENTS.md` 里那些"部落知识/工作记忆"长段我没动，§0 是纯追加。
+
+## [2026-10-11] BLOCKER 推送被拒：rebase 之后需要用户点头才 force-with-lease
+- 现象：`git push origin ai2/frontend` → non-fast-forward。
+- 归因：按规矩 rebase 了 `origin/main`，我的三笔被重写成新哈希；远端那三笔（`b1a60d8/ab6f3b0/960dd40`）与本地三笔（`e07ef7c/06a60c2/3fc9757`）是**同补丁不同哈希**，远端没有任何独有内容（`git log --left-right` 对过），AI-1 的 vite 两笔也只在本树、没上过远端。
+- 状态：**没有强推**（用户把 `git push --force` 列为必须暂停的一项），等点头。在此之前本轮所有提交只在本地 `ai2/frontend` 上。
+
 ## [2026-10-11] NOTE AI-2 的运行环境约定
 - AI-2 自测实例：**端口 1299**、`LEGADO_HOME=E:/Projects/qingyue-ai2`、数据目录 `qingyue-ai2/data/`（独立，从不读
   主仓那 227MB 的 `legado.sqlite`）、jar 由 `qingyue-ai2/server/build/libs/legado-server-0.6.46-all.jar` 出。
