@@ -111,6 +111,7 @@ export default defineConfig({
   ],
   // 显式绑 127.0.0.1（IPv4 回环）：否则默认绑 ::1，127.0.0.1:5174 不通。
   // 代理目标也用 127.0.0.1：后端 LEGADO_HOST=127.0.0.1 只听 IPv4，用 localhost 会解析到 ::1 而超时。
-  server: { host: '127.0.0.1', proxy: { '/api': 'http://127.0.0.1:8081' } },
+  // 钉死 5174 + strictPort：避免端口被占时静默漂到 5175，导致代理/同源判定失真（AI-2 隔离约定 P0）。
+  server: { host: '127.0.0.1', port: 5174, strictPort: true, proxy: { '/api': 'http://127.0.0.1:8081' } },
 })
 
