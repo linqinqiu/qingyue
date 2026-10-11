@@ -91,7 +91,7 @@
 | POST | `/api/books/content` | `ContentRequest` | `ChapterContent` | 写 | 章节正文 |
 | GET | `/api/bookshelf` | — | `List<BookshelfItem>` | 读 | 书架列表 |
 | POST | `/api/bookshelf` | `BookshelfWriteRequest` | — | 写 | 加书到书架 |
-| POST | `/api/bookshelf/import-local` | TODO | TODO | 写 | 导入本地书 |
+| POST | `/api/bookshelf/import-local` | `multipart/form-data`（文件 part + 可选 query `tocRule`） | `LocalBookImportResponse` | 写 | 本地书导入；`tocRule` 走 query 参数；文件按「书名-作者.txt」被目录规则解析 |
 | GET | `/api/books/toc-rules` | — | `TocRuleList` | 读 | 本地书分章规则列表 |
 | POST | `/api/books/toc-rules/toggle` | `TocRuleToggleRequest` | `TocRuleToggleResult` | 写 | 启停规则 |
 | POST | `/api/books/toc-rules/save` | `TocRuleSaveRequest` | `TocRuleSaveResult` | 写 | 增/改规则 |
@@ -105,7 +105,7 @@
 | PUT | `/api/bookshelf/group` | `BookGroupAssignRequest` | — | 写 | 设书所属分组 |
 | PUT | `/api/bookshelf/order` | `ShelfOrderRequest` | `ShelfOrderResult` | 写 | 书架自定义排序 |
 | DELETE | `/api/bookshelf/order` | — | — | 写 | 清排序 |
-| DELETE | `/api/bookshelf` | TODO | TODO | 写 | 清空书架（待核实） |
+| DELETE | `/api/bookshelf` | `?sourceId=...&bookUrl=...` | `204 No Content` | 写 | **按 query 移除单本**（非清空）；清空请用 `POST /api/bookshelf/batch-delete` |
 | POST | `/api/bookshelf/cache` | `BookCacheRangeRequest` | `CachedChaptersResponse` | 写 | 离线缓存章节范围 |
 | GET | `/api/bookshelf/cached-chapters` | — | `CachedChaptersResponse` | 读 | 已缓存章节 |
 | DELETE | `/api/bookshelf/cache` | — | — | 写 | 清缓存 |
@@ -131,6 +131,8 @@
 | GET | `/api/tts/session/{id}/events` | — | `TtsSessionEvent` 流（SSE） | 读 | TTS 事件流 |
 | POST | `/api/tts/speak` | `TtsSpeakRequest` | TODO | 写 | 直接朗读 |
 | GET | `/api/tts/speak` | — | TODO | 读 | 朗读状态（待核实） |
+| GET | `/api/book/export/txt` | `?sourceId=&bookUrl=` | `text/plain` 文件流（Content-Disposition RFC5987 文件名） | 读 | ⚠️ **WIP**：TXT 导出功能在 stash（未上 main），恢复并 review 后定稿 |
+| POST | `/api/book/export/txt-batch` | TODO（待恢复 stash 确认） | 文件流/zip | 写 | ⚠️ **WIP**：同上 |
 
 ## WebSocket
 
@@ -169,7 +171,7 @@
 | `SourceBrowserInlineResponse` | TODO | 响应 | |
 | `SearchRequest` | `keyword: String, sourceIds: List<String>? = null` | 请求 | `Models.kt:249` |
 | `SearchResult` | `sourceId, name, author?, bookUrl, coverUrl?, intro?, kind?, wordCount?, lastChapter?, sourceType: Int = 0` | 响应 | `Models.kt:289` |
-| `SearchStreamEvent` | `type: String, ...` | WS/SSE | **TODO：补全字段** |
+| `SearchStreamEvent` | `type, totalSources, completedSources, matchedSources, emptySources, failedSources, resultCount, results: List<SearchResult>, message?`（`type`: `start\|results\|progress\|done\|error`） | SSE（WS `/api/search/stream` 下发） | 由 AI-2 核对补全（2026-10-11） |
 | `ExploreTab` | `title: String, url: String` | 响应 | `Models.kt:250` |
 | `ExploreRequest` | `sourceId: String, url: String, page: Int = 1` | 请求 | `Models.kt:251` |
 | `SubscriptionWriteRequest` | `url: String, enabled: Boolean = true` | 请求 | `Models.kt:234` |
@@ -223,13 +225,16 @@
 | `TtsSessionAck` | `accepted: Boolean` | 响应 | `Models.kt:578` |
 | `TtsSessionEvent` | `type: String, sessionId, chunkId?, chapterIndex: Int = -1, paragraphIndex: Int = -1, audioEndMs?, durationMs?, message?` | SSE | `Models.kt:583` |
 | `ReplaceRule` | `id: String = "", name: String = "", group?, ...` | 请求/响应 | **TODO：补全字段**（`Models.kt:595`） |
+| `LocalBookImportResponse` | `total: Int, imported: Int, failed: Int, results: List<LocalBookImportItem>` | 响应 | `import-local` 出参 |
+| `LocalBookImportItem` | `filename: String, success: Boolean, bookUrl?, name?, author?, totalChapters?, error?` | 响应 | 导入单项结果 |
 | `CookieBucket` / `GlobalCookieEntry` | TODO | — | `Models.kt:166/172` |
 
 ## 变更历史
 
 | 日期 | 变更 | 影响 | 提交 |
 |---|---|---|---|
-| 2026-10-11 | 初稿：从 `server/` 代码提取全部 `/api` 端点、WebSocket、数据模型 | AI-2 可读此契约对齐前端 | TODO：补提交哈希 |
+| 2026-10-11 | 初稿：从 `server/` 代码提取全部 `/api` 端点、WebSocket、数据模型 | AI-2 可读此契约对齐前端 | 4336cdf |
+| 2026-10-11 | API-CHANGE：按 AI-2 的 `API-REQUEST` 修正 4 处——`import-local` 改 multipart、`DELETE /bookshelf` 改单本按 query、`SearchStreamEvent` 补全字段、标注 `export/txt` 为 WIP | AI-2 前端可按新契约对齐 | 待提交 |
 
 > TODO（待 AI-1 补全）：
 > 1. 各端点的精确入参/出参模型（尤其 `Source*` 登录链路、`Rss*`、`ReplaceRule*`、`/backup/*`、`/logs`）。
