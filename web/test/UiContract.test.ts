@@ -481,3 +481,62 @@ test('标记类白名单不腐：每一项都还要被界面用着，并且真�
   }
 })
 
+
+// ———— 复选框的可访问名字（AI-2 任务 C·模块 4「书源管理 UI」）————
+
+/**
+ * 扫一个 JSX 源里的每个 `type="checkbox"`，判它有没有可访问名字。
+ * 算有名字只有两种：输入标签自己带 `aria-label`，或包住它的 `<label>` 里真有文字
+ * （`<label><input/>{计数}</label>` 这种只有插值的，读屏念出来是空的）。
+ */
+function checkboxSites(source: string): Array<{ line: number; named: boolean }> {
+  const found: Array<{ line: number; named: boolean }> = []
+  const re = /<input\b[^>]*type="checkbox"[^>]*>/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(source)) !== null) {
+    const tag = match[0]
+    const before = source.slice(Math.max(0, match.index - 260), match.index)
+    let named = /aria-label\s*=/.test(tag)
+    if (!named) {
+      const labelStart = before.lastIndexOf('<label')
+      if (labelStart >= 0) {
+        const tail = source.slice(match.index + tag.length, match.index + tag.length + 400)
+        const end = tail.indexOf('</label>')
+        const labelText = (end >= 0 ? tail.slice(0, end) : tail).replace(/\{[^{}]*\}/g, '')
+        named = /[\u4e00-\u9fa5A-Za-z]{2,}/.test(labelText)
+      }
+    }
+    found.push({ line: source.slice(0, match.index).split('\n').length, named })
+  }
+  return found
+}
+
+test('判据自证：这颗扫描器能认出"空 label 包住复选框"这种没名字的形状', () => {
+  const sample = [
+    '<label><input type="checkbox" checked />只看能读的</label>',
+    '<label className="x"><input',
+    '  type="checkbox"',
+    '  checked={v}',
+    '/></label>',
+    '<input type="checkbox" aria-label={`选择《${v}》`} checked />',
+  ].join('\n')
+  const sites = checkboxSites(sample)
+  assert.equal(sites.length, 3, `扫出 ${sites.length} 处，应当是 3 处`)
+  assert.deepEqual(sites.map(s => s.named), [true, false, true],
+    '第 2 处（label 里除了输入什么都没有）必须被判成没名字，否则整条判据是空判')
+})
+
+test('web/src 里每颗粒复选框都要有可访问名字', () => {
+  const dir = path.resolve(import.meta.dirname, '..', 'src')
+  const unnamed: string[] = []
+  let total = 0
+  for (const file of fs.readdirSync(dir).filter(name => name.endsWith('.tsx'))) {
+    const source = fs.readFileSync(path.join(dir, file), 'utf8')
+    for (const site of checkboxSites(source)) {
+      total += 1
+      if (!site.named) unnamed.push(`${file}:${site.line}`)
+    }
+  }
+  assert.ok(total >= 13, `全站复选框只扫到 ${total} 处，太少说明扫描器没跟上新代码`)
+  assert.deepEqual(unnamed, [], `这些复选框读屏念得出"复选框"却念不出它是干什么的：${unnamed.join('、')}`)
+})

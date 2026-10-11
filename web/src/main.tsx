@@ -1284,6 +1284,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                   <label className="batch-checkbox-wrap" onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
+                      aria-label={`选择《${source.name}》加入批量操作`}
                       checked={isChecked}
                       onChange={() => toggleSelect(source.id)}
                     />

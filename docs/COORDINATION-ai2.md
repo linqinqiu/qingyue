@@ -184,3 +184,20 @@
 - 影响 AI-1：无需后端跟进。若想让我少踩一类坑，有一条给你：`web/test/VirtualChapterList.test.ts` 里那份
   `computeVirtualSlice` 是产品切片算法的**手写孪生**（不是从 `src` 引的），两边迟早漂；
   要不要把切片算式抽成 `src` 里的纯函数给两边共用，我下一轮可以自己动（属前端领地），先在这里报一句。
+
+## [2026-10-11] TASK 任务 C·模块 4「书源管理 UI」—— 一处真缺陷 + 六条查过是好的
+- 发现与处置：
+
+| 严重度 | 文件:行 | 问题 | 证据 | 触发条件 | 修复 | 验证 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | `web/src/main.tsx:1284` | 批量模式那颗复选框**没有可访问名字**：`<label className="batch-checkbox-wrap">` 里只包住输入框、没有任何文字 | 逐处看了全站 13 处复选框：其余 12 处要么 label 里带文字（`只看能读的（…）`、`参与「自动」打分`、`{field.title}`），要么自带 `aria-label`（`TocRulesModal:163`）；只有这颗是空的 | 读屏用户进批量模式，听到的只有"复选框，未选中"，不知道勾的是哪本书 | 补 `aria-label={\`选择《${source.name}》加入批量操作\`}` | 新增一条**全站判据**（`UiContract.test.ts`）：扫 `web/src/*.tsx` 里每个 `type="checkbox"`，没有名字就红；并带一条**判据自证**——注入一颗空 label 包住的复选框，扫描器必须认出它没名字（否则整条是空判） |
+
+- 查过、**没有**问题的六条（写下来免得下一轮重新怀疑）：
+  1. 书源列表不是 5,574 行全铺 DOM：`filteredSources.slice(0, visibleSourceCount)` + 换筛选条件时重置分页（`main.tsx:953`）。
+  2. 搜索框防抖有清理：`window.setTimeout(..., 180)` 配 `return () => window.clearTimeout(timer)`，依赖 `[load]`。
+  3. 旧响应晚到不覆盖新结果：`loadGeneration` 守卫在（0.6.23 加的那条），注释也写清了它防什么。
+  4. 导出的 object URL 全都释放：全站 4 处 `createObjectURL` 都有配对 `revokeObjectURL`（`LogsModal` / `ReplaceRulesModal` / `SourceShareModal` / 书源导出）。
+  5. **右键菜单不是移动端唯一入口**（这条我一开始判错了）：明细面板有可见的「登录 / 分阶段调试」按钮（`main.tsx:1378-1379` 的 `onOpenLogin`/`onOpenDebug`），删除/停用/移组/分享在批量栏里也都够得着（`main.tsx:1440` 那颗就是批量分享）。所以没有"iOS 长按没菜单 = 功能不可达"这回事，不用为它加手势层。
+  6. `pendingSourceFocus` 是模块级 `let`（`main.tsx:118`）而不是 state，所以那个 `[]` 依赖的挂载 effect 读它不是闭包陈旧——是从书源详情跳过来的交接，写法成立。
+- 验证：`npm --prefix web run check` 干净；`npx tsx web/test/run-all.ts` **428/428**（+2），串行单跑；`web/dist` 随源码重建。
+- 影响 AI-1：无。
