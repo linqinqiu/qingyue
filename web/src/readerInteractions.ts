@@ -67,7 +67,7 @@ export function paginateWheelStep(
   deltaY: number,
   deltaMode: number,
   accumulated: number,
-  step = 64,
+  step = 48,
   lineHeight = 16,
   pageHeight = 600,
 ): { action: 'next' | 'prev' | null; rest: number } {

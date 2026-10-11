@@ -2217,16 +2217,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }
 
   const onWheelPaginate = (event: React.WheelEvent) => {
-    if (settings.pageMode !== 'paginate' || activeDrawer || wheelTimerRef.current !== null) return
+    if (settings.pageMode !== 'paginate' || activeDrawer) return
     const { action, rest } = paginateWheelStep(event.deltaX, event.deltaY, event.deltaMode, wheelAccumRef.current)
-    wheelAccumRef.current = rest
     if (action === null) {
-      // 还没攒够一格：继续攒，但停手 180ms 就把零头丢掉，免得下次一上手被旧累计量带翻一页
+      // 还没攒够一格：继续攒，但停手 500ms 就把零头丢掉，免得下次一上手被旧累计量带翻一页。
+      // 这个窗口不能太紧：慢速轻扫（每下间隔接近一个 round-trip）也要能攒起来，
+      // 实测 180ms 在"一下一下慢慢滚"的节奏下每下都被清零，等于又回到修前的"翻不动"。
+      wheelAccumRef.current = rest
       if (wheelIdleRef.current !== null) window.clearTimeout(wheelIdleRef.current)
-      wheelIdleRef.current = window.setTimeout(() => { wheelAccumRef.current = 0; wheelIdleRef.current = null }, 180)
+      wheelIdleRef.current = window.setTimeout(() => { wheelAccumRef.current = 0; wheelIdleRef.current = null }, 500)
       return
     }
+    // 攒够了一格却撞上冷却：**不消费**，把这一格留在累计量里，冷却结束后的第一件事件立刻兑现。
+    // 修前是"冷却期一到就整段 return"，连累计都不进 —— 快速轻扫时有整整一格行程被吞掉，
+    // 表现还是"翻不动"，只是换了个成因。
+    if (wheelTimerRef.current !== null) return
     if (wheelIdleRef.current !== null) { window.clearTimeout(wheelIdleRef.current); wheelIdleRef.current = null }
+    wheelAccumRef.current = rest
     wheelTimerRef.current = window.setTimeout(() => { wheelTimerRef.current = null }, 140)
     if (action === 'next') goNextPage()
     else goPrevPage()

@@ -379,13 +379,16 @@ test('paginateWheelStep - 触控板的多次小增量累计成一页，攒够就
     acc = step.rest
     seen.push(step.action)
   }
-  assert.equal(seen.filter(Boolean).length, 1, '8 次 ×12px（共 96）应当正好翻一页，不是 0 页也不是 8 页')
-  assert.deepEqual(seen.slice(0, 5), [null, null, null, null, null], '前 5 次（60px）还没到 64px 步长')
-  assert.equal(seen[5], 'next', '第 6 次攒到 72px 才翻页')
+  assert.equal(seen.filter(Boolean).length, 2, '8 次 ×12px（共 96）在 48px 步长下应当翻两页')
+  assert.deepEqual(seen.slice(0, 3), [null, null, null], '前 3 次（36px）还没到 48px 步长')
+  assert.equal(seen[3], 'next', '第 4 次攒到 48px 才翻页')
 
-  // 鼠标一格 100px：一次就翻，且不留余量
+  // 鼠标一格 100px：一次就翻，且余量丢弃（免得一次惯性连翻三页）
   const notch = paginateWheelStep(0, 100, 0, 0)
   assert.deepEqual(notch, { action: 'next', rest: 0 })
+
+  // 行模式一格（3 行 × 16px = 48）刚好等于一步 —— 一格滚轮翻一页是这里的口径目标
+  assert.equal(paginateWheelStep(0, 3, 1, 0).action, 'next', 'deltaMode=1 的一格应当正好翻一页')
 
   // 反向对照：如果沿用"只看单次事件"的判法，触控板这 8 下一下都翻不动
   const perEventOnly = [12, 12, 12, 12, 12, 12, 12, 12].map(d => paginateWheelStep(0, d, 0, 0).action)
