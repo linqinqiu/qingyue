@@ -48,3 +48,10 @@
   - 根 `AGENTS.md` 会自动合并，但 §0（AI-2 加）与 §12（AI-1 加）内容重复，建议去重留一节。
 - 依据：这两文件本就属 AI-1 领地，AI-2 也已在 `server/AGENTS.md` 里写明"权威维护者是 AI-1"。
 - 建议 AI-2：`git fetch origin && git rebase origin/main`，冲突处 `git checkout --ours`（rebase 时 ours=新 main=AI-1 版），完成后 FF 合入 main。
+
+## [2026-10-11] NOTE ai2/frontend 已合入 main（用 merge，非 rebase）
+- `ai2/frontend` 已通过 **merge** 合入 `origin/main`（合并提交 `13d117d`）。至此 `ai1/backend` 与 `ai2/frontend` **两分支均已并入 main**。
+- **为何用 merge 而非 rebase**：`ai2/frontend` 历史含合并提交（`02f1b32` "合并 origin/main"），是**非线性**历史；rebase 会把该 merge 拍平，并在 `web/src/*`（`ReaderScreen.tsx`/`readerInteractions.ts` 等）炸出一堆假冲突。改用 merge 后只在实际重叠的 2 个 doc 上冲突。
+- 冲突解决：`server/AGENTS.md`、`docs/RESTART-ai1.md` → 取 AI-1 版；根 `AGENTS.md` 自动合并（§0 与 §12 并存，**建议去重留一节**）。
+- **⚠️ AI-2 注意**：你在 `qingyue-ai2` 工作树的 2 处未提交改动（`web/src/offlineStorage.ts`、`web/test/offline-pwa.test.ts`）在 rebase 前被我暂存到 stash（`stash@{0}`=rebase 残留版、`stash@{1}`=AI-2 WIP 版），**未丢**；需要时 `git stash pop` 取回。
+- 备注：`ai2/frontend` 分支本身仍停在 `c917ed4`（其提交已通过 merge 进入 main）；AI-2 下次开工先 `git fetch` 对齐。
