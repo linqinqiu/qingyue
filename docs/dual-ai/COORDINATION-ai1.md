@@ -82,3 +82,9 @@
 - ②设置页 / 关于页恢复居中（`web/src/styles.css`，撤 PROPOSAL-018 §3.2 的去居中）；③自定义皮肤扩成**皮肤库**（`readerSettings.ts` / `main.tsx` / `CustomizeModal.tsx` / `styles.css` + `web/test/CustomizeSkin.test.ts`）。
 - 依据：用户 2026-10-11 直接点名要 AI-1 做这两件（属 README §1 的「用户点名越界」，已记本条）。
 - 影响 AI-2：这几个文件我动过，你下次改之前先 `git fetch`；皮肤库把旧的 `customSkinId` / `customSkinCss` / `customSkinBase` 换成了 `customSkins: CustomSkin[]`（旧值会自动迁进库，不丢数据）。
+
+## [2026-10-11] COLLAB-REQUEST B 档：web/dist 不再进版本库，构建入口收成 npm scripts
+- 用户让做「B 档」。① 单一构建/开发入口：根 `package.json` 的 scripts 扩成 `build` / `test` / `dev` / `start`（`build` = 前端 → web/dist 再 fatJar；编排在 `scripts/tasks.mjs`，按平台选 `gradlew.bat` / `./gradlew`）。
+- ② `web/dist` 不再进版本库（17 个文件 `git rm --cached`，文件仍在盘上；`web/.gitignore` 加 `dist/`）。它每次源码改动都产生一次产物 diff，且不是源。
+- 护栏：`server/build.gradle` 的 fatJar 加了 `doFirst` —— 缺 `web/dist/index.html` 就报错，不再静默产出「只有后端、没有界面」的包；**只拦 fatJar**，`:server:test` 不受影响。
+- 影响 AI-2：**以后别再提交 `web/dist`**；打 jar 前先 `npm run build`。Docker 与 CI 本来就自己构建前端，不受影响。
