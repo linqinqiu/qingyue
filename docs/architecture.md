@@ -95,8 +95,6 @@
 
 ## 7. 改动边界
 
-三个 git 工作树共享一份历史：`main`（合流目标）、`ai1/backend`（服务端、`tools/`、版本号与
-`CHANGELOG.md`）、`ai2/frontend`（`web/`、README、门面文档）。分工与协商方式见
-[`dual-ai-setup.md`](dual-ai-setup.md) 与 `COORDINATION-ai1.md` / `COORDINATION-ai2.md`。
-契约文件 `API-CONTRACT.md` 由后端维护，前端只读：界面发现"契约与实际行为不一致"时发
-`API-REQUEST`，不自己改契约、也不 stub 假数据蒙混。
+三个 git 工作树共享一份历史：`main`（合流目标）、`ai1/backend`、`ai2/frontend`。
+**谁改什么、遇到具体情况照哪一行做，只在 [`COLLABORATION.md`](COLLABORATION.md) 里**——本文件不复述规则，
+复述就是下一次"同一个真相写两处"。工作树与分支的对应关系见 [`dual-ai-setup.md`](dual-ai-setup.md)。
