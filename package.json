@@ -4,6 +4,10 @@
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "keywords": [
     "legado",
     "legado3",
@@ -21,6 +25,7 @@
   "scripts": {
     "build": "node scripts/tasks.mjs build",
     "test": "node scripts/tasks.mjs test",
+    "check": "npm --prefix web run check",
     "dev": "npm --prefix web run dev",
     "start": "node start.mjs"
   },
