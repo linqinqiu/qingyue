@@ -8,64 +8,14 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { VirtualChapterList } from "../src/ReaderScreen"
 import { TOC_ROW_HEIGHT } from "../src/readerInteractions"
 
-export type VirtualSliceConfig = {
-  totalCount: number
-  itemHeight: number
-  scrollTop: number
-  viewportHeight: number
-  overscan?: number
-}
-
-export type VirtualSliceResult = {
-  totalHeight: number
-  startIndex: number
-  endIndex: number
-  renderedCount: number
-  offsetY: number
-}
+import { computeCenterScrollOffset, computeVirtualWindow } from '../src/virtualSlice.js'
 
 /**
- * Computes the virtualized window slice for a list of items with fixed height.
- * Guarantees renderedCount is strictly bounded by viewport size + 2 * overscan.
+ * 判据沿用这两个名字，但**实现是产品那一份**：以前这里手写一份 `computeVirtualSlice` 去对
+ * `ReaderScreen.tsx` 里内联的那一行算式，两边各改各的都不会红 —— 现在只有一个实现。
  */
-export function computeVirtualSlice(config: VirtualSliceConfig): VirtualSliceResult {
-  const { totalCount, itemHeight, scrollTop, viewportHeight, overscan = 6 } = config
-  const totalHeight = totalCount * itemHeight
-  if (totalCount <= 0 || itemHeight <= 0) {
-    return { totalHeight: 0, startIndex: 0, endIndex: 0, renderedCount: 0, offsetY: 0 }
-  }
-
-  const maxScroll = Math.max(0, totalHeight - viewportHeight)
-  const clampedScrollTop = Math.max(0, Math.min(maxScroll, Number.isFinite(scrollTop) ? scrollTop : 0))
-
-  const rawStart = Math.floor(clampedScrollTop / itemHeight) - overscan
-  const startIndex = Math.max(0, Math.min(totalCount - 1, rawStart))
-
-  const rawEnd = Math.ceil((clampedScrollTop + viewportHeight) / itemHeight) + overscan
-  const endIndex = Math.min(totalCount, Math.max(startIndex, rawEnd))
-
-  const renderedCount = Math.max(0, endIndex - startIndex)
-  const offsetY = startIndex * itemHeight
-
-  return { totalHeight, startIndex, endIndex, renderedCount, offsetY }
-}
-
-/**
- * Computes the target scrollTop offset required to center a specific chapter in the viewport.
- */
-export function computeAutoScrollOffset(
-  chapterIndex: number,
-  itemHeight: number,
-  viewportHeight: number,
-  totalCount: number
-): number {
-  if (totalCount <= 0 || itemHeight <= 0 || viewportHeight <= 0) return 0
-  const totalHeight = totalCount * itemHeight
-  const maxScroll = Math.max(0, totalHeight - viewportHeight)
-  const clampedIndex = Math.max(0, Math.min(totalCount - 1, chapterIndex))
-  const targetTop = clampedIndex * itemHeight - (viewportHeight / 2 - itemHeight / 2)
-  return Math.max(0, Math.min(maxScroll, Math.round(targetTop)))
-}
+const computeVirtualSlice = computeVirtualWindow
+const computeAutoScrollOffset = computeCenterScrollOffset
 
 // -----------------------------------------------------------------------------
 // Tier 1: Core Feature Tests (5,000 Chapter TOC & Virtualization Math)
@@ -299,4 +249,52 @@ test('行高只有一个来源：TOC_ROW_HEIGHT 必须等于样式表里的 --ro
   assert.ok(declared > 0, '`--row-h-list` 得在样式表里真存在着')
   assert.equal(TOC_ROW_HEIGHT, declared,
     `虚拟化按 ${TOC_ROW_HEIGHT}px 算「第 i 行位移 = i × 行高」，样式却画 ${declared}px —— 5,000 章滚到底会差出整屏`)
+})
+
+/**
+ * 这套判据从前是"手写一份切片算式对镜自照"：产品里 `ReaderScreen.tsx` 内联一行
+ * `Math.floor(scrollTop / itemHeight) - overscan`，测试里另写一份 `computeVirtualSlice`，
+ * 两边各改各的、谁也红不了（AGENTS §5「按键表与处理器必须同源」同一个病）。
+ * 现在实现只有一份，所以这条判的是"不许再长回两份"。
+ */
+test('目录切片只有一份实现：产品引 src/virtualSlice，判据不许自己手写', () => {
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'src', 'ReaderScreen.tsx'), 'utf8')
+  assert.match(src, /from '\.\/virtualSlice'/, '阅读器没再引那份共用算式 —— 是不是又内联回去了？')
+  assert.match(src, /computeVirtualWindow\(/, '目录窗口不是算出来的，就是硬写的')
+  assert.match(src, /computeCenterScrollOffset\(/, '「跳到正在读那一章」的定位算式也要走同一处')
+  // 反向对照：把内联算式改回来必须当场红 —— 否则这三条是恒真的
+  assert.doesNotMatch(src, /Math\.floor\(scrollTop \/ itemHeight\)/,
+    '内联的 `Math.floor(scrollTop / itemHeight)` 又回来了，那份共用的 virtualSlice 就成了没人引的死代码')
+
+  const judge = fs.readFileSync(path.resolve(import.meta.dirname, 'VirtualChapterList.test.ts'), 'utf8')
+  assert.match(judge, /from '\.\.\/src\/virtualSlice(\.js)?'/, '判据必须引 src 那一份实现')
+  assert.doesNotMatch(judge, /function computeVirtual(Slice|Window)/,
+    '判据里不许再定义第二份切片算式，它只能 import 产品那一份')
+
+  // 判据之间互相 import 实现 = 一处改了另一处不会红（同形状的病，登记着还没收干净）
+  const scenario = fs.readFileSync(path.resolve(import.meta.dirname, 'TOCPerformanceScenario.test.ts'), 'utf8')
+  assert.doesNotMatch(scenario, /from '\.\/VirtualChapterList\.test/,
+    '另一份测试里借实现已经过一次，这条不许它回来')
+})
+
+/**
+ * 改的是产品那份算式，所以判据得真渲染一次产品组件：
+ * "只挂窗口内那几十行"与"上下垫高凑出总滚动高度"这两件事必须由 DOM 说。
+ */
+test('5,000 章的目录真渲染时只挂窗口内那些行，其余靠垫高', () => {
+  const chapters = Array.from({ length: 5000 }, (_, i) => ({ index: i, title: `第${i + 1}章`, url: `/c/${i}` }))
+  const html = renderToStaticMarkup(React.createElement(VirtualChapterList, {
+    chapters, activeChapterIndex: 0, onSelect: () => {}, itemHeight: TOC_ROW_HEIGHT, overscan: 8,
+  }))
+  const slice = computeVirtualSlice({
+    totalCount: 5000, itemHeight: TOC_ROW_HEIGHT, scrollTop: 0, viewportHeight: 600, overscan: 8,
+  })
+  const rows = (html.match(/reader-chapter-item/g) ?? []).length
+  assert.equal(rows, slice.renderedCount, `挂了 ${rows} 行，而共用算式说该挂 ${slice.renderedCount} 行`)
+  assert.ok(rows > 0 && rows <= 40, `5,000 章的目录不该把整本挂上 DOM（实际 ${rows} 行）`)
+  assert.match(html, /第1章/, '窗口开头那几行要在')
+  assert.ok(!html.includes('第5000章'), '窗口外的行不许出现在 DOM 里')
+  assert.ok(html.includes(`height:${slice.bottomSpacer}px`), '底下那段垫高得凑出整表高度，否则滚不动也不报错')
+  // 样本自证：窗口必须远小于全表，否则"只挂几十行"这条是在演空戏
+  assert.ok(5000 - slice.renderedCount > 4_000, '夹具坏了 —— 窗口没比全表小，前面的判据不算证据')
 })

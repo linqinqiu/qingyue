@@ -330,3 +330,21 @@
 - 影响 AI-1：两处，都不紧急。
   1. **桌面包从来没进 Releases**。查了公开仓的 releases API（一共 5 个 release）：`latest` 只有 `legado-server.jar` + `legado-server-dist.zip`，按号打的 tag（v0.6.23–v0.6.26）只有 `qingyue-<版本>.zip`；而本机 `dist/` 里躺着 `qingyue-desktop-0.6.44/0.6.45/0.6.46.zip` 三份。README 原来教用户"去 Releases 下载桌面包"是假路，我已改成"自己打 + 这一档还没上传"。要不要把它接进流水线（`.github/` 归你）或者手工传一次，你定。
   2. `scripts/package-desktop.mjs:9,11,107` 的注释写 `青阅.exe`，而 `--name qingyue` 与它自己第 95 行的断言产出的是 `qingyue.exe`（`ed9059d` 那次为解压器乱码改的 ASCII 名）。只是注释漂了，不影响产物。
+
+## [2026-10-11] TASK 目录切片收成一份 ——「判据在自己对镜自照」那一类
+- 问题（P1，`web/test/VirtualChapterList.test.ts` 修前 11-68 行 vs `web/src/ReaderScreen.tsx` 修前 339-340 行）：
+  产品里目录窗口是**内联两行算式**（`Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)` / `Math.min(count, Math.ceil(...) + overscan)`），
+  而测试文件里**另写了一份** `computeVirtualSlice` 加一份 `computeAutoScrollOffset`，`TOCPerformanceScenario.test.ts:4` 还去 import 那份测试里的实现。
+  后果：判据量的是它自己那一份，产品跑的是另一份 —— 两边各改各的、谁也红不了。这一类的形状和 AGENTS §5「按键表与处理器必须同源」是同一个病。
+- 处置：新建 `web/src/virtualSlice.ts`（`computeVirtualWindow` + `computeCenterScrollOffset`，含 `bottomSpacer`），
+  `ReaderScreen.tsx` 两处改引它（窗口切片、以及"跳到正在读那一章"的居中定位）；两份测试改为 import 产品那一份。
+  顺手把三个 NaN/0 的口子夹住了：`totalCount`/`itemHeight` 不合法直接回空窗口，`scrollTop` 夹进 `[0, 可滚动距离]` —— 这些值原先会被乘进 `style.height`。
+- 验证：
+  - `tsc -b` 干净；`npx tsx web/test/run-all.ts` **444/444**，串行单跑。
+  - 两条新判据：① 「目录切片只有一份实现」—— 钉产品必须引 `./virtualSlice` 并出现 `computeVirtualWindow(` / `computeCenterScrollOffset(`，同时钉**内联算式不许回来**、判据里不许再 `function computeVirtual*`、`TOCPerformanceScenario` 不许再 `from './VirtualChapterList.test'`；② 「5,000 章真渲染时只挂窗口内那些行」—— 用 `renderToStaticMarkup` 渲染产品组件，行数必须等于共用算式给的 `renderedCount`、底下垫高必须等于 `bottomSpacer`，并带"窗口必须比全表小 4,000 行以上"的夹具自证。
+  - **两条都做了注入反扫**：把内联算式加回 `ReaderScreen.tsx` → ①红；把 `endIndex` 改成 `= totalCount`（等于不虚拟化）→ ②红（同时另 4 条一起红）。注入都在同一条命令里还原并 grep 回读（`grep -c` 归零才算还原）—— 上一轮我就是因为留了一份注入在盘上被人卷走，这次不再犯。
+  - **真浏览器 9/9**（重建 jar 后的 1299 隔离实例，`tmp/toc-window-verify.mjs`）：200 章的本地书 → 目录只画 25 行、行高 40px、`scrollHeight` 正好 8000px（垫高把整表高度凑出来了，滚到底不空）；滚到中段窗口跟着走（首行「第93章」）仍是 33 行；点第 150 章真的换章；重开目录把正在读那一章摆进视口且 `offsetFromCenter: 0`（居中走的就是那份共用算式）。用完删探针书，`DELETE` 204。
+  - 探针自己红过一轮，红的是探针：我按标题在 DOM 里找第 150 章那一行去点 —— 而**窗口外的行根本不在 DOM 上**，这正是虚拟化要做的事。改成"先把列表滚到 148 行再找再点"，并加一条「夹具点得到」把这件事显式断出来。
+- 一条对**你也有用**的实测教训：我本来想用一次性静态服务发新 `web/dist`（省得重打 jar），结果界面上的写操作全 403 —— 同源闸门比的是 Origin 的 **host 加 port**，换端口的壳一律被拒。所以"要验界面里的写动作"就绕不开重打 jar + 重启实例；静态壳只适合纯读的量测（离线统计那条就是这么验的，它不动写）。
+- 登记未动（同形状，规模更大）：`TOCPerformanceScenario.test.ts:5-7` 还从 `LazySourceLoading.test.ts` 与 `ReaderOptimization.test.ts` 借实现（`LazyCandidateManager`、`deduplicateSearchResults`、`memoizedSplitParagraphs`、`BoundedPreloadCache`）—— 这几份是"测试里写的产品逻辑"，`scrollPosition` 甚至与 `src/readerSettings.ts` 里那条同名。要收成一份得先把每个函数与真实调用点对上，我没在这一轮顺手做（做了就是拿判据去钉一份我猜的语义）。
+- 影响 AI-1：`web/dist` 已随源码重建并提交；`server/build/libs/…-all.jar` 我在本机重打过一份（**没动版本号，仍是 0.6.46**，也没动 CHANGELOG —— 那两件按分工归你）。1299 上跑的就是这份含本次改动的包。

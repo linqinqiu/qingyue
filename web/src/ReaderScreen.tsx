@@ -14,6 +14,7 @@ import { isMediaType } from './bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, resolveMeasuredPage, sectionAtPage, sectionProgress } from './readerFlow'
+import { computeCenterScrollOffset, computeVirtualWindow } from './virtualSlice'
 import { SourceSwitchModal } from './SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from './searchFilters'
 import { toast } from './Toast'
@@ -314,10 +315,7 @@ export function VirtualChapterList({
     const targetIndex = chapters.findIndex(c => c.index === activeChapterIndex)
     if (targetIndex < 0) return
 
-    const itemTop = targetIndex * itemHeight
-    const targetScroll = Math.max(0, itemTop - (el.clientHeight - itemHeight) / 2)
-    const maxScroll = Math.max(0, chapters.length * itemHeight - el.clientHeight)
-    const finalScroll = Math.min(targetScroll, maxScroll)
+    const finalScroll = computeCenterScrollOffset(targetIndex, itemHeight, el.clientHeight, chapters.length)
 
     if (Math.abs(el.scrollTop - finalScroll) > 1) {
       el.scrollTo({ top: finalScroll, behavior })
@@ -336,11 +334,16 @@ export function VirtualChapterList({
   }, [])
 
   const count = chapters.length
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)
-  const endIndex = Math.min(count, Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan)
-
-  const topSpacer = startIndex * itemHeight
-  const bottomSpacer = Math.max(0, (count - endIndex) * itemHeight)
+  const slice = computeVirtualWindow({
+    totalCount: count,
+    itemHeight,
+    scrollTop,
+    viewportHeight: containerHeight,
+    overscan,
+  })
+  const { startIndex, endIndex } = slice
+  const topSpacer = slice.offsetY
+  const bottomSpacer = slice.bottomSpacer
 
   const visibleChapters = useMemo(() => {
     const items: Array<{ chapter: Chapter; index: number }> = []
