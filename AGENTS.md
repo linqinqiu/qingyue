@@ -21,6 +21,8 @@
 
 **5. 每次重开的启动指令**：AI-1 读 `docs/RESTART-ai1.md`，AI-2 读 `docs/RESTART-ai2.md`。两份文件里写"第一条命令做什么、先读哪些文件、当前进行中的任务与它的验证口径"。
 
+**6. 合流与共享文件**：谁先完成谁先合 `main`；后合的先 `git fetch && rebase origin/main`——但**历史里含 merge 提交的分支用 merge 合，别硬 rebase**（rebase 会拍平 merge 并在无关文件上炸假冲突）。共享文件（`README.md`、`AGENTS.md`、`package.json`、`build.gradle*`）双方都要动时，先在对端日志发 `NOTE` 协商。共享协作事实源：`docs/API-CONTRACT.md`（AI-1 主导）、`docs/COORDINATION-ai1.md`（AI-1 写）、`docs/COORDINATION-ai2.md`（AI-2 写）、`docs/dual-ai-setup.md`（环境总说明）。
+
 > 已实测并在用的两条硬事实：
 > ① 同源闸门（`Guard.kt` `isSameOriginIdentity`）按 **Origin 的主机+端口 vs 服务自身绑定** 判，因此 dev server 5174 代理下的写请求一律 403 —— 前端验证走"构建产物 + 同源实例"。
 > ② `tools/verify/` 的门禁全部按 `STAMP` 自造/自清探针且**必须串行**；跑红先分清判据旧了、探针脏了、机器被自己占满了，还是产品坏了。
@@ -476,18 +478,3 @@ This repository is dedicated to the standalone Legado Server ecosystem: the stan
 - 保持组件模块化，并清晰分离各项职责（服务端解析、前端交互、数据持久化各司其职）。
 - 当成熟且维护良好的库能够降低整体复杂度或提高可靠性时，应优先使用。除非有明确理由，否则不要重复实现常见功能。
 
-## 12. AI 双工作流分工 (AI-1 / AI-2)
-
-本项目采用双 AI 并行开发：两人在各自 git worktree 工作，互不修改对方目录，通过 `main` 上的三份共享文件协作。
-
-- **AI-1（WorkBuddy CLI）**：负责【后端、安全与仓库基建】。工作树 `qingyue-ai1` / 分支 `ai1/backend`。可改 `server/`、`tools/`、`docs/`、`.github/`、根配置与 `AGENTS.md` 等。完整守则见 [`server/AGENTS.md`](server/AGENTS.md)；重开指令见 [`docs/RESTART-ai1.md`](docs/RESTART-ai1.md)。提交前缀 `ai1: <模块>: <动作>`。
-- **AI-2（Qoder）**：负责【前端、阅读体验与仓库门面】。工作树 `qingyue-ai2` / 分支 `ai2/frontend`。可改 `web/`、`README.md`、`web/AGENTS.md` 等。完整守则由 AI-2 维护于 `web/AGENTS.md`。提交前缀 `ai2: <模块>: <动作>`。
-- **禁止越界**：AI-1 不碰 `web/`、`README.md`、`web/AGENTS.md`；AI-2 不碰 `server/`、`tools/`。
-
-共享协作事实源（均在 `main`，rebase 可见）：
-- [`docs/API-CONTRACT.md`](docs/API-CONTRACT.md)：后端对外接口契约，**AI-1 主导维护**。任何接口增删改先更新此处再改代码，提交带 `api:` 子前缀。
-- [`docs/COORDINATION-ai1.md`](docs/COORDINATION-ai1.md)：**AI-1 写、AI-2 只读**的任务 / 变更 / 阻塞日志。
-- [`docs/COORDINATION-ai2.md`](docs/COORDINATION-ai2.md)：**AI-2 写、AI-1 只读**的任务 / 接口请求 / 阻塞日志。AI-1 开工前必读，优先处理其中的 `API-REQUEST` 与 `BLOCKER`。
-- [`docs/dual-ai-setup.md`](docs/dual-ai-setup.md)：双工作树路径、端口、DB、日志、目录边界与合流流程总说明。
-
-合流流程：谁先完成谁先合 `main`；后合的先 `git fetch && rebase origin/main`。共享文件（`README.md`、`AGENTS.md`、`package.json`、`build.gradle.kts`）若双方都需改动，先在对端日志发 `NOTE` 协商。
