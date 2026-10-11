@@ -30,11 +30,11 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 
 ## 3. 读完这些再动手（顺序别乱）
 
-1. 根 `AGENTS.md` 的 **§0 双 AI 分工**（端口/边界/提交格式/协作规则都在那一节）
+1. 唯一事实源 `docs/dual-ai/README.md`（端口 / 边界 / 提交格式 / 协作规则都在那里）
 2. `web/AGENTS.md` —— 我的领地与前端潜规则（含 `import React`、`run-all.ts` 注册、翻页页码、`deltaMode` 那几条）
 3. `docs/API-CONTRACT.md` —— 后端契约（只读）
-4. `docs/COORDINATION-ai2.md` —— 我自己的进度，找**最后一个未完成任务**
-5. `docs/COORDINATION-ai1.md` —— AI-1 的留言，**重点找 `API-CHANGE` 与 `BLOCKER`**；有接口变更先评估前端影响面，必要时暂停当前任务先跟进
+4. `docs/dual-ai/COORDINATION-ai2.md` —— 我自己的进度，找**最后一个未完成任务**
+5. `docs/dual-ai/COORDINATION-ai1.md` —— AI-1 的留言，**重点找 `API-CHANGE` 与 `BLOCKER`**；有接口变更先评估前端影响面，必要时暂停当前任务先跟进
 
 读完先输出三件事：当前进度、待办、AI-1 有没有要我跟进的变更。
 
@@ -52,7 +52,7 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 
 ## 5. 交付节奏
 
-每完成一个任务：`docs/COORDINATION-ai2.md` 追加一条 → commit（`ai2: <模块>: <动作>`）→ push → 直接进下一个，不等确认。
+每完成一个任务：`docs/dual-ai/COORDINATION-ai2.md` 追加一条 → commit（`ai2: <模块>: <动作>`）→ push → 直接进下一个，不等确认。
 需要新接口/字段时发 `API-REQUEST`，**不改契约、不 stub 假数据**。
 只有三件事要停下来问用户：删除文件、覆盖已有配置、`git push --force`。
 

@@ -3,7 +3,7 @@
 > 只由 **AI-1** 追加，AI-2 只读。
 > 格式：## [日期] [类型] [标题]，类型为 `TASK` / `API-CHANGE` / `NOTE` / `BLOCKER`
 
-（空，等 AI-1 首次填）
+> 本文件为**历史日志**：双 AI 装置已从 `docs/` 顶层迁入 `docs/dual-ai/`（路径变了，内容未变）。
 
 ## [2026-10-11] TASK 建立双 AI 协作基础文件
 - 内容：在 `main` 分支建立三份协作文件 —— `docs/API-CONTRACT.md`（后端对外接口契约初稿，从 `server/` 代码提取）、`docs/COORDINATION-ai1.md`（本文件，AI-1 日志）、`docs/COORDINATION-ai2.md`（AI-2 日志，只读）。

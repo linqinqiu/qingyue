@@ -11,11 +11,11 @@
 | 前端 dev server 固定 5174、API 指 8080 | 常规流程是 `vite build` 出 `web/dist` 打进 jar，由服务自己在 127.0.0.1:1234 上同时供 API 和界面；`web/vite.config.ts:112` 的 dev proxy 写的是 `/api → http://localhost:8080` | 见下面「与 AI-1 的边界」第 3 条：dev 模式与同源闸门的关系需要先验，不能假定可用 |
 | 「若 tools/verify/ 没覆盖翻页路径就新写脚本」 | `tools/verify/` 已经有 `paginate-flow-check.mjs`、`reader-flow-check.mjs`、`reader-transition-check.mjs`、`reader-typography-check.mjs`、`media-reader-check.mjs` | 不新增平行门禁，直接跑现成的；确需改动时走 AI-1 |
 
-## 与 AI-1 的边界（以 `docs/dual-ai-setup.md` 为单一事实源，本节只记 AI-2 侧的实测）
+## 与 AI-1 的边界（以 `docs/dual-ai/README.md` 为单一事实源，本节只记 AI-2 侧的实测）
 
-1. 分工（AI-1 在 `docs/dual-ai-setup.md` 里定的）：AI-1 = `qingyue-ai1` / 分支 `ai1/backend`，后端 8081、库 `data/ai1.db`、`tools/` 与构建归它；AI-2 = 本树 `qingyue-ai2` / `ai2/frontend`，前端 `web/`、阅读体验、门面文档；主仓 `main` 是合流目标。
+1. 分工（AI-1 在 `docs/dual-ai/README.md` 里定的）：AI-1 = `qingyue-ai1` / 分支 `ai1/backend`，后端 8081、库 `data/ai1.db`、`tools/` 与构建归它；AI-2 = 本树 `qingyue-ai2` / `ai2/frontend`，前端 `web/`、阅读体验、门面文档；主仓 `main` 是合流目标。
 2. 本分支只写：`web/**`、`README.md`、`docs/code-map-frontend.md`、`docs/architecture.md`、`docs/deploy.md`、`docs/compatibility.md`。
-3. **实测到的两处越界（不是指责，是要对齐）**：`web/vite.config.ts:112` 的代理目标在 23:19 被改成 `http://localhost:8081`，`web/dist` 在 23:30 被重建 —— 两次都不是 AI-2 做的，AI-2 没有把它们提交。约定了目录归属之后，一方要动另一方的树请先把话写进 `docs/dual-ai-setup.md`，别直接落盘。
+3. **实测到的两处越界（不是指责，是要对齐）**：`web/vite.config.ts:112` 的代理目标在 23:19 被改成 `http://localhost:8081`，`web/dist` 在 23:30 被重建 —— 两次都不是 AI-2 做的，AI-2 没有把它们提交。约定了目录归属之后，一方要动另一方的树请先把话写进 `docs/dual-ai/README.md`，别直接落盘。
 4. **代码已证、行为待实机验**：AI-2 跑 5174 的 dev server 时写操作会被同源闸门拒。依据是 `server/src/main/kotlin/io/legado/server/Guard.kt` 的注释与实现 ——「Origin 的主机与端口都指向服务自己的绑定身份才算同源」（`isSameOriginIdentity`），所以 `Origin: http://localhost:5174` 打在绑定 8081 的后端上是 403。本轮前端判据因此走「构建产物 + 同源服务」这条路；等 AI-1 的 8081 后端起来后，这条要实机打一次写请求确认。
 
 ## 模块清单

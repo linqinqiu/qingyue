@@ -1,6 +1,6 @@
 # API 契约
 
-> 本文件由 **AI-1** 主导维护。AI-2 只读，如需变更请在 `docs/COORDINATION-ai2.md` 发起 `API-REQUEST`。
+> 本文件由 **AI-1** 主导维护。AI-2 只读，如需变更请在 `docs/dual-ai/COORDINATION-ai2.md` 发起 `API-REQUEST`。
 >
 > 本文档为初稿，于 2026-10-11 从 `server/` 代码（Ktor，`Routes.kt` / `Models.kt` / `Application.kt` / `Guard.kt`）提取。
 > 标注 `TODO` 处为未逐 handler 核实、需 AI-1 补全的部分。
@@ -19,7 +19,7 @@
   无 `Origin` 头的非浏览器客户端（curl、浏览器扩展、服务间调用）放行。
   ⚠️ 免登录依赖绑定**回环地址**（`127.0.0.1`）；若改绑 `0.0.0.0` 则免登录自动失效（`runtime.mjs` 注释）。
 - **错误格式**：`ApiError(code: String, message: String)`（`Models.kt:5`）。
-- **端口 / 绑定**：由 `LEGADO_HOST` / `LEGADO_PORT`（默认 `127.0.0.1:1234`，裸 jar 默认 `8080`）控制，见 `docs/dual-ai-setup.md`。
+- **端口 / 绑定**：由 `LEGADO_HOST` / `LEGADO_PORT`（默认 `127.0.0.1:1234`，裸 jar 默认 `8080`）控制，见 `docs/dual-ai/README.md`。
 
 ## 端点清单
 
