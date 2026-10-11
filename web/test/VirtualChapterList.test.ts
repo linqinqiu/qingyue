@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { assertScalesLinearly, assertWithinCeiling } from './perfCriteria.ts'
+import fs from "node:fs"
+import path from "node:path"
+import React from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { VirtualChapterList } from "../src/ReaderScreen"
+import { TOC_ROW_HEIGHT } from "../src/readerInteractions"
 
 export type VirtualSliceConfig = {
   totalCount: number
@@ -267,4 +273,30 @@ test('VirtualChapterList - Tier 2: Extreme scale benchmark (50,000 chapters)', (
     assert.ok(slice.startIndex >= 0 && slice.endIndex <= 50000)
   }
   assertScalesLinearly({ name: '50,000 项虚拟切片 1,000→4,000 次', smallMs: elapsed, bigMs: performance.now() - againStart, dataFactor: 4 })
+})
+
+
+// ———— AI-2 任务 C·模块 3「目录虚拟列表」补的两条（撞 key 与行高双写）————
+
+test('同 url 的两章都要渲染得出：key 带章节序号（服务端不按地址去重）', () => {
+  const chapters = [
+    { index: 0, title: '第1章 上', url: '/c/dup' },
+    { index: 1, title: '第1章 下', url: '/c/dup' },
+  ]
+  const html = renderToStaticMarkup(React.createElement(VirtualChapterList, {
+    chapters, activeChapterIndex: 0, onSelect: () => {}, itemHeight: TOC_ROW_HEIGHT, overscan: 8,
+  }))
+  assert.match(html, /第1章 上/, '第一行在')
+  assert.match(html, /第1章 下/, '同址的第二行不能因为撞 key 就消失')
+  // 反向对照：裸 url 当 key 的写法不许回来 —— React 重复 key 只 warning，门禁与页面都看不见
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'src', 'ReaderScreen.tsx'), 'utf8')
+  assert.doesNotMatch(src, /key=\{chapter\.url\}/)
+})
+
+test('行高只有一个来源：TOC_ROW_HEIGHT 必须等于样式表里的 --row-h-list', () => {
+  const css = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'src', 'styles.css'), 'utf8')
+  const declared = Number(css.match(/--row-h-list:\s*(\d+(?:\.\d+)?)px/)?.[1])
+  assert.ok(declared > 0, '`--row-h-list` 得在样式表里真存在着')
+  assert.equal(TOC_ROW_HEIGHT, declared,
+    `虚拟化按 ${TOC_ROW_HEIGHT}px 算「第 i 行位移 = i × 行高」，样式却画 ${declared}px —— 5,000 章滚到底会差出整屏`)
 })

@@ -1,10 +1,14 @@
-import { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+// `VirtualChapterList` 在 `web/test/VirtualChapterList.test.ts` 里被 `renderToStaticMarkup` 静态渲染，
+// 那条链路走 classic JSX（`React.createElement`），只有 Vite 构建才走 automatic runtime。
+// 少这一行时页面与构建都正常，只有用例抛 `React is not defined`（AGENTS §5 的同形坑第三次：
+// PageBar/Notice 一回、ShortcutHelp+useEscapeClose 一回、TapZoneEditor 一回，这是第四回）。
+import React, { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, BookDetails, Chapter, ReadingProgress, SearchResult, TocRuleOption } from './api'
 import { ContextMenuItem, showContextMenu } from './ContextMenu'
 import { Icon } from './icons'
 import { useEscapeClose } from './useEscapeClose'
 import { Select } from './Select'
-import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateWheelStep, swipeDirection, ViewportBounds } from './readerInteractions'
+import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateWheelStep, swipeDirection, TOC_ROW_HEIGHT, ViewportBounds } from './readerInteractions'
 import { mapCells, TapAction, zoneAt } from './tapZones'
 import { isMediaType } from './bookType'
 import { TapZoneEditor } from './TapZoneEditor'
@@ -279,7 +283,7 @@ export function VirtualChapterList({
   activeChapterIndex,
   cachedUrlsSet,
   onSelect,
-  itemHeight = 38,
+  itemHeight = TOC_ROW_HEIGHT,
   overscan = 8,
   className = '',
   autoScrollKey,
@@ -369,9 +373,11 @@ export function VirtualChapterList({
           )
         }
         const isCached = cachedUrlsSet ? cachedUrlsSet.has(chapter.url) : false
+        // url 不能单独当 key：服务端 chapters() 不按地址去重（RuleRunner.kt:1389），
+        // 上下篇共用一页、"本章完"重复条目都会给出同 url 两行 —— 撞 key 只 warning，门禁看不见
         return (
           <button
-            key={chapter.url}
+            key={`${chapter.index}-${chapter.url}`}
             style={{ height: itemHeight }}
             className={`reader-chapter-item ${chapter.index === activeChapterIndex ? 'current' : ''} ${isCached ? 'cached' : ''}`}
             onClick={() => onSelect(chapter.index)}
@@ -2330,7 +2336,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             setActiveDrawer(null)
           }
         }}
-        itemHeight={40}
+        itemHeight={TOC_ROW_HEIGHT}
         overscan={8}
         autoScrollKey={activeDrawer === 'toc' || settings.sidebarPinned ? 1 : 0}
       />

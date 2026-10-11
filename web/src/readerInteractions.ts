@@ -195,3 +195,11 @@ export const contentImageUrl = (line: string): string | null => CONTENT_IMAGE_LI
 
 /** 站内绝对路径直接就是能用的地址，不需要再过图片代理。 */
 export const isSameSiteAsset = (url: string): boolean => url.startsWith('/api/')
+
+/**
+ * 目录虚拟列表一行的像素高（虚拟化算的是「第 i 行位移 = i × 行高」）。
+ *
+ * 同一个数还写在 `styles.css` 的 `--row-h-list`。行高与实际渲染不一致时，
+ * 5,000 章的目录滚到底会差出整屏，所以两处必须相等 —— 由测试当场钉。
+ */
+export const TOC_ROW_HEIGHT = 40

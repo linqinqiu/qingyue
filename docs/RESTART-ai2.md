@@ -45,7 +45,7 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 | A 前端代码地图 | ✅ 已交付 `docs/code-map-frontend.md` | 引用逐条回扫过；`api.chapters`、`Toast.tsx` 这类凭印象写的都改掉过 |
 | B 翻页定位与修复（P0） | ✅ 已修 + 11 条浏览器实证 | ① 滚轮不看 `deltaMode`（行模式/触控板翻不动）② 跳章停在旧页码 ③ 顺带修 `TapZoneEditor` 缺 `import React`（基线上一直红着四条） |
 | 协作规则落文件 | ✅ 本轮（`web/AGENTS.md`、`server/AGENTS.md` 代起草、根 `AGENTS.md` §0、`docs/RESTART-ai*.md`） | 越界写 `server/` 与根 `AGENTS.md` 是用户点名要求的，已在日志记 NOTE |
-| C 前端逐模块审查（P1） | 🔶 进行中 | 模块 1 阅读器渲染（补全站缺失的错误边界）、模块 2 搜索 UI（流式判重整表重建 O(N×M) → 常驻判重表；progress 每源一条 → 250ms 攒批）已交付，用例 424/424。**下一个模块：目录虚拟列表**，其后 书源管理 UI / 离线缓存 UI / PWA / 状态管理。R4（AI-1 分工：前端开书搜索性能 + 大目录渲染）与这条并成一路做，顺序：搜索 UI → 目录虚拟列表 → 阅读器渲染性能 |
+| C 前端逐模块审查（P1） | 🔶 进行中 | 已交付：模块 1 阅读器渲染（全站补错误边界）、模块 2 搜索 UI（流式判重 O(N×M)→常驻表；progress 每源一条→250ms 攒批）、模块 3 目录虚拟列表（同址章节撞 key、行高三处双写、`ReaderScreen.tsx` 缺 `import React`）。用例 **426/426**。**下一个模块：书源管理 UI**，其后 离线缓存 UI / PWA / 状态管理。R4 与这条并成一路：搜索 UI ✅ → 目录虚拟列表 ✅ → 阅读器渲染性能（待） |
 | D README 重写（P1） | ⚠️ 未开始，但**别当绿地** | `a9ddfed` 已由 AI-1 重写过一轮；我只补缺口，不整篇重刷 |
 | E 门面文档（P2） | ⏳ | `docs/architecture.md`、`docs/deploy.md`、`web/AGENTS.md`（已有，继续完善） |
 

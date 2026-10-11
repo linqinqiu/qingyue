@@ -168,3 +168,19 @@
   2. 反向对照最初按 30,000 条跑整表重建那版，一条用例把机器拖到 5 分钟以上（它本来就是二次方，这正是我要修的东西，但不该由用例来受刑）—— 对照缩到 3,600 条，阈值相应提到 10×，跑完 4.2s。
 - 验证：`npm --prefix web run check` 干净；`npx tsx web/test/run-all.ts` **424/424**（+4），串行单跑；先前那次跑里 `TOCPerformanceScenario Tier 4` 那条 <5ms 墙上时间判据红了，**同一条在本次串行复跑里过了**，按 AGENTS §3 归到环境噪声，不是回归。
 - 影响 AI-1：不需要你改后端。只有一条信息给你：**`counters.complete()` 每源一条 progress** 决定了前端必须攒批，若你以后改成节流推送，请发 `API-CHANGE`，我这边窗口值（250ms）要跟着重定。
+
+## [2026-10-11] TASK 任务 C·模块 3「目录虚拟列表」—— 撞 key、行高双写，外加第三种形态的 import React
+- 发现与处置：
+
+| 严重度 | 文件:行 | 问题 | 证据 | 触发条件 | 修复 | 验证 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | `web/src/ReaderScreen.tsx:374`（修前） | 目录行用 `key={chapter.url}` 当 React key，**同址两行会撞 key** | `server/.../RuleRunner.kt:1389 chapters()` 是 `mapIndexedNotNull`，**全程不按 url 去重**（`distinct()` 只出现在 nextTocUrl/翻页候选那两处）；`Chapter` 类型里 url 可重复 | 书源目录里"上下篇共用一页""本章完"重复条目、付费页复用地址 | key 改成 `${chapter.index}-${chapter.url}` | 静态渲染两行同址章节，两行都必须在；反向对照钉住裸 `key={chapter.url}` 不许回来 |
+| P1 | `web/src/ReaderScreen.tsx:282/2333` | 行高这一个数写了三处：组件默认 38、调用点传 40、样式表 `--row-h-list: 40px` | 虚拟化算的是「第 i 行位移 = i × 行高」；一旦样式表那处被调（W3 刚把 40 立成刻度），另两处不会跟着动 | 改 `--row-h-list` 或新增一个不传 itemHeight 的调用点 | 收成一处 `readerInteractions.TOC_ROW_HEIGHT`，默认值与调用点都引它 | 新用例当场比 `TOC_ROW_HEIGHT` 与样式表里 `--row-h-list` 的像素值，不等就红 |
+| P1 | `web/src/ReaderScreen.tsx:1` | **`ReaderScreen.tsx` 缺 `import React`** —— 我给 `VirtualChapterList` 加静态渲染用例时才撞出来：`ReferenceError: React is not defined at VirtualChapterList (ReaderScreen.tsx:351)` | 用例首跑就红在这条上；页面与 vite 构建一切正常（automatic runtime），只有 classic JSX 那条链路会死 | 任何测试静态渲染这个文件里的组件 | 补 default import 并写清为什么不能删 | 补上后 12/12；这是 AGENTS §5 那条同形坑的**第四回**（PageBar/Notice → ShortcutHelp+useEscapeClose → TapZoneEditor → 这次） |
+
+- 判据价值自评：上面三条里只有第一条本来就可能被写成"防不存在的场景"，是 `chapters()` 不去重这个**读到的事实**让它成立；
+  第二条是这次新用例第一次把 `VirtualChapterList` 静态渲染出来才暴露的 —— 也就是说该组件此前**从未被真渲染过**，只被数学孪生 `computeVirtualSlice` 测过。
+- 验证：`npm --prefix web run check` 干净；`web/test/VirtualChapterList.test.ts` 12/12；`npx tsx web/test/run-all.ts` **426/426**（+2），串行单跑。
+- 影响 AI-1：无需后端跟进。若想让我少踩一类坑，有一条给你：`web/test/VirtualChapterList.test.ts` 里那份
+  `computeVirtualSlice` 是产品切片算法的**手写孪生**（不是从 `src` 引的），两边迟早漂；
+  要不要把切片算式抽成 `src` 里的纯函数给两边共用，我下一轮可以自己动（属前端领地），先在这里报一句。
