@@ -3,6 +3,7 @@ package io.legado.server
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -11,6 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -23,7 +25,11 @@ class BookCacheService(private val database: Database, private val runner: RuleR
     private val jobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
     fun start() { database.cacheRequests().forEach(::enqueue) }
-    fun stop() { scope.cancel() }
+    fun stop() {
+        scope.cancel()
+        // 等所有在途缓存 worker 把数据库连接归还/关闭，避免外部紧接着 database.close() 时连接仍被占用（Windows 下删不掉文件）
+        runCatching { runBlocking { scope.coroutineContext[Job]?.join() } }
+    }
 
     fun enqueue(book: CachedBookRequest) {
         val key = "${book.sourceId}\u0000${book.bookUrl}"

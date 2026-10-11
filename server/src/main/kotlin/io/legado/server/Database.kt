@@ -17,6 +17,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.sql.Connection
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.locks.ReentrantLock
 import javax.crypto.SecretKeyFactory
@@ -30,6 +31,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
     private val maxPoolSize = AppConfig.dbPoolSize
     @Volatile private var isClosed = false
     private var _writeConnection: Connection? = null
+    private val allConnections = ConcurrentHashMap.newKeySet<Connection>()
 
     private val sqliteConfig = SQLiteConfig().apply {
         setJournalMode(SQLiteConfig.JournalMode.WAL)
@@ -40,7 +42,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
 
     init { Files.createDirectories(Path.of(path).toAbsolutePath().parent) }
 
-    private fun createConnection(): Connection = sqliteConfig.createConnection("jdbc:sqlite:$path")
+    private fun createConnection(): Connection = sqliteConfig.createConnection("jdbc:sqlite:$path").also { allConnections.add(it) }
 
     private fun getWriteConnection(): Connection {
         var conn = _writeConnection
@@ -100,6 +102,9 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             val conn = readPool.poll() ?: break
             runCatching { conn.close() }
         }
+        // 关闭所有曾经创建的连接（含仍被在途 worker 借出、未归还池的连接），避免关闭时文件句柄残留导致 Windows 下删除失败。
+        for (conn in allConnections) runCatching { conn.close() }
+        allConnections.clear()
     }
 
     fun initialize() = write { db ->
