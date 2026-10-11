@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { assertScalesLinearly, assertWithinCeiling } from './perfCriteria.ts'
-import { computeCenterScrollOffset as computeAutoScrollOffset, computeVirtualWindow as computeVirtualSlice } from '../src/virtualSlice.js'
+import { computeCenterScrollOffset as computeAutoScrollOffset, computeVirtualWindow as computeVirtualSlice } from '../src/reader/virtualSlice.js'
 import { LazyCandidateManager, deduplicateSearchResults } from './LazySourceLoading.test.ts'
 import type { SearchResult, BookDetails, Chapter, ReadingProgress } from './LazySourceLoading.test.ts'
 import { memoizedSplitParagraphs, scrollPosition, shouldPreloadNextChapter, BoundedPreloadCache } from './ReaderOptimization.test.ts'

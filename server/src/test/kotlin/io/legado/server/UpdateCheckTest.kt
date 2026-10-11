@@ -3,6 +3,7 @@ package io.legado.server
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import io.legado.server.ops.UpdateCheck
 
 /**
  * 「关于 → 检查更新」的版本比较（用户 2026-10-02）。

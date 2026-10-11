@@ -7,8 +7,8 @@ import {
   VIP_DETECTION_REGEX,
   MIN_LEGITIMATE_CHAPTER_LENGTH,
   SourceHealthInspection,
-} from '../src/sourceInspector'
-import { Chapter } from '../src/api'
+} from '../src/sources/sourceInspector'
+import { Chapter } from '../src/lib/api'
 
 test('SourceInspector - inspectChapterContent distinguishes author notes / leave notices from VIP truncation', () => {
   // 1. Legitimate end-of-book speech / notice (short 200 chars)

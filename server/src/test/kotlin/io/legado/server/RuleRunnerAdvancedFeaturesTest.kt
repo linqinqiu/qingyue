@@ -6,6 +6,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Base64
+import io.legado.server.content.applyReplaceEntry
+import io.legado.server.rules.RuleRunner
 
 class RuleRunnerAdvancedFeaturesTest {
 

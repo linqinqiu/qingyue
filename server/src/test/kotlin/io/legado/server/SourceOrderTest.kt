@@ -5,6 +5,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import io.legado.server.data.Database
+import io.legado.server.source.SourceCodec
 
 /**
  * 书源自定义排序（用户 2026-10-02：「自定义书源排序，优化书源编辑功能」）。

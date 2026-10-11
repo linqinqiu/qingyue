@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { defaultReaderSettings, parseTocRuleKey, ttsSessionKey } from '../src/readerSettings'
+import { defaultReaderSettings, parseTocRuleKey, ttsSessionKey } from '../src/reader/readerSettings'
 
 /**
  * 「阅读设置 → 本地书目录」（用户 2026-10-02：「txt目录规则，这个可以放到阅读设置里」）。
@@ -38,7 +38,7 @@ test('目录规则不参与朗读会话身份（换规则不该打断正在读�
  * 阅读设置抽屉 = 只对着手上这本（暂选，不写全局）。
  */
 test('默认规则长在书架的导入动作旁边，不在「自定义」里', () => {
-  const customize = read('../src/CustomizeModal.tsx')
+  const customize = read('../src/components/CustomizeModal.tsx')
   // 判的是代码痕迹，不是那句"搬走了"的说明文字
   assert.doesNotMatch(customize, /api\.tocRules|txtTocRule|<Select/, '「自定义」只剩皮肤；分章规则的代码别再长回来')
   const main = read('../src/main.tsx')
@@ -46,20 +46,20 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
   assert.match(main, /<span>分章规则<\/span>/, '入口按钮就挨着「导入本地」')
   assert.match(main, /onTxtTocRuleChange=\{value => setSettings\(\{ \.\.\.settings, txtTocRule: value \}\)\}/,
     '它写的是 App 那一份阅读设置，不是又造一份状态')
-  const modal = read('../src/TocRulesModal.tsx')
+  const modal = read('../src/components/TocRulesModal.tsx')
   assert.match(modal, /api\.tocRules\(\)/, '它自己去服务端取规则清单')
   assert.match(modal, /onClick=\{onImport\}/, '弹窗里能直接接着导书，不用关掉再找那颗按钮')
 
   // 备份里那份要真的能套用到服务端规则表（不是只"收下"）
-  const backup = read('../src/BackupPage.tsx')
+  const backup = read('../src/pages/BackupPage.tsx')
   assert.match(backup, /api\.applyTocRulesFromBackup\(\)/, '备份页对这条有真的套用动作')
   assert.match(backup, /TXT 分章规则/, '「原样收下的条目」清单里说得出它能套用')
-  const store = read('../../server/src/main/kotlin/io/legado/server/BackupStore.kt')
+  const store = read('../../server/src/main/kotlin/io/legado/server/backup/BackupStore.kt')
   assert.match(store, /APPLYABLE_NAMES = listOf\([^)]*"txtTocRule\.json"/, '服务端也把这条标成可套用（界面上的按钮按它出现）')
 })
 
 test('阅读设置抽屉里那一档只对着手上这本', () => {
-  const reader = read('../src/ReaderScreen.tsx')
+  const reader = read('../src/reader/ReaderScreen.tsx')
   assert.match(reader, /\{!!localBook && \(tocRuleOptions\?\.length \?\? 0\) > 0 && \(/,
     '在线书没有"目录规则"这件事，这一组就跟着本地书出现')
   assert.match(reader, /setting-label">本地书目录/, '面板里有这一组')
@@ -82,22 +82,22 @@ test('阅读设置抽屉里那一档只对着手上这本', () => {
  * 写接口有、坏正则被服务端挡在门外（不是存进去再让解析层跳过）、删除只对自己建的条目开。
  */
 test('分章规则可新建可编辑：接口、就地编辑、删除键的可见性', () => {
-  const api = read('../src/api.ts')
+  const api = read('../src/lib/api.ts')
   assert.match(api, /saveTocRule: \(rule: \{ key\?: string; name: string; rule: string/, '有新建/修改这一条')
   assert.match(api, /deleteTocRule: \(key: string\)/, '有删除这一条')
   assert.match(api, /removable\?: boolean/, '清单要报得出"这条能不能删"，界面不能猜')
 
-  const routes = read('../../server/src/main/kotlin/io/legado/server/Routes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt')
   assert.match(routes, /post\("\/books\/toc-rules\/save"\)/)
   assert.match(routes, /post\("\/books\/toc-rules\/delete"\)/)
   assert.match(routes, /rule_uncompilable/, '编不出来的正则回 400 并说清原因，而不是存进去')
   assert.match(routes, /packaged_rule/, '删随包那条要回一句"删不掉，可以取消勾选"')
-  const model = read('../../server/src/main/kotlin/io/legado/server/TxtTocRule.kt')
+  const model = read('../../server/src/main/kotlin/io/legado/server/localbook/TxtTocRule.kt')
   assert.match(model, /fun patternUsable\(pattern: String\): Boolean/, '保存前自己编译一遍，不依赖解析层的静默跳过')
   assert.match(model, /fun removable\(id: Int\): Boolean = all\.any \{ it\.id == id \} && packaged\.none/,
     '可删 = 在表里 且 不是随包那条')
 
-  const modal = read('../src/TocRulesModal.tsx')
+  const modal = read('../src/components/TocRulesModal.tsx')
   assert.match(modal, /新建一条/)
   assert.match(modal, /aria-label=\{`编辑 \$\{rule\.label\}`\}/, '编辑就在这一行上，不套第二层弹窗')
   assert.match(modal, /\{!!rule\.removable && \(/, '随包那 26 条不摆删除键')
@@ -112,24 +112,24 @@ test('分章规则可新建可编辑：接口、就地编辑、删除键的可�
  * 既看不见也选不了，而界面上根本没有启用开关。
  */
 test('手动可选 与 参与自动打分 是两件事，界面和服务端都按两件事做', () => {
-  const routes = read('../../server/src/main/kotlin/io/legado/server/Routes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt')
   assert.match(routes, /TocRules\.all\.map/, '清单发的是全表，不再是 candidates')
   assert.doesNotMatch(routes, /options = listOf\([\s\S]{0,220}\+ TocRules\.candidates\.map/,
     'candidates 只能用于自动打分，拿它当选择清单就是把 12 条规则藏起来')
   assert.match(routes, /post\("\/books\/toc-rules\/toggle"\)/, '有开关这条规则的入口')
-  const model = read('../../server/src/main/kotlin/io/legado/server/TxtTocRule.kt')
+  const model = read('../../server/src/main/kotlin/io/legado/server/localbook/TxtTocRule.kt')
   assert.match(model, /val selectable: List<TxtTocRule> get\(\) = all\.filter \{ compiles\(it\.id\) \}/,
     '可选只看用不用得了，不看 enable')
   assert.match(model, /fun compiles\(id: Int\): Boolean = id == PACKAGED_BUILTIN_ID \|\| compile\(id\) != null/,
     '内置那条（id -100）没有正则但不算坏规则')
   assert.match(model, /fun setEnable\(id: Int, enable: Boolean\)/)
 
-  const api = read('../src/api.ts')
+  const api = read('../src/lib/api.ts')
   assert.match(api, /toggleTocRule: \(key: string, enable: boolean\)/)
   assert.match(api, /enable\?: boolean/, '选项要带得上"参不参与自动"')
   assert.match(api, /broken\?: boolean/, '以及"正则坏没坏"')
 
-  const modal = read('../src/TocRulesModal.tsx')
+  const modal = read('../src/components/TocRulesModal.tsx')
   assert.match(modal, /pickable = options\.filter\(option => !option\.broken\)/,
     '默认规则选择器列的是全部能用的规则')
   assert.match(modal, /rows = options\.filter\(option => !option\.builtIn && option\.key !== 'auto'\)/,
@@ -138,7 +138,7 @@ test('手动可选 与 参与自动打分 是两件事，界面和服务端都�
   assert.match(modal, /<code title=\{rule\.rule\}>/, '正则原文要露出来，否则没人判断得了它适不适合自己的书')
   assert.match(modal, /手动选一条不需要先"启用"它/, '界面文案把这两件事分开讲')
 
-  const reader = read('../src/ReaderScreen.tsx')
+  const reader = read('../src/reader/ReaderScreen.tsx')
   assert.match(reader, /\.filter\(option => !option\.broken\)/, '阅读设置里那颗选择器同样排除坏正则')
   assert.match(reader, /（不参与自动）/, '选得到但不打分的那几条要标出来，别让人以为勾了就等于生效')
 })

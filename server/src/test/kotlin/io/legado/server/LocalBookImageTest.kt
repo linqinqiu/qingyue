@@ -6,6 +6,10 @@ import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import io.legado.server.http.localAssetType
+import io.legado.server.localbook.LocalBookParser
+import io.legado.server.localbook.ParsedBook
+import io.legado.server.localbook.TocRules
 
 /**
  * 本地书的图片（用户 2026-10-02：「重点研究本地阅读功能…支持图片」）。

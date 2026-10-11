@@ -2,6 +2,7 @@ package io.legado.server
 
 import org.junit.Assert.*
 import org.junit.Test
+import io.legado.server.rules.RuleRunner
 
 class RuleRunnerExtendedTest {
 

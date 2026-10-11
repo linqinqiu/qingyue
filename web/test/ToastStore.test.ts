@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { toast, ToastItem } from '../src/Toast.tsx'
+import { toast, ToastItem } from '../src/components/Toast.tsx'
 
 test('toast store - full method suite and timeout dismiss', async () => {
   // Clear any pre-existing toasts from earlier test suites

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { autoTagBatches, HEALTH_TAGS } from '../src/sourceGrouping'
+import { autoTagBatches, HEALTH_TAGS } from '../src/sources/sourceGrouping'
 
 /**
  * 「书源体检，除非点击了关闭，其他情况都后台持续体检一直到结束，
@@ -41,13 +41,13 @@ test('过程中的自动分组 - 已经打上和本轮已经写过的都不重�
 })
 
 test('体检跑在弹窗组件之外：卸载不再顺手取消', () => {
-  const modal = read('../src/SourceHealthModal.tsx')
+  const modal = read('../src/sources/SourceHealthModal.tsx')
   assert.match(modal, /const run = useHealthRun\(\)/, '弹窗是订阅者，不是运行时的持有者')
   assert.match(modal, /if \(!getHealthRun\(\)\.running && scoped\.length/, '已经有一轮在跑就不再开第二轮')
   assert.doesNotMatch(modal, /return \(\) => \{[\s\S]{0,160}cancel/, '卸载回调里不许再出现取消')
   assert.doesNotMatch(modal, /cancelledRef\.current\s*=/, '组件里不该还留着"卸载就置位"的那个开关（注释里提历史不算）')
   assert.match(modal, /aria-label=\{running \? '收起窗口（体检继续在后台跑）'/, '收起这个动作要说清它不停止体检')
-  const store = read('../src/sourceHealthRun.ts')
+  const store = read('../src/sources/sourceHealthRun.ts')
   assert.match(store, /export function stopHealthRun/, '只有显式停止这一个入口')
   assert.match(store, /autoTagBatches/, '分组是在批次循环里做的，不是等跑完再补')
 })

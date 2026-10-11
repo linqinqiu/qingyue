@@ -7,6 +7,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.ConcurrentHashMap
+import io.legado.server.model.ExploreTab
+import io.legado.server.rules.RuleExecutionException
+import io.legado.server.rules.RuleRunner
 
 class RuleRunnerTest {
 

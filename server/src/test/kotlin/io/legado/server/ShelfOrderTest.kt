@@ -5,6 +5,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import io.legado.server.data.Database
+import io.legado.server.model.BookIdentifier
+import io.legado.server.model.BookshelfWriteRequest
 
 /**
  * 书架自定义排序的落库（用户 2026-10-02：「批量管理功能在，长按书籍可移动能排顺序（自定义）」）。

@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { parseChangelog, ChangelogPage } from '../src/ChangelogPage'
+import { parseChangelog, ChangelogPage } from '../src/pages/ChangelogPage'
 
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
 
@@ -89,7 +89,7 @@ test('仓库 CHANGELOG 能解析，且最新一条就是当前版本号', () => 
 
 /** 接口层：读不到就 404，绝不能 200 + 空文本（前端会把"包里没有"念成"没有更新"）。 */
 test('服务端 /changelog 读不到时报 404，不报"空日志"', () => {
-  const routes = read('..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'Routes.kt')
+  const routes = read('..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http', 'Routes.kt')
   assert.match(routes, /get\("\/changelog"\)/, '要有 GET /api/changelog 这一条路由')
   assert.match(routes, /meta\/changelog\.md/, '它读的是随包的 meta/changelog.md（打进 jar 才谈得上"随包"）')
   assert.match(routes, /changelog_missing/, '读不到时给一个明确的错误码')
@@ -100,7 +100,7 @@ test('服务端 /changelog 读不到时报 404，不报"空日志"', () => {
 
 /** 前端读的是同一个地址，且拿不到文本时如实报错。 */
 test('api.changelog 读 /api/changelog，非 2xx 要抛而不是返回空串', () => {
-  const api = read('..', 'src', 'api.ts')
+  const api = read('..', 'src', 'lib', 'api.ts')
   assert.match(api, /changelog:.*\/api\/changelog/s, 'api.ts 要有 changelog()，打到 /api/changelog')
   const body = /changelog:[\s\S]{0,400}/.exec(api)?.[0] ?? ''
   assert.match(body, /res\.ok/, '要判断 res.ok')

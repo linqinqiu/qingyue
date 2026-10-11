@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import io.legado.server.content.LooseJson
+import io.legado.server.rules.RuleRunner
 
 /**
  * URL 尾巴 `,{options}` 的解析回归锁。

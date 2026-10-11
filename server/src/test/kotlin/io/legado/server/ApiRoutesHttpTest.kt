@@ -16,6 +16,28 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import io.legado.server.cache.CoverCache
+import io.legado.server.model.BatchSourceRequest
+import io.legado.server.model.BatchSourceResponse
+import io.legado.server.model.BookRequest
+import io.legado.server.model.BookshelfItem
+import io.legado.server.model.BookshelfSourceSwitchRequest
+import io.legado.server.model.BookshelfStatusRequest
+import io.legado.server.model.BookshelfWriteRequest
+import io.legado.server.model.ContentRequest
+import io.legado.server.model.ImportRequest
+import io.legado.server.model.ImportResponse
+import io.legado.server.model.ReadingProgress
+import io.legado.server.model.SearchRequest
+import io.legado.server.model.SourceHealthCheckRequest
+import io.legado.server.model.SourceHealthCheckResponse
+import io.legado.server.model.SourceRecord
+import io.legado.server.model.SourceSubscription
+import io.legado.server.model.SourceSummary
+import io.legado.server.model.SourceValidateRequest
+import io.legado.server.model.SourceWriteRequest
+import io.legado.server.model.SubscriptionWriteRequest
+import io.legado.server.model.ValidateResponse
 
 class ApiRoutesHttpTest {
 

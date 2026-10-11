@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ReplaceRulesModal } from '../src/ReplaceRulesModal'
+import { ReplaceRulesModal } from '../src/components/ReplaceRulesModal'
 
 // 0.6.27 起规则不再是整页（ReplaceRulesPage 已删，入口在「设置 → 规则」与阅读器，
 // 都开这个弹窗）。静态渲染验结构与从整页版搬进来的批量启停按钮还在。

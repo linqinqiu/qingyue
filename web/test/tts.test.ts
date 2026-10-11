@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cleanTextForSpeech, splitSentences, processChapterForTts } from '../src/ttsTextProcessor'
+import { cleanTextForSpeech, splitSentences, processChapterForTts } from '../src/reader/ttsTextProcessor'
 
 test('TTS Text Processor - cleanTextForSpeech filters noise and decorative symbols', () => {
   const dirty1 = '====== 第一章 降临 ======'

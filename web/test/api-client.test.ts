@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, streamSearch } from '../src/api.ts'
+import { api, streamSearch } from '../src/lib/api.ts'
 
 test('api client - 不设身份：请求里不再带任何令牌，但 Content-Type 与错误传递照旧', async () => {
   const originalFetch = globalThis.fetch

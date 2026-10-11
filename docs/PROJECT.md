@@ -50,11 +50,11 @@ Legado is a high-performance reader ecosystem consisting of:
 - Lazy loading triggered only upon expanding source list or clicking alternative source.
 
 ## Code Layout
-- `server/src/main/kotlin/io/legado/server/Database.kt` (SQLite persistence, connection management)
-- `server/src/main/kotlin/io/legado/server/RuleRunner.kt` (Rule execution, search candidate handling)
-- `server/src/main/kotlin/io/legado/server/Routes.kt` (Ktor routing, search concurrency, streaming)
-- `server/src/main/kotlin/io/legado/server/BookCacheService.kt` (Offline caching engine)
+- `server/src/main/kotlin/io/legado/server/data/Database.kt` (SQLite persistence, connection management)
+- `server/src/main/kotlin/io/legado/server/rules/RuleRunner.kt` (Rule execution, search candidate handling)
+- `server/src/main/kotlin/io/legado/server/http/Routes.kt` (Ktor routing, search concurrency, streaming)
+- `server/src/main/kotlin/io/legado/server/cache/BookCacheService.kt` (Offline caching engine)
 - `server/src/test/kotlin/io/legado/server/` (Unit tests)
 - `web/src/main.tsx` (App entry, Library page, Bookshelf page, Source choice logic)
-- `web/src/ReaderScreen.tsx` (Reader UI, TOC modal, VirtualChapterList)
+- `web/src/reader/ReaderScreen.tsx` (Reader UI, TOC modal, VirtualChapterList)
 - `web/src/styles.css` (Virtual list and reader styles)

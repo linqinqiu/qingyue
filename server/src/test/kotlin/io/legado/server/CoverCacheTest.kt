@@ -4,6 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import io.legado.server.cache.CoverCache
+import io.legado.server.http.tryCacheCover
+import io.legado.server.http.tryFindCachedCover
+import io.legado.server.model.SearchResult
 
 class CoverCacheTest {
     @Test

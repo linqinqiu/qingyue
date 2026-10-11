@@ -8,6 +8,11 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import io.legado.server.cache.CoverCache
+import io.legado.server.data.Database
+import io.legado.server.localbook.LocalBookParser
+import io.legado.server.localbook.ParsedBook
+import io.legado.server.localbook.ParsedChapter
 
 class LocalBookParserTest {
 

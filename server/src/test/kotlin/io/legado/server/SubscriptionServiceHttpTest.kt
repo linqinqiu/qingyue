@@ -5,6 +5,9 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import io.legado.server.data.Database
+import io.legado.server.model.SubscriptionWriteRequest
+import io.legado.server.subscription.SubscriptionService
 
 class SubscriptionServiceHttpTest {
 

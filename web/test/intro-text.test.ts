@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { formatIntro } from '../src/searchFilters.ts'
+import { formatIntro } from '../src/lib/searchFilters.ts'
 
 /**
  * 简介显示（用户 2026-10-09：「怎么这么显示，不大好，这简介有些不对」）。

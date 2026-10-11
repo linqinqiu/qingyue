@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { matchBestChapter } from '../src/SourceSwitchModal'
-import { Chapter } from '../src/api'
-import { toast, ToastListener, ToastMessage } from '../src/Toast'
+import { matchBestChapter } from '../src/sources/SourceSwitchModal'
+import { Chapter } from '../src/lib/api'
+import { toast, ToastListener, ToastMessage } from '../src/components/Toast'
 
 test('SourceSwitch - matchBestChapter - exact title matches', () => {
   const chapters: Chapter[] = [

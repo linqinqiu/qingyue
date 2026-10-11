@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SearchStore, bookKey, groupSearchResults } from '../src/searchStore'
-import { SearchResult } from '../src/api'
+import { SearchStore, bookKey, groupSearchResults } from '../src/lib/searchStore'
+import { SearchResult } from '../src/lib/api'
 
 test('SearchStatePersistence - store state updates and reactive subscriptions', () => {
   const store = new SearchStore()

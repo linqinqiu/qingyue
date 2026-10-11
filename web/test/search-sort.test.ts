@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SearchResult } from '../src/api'
+import { SearchResult } from '../src/lib/api'
 import {
   cleanAuthor,
   cleanTitle,
@@ -11,8 +11,8 @@ import {
   isPopularMatch,
   defaultSearchFilters,
   SearchGroup,
-} from '../src/searchFilters'
-import { bookKey, groupSearchResults } from '../src/searchStore'
+} from '../src/lib/searchFilters'
+import { bookKey, groupSearchResults } from '../src/lib/searchStore'
 
 test('SearchSort - cleanTitle and cleanAuthor strip noise and symbols', () => {
   assert.equal(cleanTitle('[“我是大玩家”]'), '我是大玩家')

@@ -10,7 +10,7 @@ import path from 'node:path'
  * 只扫**字符串字面量与 JSX 文本**，注释与代码本身不算 —— 注释里出现 `...` 或箭头是正常书写。
  */
 const SRC = path.resolve(import.meta.dirname, '../src')
-const files = () => fs.readdirSync(SRC).filter(name => /\.(tsx|ts)$/.test(name))
+const files = () => fs.readdirSync(SRC, { recursive: true }).filter(name => /\.(tsx|ts)$/.test(name))
 
 /** 项目口径：不用彩色 emoji、不用装饰性字形，图标一律单色 SVG（AGENTS §5、用户 2026-09 起）。 */
 const BANNED_GLYPHS = [
@@ -118,10 +118,10 @@ for (const name of files()) {
 }
 
 test('书源在界面上以名字出现，不再直接甩 sourceId', () => {
-  const switchModal = fs.readFileSync(path.join(SRC, 'SourceSwitchModal.tsx'), 'utf8')
+  const switchModal = fs.readFileSync(path.join(SRC, 'sources', 'SourceSwitchModal.tsx'), 'utf8')
   assert.ok(switchModal.includes('sourceLabel('), '换源弹窗要用 sourceLabel，而不是把裸 sourceId 当标题')
   assert.ok(!/<strong>\{c\.result\.sourceId\}<\/strong>/.test(switchModal), '候选行不许再直接渲染 sourceId')
-  const offline = fs.readFileSync(path.join(SRC, 'OfflineCacheModal.tsx'), 'utf8')
+  const offline = fs.readFileSync(path.join(SRC, 'components', 'OfflineCacheModal.tsx'), 'utf8')
   // 只禁"当文字渲染"的裸 id；React 的 key 与调用参数里出现 sourceId 是对的。
   assert.ok(!/<[a-z]+[^>]*>\{book\.sourceId\}</.test(offline), '离线缓存那一行不该把裸书源 id 当文字显示')
 })
@@ -159,7 +159,7 @@ test('随包的更新日志里不出现装饰字形', () => {
 
 /** 服务端 `RuleRunner` 的调试轨迹直接显示在「书源调试」弹窗里，同样算界面文案。 */
 test('书源调试的轨迹标签不出现装饰字形', () => {
-  const file = path.resolve(import.meta.dirname, '../../server/src/main/kotlin/io/legado/server/RuleRunner.kt')
+  const file = path.resolve(import.meta.dirname, '../../server/src/main/kotlin/io/legado/server/rules/RuleRunner.kt')
   const offenders: string[] = []
   fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, index) => {
     if (!/DebugTrace\(/.test(line)) return

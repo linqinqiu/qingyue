@@ -6,6 +6,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import io.legado.server.cache.CoverCache
+import io.legado.server.data.Database
+import io.legado.server.localbook.ParsedBook
+import io.legado.server.localbook.ParsedChapter
+import io.legado.server.model.BookshelfWriteRequest
+import io.legado.server.model.Chapter
 
 /**
  * 书架分组与「回收我们生成的假封面」。字段口径照上游 `data/entities/BookGroup.kt`

@@ -53,7 +53,7 @@ test('按钮档位都有全局基础档（换一处用不会变成裸文字）',
 })
 
 test('朗读悬浮条：挂载时就夹回视口，且不给底部导航让位的那条路已封住', () => {
-  const src = fs.readFileSync(path.resolve(import.meta.dirname, '../src/ttsBarPosition.ts'), 'utf8')
+  const src = fs.readFileSync(path.resolve(import.meta.dirname, '../src/reader/ttsBarPosition.ts'), 'utf8')
   // 存进去的坐标可能来自另一块屏；只监听 resize 的话手机上打开会留在屏幕外（连抓手一起）
   assert.match(src, /clampNow\(\)\s*\r?\n\s*window\.addEventListener\('resize'/,
     '挂载时必须先夹一次，而不是只等 resize')
@@ -83,7 +83,7 @@ test('页面级浮层都在挡片之下（弹窗开着时顶栏与批量条不�
 })
 
 test('体检弹窗不把"清单还没取到"写成"0 个书源"', () => {
-  const modal = fs.readFileSync(path.resolve(import.meta.dirname, '../src/SourceHealthModal.tsx'), 'utf8')
+  const modal = fs.readFileSync(path.resolve(import.meta.dirname, '../src/sources/SourceHealthModal.tsx'), 'utf8')
   const page = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
   // 空数组有两种成因，只有一种该报数字
   assert.match(modal, /sourcesState: 'loading' \| 'ready' \| 'failed'/, '弹窗得知道清单到没到手')
@@ -96,7 +96,7 @@ test('体检弹窗不把"清单还没取到"写成"0 个书源"', () => {
 })
 
 test('移动端底部导航的列数与真实按钮数对得上', () => {
-  const reader = fs.readFileSync(path.resolve(import.meta.dirname, '../src/ReaderScreen.tsx'), 'utf8')
+  const reader = fs.readFileSync(path.resolve(import.meta.dirname, '../src/reader/ReaderScreen.tsx'), 'utf8')
   const nav = /<nav className="mobile-reader-nav">([\s\S]*?)<\/nav>/.exec(reader)?.[1] ?? ''
   const buttons = (nav.match(/<button/g) ?? []).length
   assert.ok(buttons > 0, '要真的取到那段导航（取空的话下面那条断言恒真）')
@@ -228,9 +228,9 @@ test('浮层尺寸只有一处来源：菜单不许在 TSX 里写像素，夹取
   // 只扫代码：注释里写"以前是 210 / 34，样式表是 196 / 32+2"是这段历史唯一的去处，
   // 判据若把它也算成违规，下一次就没人肯写注释了。
   const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-  const menu = code(fs.readFileSync(path.join(dir, 'ContextMenu.tsx'), 'utf8'))
-  const select = code(fs.readFileSync(path.join(dir, 'Select.tsx'), 'utf8'))
-  const geo = fs.readFileSync(path.join(dir, 'overlayGeometry.ts'), 'utf8')
+  const menu = code(fs.readFileSync(path.join(dir, 'components', 'ContextMenu.tsx'), 'utf8'))
+  const select = code(fs.readFileSync(path.join(dir, 'components', 'Select.tsx'), 'utf8'))
+  const geo = fs.readFileSync(path.join(dir, 'lib', 'overlayGeometry.ts'), 'utf8')
 
   // 菜单的宽高由样式表定（min-width:196 / 行 32 + 间隙 2），位置由挂载后量出来的真实矩形夹
   assert.match(menu, /useClampOverlay/, '右键菜单要用量出来的矩形夹进视口，不能再估宽高')
@@ -269,7 +269,7 @@ function duplicateOverlayGeometry(cssText: string, selectText: string) {
 
 test('几何重复判据会红：把 340 塞回样式表，必须报出 MENU_MAX_HEIGHT 这一对', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
-  const select = fs.readFileSync(path.join(dir, 'Select.tsx'), 'utf8')
+  const select = fs.readFileSync(path.join(dir, 'components', 'Select.tsx'), 'utf8')
   const injected = css.replace('.ui-select-menu { position: fixed;', '.ui-select-menu { max-height: 340px; position: fixed;')
   const problems = duplicateOverlayGeometry(injected, select)
   assert.ok(problems.some(p => p.includes('.ui-select-menu') && p.includes('MENU_MAX_HEIGHT')),
@@ -280,7 +280,7 @@ test('几何重复判据会红：把 340 塞回样式表，必须报出 MENU_MAX
 
 test('每个弹窗都接了 Esc、套了 .dialog-shell、有 role="dialog" 与名字，且不用 inline style 压宽高', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
-  const files = fs.readdirSync(dir).filter(n => n.endsWith('.tsx'))
+  const files = fs.readdirSync(dir, { recursive: true }).filter(n => n.endsWith('.tsx'))
     .map(n => ({ name: n, src: fs.readFileSync(path.join(dir, n), 'utf8') }))
   assert.deepEqual(auditOverlays(files), [],
     '浮层的 Esc / 外壳 / role / 名字 / inline 宽高不许再靠自觉（PROPOSAL-018 W1 ②④ + W2 §3.3）')
@@ -396,7 +396,8 @@ test('门禁里的选择器锚点都还长在界面上（删类名要先查门�
   const gates = fs.readdirSync(verifyDir).filter(n => n.endsWith('.mjs') && !AUDIT_ONLY.test(n) && !/^(next-|env|multipart|zip-make|make-ico|render-icons|preview|snapshot|commit-pending|extract-|testreport|test-failure|chaincheck|archive-verify|md-table-check|frame-metrics)/.test(n))
     .map(n => ({ name: n, src: fs.readFileSync(path.join(verifyDir, n), 'utf8') }))
   const dir = path.resolve(import.meta.dirname, '../src')
-  const appText = fs.readdirSync(dir).map(n => fs.readFileSync(path.join(dir, n), 'utf8')).join('\n')
+  const appText = fs.readdirSync(dir, { recursive: true }).filter(n => /\.(ts|tsx|css)$/.test(n))
+    .map(n => fs.readFileSync(path.join(dir, n), 'utf8')).join('\n')
   assert.deepEqual(gateAnchorProblems(gates, appText), [],
     '门禁点的东西在旧界面里不存在 —— 要么是被当死类名删了，要么是界面改了口而门禁没跟')
 })
@@ -447,7 +448,7 @@ function classNamesIn(src: string): string[] {
 test('界面类名不再有"挂着而样式表 0 命中"的新增项', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
   const used = new Map<string, string>()
-  for (const file of fs.readdirSync(dir).filter(name => name.endsWith('.tsx'))) {
+  for (const file of fs.readdirSync(dir, { recursive: true }).filter(name => name.endsWith('.tsx'))) {
     const src = fs.readFileSync(path.join(dir, file), 'utf8')
     for (const token of classNamesIn(src)) {
       if (!/^[a-z][a-z0-9_-]*$/i.test(token)) continue
@@ -468,7 +469,7 @@ test('界面类名不再有"挂着而样式表 0 命中"的新增项', () => {
 
 test('标记类白名单不腐：每一项都还要被界面用着，并且真的有门禁在引它', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
-  const srcTokens = fs.readdirSync(dir).filter(n => n.endsWith('.tsx'))
+  const srcTokens = fs.readdirSync(dir, { recursive: true }).filter(n => n.endsWith('.tsx'))
     .flatMap(n => classNamesIn(fs.readFileSync(path.join(dir, n), 'utf8')))
   const gatesDir = path.resolve(import.meta.dirname, '../../tools/verify')
   const testsDir = path.resolve(import.meta.dirname, './')
@@ -530,7 +531,7 @@ test('web/src 里每颗粒复选框都要有可访问名字', () => {
   const dir = path.resolve(import.meta.dirname, '..', 'src')
   const unnamed: string[] = []
   let total = 0
-  for (const file of fs.readdirSync(dir).filter(name => name.endsWith('.tsx'))) {
+  for (const file of fs.readdirSync(dir, { recursive: true }).filter(name => name.endsWith('.tsx'))) {
     const source = fs.readFileSync(path.join(dir, file), 'utf8')
     for (const site of checkboxSites(source)) {
       total += 1

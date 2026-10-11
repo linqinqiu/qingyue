@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
  * 「桌面绿底白书、标签页同一套、应用内却是青绿书+金色结」三种样子并存。
  */
 const favicon = readFileSync(new URL('../public/favicon.svg', import.meta.url), 'utf8')
-const logo = readFileSync(new URL('../src/Logo.tsx', import.meta.url), 'utf8')
+const logo = readFileSync(new URL('../src/components/Logo.tsx', import.meta.url), 'utf8')
 
 // 词边界不能省：`id="bg"` 里也含 `d="`，不加边界会把渐变 id 当成路径比进来
 const paths = (text: string) => [...text.matchAll(/\bd="([^"]+)"/g)].map(m => m[1])

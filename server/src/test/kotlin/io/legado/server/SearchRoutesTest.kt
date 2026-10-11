@@ -12,6 +12,15 @@ import org.junit.Test
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import io.legado.server.data.Database
+import io.legado.server.http.SearchSourceOutcome
+import io.legado.server.http.SearchStreamCounters
+import io.legado.server.http.boundedConcurrentMap
+import io.legado.server.http.searchSourceOutcome
+import io.legado.server.http.sourceSearchConcurrency
+import io.legado.server.model.SearchStreamEvent
+import io.legado.server.rules.RuleRunner
+import io.legado.server.source.SourceCodec
 
 class SearchRoutesTest {
 

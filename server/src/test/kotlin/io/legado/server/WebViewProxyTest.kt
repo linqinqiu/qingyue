@@ -7,6 +7,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URI
 import java.nio.file.Files
+import io.legado.server.data.Database
+import io.legado.server.source.WebViewException
+import io.legado.server.source.WebViewProxy
 
 /**
  * 内置 WebView 登录：HTML/CSS 重写、域名白名单与 Cookie 解析的回归测试。

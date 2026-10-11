@@ -13,7 +13,7 @@ import {
   getOfflineStorageStats,
   accumulateBookStats,
   evictLruOfflineBooks
-} from '../src/offlineStorage.js'
+} from '../src/lib/offlineStorage.js'
 
 // Mock IndexedDB implementation for test runner
 class MockIDBRequest {
@@ -469,7 +469,7 @@ test('配额满时自动淘汰别的书并重试成功，且不动正在写的�
 // ———— 离线缓存弹窗的三态（AI-2 任务 C·模块 5）————
 
 test('offlineStatsView - 取失败不许画成"你确实没有缓存"', async () => {
-  const { offlineStatsView } = await import('../src/OfflineCacheModal')
+  const { offlineStatsView } = await import('../src/components/OfflineCacheModal')
   assert.equal(offlineStatsView({ loading: true, failed: false, books: null }), 'loading')
   assert.equal(offlineStatsView({ loading: false, failed: false, books: 0 }), 'empty', '真取到 0 本才叫空')
   assert.equal(offlineStatsView({ loading: false, failed: false, books: 3 }), 'ready')

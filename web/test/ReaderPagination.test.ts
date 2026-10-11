@@ -12,8 +12,8 @@ import {
   scrollTapZone,
   swipeDirection,
   wheelPixels,
-} from '../src/readerInteractions'
-import { resolveMeasuredPage } from '../src/readerFlow'
+} from '../src/reader/readerInteractions'
+import { resolveMeasuredPage } from '../src/reader/readerFlow'
 import {
   defaultReaderSettings,
   getReaderFontFamily,
@@ -23,7 +23,7 @@ import {
   parsePageMode,
   parseReaderFont,
   saveReaderSettings,
-} from '../src/readerSettings'
+} from '../src/reader/readerSettings'
 
 test('ReaderPagination - Tap Zones: Scroll reading mode tap zone partitions (top 30%, bottom 30%, middle 40%)', () => {
   const vh = 1000

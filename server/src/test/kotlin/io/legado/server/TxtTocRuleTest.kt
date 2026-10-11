@@ -3,6 +3,9 @@ package io.legado.server
 import org.junit.Assert.*
 import org.junit.Test
 import java.nio.charset.StandardCharsets
+import io.legado.server.localbook.LocalBookParser
+import io.legado.server.localbook.TocRules
+import io.legado.server.localbook.TxtTocRule
 
 /**
  * TXT 目录规则表（用户 2026-10-02：「txt目录规则，这个可以放到阅读设置里」）。

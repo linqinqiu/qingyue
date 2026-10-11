@@ -13,6 +13,17 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.net.URI
 import java.nio.file.Files
+import io.legado.server.data.Database
+import io.legado.server.model.ImportRequest
+import io.legado.server.model.SourceLoginActionRequest
+import io.legado.server.model.SourceLoginActionResult
+import io.legado.server.model.SourceLoginCookieUpdateRequest
+import io.legado.server.model.SourceLoginInfoUpdateRequest
+import io.legado.server.model.SourceLoginUiResponse
+import io.legado.server.model.SourceSummary
+import io.legado.server.rules.RuleRunner
+import io.legado.server.source.SourceCodec
+import io.legado.server.source.WebViewProxy
 
 class SourceLoginTest {
 

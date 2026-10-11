@@ -10,6 +10,14 @@ import java.sql.DriverManager
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import io.legado.server.cache.CachedCover
+import io.legado.server.data.Database
+import io.legado.server.model.BookshelfInfoUpdateRequest
+import io.legado.server.model.BookshelfWriteRequest
+import io.legado.server.model.ChapterContent
+import io.legado.server.model.ReadingProgress
+import io.legado.server.model.SearchResult
+import io.legado.server.model.SubscriptionWriteRequest
 
 class DatabaseTest {
     @Test

@@ -10,6 +10,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import io.legado.server.backup.LegacyBackup
 
 /**
  * 跨版本备份兼容的回归锁。语料形状取自上游 `ImportOldData.kt` 的老字段表，

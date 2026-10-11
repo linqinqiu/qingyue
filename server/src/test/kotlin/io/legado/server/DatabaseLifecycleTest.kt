@@ -13,6 +13,15 @@ import org.junit.Test
 import java.nio.file.Files
 import java.sql.DriverManager
 import java.util.concurrent.atomic.AtomicInteger
+import io.legado.server.cache.CachedCover
+import io.legado.server.data.Database
+import io.legado.server.data.VersionConflict
+import io.legado.server.model.BookshelfWriteRequest
+import io.legado.server.model.ChapterContent
+import io.legado.server.model.ImportResponse
+import io.legado.server.model.ReadingProgress
+import io.legado.server.model.SubscriptionWriteRequest
+import io.legado.server.source.SourceCodec
 
 class DatabaseLifecycleTest {
 

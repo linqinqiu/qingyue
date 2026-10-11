@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { CustomizeModal } from '../src/CustomizeModal'
+import { CustomizeModal } from '../src/components/CustomizeModal'
 import {
   activeCustomSkin,
   availableSkins,
@@ -19,7 +19,7 @@ import {
   themeClassNames,
   type CustomSkin,
   type ReaderSettings,
-} from '../src/readerSettings'
+} from '../src/reader/readerSettings'
 
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
 const settings = (patch: Partial<ReaderSettings> = {}): ReaderSettings => ({ ...defaultReaderSettings, ...patch })
@@ -157,7 +157,7 @@ test('应用只有一套外壳（旧版顶栏），侧栏与页头条那套文�
   assert.ok(!fs.existsSync(path.join(src, 'PageBar.tsx')), 'PageBar.tsx（v2 页头条）应该已经删掉')
   const testDir = path.resolve(import.meta.dirname)
   assert.ok(!fs.existsSync(path.join(testDir, 'AppRail.test.ts')), '配套用例也要一起撤，留着就是一条打不开的红')
-  const settingsSrc = read('..', 'src', 'readerSettings.ts')
+  const settingsSrc = read('..', 'src', 'reader', 'readerSettings.ts')
   assert.doesNotMatch(settingsSrc, /uiLayout/, '设置里不该再有"界面布局"这一档')
   const css = read('..', 'src', 'styles.css')
   for (const dead of ['.app-rail', '.rail-item', '.page-bar', '.app-frame', '.rail-tabs']) {
@@ -178,8 +178,8 @@ test('样式表里两张新界面都有规则（更新日志页、自定义弹�
   // W2 并档：两张弹窗自己的宽高没了，几何在共用那一档里 —— 所以断言也搬到那一档上。
   assert.match(css, /^\.dialog-shell \{/m, '弹窗外壳那一档不见了，两张弹窗都会退回裸 div')
   assert.match(css, /^\.dialog-head \{/m, '弹窗页头那一档不见了')
-  assert.match(read('..', 'src', 'CustomizeModal.tsx'), /className="dialog-shell[^"]*customize-dialog"/)
-  assert.match(read('..', 'src', 'TocRulesModal.tsx'), /className="dialog-shell[^"]*toc-rules-modal"/)
+  assert.match(read('..', 'src', 'components', 'CustomizeModal.tsx'), /className="dialog-shell[^"]*customize-dialog"/)
+  assert.match(read('..', 'src', 'components', 'TocRulesModal.tsx'), /className="dialog-shell[^"]*toc-rules-modal"/)
   assert.match(css, /\.changelog-page \{/)
   assert.match(css, /\.theme-swatch-custom/)
   assert.match(css, /\.menu-section-action/)

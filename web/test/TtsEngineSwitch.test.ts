@@ -4,8 +4,8 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defaultReaderSettings, effectiveTtsVoice, loadReaderSettings, ttsSessionKey } from '../src/readerSettings'
-import { TtsSettingsModal } from '../src/TtsSettingsModal'
+import { defaultReaderSettings, effectiveTtsVoice, loadReaderSettings, ttsSessionKey } from '../src/reader/readerSettings'
+import { TtsSettingsModal } from '../src/reader/TtsSettingsModal'
 
 /**
  * 「朗读引擎在使用中切换会重音，都启动」+「小说阅读过程中章节之间的过渡没有做好」
@@ -22,7 +22,7 @@ import { TtsSettingsModal } from '../src/TtsSettingsModal'
  * 因为 AGENTS.md 里那条"切章必须清 content 才能防误读"的老办法看起来同样有理，很容易被抄回来。
  */
 
-const readerSource = readFileSync(fileURLToPath(new URL('../src/ReaderScreen.tsx', import.meta.url)), 'utf8')
+const readerSource = readFileSync(fileURLToPath(new URL('../src/reader/ReaderScreen.tsx', import.meta.url)), 'utf8')
 
 /** 取某个 `const 名字 = ...` 声明到它自己的依赖数组收尾（`\n  }, [`）为止。 */
 function sourceOf(fnName: string, expectContains: string): string {
@@ -104,7 +104,7 @@ test('朗读会话身份 - 排版与主题改动不该打断正在读的这一�
 })
 
 test('朗读引擎与 ttsEngine.ts 用的是同一套会话判据（两套名字迟早漂移）', () => {
-  const engineSource = readFileSync(fileURLToPath(new URL('../src/ttsEngine.ts', import.meta.url)), 'utf8')
+  const engineSource = readFileSync(fileURLToPath(new URL('../src/reader/ttsEngine.ts', import.meta.url)), 'utf8')
   assert.match(engineSource, /return ttsSessionKey\(settings\)/, 'HttpAudioTtsEngine.getSettingsKey 必须直接引 ttsSessionKey')
   assert.ok(
     !/settings\.ttsVoice\s*\|\|\s*'zh-CN-XiaoxiaoNeural'/.test(engineSource),

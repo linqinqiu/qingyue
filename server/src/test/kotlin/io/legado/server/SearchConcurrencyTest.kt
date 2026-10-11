@@ -9,6 +9,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
+import io.legado.server.http.SearchSourceOutcome
+import io.legado.server.http.SearchStreamCounters
+import io.legado.server.http.boundedConcurrentMap
+import io.legado.server.http.searchSourceOutcome
+import io.legado.server.http.sourceSearchConcurrency
+import io.legado.server.model.SearchResult
+import io.legado.server.rules.RuleRunner
 
 class SearchConcurrencyTest {
     @Test

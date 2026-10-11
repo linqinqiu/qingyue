@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { filterByGroup, sourceGroups, UNGROUPED } from '../src/exploreGroups'
-import type { SourceSummary } from '../src/api'
+import { filterByGroup, sourceGroups, UNGROUPED } from '../src/lib/exploreGroups'
+import type { SourceSummary } from '../src/lib/api'
 
 /**
  * 「发现页书源也能按照分组搜索」（用户 2026-10-02）。
@@ -33,7 +33,7 @@ test('筛选 - 全部分组给回全部，未分组只给没组的', () => {
 })
 
 test('发现页确实接上了这套筛选（不只是一个没人调用的模块）', () => {
-  const page = read('../src/ExplorePage.tsx')
+  const page = read('../src/pages/ExplorePage.tsx')
   assert.match(page, /ariaLabel="按分组筛选发现页书源"/, '页面上有这颗分组选择器')
   assert.match(page, /value=\{group\}[\s\S]*?onChange=\{chooseGroup\}/, '它绑的是本页的分组状态')
   assert.match(page, /options=\{pickable\.map/, '选源下拉列的是**筛过**的那批，不是全部 sources')

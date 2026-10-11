@@ -2,6 +2,10 @@ package io.legado.server
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import io.legado.server.rules.RuleRunner
+import io.legado.server.rules.applyIndexTokens
+import io.legado.server.rules.parseIndexSpec
+import io.legado.server.rules.splitIndexSuffix
 
 /**
  * Legado 索引型选择器（`!N` / `[N]` / 负索引 / 区间）。

@@ -4,11 +4,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { AppHeader } from '../src/AppHeader'
-import { toast } from '../src/Toast'
-import { defaultReaderSettings } from '../src/readerSettings'
-import { BackupPage, reportImportSummary } from '../src/BackupPage'
-import { applyPreferencePatch, mapReadStyle } from '../src/backupPreferences'
+import { AppHeader } from '../src/components/AppHeader'
+import { toast } from '../src/components/Toast'
+import { defaultReaderSettings } from '../src/reader/readerSettings'
+import { BackupPage, reportImportSummary } from '../src/pages/BackupPage'
+import { applyPreferencePatch, mapReadStyle } from '../src/lib/backupPreferences'
 
 const SRC = path.resolve(import.meta.dirname, '../src')
 
@@ -153,7 +153,7 @@ function stripComments(source: string) {
 }
 
 test('前端代码里彻底没有 WebDAV 残留（注释里的历史说明不算）', () => {
-  const files = fs.readdirSync(SRC).filter(name => /\.(ts|tsx|css)$/.test(name))
+  const files = fs.readdirSync(SRC, { recursive: true }).filter(name => /\.(ts|tsx|css)$/.test(name))
   const hits = files
     .map(name => [name, stripComments(fs.readFileSync(path.join(SRC, name), 'utf8'))] as const)
     .filter(([, code]) => /webdav/i.test(code))

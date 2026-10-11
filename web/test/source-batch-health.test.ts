@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, BatchSourceRequest, BatchSourceResponse, SourceHealthCheckResponse } from '../src/api'
+import { api, BatchSourceRequest, BatchSourceResponse, SourceHealthCheckResponse } from '../src/lib/api'
 
 test('Source Batch Management & Health Check API Test Suite', async (t) => {
 

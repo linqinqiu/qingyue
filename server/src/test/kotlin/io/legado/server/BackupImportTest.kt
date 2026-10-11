@@ -10,6 +10,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import io.legado.server.backup.BackupAes
+import io.legado.server.backup.BackupImporter
+import io.legado.server.data.Database
+import io.legado.server.model.ReadingProgress
 
 /** 备份包导入：只认备份内的固定文件名，且不因缺失条目而失败。 */
 class BackupImportTest {

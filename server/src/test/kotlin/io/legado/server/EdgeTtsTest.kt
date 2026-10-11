@@ -18,6 +18,11 @@ import java.io.ByteArrayOutputStream
 import java.net.http.HttpClient
 import java.nio.file.Files
 import java.nio.file.Path
+import io.legado.server.model.TtsSessionChunkRequest
+import io.legado.server.model.TtsSessionInfo
+import io.legado.server.model.TtsSpeakRequest
+import io.legado.server.model.TtsVoice
+import io.legado.server.tts.EdgeTtsService
 
 class EdgeTtsTest {
 

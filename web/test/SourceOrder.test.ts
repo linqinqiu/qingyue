@@ -18,14 +18,14 @@ test('顺序只有一个来源：服务端排，客户端只做原位回填', ()
     '松手后要就地回填，否则"拖了但那一行没动"，只有刷新才看得见结果')
   assert.match(main, /if \(!rank\.has\(item\.id\)\) return item/, '没在这一列里的源保持原位，不跟着重排')
   assert.match(main, /items: visibleSources,\s*\n\s*onReorder: applySourceOrder/, '拖的是屏幕上这一列，写的也是这一列')
-  const server = read('../../server/src/main/kotlin/io/legado/server/Database.kt')
+  const server = read('../../server/src/main/kotlin/io/legado/server/data/Database.kt')
   assert.match(server, /order by sort_order is null, sort_order, name collate nocase/,
     '排过序的在前、没排过的按名称跟在后面（全 NULL 时等价于原来的按名称排）')
 })
 
 test('书源拖动与书架共用同一份手势，且批量模式让路', () => {
   const main = read('../src/main.tsx')
-  assert.match(main, /from '\.\/dragSort'/, '手势在 dragSort.ts 里，两处共用一份')
+  assert.match(main, /from '\.\/shelf\/dragSort'/, '手势在 dragSort.ts 里，两处共用一份')
   assert.match(main, /itemSelector: '\.source-list-item'/)
   assert.match(main, /enabled: \(\) => !isBatchMode/, '批量模式里点按是勾选，不能抢成拖动')
   assert.match(main, /onPointerDown=\{onSourcePointerDown\(index\)\}/)
@@ -38,11 +38,11 @@ test('有位置才给"清除自定义顺序"，并且说的是条数', () => {
   assert.match(main, /orderedCount > 0 && \(/)
   assert.match(main, /个书源有自定义位置；其余按名称排在后面/, '不能只说"已自定义"而不讲清其余那批还是按名称')
   assert.match(main, /api\.clearSourceOrder/)
-  assert.match(read('../src/api.ts'), /reorderSources: \(ids: string\[\]\) => request<\{ updated: number \}>\('\/api\/sources\/order', \{ method: 'PUT', body: JSON\.stringify\(\{ ids \}\) \}\)/)
+  assert.match(read('../src/lib/api.ts'), /reorderSources: \(ids: string\[\]\) => request<\{ updated: number \}>\('\/api\/sources\/order', \{ method: 'PUT', body: JSON\.stringify\(\{ ids \}\) \}\)/)
 })
 
 test('路由注册在 /sources/{id} 之前，PUT /sources/order 不会被当成某个源', () => {
-  const routes = read('../../server/src/main/kotlin/io/legado/server/Routes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt')
   const order = routes.indexOf('put("/sources/order")')
   const parameterized = routes.indexOf('route("/sources/{id}")')
   assert.ok(order > 0, '要有这条路由')

@@ -16,6 +16,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import io.legado.server.model.ReplaceRule
+import io.legado.server.model.ReplaceRuleImportRequest
+import io.legado.server.model.ReplaceRuleImportResponse
+import io.legado.server.model.ReplaceRulePreviewRequest
+import io.legado.server.model.ReplaceRulePreviewResponse
+import io.legado.server.model.ReplaceRuleToggleRequest
 
 class ReplaceRuleE2EIntegrationTest {
 

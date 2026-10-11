@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { describeSyncError, looksLikeFailure } from '../src/syncErrors'
+import { describeSyncError, looksLikeFailure } from '../src/lib/syncErrors'
 
 // 这些签名对应的是服务端真实抛出的文案（SubscriptionService / NetworkSecurity）
 // 加 JDK HttpClient 的英文异常，不是随手编的例子。

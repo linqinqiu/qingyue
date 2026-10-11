@@ -16,6 +16,19 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.system.exitProcess
 import java.nio.file.Files
+import io.legado.server.cache.BookCacheService
+import io.legado.server.cache.CoverCache
+import io.legado.server.data.Database
+import io.legado.server.http.ServerIdentity
+import io.legado.server.http.apiRoutes
+import io.legado.server.model.HealthStatus
+import io.legado.server.ops.LogService
+import io.legado.server.ops.logSystem
+import io.legado.server.rules.RuleRunner
+import io.legado.server.subscription.SubscriptionService
+import io.legado.server.tts.EdgeTtsService
+import io.legado.server.tts.TtsSessionService
+import io.legado.server.model.ApiError
 
 /**
  * 构建并（按需）启动青阅服务引擎。抽出来是为了让 `main`（裸跑 jar / CDS 归档）和

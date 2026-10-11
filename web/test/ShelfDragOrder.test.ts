@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { compareCustomSort, dropIndexAt, moveWithin } from '../src/shelfOrder'
-import type { BookshelfItem } from '../src/api'
+import { compareCustomSort, dropIndexAt, moveWithin } from '../src/shelf/shelfOrder'
+import type { BookshelfItem } from '../src/lib/api'
 
 /**
  * 「批量管理功能在，长按书籍可移动能排顺序（自定义）」（用户 2026-10-02）。
@@ -57,9 +57,9 @@ test('书架确实接上了拖动排序（不只是一个没人调用的模块�
   assert.match(main, /清除自定义顺序/)
   assert.match(main, /onPointerDown=\{onPointerDown\(index\)\}/)
   assert.match(main, /onClickCapture=\{onClickCapture\}/, '拖完那一下不能被当成"点开这本书"')
-  const layout = read('../src/shelfLayout.ts')
+  const layout = read('../src/shelf/shelfLayout.ts')
   assert.match(layout, /SORT_VALUES: ShelfSort\[\] = \[[^\]]*'custom'/, 'custom 是合法持久值，否则刷新就弹回默认档')
-  const server = read('../..', 'server/src/main/kotlin/io/legado/server/Routes.kt')
+  const server = read('../..', 'server/src/main/kotlin/io/legado/server/http/Routes.kt')
   assert.match(server, /put\("\/bookshelf\/order"\)/, '服务端有这条路由')
 })
 

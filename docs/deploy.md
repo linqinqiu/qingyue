@@ -80,7 +80,7 @@ start.cmd                      # 双击用：没跑就起、等就绪再开界�
 ## 6. 升级之后"界面还是旧版"
 
 九成是 Service Worker 预缓存：新版本 SW 停在 waiting 态，旧的 `navigateFallback` 还在发 `index.html` + 旧 bundle，
-于是用户看到"新增的入口根本不存在"，哪怕服务端已经返回了新资源。三层兜底都在 `web/src/PwaManager.tsx`：
+于是用户看到"新增的入口根本不存在"，哪怕服务端已经返回了新资源。三层兜底都在 `web/src/components/PwaManager.tsx`：
 注册成功后立刻判 `reg.waiting && navigator.serviceWorker.controller` 并弹更新提示；页面 `focus` / `visibilitychange`
 与每 5 分钟主动 `registration.update()`；真更新时如果用户正在输入或搜索在飞，推迟到空闲再刷。
 

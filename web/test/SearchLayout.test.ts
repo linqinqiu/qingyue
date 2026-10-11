@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { DEFAULT_LAYOUT, DEFAULT_SEARCH_LAYOUT, readSearchLayout, readShelfLayout, writeSearchLayout, writeShelfLayout } from '../src/shelfLayout'
-import { pickBlurb, SearchGroup } from '../src/searchFilters'
+import { DEFAULT_LAYOUT, DEFAULT_SEARCH_LAYOUT, readSearchLayout, readShelfLayout, writeSearchLayout, writeShelfLayout } from '../src/shelf/shelfLayout'
+import { pickBlurb, SearchGroup } from '../src/lib/searchFilters'
 
 /**
  * 搜索结果的三档展示（用户 2026-10-02：「搜索获得的书籍也能用不同的方式展示（网格，列表，紧凑列表）」

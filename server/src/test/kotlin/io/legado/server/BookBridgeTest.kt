@@ -2,6 +2,8 @@ package io.legado.server
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import io.legado.server.rules.JsExecutionContext
+import io.legado.server.rules.JsSandbox
 
 /**
  * `book` / `chapter` 桥对象。上游把真实的 Book / BookChapter 对象交给 Rhino，

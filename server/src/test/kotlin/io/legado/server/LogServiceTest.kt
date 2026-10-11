@@ -3,6 +3,11 @@ package io.legado.server
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import io.legado.server.ops.LogCategory
+import io.legado.server.ops.LogEntry
+import io.legado.server.ops.LogLevel
+import io.legado.server.ops.LogService
+import io.legado.server.ops.logNetwork
 
 /**
  * 日志产出的三条判据。都是一次 4,000 行采样里真实踩到的形状

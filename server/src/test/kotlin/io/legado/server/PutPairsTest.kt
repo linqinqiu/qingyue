@@ -2,6 +2,7 @@ package io.legado.server
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import io.legado.server.rules.putPairs
 
 /**
  * `@put:{…}` 的多键解析。库里 @put 出现 492 次、278 次是多键，

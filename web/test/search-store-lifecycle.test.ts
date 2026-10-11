@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, SearchResult } from '../src/api.ts'
+import { api, SearchResult } from '../src/lib/api.ts'
 import {
   searchStore,
   bookKey,
   loadSourceBook,
   SearchGroup,
   SourceChoice,
-} from '../src/searchStore.ts'
-import { mergeStreamedResults, PROGRESS_FLUSH_MS, progressCanCoalesce, streamDedupeKey } from '../src/searchFilters.ts'
+} from '../src/lib/searchStore.ts'
+import { mergeStreamedResults, PROGRESS_FLUSH_MS, progressCanCoalesce, streamDedupeKey } from '../src/lib/searchFilters.ts'
 import { assertScalesLinearly, warmUp } from './perfCriteria.ts'
 
 test('searchStore - bookKey and loadSourceBook helper', async () => {

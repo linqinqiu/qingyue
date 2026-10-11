@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { BoundaryFallback, ErrorBoundary, boundarySummary } from '../src/ErrorBoundary'
+import { BoundaryFallback, ErrorBoundary, boundarySummary } from '../src/components/ErrorBoundary'
 
 /**
  * 渲染崩掉的兜底（AI-2 任务 C·模块「阅读器渲染」第一条发现：全站原来一处错误边界都没有，
@@ -58,7 +58,7 @@ test('两处挂载点都在：阅读器那一支单独包，根上再兜一层',
 })
 
 test('崩了要留痕：componentDidCatch 把堆栈打进 console，界面只给一句人话', () => {
-  const src = fs.readFileSync(path.join(SRC, 'ErrorBoundary.tsx'), 'utf8')
+  const src = fs.readFileSync(path.join(SRC, 'components', 'ErrorBoundary.tsx'), 'utf8')
   assert.match(src, /componentDidCatch\([\s\S]*console\.error/)
   assert.match(src, /getDerivedStateFromError/)
 })

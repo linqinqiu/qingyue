@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api } from '../src/api.ts'
+import { api } from '../src/lib/api.ts'
 
 test('Source Login API Client - getSourceLoginUi, save, action, check, and delete', async () => {
   const originalFetch = globalThis.fetch

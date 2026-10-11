@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { SettingsPage, type SettingsSection } from '../src/SettingsPage'
+import { SettingsPage, type SettingsSection } from '../src/pages/SettingsPage'
 
 /**
  * 「设置」页存在的意义是"分类"：用户 2026-10-03 让它收纳 txt 目录规则 / 备份 / 替换净化，
@@ -35,7 +35,7 @@ test('静态渲染：分组、一行一句说明、一个动作', () => {
 })
 
 test('这一页只是路由：它自己不含任何编辑器实现', () => {
-  const page = read('../src/SettingsPage.tsx')
+  const page = read('../src/pages/SettingsPage.tsx')
   // 出现这些就说明有人把第二套实现搬进来了（两处都能改 → 迟早两处不一样）
   assert.doesNotMatch(page, /localStorage|fetch\(|api\./, '设置页不该自己读写数据')
   assert.doesNotMatch(page, /useState/, '它没有自己的状态：状态仍在原来那一处')
@@ -45,12 +45,12 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   // 2026-10-08 用户定的框架（对齐 Legado-with-MD3）：顶栏只留 书库/书架/发现/订阅/设置，
   // 书源 / 替换净化规则 / 备份包 从顶栏搬进「设置」页；2026-10-09 用户要求把「书源」放回顶栏。
   // 判的仍是同一件事：**不许有功能只剩下一个找不到的入口**，也不许同一个目的地在两处各留一条路。
-  const header = read('../src/AppHeader.tsx')
+  const header = read('../src/components/AppHeader.tsx')
   assert.match(header, /PRIMARY_PAGES\.map/, '顶栏入口由那张表渲染（手写一排按钮迟早漏一项）')
   assert.ok(!/<span>设置<\/span>/.test(header), '「设置」已是一级入口，不该再在「我的」菜单里留第二条路')
   assert.ok(!/<span>规则<\/span>|<span>备份<\/span>|<span>书源<\/span>/.test(header), '规则 / 备份 / 书源 不在菜单里重复')
 
-  const table = read('../src/shortcuts.ts')
+  const table = read('../src/reader/shortcuts.ts')
   // 书源已回到顶栏：它必须是一级入口，且不再出现在收编清单里
   assert.ok(/\{ page: 'sources'/.test(table), '书源要回到顶栏一级表里')
   // 规则 / 备份 仍从「设置」页进：0.6.27 起是悬浮层（PageDialog），不占顶栏也不占路由，

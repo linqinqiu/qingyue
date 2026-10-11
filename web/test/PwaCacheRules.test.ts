@@ -13,7 +13,7 @@ import path from 'node:path'
 
 const CONFIG = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'vite.config.ts'), 'utf8')
 const ROUTES = fs.readFileSync(
-  path.resolve(import.meta.dirname, '..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'Routes.kt'),
+  path.resolve(import.meta.dirname, '..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http', 'Routes.kt'),
   'utf8',
 )
 const workboxRaw = CONFIG.slice(CONFIG.indexOf('workbox: {'), CONFIG.indexOf('injectManifest'))

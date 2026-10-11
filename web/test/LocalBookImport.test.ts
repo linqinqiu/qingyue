@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BookshelfItem, LocalBookImportResponse } from '../src/api'
+import { BookshelfItem, LocalBookImportResponse } from '../src/lib/api'
 
 test('LocalBookImport - api types and local book shelf item identification', () => {
   const localItem: BookshelfItem = {

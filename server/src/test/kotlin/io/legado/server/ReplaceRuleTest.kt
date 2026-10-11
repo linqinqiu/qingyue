@@ -6,6 +6,11 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
+import io.legado.server.content.ContentProcessor
+import io.legado.server.data.Database
+import io.legado.server.model.ReplaceRule
+import io.legado.server.rules.JsSandbox
+import io.legado.server.rules.RuleRunner
 
 class ReplaceRuleTest {
 

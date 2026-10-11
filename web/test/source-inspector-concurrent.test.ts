@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, Chapter, SearchResult } from '../src/api.ts'
+import { api, Chapter, SearchResult } from '../src/lib/api.ts'
 import {
   clearStoredInspections,
   createInitialInspections,
@@ -8,7 +8,7 @@ import {
   inspectAllSourcesConcurrently,
   findMainChapter,
   isNoticeOrNonMainChapter,
-} from '../src/sourceInspector.ts'
+} from '../src/sources/sourceInspector.ts'
 
 test('source inspector - notice detection and main chapter fallback', () => {
   assert.equal(isNoticeOrNonMainChapter('完结感言'), true)

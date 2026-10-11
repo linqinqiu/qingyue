@@ -13,7 +13,7 @@ import {
   isDoubleColumnActive,
   contentImageUrl,
   isSameSiteAsset,
-} from '../src/readerInteractions.ts'
+} from '../src/reader/readerInteractions.ts'
 import {
   clampScrollPosition,
   scrollPosition,
@@ -25,7 +25,7 @@ import {
   saveReaderSettings,
   getReaderFontFamily,
   defaultReaderSettings,
-} from '../src/readerSettings.ts'
+} from '../src/reader/readerSettings.ts'
 
 test('reader interactions - tap zones and gestures', () => {
   // Scroll mode tap zones

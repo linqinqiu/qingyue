@@ -7,6 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import javax.net.ssl.SSLHandshakeException
 import java.net.UnknownHostException
+import io.legado.server.rules.RuleRunner
+import io.legado.server.source.SourceHealth
 
 /**
  * 体检判据的回归锁：结论必须来自「实跑搜索能否解析出条目」，

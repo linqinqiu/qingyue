@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import io.legado.server.rules.RuleExecutionException
+import io.legado.server.rules.RuleRunner
+import io.legado.server.source.SourceCodec
 
 /**
  * RSS 订阅引擎：字段映射与栏目解析按上游 `model/rss/RssParserByRule.kt` 与
