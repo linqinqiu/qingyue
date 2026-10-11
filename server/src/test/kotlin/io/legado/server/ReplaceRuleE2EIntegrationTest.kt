@@ -33,6 +33,10 @@ class ReplaceRuleE2EIntegrationTest {
 
             application {
                 legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
             }
 
             val client = createClient {
@@ -155,8 +159,8 @@ class ReplaceRuleE2EIntegrationTest {
             assertEquals(2, finalListResp.body<List<ReplaceRule>>().size)
 
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 }

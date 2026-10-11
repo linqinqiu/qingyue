@@ -48,6 +48,8 @@ class BookCacheServiceTest {
             assertEquals("第2章正文", database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c2")?.content)
             assertEquals("第3章正文", database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c3")?.content)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -119,6 +121,8 @@ class BookCacheServiceTest {
             assertEquals("ready", shelf.cacheState)
             assertNotNull(database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c3"))
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -153,6 +157,8 @@ class BookCacheServiceTest {
             assertEquals(2, shelf.totalChapters)
             assertEquals("ready", shelf.cacheState)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -187,6 +193,8 @@ class BookCacheServiceTest {
             assertEquals(2, shelves.size)
             assertTrue(shelves.all { it.cacheState == "ready" && it.cachedChapters == 1 })
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -226,6 +234,8 @@ class BookCacheServiceTest {
             assertNotNull(database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c3"))
             assertNull(database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c2"))
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -261,6 +271,8 @@ class BookCacheServiceTest {
             assertNotNull(database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c1"))
             assertNull(database.cachedContent("https://s1.test", "https://book/1", "https://book/1/c2"))
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -296,6 +308,8 @@ class BookCacheServiceTest {
             assertEquals("failed", shelf.cacheState)
             assertEquals("已取消缓存", shelf.cacheError)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -317,6 +331,8 @@ class BookCacheServiceTest {
             assertEquals("failed", shelf.cacheState)
             assertTrue(shelf.cacheError?.contains("书源不存在") == true)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -353,6 +369,8 @@ class BookCacheServiceTest {
             assertEquals(1, shelf.cachedChapters)
             assertEquals("ready", shelf.cacheState)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -394,6 +412,8 @@ class BookCacheServiceTest {
             assertEquals("ready", shelf.cacheState)
             assertTrue("Expected 4-8 concurrent chapter downloads, observed ${maxActive.get()}", maxActive.get() in 4..8)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -430,6 +450,8 @@ class BookCacheServiceTest {
             waitForCondition(10_000) { database.listBookshelf().single().cacheState == "ready" }
             assertEquals(60, database.listBookshelf().single().cachedChapters)
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 

@@ -29,7 +29,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
             }
@@ -38,8 +44,8 @@ class ApiRoutesHttpTest {
             assertEquals(HttpStatusCode.OK, resp.status)
             assertTrue(resp.bodyAsText().contains("ok"))
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -52,7 +58,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -149,8 +161,8 @@ class ApiRoutesHttpTest {
             }
             assertEquals(HttpStatusCode.NotFound, deleteAgainResp.status)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -163,7 +175,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -263,8 +281,8 @@ class ApiRoutesHttpTest {
             }
             assertEquals(HttpStatusCode.NoContent, deleteShelfResp.status)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -277,7 +295,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -315,8 +339,8 @@ class ApiRoutesHttpTest {
             }
             assertEquals(HttpStatusCode.NotFound, deleteNonExistent.status)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -329,7 +353,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -384,8 +414,8 @@ class ApiRoutesHttpTest {
             val coverNotFoundResp = client.get("/api/covers/nonexistent-key-1234")
             assertEquals(HttpStatusCode.NotFound, coverNotFoundResp.status)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -398,7 +428,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -433,8 +469,8 @@ class ApiRoutesHttpTest {
             assertEquals(1, shelfList.size)
             assertEquals("异步封面测试", shelfList.first().name)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -451,7 +487,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -477,8 +519,8 @@ class ApiRoutesHttpTest {
             // Immediately returns cached cover key
             assertEquals(cachedCover.key, addedItem.coverKey)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 
@@ -491,7 +533,13 @@ class ApiRoutesHttpTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; explicitNulls = false }) }
                 install(HttpCookies)
@@ -575,8 +623,8 @@ class ApiRoutesHttpTest {
             val list3 = listResp3.body<List<SourceSummary>>()
             assertEquals(0, list3.size)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 }

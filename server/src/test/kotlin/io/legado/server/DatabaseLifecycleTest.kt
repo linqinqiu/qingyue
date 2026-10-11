@@ -60,6 +60,8 @@ class DatabaseLifecycleTest {
                 assertTrue("book_content_cache_book_idx must exist", indices.contains("book_content_cache_book_idx"))
                 assertTrue("source_subscription_enabled_idx must exist", indices.contains("source_subscription_enabled_idx"))
             }
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -93,6 +95,8 @@ class DatabaseLifecycleTest {
             val record = database.getSource("https://heavy.example")
             assertNotNull(record)
             assertTrue(record!!.json.contains("heavyData"))
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -128,6 +132,8 @@ class DatabaseLifecycleTest {
             // Null or blank query returns all
             val allResults = database.listSources(null)
             assertEquals(3, allResults.size)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -151,6 +157,8 @@ class DatabaseLifecycleTest {
             val names = sources.map { it.name }
             // NOCASE collation should sort: Apple, banana, CHERRY, date
             assertEquals(listOf("Apple", "banana", "CHERRY", "date"), names)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -209,6 +217,8 @@ class DatabaseLifecycleTest {
 
             assertEquals(150, totalReadOps.get())
             assertEquals(50, totalWriteOps.get())
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -245,6 +255,8 @@ class DatabaseLifecycleTest {
             assertTrue(database.deleteSubscription(sub.id))
             assertNull(database.getSubscription(sub.id))
             assertEquals(0, database.listSubscriptions().size)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -273,6 +285,8 @@ class DatabaseLifecycleTest {
             // Old progress and content cache should be cleared
             assertNull(database.getProgress("source-1", "https://book/1"))
             assertNull(database.cachedContent("source-1", "https://book/1", "https://book/1/c1"))
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -296,6 +310,8 @@ class DatabaseLifecycleTest {
             assertEquals("https://book/2", newItem.bookUrl)
             assertEquals("cover-key-1", newItem.coverKey) // Retained old cover key
             assertNull(orphanCover) // Not orphaned, preserved
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -323,6 +339,8 @@ class DatabaseLifecycleTest {
             }.exceptionOrNull()
 
             assertTrue("Should throw VersionConflict on stale version", conflict is VersionConflict)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }

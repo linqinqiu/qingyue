@@ -86,6 +86,8 @@ class CrossFeatureBackendTest {
             assertNotNull(database.cachedContent("https://src1.com", "https://src1.com/b/1", "https://src1.com/b/1/c1"))
             assertNotNull(database.cachedContent("https://src1.com", "https://src1.com/b/1", "https://src1.com/b/1/c20"))
             cacheService.stop()
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -128,6 +130,8 @@ class CrossFeatureBackendTest {
             assertEquals(1, shelfList.size)
             assertEquals("source-new", shelfList.first().sourceId)
             assertEquals(4, shelfList.first().chapterIndex)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -173,6 +177,8 @@ class CrossFeatureBackendTest {
             val allShelf = database.listBookshelf()
             assertEquals(1, allShelf.size)
             assertEquals("src-c", allShelf.first().sourceId)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -241,6 +247,8 @@ class CrossFeatureBackendTest {
             }
 
             assertEquals(500, totalOps.get())
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -295,6 +303,8 @@ class CrossFeatureBackendTest {
 
             assertEquals(25, database.listSources(null).size)
             assertEquals("更新版书源1", database.getSource("https://src1.com")?.let { SourceCodec.parse(it.json).name })
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -347,6 +357,8 @@ class CrossFeatureBackendTest {
             assertEquals(1, shelfList.size)
             assertEquals("https://src.com/book/1", shelfList.first().bookUrl)
             cacheService.stop()
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -391,6 +403,8 @@ class CrossFeatureBackendTest {
             assertEquals("另一本书", saved.name)
             assertEquals(1, database.listBookshelf().size)
             cacheService.stop()
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }

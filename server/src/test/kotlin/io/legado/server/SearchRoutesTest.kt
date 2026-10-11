@@ -54,6 +54,8 @@ class SearchRoutesTest {
             // Assert that ONLY the search URL was requested (no details, TOC, or content fetches)
             assertEquals(1, requestedUrls.size)
             assertTrue(requestedUrls.first().contains("/search"))
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -123,6 +125,8 @@ class SearchRoutesTest {
             assertEquals(1, done.emptySources)   // source 3
             assertEquals(1, done.failedSources)  // source 4
             assertEquals(3, done.resultCount)
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 
@@ -171,6 +175,8 @@ class SearchRoutesTest {
 
             val nonExistent = database.listSearchSourceRecords(listOf("https://nonexistent.example"))
             assertEquals(0, nonExistent.size)
+        runCatching { database.close() }
+        Unit
         } finally { Files.deleteIfExists(java.nio.file.Path.of(path)) }
     }
 

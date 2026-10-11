@@ -37,6 +37,8 @@ class SubscriptionServiceHttpTest {
             assertNotNull(loadedSub1)
             assertNotNull(loadedSub1!!.lastError)
             assertTrue(loadedSub1.lastError!!.contains("拒绝访问") || loadedSub1.lastError!!.contains("内网"))
+        runCatching { db.close() }
+        Unit
         } finally {
             Files.deleteIfExists(Path.of(tempDb))
         }
@@ -54,6 +56,8 @@ class SubscriptionServiceHttpTest {
             // Repeated start is a no-op
             service.start()
             service.stop()
+        runCatching { db.close() }
+        Unit
         } finally {
             Files.deleteIfExists(Path.of(tempDb))
         }

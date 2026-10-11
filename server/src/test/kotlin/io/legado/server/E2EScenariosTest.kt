@@ -128,6 +128,8 @@ class E2EScenariosTest {
             val loadedProgress = database.getProgress(firstHit.sourceId, firstHit.bookUrl)
             assertNotNull(loadedProgress)
             assertEquals(0, loadedProgress!!.chapterIndex)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -207,8 +209,11 @@ class E2EScenariosTest {
             assertNotNull(progress)
             assertEquals(1998, progress!!.chapterIndex) // chapter 1999 has index 1998
             service.stop()
+            delay(300) // 等异步缓存 worker 把借出的连接归还/关闭，避免 close 时文件仍被占用（Windows 删不掉）
+        runCatching { database.close() }
+        Unit
         } finally {
-            Files.deleteIfExists(java.nio.file.Path.of(path))
+            deleteDatabaseFileWithRetry(path)
         }
     }
 
@@ -274,6 +279,8 @@ class E2EScenariosTest {
             }
 
             service.stop()
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -366,6 +373,8 @@ class E2EScenariosTest {
             val cachedContent = database.cachedContent("https://src.com", "https://src.com/book/5000", targetChapter.url)
             assertNotNull(cachedContent)
             assertEquals(content.content, cachedContent!!.content)
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -459,6 +468,8 @@ class E2EScenariosTest {
 
             assertEquals(95, database.listSources(null).size)
             assertNull(database.getSource("https://src100.com"))
+        runCatching { database.close() }
+        Unit
         } finally {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
@@ -474,4 +485,18 @@ class E2EScenariosTest {
     }
 
     private fun temporaryDatabase(): String = Files.createTempFile("legado-e2e-test", ".sqlite").toString()
+
+    /** Windows 上 WAL 模式的 sqlite 在连接关闭后释放文件句柄有延迟，删除带重试以规避偶发 FileSystemException。 */
+    private fun deleteDatabaseFileWithRetry(path: String) {
+        val file = java.nio.file.Path.of(path)
+        repeat(50) { attempt ->
+            try {
+                Files.deleteIfExists(file)
+                return
+            } catch (e: java.nio.file.FileSystemException) {
+                if (attempt == 49) throw e
+                Thread.sleep(150)
+            }
+        }
+    }
 }

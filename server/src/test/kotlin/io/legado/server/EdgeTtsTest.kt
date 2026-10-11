@@ -96,7 +96,13 @@ class EdgeTtsTest {
                 host = "0.0.0.0", port = 8080, databasePath = dbPath,
                 coverCacheDirectory = tempDir
             )
-            application { legadoApplication(config) }
+            application {
+                legadoApplication(config)
+                monitor.subscribe(io.ktor.server.application.ApplicationStopped) {
+                    runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+                    runCatching { tempDir.toFile().deleteRecursively() }
+                }
+            }
             val client = createClient {
                 install(HttpCookies)
                 install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
@@ -141,8 +147,8 @@ class EdgeTtsTest {
             }
             assertEquals(HttpStatusCode.NoContent, stopResp.status)
         } finally {
-            Files.deleteIfExists(Path.of(dbPath))
-            tempDir.toFile().deleteRecursively()
+            runCatching { Files.deleteIfExists(Path.of(dbPath)) }
+            runCatching { tempDir.toFile().deleteRecursively() }
         }
     }
 }
