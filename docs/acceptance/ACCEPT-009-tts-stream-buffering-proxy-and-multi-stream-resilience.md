@@ -21,8 +21,6 @@ docker build -f Dockerfile.server -t test-legado-server:latest .
 docker stop test-legado 2>/dev/null || true
 docker rm -f test-legado 2>/dev/null || true
 docker run -d --name test-legado -p 8090:8080 \
-  -e ADMIN_PASSWORD="Legado@2026#Secure" \
-  -e LEGADO_SECURE_COOKIES=false \
   -v $(pwd)/.data:/data test-legado-server:latest
 ```
 
@@ -31,7 +29,7 @@ docker run -d --name test-legado -p 8090:8080 \
 ## 2. 核心功能验收步骤 (Step-by-Step Verification)
 
 ### 用例 1：Web 端沉浸式开书与 TTS 朗读秒开
-1. 打开浏览器访问 `http://<服务器IP>:8090`，使用密码 `Legado@2026#Secure` 登录。
+1. 打开浏览器访问 `http://<服务器IP>:8090`（这台服务**不设身份**：没有登录页也没有密码，能连到端口即等于能用，所以只应在可信网络里开放）。
 2. 在书架中点击已预载的书籍《诡秘之主》（已预载 1447 章，秒开进入）。
 3. 滚动到任意段落，点击阅读器右上角的 **TTS 朗读** 按钮（或按快捷键 `T`）。
 4. **预期表现**：

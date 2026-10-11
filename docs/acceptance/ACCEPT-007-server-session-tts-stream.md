@@ -79,7 +79,10 @@ GET /api/tts/session/.../events -> 200 OK (Content-Type: text/event-stream)
 
 ## 4. 回归与边缘防御检查项 (Sanity & Edge Checks)
 
-- [ ] **多租户与鉴权**：未登录或 CSRF 不合法时，会话创建与控制接口返回 401/403 阻断。
+- [x] ~~**多租户与鉴权**：未登录或 CSRF 不合法时返回 401/403~~ —— **本项已作废**：这台服务不设身份
+  （没有密码、没有登录、没有会话）。写操作唯一的门是**同源闸门**（`Origin` 的主机与端口都要等于服务自己的绑定身份，
+  见 `server/src/main/kotlin/io/legado/server/http/Guard.kt`），跨站页面驱动浏览器改库会被 403 挡下，
+  而"未登录 401"这一档根本不存在。绑定地址就是边界：默认只绑 `127.0.0.1`。
 - [ ] **标点碎片防护**：遇到纯标点/引号切片（有效字符 < 2），不会向 Edge-TTS 发起空请求导致 416 崩溃。
 - [ ] **内存资源回收**：用户退出听书或关闭标签页后，服务端 30 秒 Reaper 机制与断开事件确保无悬挂协程与内存泄漏。
 - [ ] **自动化测试全绿**：`npm --prefix web run check && npx tsx web/test/run-all.ts && ./gradlew :server:test` 全部通过。

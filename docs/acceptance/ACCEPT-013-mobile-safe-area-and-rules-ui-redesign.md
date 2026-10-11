@@ -27,8 +27,6 @@ docker build -f Dockerfile.server -t test-legado-server:latest .
 docker stop test-legado 2>/dev/null || true
 docker rm -f test-legado 2>/dev/null || true
 docker run -d --name test-legado -p 8080:8080 \
-  -e ADMIN_PASSWORD=admin123 \
-  -e LEGADO_SECURE_COOKIES=false \
   -v $(pwd)/.data:/data test-legado-server:latest
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/index.html
 ```
