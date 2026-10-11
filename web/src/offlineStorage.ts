@@ -36,8 +36,15 @@ export interface OfflineStorageStats {
 }
 
 const DB_NAME = 'legado_offline_db'
-const DB_VERSION = 1
+// v2：多一条"按书统计"用的复合键索引 by_book_totals（见 BOOK_TOTALS_INDEX 的注释）。
+const DB_VERSION = 2
 const STORE_CHAPTERS = 'chapters'
+/**
+ * 按书统计走的索引：[sourceId, bookUrl, byteSize, cachedAt]。
+ * 走 `openKeyCursor` 时浏览器只把这条索引的键交回来，**不会把 content 读进内存** ——
+ * 全本缓存上千章时，旧的全表游标会把每条记录的正文整份物化一次，只为求一个字节数之和。
+ */
+const BOOK_TOTALS_INDEX = 'by_book_totals'
 
 const SNAPSHOT_SHELF_KEY = 'legado_shelf_snapshot'
 const OFFLINE_PROGRESS_QUEUE_KEY = 'legado_offline_progress_queue'
@@ -53,10 +60,17 @@ function openDb(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = () => {
       const db = request.result
-      if (!db.objectStoreNames.contains(STORE_CHAPTERS)) {
-        const store = db.createObjectStore(STORE_CHAPTERS, { keyPath: 'key' })
+      const created = !db.objectStoreNames.contains(STORE_CHAPTERS)
+      const store = created
+        ? db.createObjectStore(STORE_CHAPTERS, { keyPath: 'key' })
+        : (request.transaction as IDBTransaction).objectStore(STORE_CHAPTERS)
+      if (created) {
         store.createIndex('by_book', ['sourceId', 'bookUrl'], { unique: false })
         store.createIndex('by_cached_at', 'cachedAt', { unique: false })
+      }
+      // 老库升到 v2 时只补这一条索引：建索引由浏览器扫存量记录，我们不改它们的内容
+      if (!store.indexNames.contains(BOOK_TOTALS_INDEX)) {
+        store.createIndex(BOOK_TOTALS_INDEX, ['sourceId', 'bookUrl', 'byteSize', 'cachedAt'], { unique: false })
       }
     }
     request.onblocked = () => reject(new Error('IndexedDB 升级被其它标签页占用，请关闭旧标签后重试'))
@@ -197,47 +211,104 @@ export async function getOfflineChaptersSet(
 }
 
 /**
+ * 一本书的统计累加（纯算式，不碰 IndexedDB）。
+ *
+ * 快路径交回来的不是记录而是四列键，分组/求和/取最近时间全在这几列上 ——
+ * 算错了界面就显示"7 本 31 章"这种看着合理其实不对的数字，所以单独钉住。
+ */
+export type BookStatsEntry = readonly [string, string, number, number]
+
+export function accumulateBookStats(entries: readonly BookStatsEntry[]): {
+  books: OfflineBookStat[]
+  totalChapters: number
+  totalBytes: number
+} {
+  const byBook = new Map<string, OfflineBookStat>()
+  let totalChapters = 0
+  let totalBytes = 0
+  for (const [sourceId, bookUrl, byteSize, cachedAt] of entries) {
+    const key = sourceId + String.fromCharCode(0) + bookUrl
+    const stat = byBook.get(key) || { sourceId, bookUrl, chapterCount: 0, totalBytes: 0, lastCachedAt: 0 }
+    const bytes = Number.isFinite(byteSize) && byteSize > 0 ? byteSize : 0
+    stat.chapterCount += 1
+    stat.totalBytes += bytes
+    stat.lastCachedAt = Math.max(stat.lastCachedAt, Number.isFinite(cachedAt) ? cachedAt : 0)
+    byBook.set(key, stat)
+    totalChapters += 1
+    totalBytes += bytes
+  }
+  return { books: Array.from(byBook.values()), totalChapters, totalBytes }
+}
+
+/**
+ * 快路径：沿复合键索引走一遍，游标交回的是那四列键本身，不含 content。
+ *
+ * 返回 null 表示这条路不可信 —— 索引还没建、或有记录缺了四列之一（复合索引要求每列都是
+ * 合法键，缺列的那条根本进不了索引）。那种情况退回全表扫描：宁可慢一次，也不能少报数字。
+ */
+function statsViaKeyIndex(db: IDBDatabase): Promise<OfflineStorageStats | null> {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE_CHAPTERS, 'readonly')
+      const store = tx.objectStore(STORE_CHAPTERS)
+      if (!store.indexNames.contains(BOOK_TOTALS_INDEX)) { resolve(null); return }
+      const entries: BookStatsEntry[] = []
+      let recordTotal = -1
+      let unusable = false
+      const finish = () => {
+        if (unusable || recordTotal < 0) { resolve(null); return }
+        resolve(entries.length === recordTotal ? accumulateBookStats(entries) : null)
+      }
+      const counted = store.count()
+      counted.onsuccess = () => { recordTotal = counted.result }
+      counted.onerror = () => { unusable = true; finish() }
+      const cursorRequest = store.index(BOOK_TOTALS_INDEX).openKeyCursor()
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result
+        if (!cursor) { finish(); return }
+        const key = cursor.key as unknown as BookStatsEntry
+        if (!Array.isArray(key) || key.length !== 4) { unusable = true; finish(); return }
+        entries.push([String(key[0]), String(key[1]), Number(key[2]), Number(key[3])])
+        cursor.continue()
+      }
+      cursorRequest.onerror = () => { unusable = true; finish() }
+      tx.onabort = () => { unusable = true; finish() }
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+/**
  * Calculates storage stats across all offline books
  */
 export async function getOfflineStorageStats(): Promise<OfflineStorageStats> {
   const db = await openDb()
+  const fast = await statsViaKeyIndex(db)
+  if (fast) return fast
+  return scanAllChaptersForStats(db)
+}
 
+/** 慢路径：整表游标，会把每条记录的 content 读进内存。只在快路径不可信时走。 */
+async function scanAllChaptersForStats(db: IDBDatabase): Promise<OfflineStorageStats> {
   return new Promise((resolve, reject) => {
     try {
       const tx = db.transaction(STORE_CHAPTERS, 'readonly')
       const store = tx.objectStore(STORE_CHAPTERS)
       const req = store.openCursor()
-      const bookMap = new Map<string, OfflineBookStat>()
-      let totalChapters = 0
-      let totalBytes = 0
+      const entries: BookStatsEntry[] = []
 
       req.onsuccess = () => {
         const cursor = req.result
         if (cursor) {
           const record = cursor.value as OfflineChapterRecord
-          const bookKey = `${record.sourceId}::${record.bookUrl}`
-          const stat = bookMap.get(bookKey) || {
-            sourceId: record.sourceId,
-            bookUrl: record.bookUrl,
-            chapterCount: 0,
-            totalBytes: 0,
-            lastCachedAt: 0,
-          }
-          stat.chapterCount += 1
+          // 老库里可能没写 byteSize，这一条退回按正文字符数估 —— 分组与求和交给 accumulateBookStats，
+          // 两条路径只有"字节怎么估"这一处不同，不许再各写一份分组算式
           const bytes = record.byteSize || (record.content?.length || 0) * 2
-          stat.totalBytes += bytes
-          stat.lastCachedAt = Math.max(stat.lastCachedAt, record.cachedAt || 0)
-          bookMap.set(bookKey, stat)
-
-          totalChapters += 1
-          totalBytes += bytes
+          entries.push([record.sourceId, record.bookUrl, bytes, record.cachedAt || 0])
           cursor.continue()
         } else {
-          resolve({
-            books: Array.from(bookMap.values()),
-            totalChapters,
-            totalBytes,
-          })
+          resolve(accumulateBookStats(entries))
         }
       }
       req.onerror = () => reject(req.error)

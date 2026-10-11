@@ -11,6 +11,7 @@ import {
   enqueueOfflineProgress,
   flushOfflineProgress,
   getOfflineStorageStats,
+  accumulateBookStats,
   evictLruOfflineBooks
 } from '../src/offlineStorage.js'
 
@@ -50,16 +51,77 @@ class MockIDBCursor {
   }
 }
 
+class MockIDBKeyCursor {
+  rows: { key: any[]; primaryKey: any }[]
+  pos = 0
+  req: MockIDBRequest
+  constructor(rows: { key: any[]; primaryKey: any }[], req: MockIDBRequest) {
+    this.rows = rows
+    this.req = req
+  }
+  get key() {
+    return this.rows[this.pos].key
+  }
+  get primaryKey() {
+    return this.rows[this.pos].primaryKey
+  }
+  continue() {
+    this.pos++
+    setTimeout(() => {
+      this.req.result = this.pos < this.rows.length ? this : null
+      this.req.onsuccess?.({ target: this.req })
+    }, 0)
+  }
+}
+
+/** 复合键按逐列升序排 —— 真实 IndexedDB 还带类型序，但统计与顺序无关，这里只管稳定。 */
+function compareIndexKeys(a: any[], b: any[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === b[i]) continue
+    return a[i] < b[i] ? -1 : 1
+  }
+  return 0
+}
+
 class MockIDBIndex {
   store: MockIDBObjectStore
-  constructor(store: MockIDBObjectStore) {
+  name: string
+  constructor(store: MockIDBObjectStore, name: string) {
     this.store = store
+    this.name = name
   }
   openCursor(range?: any) {
     return this.store.openCursor(range)
   }
+  /**
+   * 只交回索引的那几列 + 主键，且**缺任何一列的记录不进索引** —— 真实 IndexedDB 就是这个语义，
+   * 统计的快路径靠它，而"少了一条"必须由 store.count() 对账兜住，所以这里不能宽容。
+   * `range` 是 `IDBKeyRange.only([...])` 的桩（mock 直接把数组当 range）：按整条键逐列相等筛，
+   * clearOfflineBook 就是靠它取一本书的全部章节主键。
+   */
   openKeyCursor(range?: any) {
-    return this.store.openCursor(range)
+    this.store.keyCursorCalls++
+    const req = new MockIDBRequest()
+    const keyPath = this.store.indexes.get(this.name)
+    const rows: { key: any[]; primaryKey: any }[] = []
+    if (keyPath) {
+      const wantRange = Array.isArray(range) ? range : null
+      for (const rec of this.store.data.values()) {
+        const key = keyPath.map(p => rec?.[p])
+        if (!key.every(v => v !== undefined && v !== null)) continue
+        if (wantRange && (wantRange.length !== keyPath.length || !wantRange.every((v, i) => v === key[i]))) continue
+        rows.push({
+          key,
+          primaryKey: rec.key ?? `${rec.sourceId}_${rec.bookUrl}_${rec.chapterUrl}`,
+        })
+      }
+      rows.sort((a, b) => compareIndexKeys(a.key, b.key))
+    }
+    setTimeout(() => {
+      req.result = rows.length > 0 ? new MockIDBKeyCursor(rows, req) : null
+      req.onsuccess?.({ target: req })
+    }, 0)
+    return req
   }
 }
 
@@ -68,9 +130,19 @@ let quotaFailuresLeft = 0
 
 class MockIDBObjectStore {
   data = new Map<string, any>()
+  indexes = new Map<string, string[]>()
+  indexNames = {
+    contains: (name: string) => this.indexes.has(name)
+  }
+  /** 统计走哪条路要看这两个计数：快路径只该碰 openKeyCursor，全表游标只在退回时出现。 */
+  keyCursorCalls = 0
+  fullCursorCalls = 0
   name: string
   constructor(name: string) {
     this.name = name
+  }
+  createIndex(name: string, keyPath: string | string[]) {
+    this.indexes.set(name, Array.isArray(keyPath) ? keyPath : [keyPath])
   }
   put(value: any, key?: any) {
     const actualKey = key ?? value.key ?? `${value.sourceId}_${value.bookUrl}_${value.chapterUrl}`
@@ -105,10 +177,17 @@ class MockIDBObjectStore {
     setTimeout(() => req.onsuccess?.({ target: req }), 0)
     return req
   }
-  index(_name: string) {
-    return new MockIDBIndex(this)
+  index(name: string) {
+    return new MockIDBIndex(this, name)
+  }
+  count() {
+    const req = new MockIDBRequest()
+    req.result = this.data.size
+    setTimeout(() => req.onsuccess?.({ target: req }), 0)
+    return req
   }
   openCursor(range?: any) {
+    this.fullCursorCalls++
     const req = new MockIDBRequest()
     let records = Array.from(this.data.values())
     if (Array.isArray(range) && range.length === 2) {
@@ -139,6 +218,9 @@ class MockIDBTransaction {
 
 class MockIDBDatabase {
   stores = new Map<string, MockIDBObjectStore>()
+  // 生产代码会在连接上挂这两个回调（版本被别的标签升级 / 连接被回收时重开），桩得留着位子
+  onversionchange?: ((e: any) => void) | null
+  onclose?: ((e: any) => void) | null
   objectStoreNames = {
     contains: (name: string) => this.stores.has(name)
   }
@@ -159,17 +241,43 @@ class MockIDBDatabase {
 
 let currentDbInstance: MockIDBDatabase | null = null
 
-function setupMockIndexedDB() {
+/**
+ * @param existingV1Store 造一个"用户已经缓存过书、库还是 v1"的场景：
+ *   chapters 表和老的两条索引已在、还带着记录。生产代码的升级分支必须只补新索引、
+ *   既不重建表也不动存量记录 —— 版本号 +1 唯一的真风险就是这个。
+ */
+function setupMockIndexedDB(existingV1Store = false) {
   mockStorage.clear()
-  currentDbInstance = new MockIDBDatabase()
-  currentDbInstance.createObjectStore('chapters')
+  // 上一轮的连接先关掉：offlineStorage 在 onclose 里清它自己缓存的 dbPromise，
+  // 不清的话新的 mock 库根本不会被重新 open，用例会读到上一轮的存储。
+  currentDbInstance?.onclose?.(null as any)
+
+  const db = new MockIDBDatabase()
+  if (existingV1Store) {
+    const store = db.createObjectStore('chapters')
+    store.createIndex('by_book', ['sourceId', 'bookUrl'])
+    store.createIndex('by_cached_at', ['cachedAt'])
+    store.data.set('src-old::book-old::c1', {
+      key: 'src-old::book-old::c1', sourceId: 'src-old', bookUrl: 'book-old', chapterUrl: 'c1',
+      title: '第1章', content: '老库里已经下好的一章', cachedAt: 1000, byteSize: 27,
+    })
+  }
+  currentDbInstance = db
 
   const mockFactory = {
     open: (_name: string, _version: number) => {
-      const req = new MockIDBRequest()
+      const req = new MockIDBRequest() as MockIDBRequest & {
+        onupgradeneeded?: ((e: any) => void) | null
+        transaction: MockIDBTransaction | null
+      }
       req.result = currentDbInstance
+      // 真实浏览器在 versionchange 事务里给的是"已经存在的那个 store"，这里同构
+      req.transaction = new MockIDBTransaction(
+        currentDbInstance?.stores.get('chapters') ?? new MockIDBObjectStore('chapters'),
+      )
       setTimeout(() => {
-        if (req.onsuccess) req.onsuccess({ target: req })
+        req.onupgradeneeded?.({ target: req })
+        req.onsuccess?.({ target: req })
       }, 0)
       return req
     }
@@ -179,7 +287,7 @@ function setupMockIndexedDB() {
   ;(globalThis as any).IDBKeyRange = {
     only: (val: any) => val
   }
-  return currentDbInstance
+  return db
 }
 
 // Mock localStorage
@@ -370,4 +478,122 @@ test('offlineStatsView - 取失败不许画成"你确实没有缓存"', async ()
   // 反向对照：修前只有 loading 一个旗标 —— 不 loading 且 stats 为 null（读失败）会被判成 empty
   assert.equal(offlineStatsView({ loading: false, failed: false, books: null }), 'failed',
     '没取到又不在转圈时只能算没取到；这一条红了就说明界面又会把故障说成用户的操作结果')
+})
+
+// ———— 离线统计不再整表读正文（AI-2：修掉全表游标）————
+
+const TOTALS_INDEX = 'by_book_totals'
+
+test('accumulateBookStats - 分组、字节求和与最近时间', () => {
+  const r = accumulateBookStats([
+    ['s1', 'bA', 100, 5],
+    ['s1', 'bA', 200, 9],
+    ['s1', 'bB', 50, 7],
+  ])
+  assert.equal(r.totalChapters, 3)
+  assert.equal(r.totalBytes, 350)
+  assert.equal(r.books.length, 2)
+  const a = r.books.find(b => b.bookUrl === 'bA')
+  assert.ok(a)
+  assert.equal(a.chapterCount, 2)
+  assert.equal(a.totalBytes, 300)
+  assert.equal(a.lastCachedAt, 9, '取的是这本书最后一次写入的时间，不是第一次')
+})
+
+/**
+ * 分组的键必须比"能拼出来"更严：bookUrl 里本来就可能带 `::`（带注解的书源地址、
+ * 聚合源的拼接地址都不是稀奇事），用 `::` 拼 (sourceId, bookUrl) 会把两本不同的书并成一本 ——
+ * 少报一本，而章数与体积还都看着合理。生产代码用的是不可见分隔符，这里带反向对照。
+ */
+test('accumulateBookStats - 分组键不许用 :: 拼', () => {
+  const r = accumulateBookStats([
+    ['x', 'a::b', 7, 3],
+    ['x::a', 'b', 7, 4],
+    ['x', 'plain', 1, 1],
+  ])
+  assert.equal(r.books.length, 3, '两本不同的书被并成了一本')
+  assert.equal(r.totalChapters, 3)
+  assert.ok(r.books.some(b => b.sourceId === 'x::a' && b.bookUrl === 'b'), '分组不许改写两边的值')
+  assert.ok(r.books.every(b => b.chapterCount === 1), '谁也没被算成谁的第二章')
+  // 反向对照：同样这三条按 `::` 拼键，前两对确实会撞成一个 —— 证明上面那条在判事，不是空判
+  const naive = new Set(['x' + '::' + 'a::b', 'x::a' + '::' + 'b', 'x' + '::' + 'plain'])
+  assert.equal(naive.size, 2, '若 :: 拼接本来就分得开，这条判据就是空判')
+})
+
+test('统计走复合键索引，不再把正文整表读进内存', async () => {
+  const db = setupMockIndexedDB()
+  await putOfflineChapter('s1', 'bA', 'c1', '第1章', '甲'.repeat(500))
+  const store = db.stores.get('chapters')
+  assert.ok(store, '空库由生产代码的 onupgradeneeded 建表')
+  assert.ok(store!.indexNames.contains(TOTALS_INDEX), '新库要有 by_book_totals，否则快路径永远不生效')
+
+  await putOfflineChapter('s1', 'bA', 'c2', '第2章', '乙'.repeat(500))
+  await putOfflineChapter('s1', 'bB', 'c1', '第1章', '丙'.repeat(500))
+
+  const keyBefore = store!.keyCursorCalls
+  const fullBefore = store!.fullCursorCalls
+  const stats = await getOfflineStorageStats()
+  assert.ok(store!.keyCursorCalls > keyBefore, '统计没走键游标 —— 那条快路径根本没被执行过')
+  assert.equal(store!.fullCursorCalls, fullBefore, '统计还在整表读记录，正文被物化进内存')
+  assert.equal(stats.totalChapters, 3)
+  assert.equal(stats.books.length, 2)
+  assert.equal(stats.books.find(b => b.bookUrl === 'bA')?.chapterCount, 2)
+  assert.ok(stats.totalBytes > 0)
+})
+
+/**
+ * 老记录缺列时键游标会少一条（复合索引要求每列都是合法键）。
+ * 少了 store.count() 那次对账，这里会安静地少报一章 —— 所以退回全表扫描，宁可慢一次。
+ */
+test('统计对账不过就退回全表扫描，数字不许变', async () => {
+  const db = setupMockIndexedDB()
+  await putOfflineChapter('s1', 'bA', 'c1', '第1章', '甲'.repeat(100))
+  const store = db.stores.get('chapters')!
+  // 直接塞一条没有 byteSize 的记录，模拟 v1 时代写进去、没带这一列的旧缓存
+  store.data.set('s1::bA::legacy', {
+    key: 's1::bA::legacy', sourceId: 's1', bookUrl: 'bA', chapterUrl: 'legacy',
+    title: '旧', content: 'old'.repeat(40), cachedAt: 1,
+  })
+
+  const keyBefore = store.keyCursorCalls
+  const stats = await getOfflineStorageStats()
+  assert.equal(stats.totalChapters, 2, '缺列的那条被索引漏掉后必须靠全表扫描补回来')
+  assert.equal(stats.books.find(b => b.bookUrl === 'bA')?.chapterCount, 2)
+  assert.equal(store.fullCursorCalls, 1, '退回时走的正是整表游标')
+  assert.ok(store.keyCursorCalls > keyBefore, '先试过快路径、对账不过才退回')
+})
+
+test('索引没建起来时统计照样出数（退回全表扫描）', async () => {
+  const db = setupMockIndexedDB()
+  await putOfflineChapter('s1', 'bA', 'c1', '第1章', '甲'.repeat(100))
+  const store = db.stores.get('chapters')!
+  store.indexes.delete(TOTALS_INDEX)
+
+  const stats = await getOfflineStorageStats()
+  assert.equal(stats.totalChapters, 1)
+  assert.equal(store.keyCursorCalls, 0, '没有索引就不该去开键游标')
+  assert.equal(store.fullCursorCalls, 1)
+})
+
+/**
+ * DB_VERSION 1→2 唯一的真实风险：用户设备上已经下了几十本书。
+ * 升级必须只补新索引 —— 重建表等于把离线缓存清空，老记录一条都不能少。
+ */
+test('v1 库升到 v2 只补索引，不动表也不清老缓存', async () => {
+  const db = setupMockIndexedDB(true)
+  const old = await getOfflineChapter('src-old', 'book-old', 'c1')
+  assert.ok(old, '升级把老缓存弄丢了')
+  assert.equal(old!.content, '老库里已经下好的一章')
+
+  const store = db.stores.get('chapters')!
+  assert.equal(store.data.size, 1, '升级后老记录还在')
+  assert.ok(store.indexNames.contains(TOTALS_INDEX), '升级要补上 by_book_totals')
+  assert.ok(store.indexNames.contains('by_book'), '原有索引不许被重建掉')
+  assert.ok(store.indexNames.contains('by_cached_at'), '原有索引不许被重建掉')
+
+  await putOfflineChapter('s1', 'bA', 'c1', '第1章', '甲'.repeat(100))
+  const stats = await getOfflineStorageStats()
+  assert.equal(stats.totalChapters, 2, '老记录也要被新索引统计到')
+  assert.equal(stats.books.length, 2)
+  assert.equal(store.fullCursorCalls, 0, '升级后的库应当直接吃上快路径')
 })
