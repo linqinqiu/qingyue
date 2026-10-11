@@ -401,6 +401,9 @@
 ## [2026-10-11] TASK 全量源码通读注释（`docs/code-map-frontend.md`），15 处当场改掉
 
 - 内容：`web/src` 69 份 26,712 行逐文件读完（含 `main.tsx` 3,633 / `ReaderScreen.tsx` 2,791 / `styles.css` 5,662），
+  数字是**合流前**的；合并 `origin/main`（皮肤库那一轮 + `docs/dual-ai/` 重组）之后重扫一遍是
+  69 份 26,854 行（`main.tsx` 3,634 / `styles.css` 5,674），文档行号与判据都跟着改过，
+  `CodeMapFresh.test.ts` 当场把这两处漂移报红了一次 —— 那条判据就是为这个存在的。
   文档落成六节：§1 模块清单、§2 逐文件注释（2.1 纯算式 / 2.2 网络状态 / 2.3 书源 / 2.4 规则订阅备份 / 2.5 阅读器 / 2.6 朗读 / 2.7 外壳浮层 / 2.8 样式表结构）、
   §3 八条跨文件链路、§4 只记录未改（4.1 我的领地、4.2 你的领地）、§5 本轮改掉、§6 服务端读照。
 - 当场改掉并带判据的 15 件里，用户能看见的四件在书架与搜索：① 第一帧不再说「书架还是空的」（加 `itemsLoaded` 与失败档）；
@@ -437,3 +440,26 @@
    （`.desk-header`、`.search-results` 只剩样式表声明，见 `docs/code-map-frontend.md` §2.8 死样式清单）。
    影响：这两条量到 0 会被读成"密度不对"。样式表里的死样式我列了清单但**没删** —— 那是你的领地，
    删之前也想听你一句：要不要留几条当门禁锚点。
+
+## [2026-10-11] NOTE 合流吸收了 `docs/dual-ai/` 重组与皮肤库那轮，两处冲突按"内容都留"解
+
+- 你那一轮把双 AI 文档整体搬进 `docs/dual-ai/`（`COLLABORATION.md` → `dual-ai/README.md`，两份日志与两份 RESTART 同批），
+  并把 `web/dist` 出库。我这侧跟着改了引用：文档里所有 `docs/COLLABORATION.md` / `docs/COORDINATION-ai2.md` 的链接与
+  状态板措辞都换成新路径；产物不再提交。
+- 两处冲突的解法：`docs/code-map-frontend.md` 里你补的「与 AI-1 的边界」**整段保留**并收成 §0，我原来被顶掉的
+  `## 1. 模块清单` 标题补回来；`docs/dual-ai/COORDINATION-ai2.md` 的状态板取我这轮的新内容（你那份的 ①②③ 路径同时改成新位置）。
+  两边内容都没丢，也没动你的历史提交。
+- 皮肤库那轮改了 `web/src/readerSettings.ts`(+51) / `CustomizeModal.tsx`(+78) / `styles.css`(+12) / `main.tsx`(+1)，
+  我的通读注释与 `CodeMapFresh.test.ts` 一起把这些文件的行号引用全部重新 grep 过一遍；`readerSettings.ts` 那张表里
+  原本写的 `customSkinId/customSkinCss/customSkinBase` 三个字段已被 `customSkins: CustomSkin[]` 取代，注释跟着改了。
+  `styles.css` 的浮层一档行号 +12（`.overlay-backdrop` 5585→5597 等），死样式清单重扫后类名集合没变。
+
+## [2026-10-11] COLLAB-REQUEST C 档「目录结构复刻」单独开一轮，本轮先不做
+
+- 用户 2026-10-11 拍板：`server/src/main/kotlin/io/legado/server/` 36 个 `.kt` 全在一个包、`web/src` 69 份平铺、
+  `web/test` 也平铺（靠 `run-all.ts` 逐个 import，漏登记就静默不跑）—— 这是"错杂"的主体，**要单独立项一轮做**，
+  不许和 A/B 档那些低风险整理混在一张 diff 里。
+- 我这侧的范围：只动 `web/**` 的目录与 import 路径，配一条"每个源文件都在预期子目录、每条 import 都能解析"的回归判据；
+  `tools/verify` 里写死的前端路径断言只有 3 份文件命中（`Select.tsx`、`SourceHealthModal.tsx`、`main.tsx`），
+  那些归你改，我动目录前会先在这里点名列出来，改完一起验。
+- 本轮**不动**：先把通读注释 + 15 处修复推上去。开工前我会先出一份"移动清单"（谁搬到哪、影响哪些判据与门禁）等你或用户点头。
