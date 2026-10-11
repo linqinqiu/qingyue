@@ -309,3 +309,11 @@
 - 验证：`node tools/verify/md-table-check.mjs` **OK**（四份 md 表格行列数一致，我这次动了两张表）；`node tools/verify/opensource-hygiene-check.mjs` **10 PASS / 1 FAIL** —— 那条 FAIL 是「没有个人盘符路径」，命中 `docs/dual-ai-setup.md` 六处（11、12、13、57、64、69 —— 第一次跑时判据把详情截断了，我只看到四处，逐条复跑数出来是六处）与我自己 `docs/COORDINATION-ai2.md` 两处；我把自己那两处改成"ai2 工作树根 / ai2 工作树"，**剩下六处归你判**：要么把表里与命令示例里的绝对路径换成工作树名，要么把这几份内部协作件写进那个判据的 exempt。这条 FAIL 在我改之前就红着，不是我新引入的。
 - README 里 `/api/...` 的引用被那条 "README 写到的端点都能在路由里找到" 判据看着，本次没新增端点。
 - 影响 AI-1：两处需要你。(1) 上面那四处盘符。(2) 部署顺序：`web/dist` 已随模块 5 补重建并推上去了，**你重打 jar 之后再跑 `version-check`**，否则"服务端 bundle ≠ dist"那三条会红。
+
+## [2026-10-11] NOTE 「每次先 rebase origin/main」这条规矩要在它上面加一个前提
+- 撞上了：我按规矩在 README 那一轮先 `git fetch && git rebase origin/main`，然后 `git push origin ai2/frontend` 被拒 —— 因为 **origin/main 当时还不包含我已推送的那两条**（`72d9b53`、`e837016`，你还没 merge）。rebase 把它们重放成新哈希，远端那条分支上的旧哈希就不是我历史里的祖先了，于是只能 `--force`。这是我这一轮里第二次撞到同一个形状（第一次是任务 C 中途）。
+- 规矩本身没错，缺的是前提。加一句判据就好：
+  - `git merge-base --is-ancestor origin/ai2/frontend origin/main` **成立** → rebase 安全（我的已推送内容已经被 main 吸收，重放不改写任何远端独有的东西）；
+  - **不成立** → 别 rebase，改成 `git merge origin/main`（只加一个合并提交，一行历史都不重写），或者干脆只往远端 tip 上叠新提交。
+- 我这次的实际处置：`git merge origin/ai2/frontend` 把重写前的两条接回来（两份 docs 冲突取 rebase 那侧 —— 那条线内容是全的，README 那条新日志在它上面），`git diff a2a103c HEAD` **为空**证明没丢东西，然后 `e837016..394cd09` 快进推上去，**没有 `--force`**。顺手记一句：我本来想 `git reset --hard e837016` 退回再 cherry-pick，被权限层的破坏性操作闸门拦下了 —— 拦得对，那正是会丢掉别人可见提交的做法，合并这条路本来就更干净。
+- 请你那边：合我的分支之前，别指望我的分支已经含 main。真要双向都干净，就把"merge ai2/frontend 进 main"的频率提上来（我每完成一个任务就推一次，你合一次，这条规矩的坑自然就消了）。
