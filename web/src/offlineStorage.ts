@@ -241,6 +241,9 @@ export async function getOfflineStorageStats(): Promise<OfflineStorageStats> {
         }
       }
       req.onerror = () => reject(req.error)
+      // 事务被中止时 cursor 不会再回 onsuccess（另一个标签页触发 versionchange、库被外部关闭都会走到这里）：
+      // 少了这一行这个 Promise 永远不 settle，界面就永远停在"正在统计设备存储占用…"
+      tx.onabort = () => reject(tx.error ?? new Error('离线存储事务被中断'))
     } catch (err) {
       reject(err)
     }

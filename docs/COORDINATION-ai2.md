@@ -240,3 +240,21 @@
 - 验证：`tsc -b` 干净；`npx tsx web/test/run-all.ts` **434/434**（本模块 +6：PWA 5 条 + Toast 1 条），串行单跑；`web/dist` 随源码重建。
 - 影响 AI-1：一条 —— `workbox` 那几条规则现在指 `/api/covers*` 与 `/api/bookshelf`。**若以后把书架改成需要鉴权、或换路径**，
   这条缓存规则要跟着改（它已经由 `PwaCacheRules.test.ts` 与 `Routes.kt` 对钉住，路径漂了用例会红，不会静默失效）。
+
+## [2026-10-11] TASK 任务 C·模块 5「离线缓存 UI」—— 读失败被画成"你确实没有缓存"
+- 发现与处置：
+
+| 严重度 | 文件:行 | 问题 | 证据 | 触发条件 | 修复 | 验证 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | `web/src/OfflineCacheModal.tsx`（修前 26-43、122 行） | 只有 `loading` 一个旗标：`getOfflineStorageStats()` 抛错时 `stats` 停在 `null`，渲染却按 `stats?.books.length === 0` 走空态 | 存储层**是会 reject 的**（`offlineStorage.ts:243 req.onerror`、`openDb()` 也会失败）→ 信息到了弹窗被丢掉；屏幕上写"这台电脑上还没有已下载的章节"，三格还报 0 本 0 章 | 配额满、隐私模式、另一标签页触发 versionchange、库被外部关闭 | 加 `failed` 态并抽成纯函数 `offlineStatsView(loading/failed/books)`：`loading｜failed｜empty｜ready`；失败条配「再取一次」，失败时不画假数字，清空按钮只在 `ready` 可用 | 用例 1 条含**反向对照**（`books:null` 且不 loading 必须判 `failed`，不许判 `empty`）+ 真浏览器 6 条 |
+| P1 | `web/src/offlineStorage.ts:243` | `getOfflineStorageStats` 只接了 `req.onerror`，**没接 `tx.onabort`**：事务被中止时 cursor 不再回 `onsuccess`，Promise 永不 settle | `openDb` 自己就写了 `onversionchange → db.close()` 与 `onclose → 清缓存连接`（67-68 行），也就是"库会被外部关掉"是这里已承认的事实；那种时候统计会永远挂着 | 另一标签页触发升级/关闭 | 补 `tx.onabort = () => reject(...)` | 与上一条同一路径：真浏览器里打断存储后弹窗能落到失败条而不是停在"正在统计…" |
+| 已检查·无问题 | `web/src/ReaderScreen.tsx:504/627-635` | 阅读器那半边的缓存进度是不是也有同形状的病 | 它的 state 本来就带 `error?: string`，失败走 `toast.warning(...缓存中断...)`，并且把服务端条数与本机 IndexedDB 条数取 `max` 合并 | — | 不用改（弹窗是唯一漏掉三态的一处） | grep + 读码 |
+| 登记未动 | `web/src/offlineStorage.ts:202-248` | 统计是**全表游标**：每条记录整份读进内存（含 `content`），全本缓存（上千章 × 几 KB）时打开这个弹窗会一次性把它们全捞出来 | 代码形状；`byteSize` 已逐条存着，但 IndexedDB 游标不能只投影一个字段 | 离线量大 + 打开「离线缓存」 | **本轮没改**：要便宜只能加一份"按书聚合"的计数 store（`DB_VERSION` 要 +1 并写 `onupgradeneeded`），属结构改动，做完再报 | 待做 |
+
+- 真浏览器实证 **6/6**（1299 隔离实例）：打断 `window.indexedDB.open` 之后弹窗写「没取到本机的离线缓存清单 —— 这不代表你没有缓存，也不会删掉任何东西」+「再取一次」，不出现"还没有已下载的章节"、不出现 0 本/0 章；反向对照那侧正常读出「已离线书籍 7 本 / 30 余章 / 146.9 KB」的清单。
+- 探针自己红过三轮，都是探针坏（记下来免得重犯）：
+  1. 第一版没等加载页与首启协议层，直接 `.dialog-shell` 取文本 —— 而**协议层本身也是一张 `.dialog-shell`**，它的正文里也写着"离线缓存"，于是两条**否定断言在错误的屏上真空通过了（假绿）**。修：先断言弹窗真存在，再判内容。
+  2. 选择器改锁 `[aria-label="离线缓存"]`（与 AGENTS「门禁选择器必须带弹窗作用域」同一条规矩）。
+  3. 反向对照取态太早，读到"正在统计…"就判红 —— 等它落定再读。
+- 验证：`tsc -b` 干净；`npx tsx web/test/run-all.ts` **435/435**（+1），串行单跑；`web/dist` 与 jar 已随源码重建。
+- 影响 AI-1：不需要你跟进。那条"全表游标"若要改成聚合计数 store，是 `web/` 内的 IndexedDB 版本升级，我自己做完会在这里报一声。

@@ -357,3 +357,17 @@ test('配额满时自动淘汰别的书并重试成功，且不动正在写的�
   assert.ok(!books.some(b => b.bookUrl === 'other-1'), '应已淘汰别的书腾出空间')
   await clearAllOffline()
 })
+
+// ———— 离线缓存弹窗的三态（AI-2 任务 C·模块 5）————
+
+test('offlineStatsView - 取失败不许画成"你确实没有缓存"', async () => {
+  const { offlineStatsView } = await import('../src/OfflineCacheModal')
+  assert.equal(offlineStatsView({ loading: true, failed: false, books: null }), 'loading')
+  assert.equal(offlineStatsView({ loading: false, failed: false, books: 0 }), 'empty', '真取到 0 本才叫空')
+  assert.equal(offlineStatsView({ loading: false, failed: false, books: 3 }), 'ready')
+  assert.equal(offlineStatsView({ loading: false, failed: true, books: 0 }), 'failed',
+    '即使条数是 0，失败过就不能报"没有"')
+  // 反向对照：修前只有 loading 一个旗标 —— 不 loading 且 stats 为 null（读失败）会被判成 empty
+  assert.equal(offlineStatsView({ loading: false, failed: false, books: null }), 'failed',
+    '没取到又不在转圈时只能算没取到；这一条红了就说明界面又会把故障说成用户的操作结果')
+})

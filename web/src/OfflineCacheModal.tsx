@@ -8,8 +8,23 @@ import {
   OfflineBookStat,
   OfflineStorageStats,
 } from './offlineStorage'
-import { toast } from './Toast'import { useEscapeClose } from './useEscapeClose'
+import { toast } from './Toast'
+import { useEscapeClose } from './useEscapeClose'
 
+/**
+ * 「还没取到」「取失败了」「这台电脑确实没有缓存」是三件事（与备份页、订阅页同一口径）。
+ *
+ * 抽成纯函数是为了能逐条钉住：这里原先只有 `loading` 一个旗标，读失败之后 `stats` 停在 null，
+ * 界面于是把第二种直接画成第三种 —— 屏幕上写"这台电脑上还没有已下载的章节"，
+ * 用户以为自己把书删了。
+ */
+export function offlineStatsView(state: { loading: boolean; failed: boolean; books: number | null }): 'loading' | 'failed' | 'empty' | 'ready' {
+  if (state.failed) return 'failed'
+  if (state.loading) return 'loading'
+  // 不 loading 又拿不到条数：只能算没取到，不许算"确实没有"
+  if (state.books === null) return 'failed'
+  return state.books === 0 ? 'empty' : 'ready'
+}
 
 interface OfflineCacheModalProps {
   onClose: () => void
@@ -25,14 +40,18 @@ function formatBytes(bytes: number): string {
 export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
   const [stats, setStats] = useState<OfflineStorageStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [clearing, setClearing] = useState(false)
 
   const loadStats = async () => {
     try {
       const data = await getOfflineStorageStats()
       setStats(data)
+      setFailed(false)
     } catch {
-      toast.error('读取离线存储状态失败')
+      // 失败要留在 state 里：只弹一条 toast、界面继续按"空"排版，等于把故障说成用户的操作结果
+      setStats(null)
+      setFailed(true)
     } finally {
       setLoading(false)
     }
@@ -41,6 +60,8 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
   useEffect(() => {
     void loadStats()
   }, [])
+
+  const view = offlineStatsView({ loading, failed, books: stats ? stats.books.length : null })
 
   const handleClearBook = async (book: OfflineBookStat) => {
     if (!window.confirm(`确定要清理《${book.name || book.bookUrl}》的本地离线缓存吗？`)) return
@@ -91,26 +112,31 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
         </header>
 
         <div className="source-login-body">
-          {loading ? (
-            <div>
-              <span>正在统计设备存储占用…</span>
-            </div>
-          ) : (
+          {view === 'loading' && (
+            <p role="status">正在统计设备存储占用…</p>
+          )}
+          {view === 'failed' && (
+            <p role="status">
+              没取到本机的离线缓存清单 —— 这不代表你没有缓存，也不会删掉任何东西。
+              <button type="button" className="subtle-button" onClick={() => void loadStats()}>再取一次</button>
+            </p>
+          )}
+          {(view === 'empty' || view === 'ready') && stats && (
             <div>
               <div className="cache-overview-card">
                 <div className="overview-item">
                   <span className="overview-label">已离线书籍</span>
-                  <strong className="overview-value">{stats?.books.length || 0} 本</strong>
+                  <strong className="overview-value">{stats.books.length} 本</strong>
                 </div>
                 <div className="overview-divider" />
                 <div className="overview-item">
                   <span className="overview-label">总离线章节</span>
-                  <strong className="overview-value">{stats?.totalChapters || 0} 章</strong>
+                  <strong className="overview-value">{stats.totalChapters} 章</strong>
                 </div>
                 <div className="overview-divider" />
                 <div className="overview-item">
                   <span className="overview-label">本地空间占用</span>
-                  <strong className="overview-value text-teal">{formatBytes(stats?.totalBytes || 0)}</strong>
+                  <strong className="overview-value text-teal">{formatBytes(stats.totalBytes)}</strong>
                 </div>
               </div>
 
@@ -119,7 +145,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
                   <span>已离线书籍列表</span>
                   <small>断网时可继续读</small>
                 </div>
-                {(!stats?.books || stats.books.length === 0) ? (
+                {view === 'empty' ? (
                   <p className="empty-notice">这台电脑上还没有已下载的章节。在阅读器底部点「下载到本设备」，之后断网也能继续读。</p>
                 ) : (
                   <div className="offline-books-list">
@@ -149,7 +175,7 @@ export function OfflineCacheModal({ onClose }: OfflineCacheModalProps) {
           <button
             type="button"
             className="danger-button"
-            disabled={clearing || !stats?.books.length}
+            disabled={clearing || view !== 'ready'}
             onClick={() => void handleClearAll()}
           >
             {clearing ? '清空中…' : '清空全部本地缓存'}
