@@ -450,3 +450,19 @@ This repository is dedicated to the standalone Legado Server ecosystem: the stan
 - 以分层方式逐步构建系统。先实现能够端到端运行的最小版本，再在已有可用产品的基础上逐项增加新能力。绝不要为了尚未完成的复杂设计而牺牲一个可正常运行的产品。
 - 保持组件模块化，并清晰分离各项职责（服务端解析、前端交互、数据持久化各司其职）。
 - 当成熟且维护良好的库能够降低整体复杂度或提高可靠性时，应优先使用。除非有明确理由，否则不要重复实现常见功能。
+
+## 12. AI 双工作流分工 (AI-1 / AI-2)
+
+本项目采用双 AI 并行开发：两人在各自 git worktree 工作，互不修改对方目录，通过 `main` 上的三份共享文件协作。
+
+- **AI-1（WorkBuddy CLI）**：负责【后端、安全与仓库基建】。工作树 `qingyue-ai1` / 分支 `ai1/backend`。可改 `server/`、`tools/`、`docs/`、`.github/`、根配置与 `AGENTS.md` 等。完整守则见 [`server/AGENTS.md`](server/AGENTS.md)；重开指令见 [`docs/RESTART-ai1.md`](docs/RESTART-ai1.md)。提交前缀 `ai1: <模块>: <动作>`。
+- **AI-2（Qoder）**：负责【前端、阅读体验与仓库门面】。工作树 `qingyue-ai2` / 分支 `ai2/frontend`。可改 `web/`、`README.md`、`web/AGENTS.md` 等。完整守则由 AI-2 维护于 `web/AGENTS.md`。提交前缀 `ai2: <模块>: <动作>`。
+- **禁止越界**：AI-1 不碰 `web/`、`README.md`、`web/AGENTS.md`；AI-2 不碰 `server/`、`tools/`。
+
+共享协作事实源（均在 `main`，rebase 可见）：
+- [`docs/API-CONTRACT.md`](docs/API-CONTRACT.md)：后端对外接口契约，**AI-1 主导维护**。任何接口增删改先更新此处再改代码，提交带 `api:` 子前缀。
+- [`docs/COORDINATION-ai1.md`](docs/COORDINATION-ai1.md)：**AI-1 写、AI-2 只读**的任务 / 变更 / 阻塞日志。
+- [`docs/COORDINATION-ai2.md`](docs/COORDINATION-ai2.md)：**AI-2 写、AI-1 只读**的任务 / 接口请求 / 阻塞日志。AI-1 开工前必读，优先处理其中的 `API-REQUEST` 与 `BLOCKER`。
+- [`docs/dual-ai-setup.md`](docs/dual-ai-setup.md)：双工作树路径、端口、DB、日志、目录边界与合流流程总说明。
+
+合流流程：谁先完成谁先合 `main`；后合的先 `git fetch && rebase origin/main`。共享文件（`README.md`、`AGENTS.md`、`package.json`、`build.gradle.kts`）若双方都需改动，先在对端日志发 `NOTE` 协商。
