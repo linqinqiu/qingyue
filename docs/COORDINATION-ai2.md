@@ -152,3 +152,19 @@
   如果 AI-1 也在 1234/8080/8081 起服务，与 AI-2 不冲突；但 **1299 请留给 AI-2**。
 - 探针纪律：浏览器实证用的探针书（书名「翻页验证-*」）每次跑完都从自己的库删干净，绝不进真书架。
 
+
+## [2026-10-11] TASK 任务 C·模块 2「搜索 UI」/ R4 第一项 —— 流式合并两处
+- 发现与处置：
+
+| 严重度 | 文件:行 | 问题 | 证据 | 触发条件 | 修复 | 验证 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| P1 | `web/src/searchStore.ts`（修前 results 分支） | 每条 results 封包都把已收结果整份重建成一个 Set 再 filter，代价 O(已收条数 × 封包数) | 修前写法 `new Set(prev.results.map(...))` 每包执行一次；同数据对照实测整表重建比常驻判重表贵 **>10×**（用例里当场量） | 整库搜索：服务端每个有结果的源各发一条 results | 判重表 `seenResults` 跟着一次搜索常驻，抽成纯函数 `searchFilters.mergeStreamedResults`；`startSearch`/`reset` 都换表（不换表会让第二次搜结果凭空少一半） | 用例 3 条：跨封包判重 / 跨源同书保留 / 空表反向对照 + 规模对照 |
+| P1 | `web/src/searchStore.ts`（progress 分支） | 服务端每完成一个源发一条 progress，前端直接 setState → 一次整库搜索几千次结果区重渲染 | `Routes.kt:658` 每源调 `counters.complete(outcome)`，而 `Routes.kt:1886` 的 snapshot 默认 type 就是 `progress`；库里启用源 5,574 个 | 一次整库搜索 | progress 攒 `PROGRESS_FLUSH_MS=250` 合并一次；start/done/error 不攒（终态立刻可见）；停止时把攒着的最后一条冲下去，状态行不说谎 | 用 mock WebSocket 真演：600 条 progress **一次都不许渲染**，纯重复的 results 包也不许空渲染，done 后 `loading=false` 且 `progress.completedSources=5574` |
+| 已检查·无问题 | `web/src/searchStore.ts:240/353` | 在途请求脏覆盖 | `openGroupGen` 与 `this.socket !== socket` 双守卫都在，`startSearch` 里也递增 | — | 不用改 | 逐条读过 |
+| 已检查·无问题 | `web/src/api.ts:639-653` | WS 生命周期 | open/message/error/close 都有监听，坏 JSON 走 `onError` 且不重复报（`reported` 旗标） | — | 不用改 | 读码 |
+
+- 规模判据的两次自纠（都是判据自己坏，不是产品）：
+  1. 第一版把小样本定在 1,440 条，一次小 GC 就把比值从 5× 推到 17×，`assertScalesLinearly` 当场红 —— 改成 6,000/30,000 条并**取三次最小值**；
+  2. 反向对照最初按 30,000 条跑整表重建那版，一条用例把机器拖到 5 分钟以上（它本来就是二次方，这正是我要修的东西，但不该由用例来受刑）—— 对照缩到 3,600 条，阈值相应提到 10×，跑完 4.2s。
+- 验证：`npm --prefix web run check` 干净；`npx tsx web/test/run-all.ts` **424/424**（+4），串行单跑；先前那次跑里 `TOCPerformanceScenario Tier 4` 那条 <5ms 墙上时间判据红了，**同一条在本次串行复跑里过了**，按 AGENTS §3 归到环境噪声，不是回归。
+- 影响 AI-1：不需要你改后端。只有一条信息给你：**`counters.complete()` 每源一条 progress** 决定了前端必须攒批，若你以后改成节流推送，请发 `API-CHANGE`，我这边窗口值（250ms）要跟着重定。

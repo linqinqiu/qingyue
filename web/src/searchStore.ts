@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api, BookDetails, SearchResult, SearchStreamEvent, streamSearch } from './api'
+import { mergeStreamedResults, PROGRESS_FLUSH_MS, progressCanCoalesce } from './searchFilters'
 import { OpenBook } from './ReaderScreen'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, SearchFilters, SearchGroup } from './searchFilters'
 
@@ -184,6 +185,12 @@ export class SearchStore {
   private socket: WebSocket | null = null
   // openGroup 是逐源 await 的长循环；发起新搜索/重置时递增它，让在途循环回来时判为过期、不再脏覆盖 choices/openBook。
   private openGroupGen = 0
+  // 流式结果的判重表：跟着一次搜索活。每条封包只往里加，不再每条封包重建一遍已知集合
+  // （那是 O(已收条数 × 封包数)，而整库搜索有五千多个源 → 五千次重建，正发生在结果往屏上长的那段）
+  private seenResults = new Set<string>()
+  // progress 封包的合并窗口：服务端每完成一个源都发一条，直连 setState 就是几千次重渲染
+  private pendingProgress: SearchStreamEvent | null = null
+  private progressTimer: ReturnType<typeof setTimeout> | null = null
 
   getSnapshot = (): SearchStoreState => this.state
 
@@ -236,6 +243,21 @@ export class SearchStore {
     this.setState({ choices })
   }
 
+  /** 把攒着的 progress 一次性落进 state（状态行因此每 PROGRESS_FLUSH_MS 最多重排一次）。 */
+  private flushProgress = () => {
+    this.progressTimer = null
+    const packet = this.pendingProgress
+    this.pendingProgress = null
+    if (packet) this.setState({ progress: packet })
+  }
+
+  /** 丢掉攒着的那条：紧跟其后的 start/done/error 都带着更新的进度，留着反而会倒退一格。 */
+  private cancelProgressFlush = () => {
+    if (this.progressTimer !== null) clearTimeout(this.progressTimer)
+    this.progressTimer = null
+    this.pendingProgress = null
+  }
+
   startSearch = (keyword?: string, sourceId?: string) => {
     this.openGroupGen++ // 作废任何在途的 openGroup
     const query = (keyword !== undefined ? keyword : this.state.keyword).trim()
@@ -261,6 +283,10 @@ export class SearchStore {
       this.socket = null
     }
 
+    // 新一轮搜索：判重表整张换掉（旧的键留着会把新书判成重复），攒着的 progress 丢掉
+    this.seenResults = new Set<string>()
+    this.cancelProgressFlush()
+
     this.setState({
       keyword: query,
       selectedSourceId: source,
@@ -279,30 +305,33 @@ export class SearchStore {
       scopeIds,
       packet => {
         if (this.socket !== socket) return
-        if (packet.type === 'start' || packet.type === 'progress' || packet.type === 'done') {
-          this.setState({ progress: packet })
-        }
         if (packet.type === 'results') {
-          this.setState(prev => {
-            const known = new Set(prev.results.map(item => `${item.sourceId}\u0000${item.bookUrl}`))
-            const additions = packet.results.filter(item => !known.has(`${item.sourceId}\u0000${item.bookUrl}`))
-            return additions.length ? { results: [...prev.results, ...additions] } : {}
-          })
+          // 判重靠常驻的 seen 表；并且**没有新增就不 setState** —— 空补丁也会 emitChange，
+          // 那等于让"这一包全是重复"也换一次整区重渲染
+          const additions = mergeStreamedResults(this.seenResults, packet.results)
+          if (additions.length) {
+            this.setState(prev => ({ results: [...prev.results, ...additions] }))
+          }
+          return
+        }
+        if (progressCanCoalesce(packet.type)) {
+          this.pendingProgress = packet
+          if (this.progressTimer === null) this.progressTimer = setTimeout(this.flushProgress, PROGRESS_FLUSH_MS)
+          return
+        }
+        // start / done / error 都带"现在就该看见"的语义，先冲掉攒着的再落这条
+        this.cancelProgressFlush()
+        if (packet.type === 'start') {
+          this.setState({ progress: packet })
+          return
         }
         if (packet.type === 'error') {
-          this.setState({
-            message: packet.message || '搜索失败',
-            loading: false,
-          })
+          this.setState({ message: packet.message || '搜索失败', loading: false })
           this.socket = null
+          return
         }
-        if (packet.type === 'done') {
-          this.setState({
-            progress: packet,
-            loading: false,
-          })
-          this.socket = null
-        }
+        this.setState({ progress: packet, loading: false })
+        this.socket = null
       },
       error => {
         if (this.socket === socket) {
@@ -329,6 +358,8 @@ export class SearchStore {
   stopSearch = () => {
     const socket = this.socket
     this.socket = null
+    // 停止时把攒着的最后一条进度落下去：状态行要停在"真正知道的最后一刻"，不能比屏幕上还旧
+    this.flushProgress()
     this.setState({
       stopped: true,
       loading: false,
@@ -454,6 +485,9 @@ export class SearchStore {
 
   reset = () => {
     this.openGroupGen++ // 作废任何在途的 openGroup
+    // 判重表与攒着的进度都要跟着整份状态一起清掉，否则清空后紧接着的一次搜索会被旧键判重
+    this.seenResults = new Set<string>()
+    this.cancelProgressFlush()
     if (this.socket) {
       try {
         if (this.socket.readyState === WebSocket.OPEN) {
