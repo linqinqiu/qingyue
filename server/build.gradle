@@ -35,7 +35,7 @@ jacocoTestReport {
 
 
 group = 'io.legado'
-version = '0.6.46'
+version = '0.6.47'
 
 java {
     toolchain {

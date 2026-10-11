@@ -1,5 +1,6 @@
 package io.legado.server
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -42,12 +43,22 @@ class UpdateCheckTest {
     }
 
     @Test
-    fun `没配仓库地址时如实回 not_configured，不发请求也不抛`() {
-        org.junit.Assume.assumeTrue("这台机器配了 LEGADO_REPO，跳过", UpdateCheck.repository.isBlank())
-        val result = UpdateCheck.check("0.6.3")
-        assertTrue("没配仓库应当回 not_configured，实到 ${result.status}", result.status == "not_configured")
-        // 原来这里兜底填了 `lukelzlz/legado-server`（代码 clone 来的地方），于是「关于」页
-        // 把别人家名字当成本项目的开发者、项目主页与检查更新目标。用户 2026-10-05 明确不许。
-        assertTrue("未配置时不许回落到任何仓库 slug", result.repository.isBlank())
+    fun `默认仓库是本项目自己的，不是空也不是别人家的`() {
+        // 出厂状态就该能检查更新（用户 2026-10-11「检查更新不当」）。之前默认是空 → 永远
+        // not_configured；再之前硬编码别人家仓库（`lukelzlz/legado-server`，代码 clone 来的地方），
+        // 用户 2026-10-05 明确不许把仓库放到别人手里。
+        assertTrue("默认仓库不能是空的，否则检查更新出厂即死", UpdateCheck.repository.isNotBlank())
+        assertFalse("默认仓库不许是 clone 来的别人家仓库", UpdateCheck.repository.contains("lukelzlz"))
+        assertEquals("linqinqiu/qingyue", UpdateCheck.DEFAULT_REPOSITORY)
+    }
+
+    @Test
+    fun `滚动构建标签 latest 不当成版本号`() {
+        // CI 每推一次 main 就发一个标签 `latest` 的滚动构建，`/releases/latest` 会返回它。
+        // 以前直接拿 tag_name 去比 → isNewer("latest","0.6.46") 走"比不了即不同"那条 → true →
+        // 每次都说「有新版本 latest」。现在只有像版本号的标签才参与比较，`latest` 归滚动构建那组。
+        assertFalse(UpdateCheck.isVersionTag("latest"))
+        assertTrue(UpdateCheck.isVersionTag("v0.6.26"))
+        assertTrue(UpdateCheck.isVersionTag("0.6.26"))
     }
 }

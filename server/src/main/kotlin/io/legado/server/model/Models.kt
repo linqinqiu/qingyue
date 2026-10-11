@@ -511,7 +511,12 @@ data class CachedBookRequest(
 
 @Serializable data class ServerPortResult(val port: Int, val restartRequired: Boolean)
 
-/** 「关于 → 检查更新」的结果。`status`：`latest` / `available` / `not_found` / `unreachable`。 */
+/**
+ * 「关于 → 检查更新」的结果。`status`：`latest` / `available` / `not_found` / `unreachable` / `not_configured`。
+ *
+ * `latest` 那一组是**版本号发布**（标签形如 `v0.6.26`），拿来判"有没有更新"；
+ * `rolling*` 那一组是 CI 的**滚动构建**（标签不是版本号，如 `latest`），只报发布时间与链接、不判新旧。
+ */
 @Serializable data class UpdateCheckResult(
     val current: String,
     val latest: String? = null,
@@ -520,6 +525,9 @@ data class CachedBookRequest(
     val repository: String,
     val status: String,
     val message: String? = null,
+    val rollingTag: String? = null,
+    val rollingUrl: String? = null,
+    val rollingPublishedAt: String? = null,
 )
 
 @Serializable

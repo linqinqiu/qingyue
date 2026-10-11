@@ -1,6 +1,6 @@
 {
   "name": "legado-server",
-  "version": "0.6.46",
+  "version": "0.6.47",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",
@@ -26,10 +26,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lukelzlz/legado-server.git"
+    "url": "git+https://github.com/linqinqiu/qingyue.git"
   },
   "bugs": {
-    "url": "https://github.com/lukelzlz/legado-server/issues"
+    "url": "https://github.com/linqinqiu/qingyue/issues"
   },
-  "homepage": "https://github.com/lukelzlz/legado-server#readme"
+  "homepage": "https://github.com/linqinqiu/qingyue#readme"
 }

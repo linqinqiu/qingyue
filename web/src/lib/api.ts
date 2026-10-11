@@ -15,12 +15,17 @@ export type ServerInfo = { host: string; port: number }
 export type ServerPortResult = { port: number; restartRequired: boolean }
 export type UpdateCheckResult = {
   current: string
+  /** 版本号发布里最高的一个标签（形如 `v0.6.26`），没有版本号发布时为 null。 */
   latest?: string | null
   url?: string | null
   publishedAt?: string | null
   repository: string
-  status: 'latest' | 'available' | 'not_found' | 'unreachable' | string
+  status: 'latest' | 'available' | 'not_found' | 'unreachable' | 'not_configured' | string
   message?: string | null
+  /** CI 的滚动构建（标签不是版本号，如 `latest`）：只报发布时间与链接，不判新旧。 */
+  rollingTag?: string | null
+  rollingUrl?: string | null
+  rollingPublishedAt?: string | null
 }
 export type SearchResult = { sourceId: string; name: string; author?: string; bookUrl: string; coverUrl?: string; intro?: string; kind?: string; wordCount?: string; lastChapter?: string; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type ExploreTab = { title: string; url: string }

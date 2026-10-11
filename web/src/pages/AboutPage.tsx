@@ -41,6 +41,13 @@ const REFERENCED: Array<[string, string, string]> = [
 const LICENSE_TEXT = '本项目以 GNU GPL-3.0 发布，完整条款见仓库根目录的 LICENSE 文件。你可以自由运行、研究、修改并分发本程序，但修改后的版本必须以同一协议公开。'
 // 用户协议 / 免责声明 / 产品介绍的文案在 `agreement.ts`（与首启弹层共用一份，抄两份迟早漂移）。
 
+/** 把 ISO 时间（`published_at`）念成本地时间；解析不了就原样返回，不编一个假时间。 */
+function formatWhen(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="about-section">
@@ -90,8 +97,8 @@ export function AboutPage({
           <div><dt>运行位置</dt><dd>{window.location.host}</dd></div>
           {/* 「开发者」这一格原来印的是仓库 slug，而 slug 的兜底值硬写着别人家的仓库
               （`lukelzlz/legado-server`，这份代码 clone 来的地方，不是本项目的归属）。
-              现在没配仓库地址就直说没配，绝不替谁署名。 */}
-          <div><dt>开发者</dt><dd>{repository || '未配置仓库地址（LEGADO_REPO）'}</dd></div>
+              现在服务端默认回本项目自己的仓库（`linqinqiu/qingyue`），没取到才说没取到。 */}
+          <div><dt>开发者</dt><dd>{repository || '未配置'}</dd></div>
         </dl>
         <div className="about-actions">
           {/* 没配仓库时按钮照旧可点：点了服务端会回一句"没配置"，比一颗点不动的按钮说得清 */}
@@ -106,12 +113,23 @@ export function AboutPage({
         </div>
         {notice && <p className="about-check is-unreachable">{notice}</p>}
         {check && (
-          <p className={`about-check is-${check.status}`}>
-            {check.status === 'available' && <>有新版本 <strong>{check.latest}</strong>（当前 {check.current}）
-              {check.url && <> · <a href={check.url} target="_blank" rel="noreferrer">查看这一版</a></>}</>}
-            {check.status === 'latest' && <>已经是最新的 {check.current}（{check.repository} 上没有更新的发布）</>}
-            {(check.status === 'not_found' || check.status === 'unreachable' || check.status === 'not_configured') && <>{check.message}</>}
-          </p>
+          <div className="about-check-group">
+            <p className={`about-check is-${check.status}`}>
+              {check.status === 'available' && <>有新版本 <strong>{check.latest}</strong>（当前 {check.current}）
+                {check.url && <> · <a href={check.url} target="_blank" rel="noreferrer">查看这一版</a></>}</>}
+              {check.status === 'latest' && <>版本号发布里没有更新的（当前 {check.current}）</>}
+              {(check.status === 'not_found' || check.status === 'unreachable' || check.status === 'not_configured') && <>{check.message}</>}
+            </p>
+            {/* 版本号发布之外，CI 每推一次 main 就刷新一个滚动构建（标签不是版本号，如 `latest`）。
+                它没有版本号可比，只报发布时间和链接 —— 硬判新旧就会说谎（本机不知道自己的构建时间）。 */}
+            {check.rollingTag && (
+              <p className="about-check is-rolling">
+                另有一个持续构建 <code>{check.rollingTag}</code>
+                {check.rollingPublishedAt && <>（{formatWhen(check.rollingPublishedAt)} 发布）</>}
+                {check.rollingUrl && <> · <a href={check.rollingUrl} target="_blank" rel="noreferrer">查看 / 下载</a></>}
+              </p>
+            )}
+          </div>
         )}
       </header>
 

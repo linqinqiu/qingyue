@@ -5484,7 +5484,8 @@ input[type="checkbox"] {
 .about-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 4px; }
 .about-actions .ghost-button { text-decoration: none; }
 .about-check { margin: 2px 0 0; padding: 9px 12px; border-radius: var(--r-2); font-size: var(--t-sm); line-height: 1.7; }
-.about-check.is-available, .about-check.is-latest { background: var(--surface-muted); color: var(--ink); }
+.about-check-group { display: grid; gap: 6px; }
+.about-check.is-available, .about-check.is-latest, .about-check.is-rolling { background: var(--surface-muted); color: var(--ink); }
 .about-check.is-not_found, .about-check.is-unreachable { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--ink); }
 .about-section { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line); }
 .about-section h2 { margin: 0 0 10px; font-family: Georgia, "Noto Serif SC", serif; font-size: 19px; font-weight: 600; }
