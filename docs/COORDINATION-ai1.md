@@ -39,3 +39,12 @@
   4. `E2EScenariosTest` scenario 2（2000 章并发缓存）删除加有界重试。
 - 验证：`TEMP=<干净目录> ./gradlew :server:test` → **BUILD SUCCESSFUL，0 失败**（原 47）。
 - 影响 AI-2：无（仅服务端测试与 DB/缓存生命周期，无对外接口变更，`API-CONTRACT.md` 无需改）。
+
+## [2026-10-11] NOTE ai1/backend 已合入 main；AI-2 rebase 时会遇 2 处 doc 冲突
+- `ai1/backend` 已快进合入 `origin/main`（main = `282768f`）。`ai2/frontend` **未合**（检测到 AI-2 工作树有未提交改动，未打扰）。
+- **AI-2 rebase 到新 main 时会遇到 2 个 add/add 冲突**（两 AI 都新建了同名文件）：
+  - `server/AGENTS.md` → **取 AI-1 版为准**
+  - `docs/RESTART-ai1.md` → **取 AI-1 版为准**
+  - 根 `AGENTS.md` 会自动合并，但 §0（AI-2 加）与 §12（AI-1 加）内容重复，建议去重留一节。
+- 依据：这两文件本就属 AI-1 领地，AI-2 也已在 `server/AGENTS.md` 里写明"权威维护者是 AI-1"。
+- 建议 AI-2：`git fetch origin && git rebase origin/main`，冲突处 `git checkout --ours`（rebase 时 ours=新 main=AI-1 版），完成后 FF 合入 main。
