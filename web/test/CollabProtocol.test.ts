@@ -3,7 +3,7 @@
  *
  * 这些检查全部钉**结构**：结构缺了就红（少一节、少一个状态板字段、领地表两边重叠、
  * 日志头把规则复述了一遍）。它不判文字好不好看。
- * 规程本身在 `docs/COLLABORATION.md`，那份文件是唯一出处；这里红的时候改的是它的结构，不是这条判据。
+ * 规程本身在 `docs/dual-ai/README.md`，那份文件是唯一出处；这里红的时候改的是它的结构，不是这条判据。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -13,8 +13,8 @@ import path from 'node:path'
 const docs = (...parts: string[]) => path.resolve(import.meta.dirname, '..', '..', ...parts)
 const read = (...parts: string[]) => fs.readFileSync(docs(...parts), 'utf8')
 
-const PROTOCOL = read('docs', 'COLLABORATION.md')
-const MY_LOG = read('docs', 'COORDINATION-ai2.md')
+const PROTOCOL = read('docs', 'dual-ai', 'README.md')
+const MY_LOG = read('docs', 'dual-ai', 'COORDINATION-ai2.md')
 
 /** 规程必须回答的那六件事，少一件就是"不能指导具体情况"。 */
 const REQUIRED_SECTIONS = ['领地', '情况', '状态板', '发版', '红因', '违规']
@@ -58,13 +58,13 @@ test('领地表两边不许重叠 —— 同一个路径不能两个都声称归
   const clash = mine.filter(item => theirs.includes(item))
   assert.deepEqual(clash, [], `两边都声称归自己的路径：${clash.join(' , ')}`)
   // 反向对照：真重叠时必须逮得住（用同样形状造一条数据，不靠注释自证）
-  const naive = ['web/**', 'docs/COLLABORATION.md'].filter(item => ['server/**', 'docs/COLLABORATION.md'].includes(item))
-  assert.deepEqual(naive, ['docs/COLLABORATION.md'], '这个重叠检测本身失效了，上面那条就是恒真')
+  const naive = ['web/**', 'docs/dual-ai/README.md'].filter(item => ['server/**', 'docs/dual-ai/README.md'].includes(item))
+  assert.deepEqual(naive, ['docs/dual-ai/README.md'], '这个重叠检测本身失效了，上面那条就是恒真')
 })
 
 test('日志头部只指路，不复述规则（复述就是下一次错乱的来源）', () => {
   const head = MY_LOG.split('\n').slice(0, 6).join('\n')
-  assert.match(head, /COLLABORATION\.md/, 'AI-2 日志头部没指回规程')
+  assert.match(head, /README\.md/, 'AI-2 日志头部没指回规程')
   assert.doesNotMatch(head, /格式：## \[日期\]|类型为 `TASK`/,
     '日志头部又把类型的清单抄了一遍 —— 规程改了这里不会跟着改，正是"同一个真相写两处"')
 })
@@ -129,7 +129,7 @@ const ESCAPED_PIPE = String.fromCharCode(92, 124)
 const cellsOf = (line: string) => line.split(ESCAPED_PIPE).join('〈pipe〉').split('|').slice(1, -1)
 
 test('协作文档的表格每行列数一致，且没有空格子', () => {
-  const files = ['docs/COLLABORATION.md', 'docs/COORDINATION-ai2.md', 'docs/RESTART-ai2.md']
+  const files = ['docs/dual-ai/README.md', 'docs/dual-ai/COORDINATION-ai2.md', 'docs/dual-ai/RESTART-ai2.md']
   let tables = 0
   const problems: string[] = []
   for (const file of files) {
@@ -149,6 +149,6 @@ test('协作文档的表格每行列数一致，且没有空格子', () => {
 test('架构文档的「改动边界」一节指回规程，不自己写一份', () => {
   const arch = read('docs', 'architecture.md')
   const section = arch.split(/^## /m).find(chunk => chunk.startsWith('7.')) ?? ''
-  assert.match(section, /COLLABORATION\.md/, 'architecture.md 的改动边界没引用规程')
+  assert.match(section, /README\.md/, 'architecture.md 的改动边界没引用规程')
   assert.ok(section.split('\n').length <= 8, '那一节又开始自己复述分工了 —— 只许留一句指路')
 })

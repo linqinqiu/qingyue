@@ -11,7 +11,15 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"本文件行数 == 文档里写�
 
 读出来的问题里，**当场改掉**的列在 §5，**只记录没动**的列在 §4（要么归 AI-1，要么要先拍板）。
 
-模块归属与"这种情况照哪行办"看 [`COLLABORATION.md`](COLLABORATION.md)；整体架构看 [`architecture.md`](architecture.md)。
+模块归属与"这种情况照哪行办"看 [`docs/dual-ai/README.md`](dual-ai/README.md)；整体架构看 [`architecture.md`](architecture.md)。
+
+## 0. 与 AI-1 的边界（以 `docs/dual-ai/README.md` 为单一事实源，本节只记 AI-2 侧的实测）
+
+1. 分工（AI-1 在 `docs/dual-ai/README.md` 里定的）：AI-1 = `qingyue-ai1` / 分支 `ai1/backend`，后端 8081、库 `data/ai1.db`、`tools/` 与构建归它；AI-2 = 本树 `qingyue-ai2` / `ai2/frontend`，前端 `web/`、阅读体验、门面文档；主仓 `main` 是合流目标。
+2. 本分支只写：`web/**`、`README.md`、`docs/code-map-frontend.md`、`docs/architecture.md`、`docs/deploy.md`、`docs/compatibility.md`。
+3. **实测到的两处越界（不是指责，是要对齐）**：`web/vite.config.ts:112` 的代理目标在 23:19 被改成 `http://localhost:8081`，`web/dist` 在 23:30 被重建 —— 两次都不是 AI-2 做的，AI-2 没有把它们提交。约定了目录归属之后，一方要动另一方的树请先把话写进 `docs/dual-ai/README.md`，别直接落盘。
+4. **代码已证、行为待实机验**：AI-2 跑 5174 的 dev server 时写操作会被同源闸门拒。依据是 `server/src/main/kotlin/io/legado/server/Guard.kt` 的注释与实现 ——「Origin 的主机与端口都指向服务自己的绑定身份才算同源」（`isSameOriginIdentity`），所以 `Origin: http://localhost:5174` 打在绑定 8081 的后端上是 403。本轮前端判据因此走「构建产物 + 同源服务」这条路；等 AI-1 的 8081 后端起来后，这条要实机打一次写请求确认。
+   - **2026-10-11 补实测**：这半已经验过一半 —— 把刚构建的 `web/dist` 用静态服务器发在 5178、`/api` 转给 1299，读侧全通，写侧（`Origin: 5178`）确实 403。所以浏览器门禁里凡是涉及保存进度 / 加删书架 / 导入 / 缓存的，只能打在**同一个端口**的实例上。
 
 ## 1. 模块清单
 
@@ -187,7 +195,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"本文件行数 == 文档里写�
 | P2 | `SourceSwitchModal.tsx:35` / `TtsPlayerBar.tsx:72` / `ReaderScreen.tsx:955` | 「`-1` = 章节标题」与"标题归一化"这两套口径各写两份 | 迟早漂；归一化规则该收进一处（书签那条已有先例） |
 | P2 | `styles.css` 死样式 | 清单见 §2.8 末段 | 不影响功能，但每次改外壳都要先在那堆残留里辨认"现行的是哪几条" |
 
-### 4.2 归 AI-1（`server/`、`tools/` 领地，已按规程写进 [`COORDINATION-ai2.md`](COORDINATION-ai2.md)）
+### 4.2 归 AI-1（`server/`、`tools/` 领地，已按规程写进 [`docs/dual-ai/COORDINATION-ai2.md`](dual-ai/COORDINATION-ai2.md)）
 
 | P | 位置 | 事实 | 建议 |
 | :--- | :--- | :--- | :--- |
@@ -230,12 +238,12 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"本文件行数 == 文档里写�
   （本机既有安全边界，不改）。所以这条由 `ShelfState.test.ts` 的结构判据钉住，浏览器侧只演了"可见的都选中"这半（0 张时它自己声明是空判）。
 - 判据自己被自己逮到一次真漂移：`api.ts` 加了 5 行注释后文档还写着 653 行 —— `CodeMapFresh.test.ts` 当场报红，这就是它存在的理由。
 - **产物仍未更新**：`./gradlew :server:fatJar` 被我这边的权限分类器挡下（`server/` 不在 AI-2 权限内，
-  见 `COLLABORATION.md` 的发版队列），所以本轮界面改动还没落到 1234 那个 jar；发版与版本号照旧等 AI-1。
+  见 `docs/dual-ai/README.md` 的发版队列），所以本轮界面改动还没落到 1234 那个 jar；发版与版本号照旧等 AI-1。
 
 ## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，30 份 14,121 行）
 
 > **领地声明**：`server/` 归 AI-1，本轮**一行代码都没动**。这一节的作用是：让前端知道每一侧的对面是什么形状，
-> 以及把我能用命令复现的事实交出去（见 §4.2 与 `COORDINATION-ai2.md`）。
+> 以及把我能用命令复现的事实交出去（见 §4.2 与 `docs/dual-ai/COORDINATION-ai2.md`）。
 > 读法与前端不同：两份并行读码 + 我只逐条**实测**了我准备发表的那部分（curl / grep / 读文件），
 > 没实测到的不写在这里 —— 所以这一节是"照录 + 口径"，不是服务端注释的替代品。
 

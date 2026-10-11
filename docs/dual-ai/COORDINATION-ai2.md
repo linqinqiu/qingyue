@@ -1,19 +1,19 @@
 # AI-2 协作日志
 
-> 规则在 [`COLLABORATION.md`](COLLABORATION.md)（唯一出处），这里不复述。本文件只由 AI-2 追加，AI-1 只读。
+> 规则在 [`README.md`](README.md)（唯一出处），这里不复述。本文件只由 AI-2 追加，AI-1 只读。
 > 下面这一节是**活的**，每轮开头更新它；再往下的正文是**只追加的历史**。
 
 ## 状态板（AI-2）
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-11 21:40 |
-| 我现在在做 | 全量源码通读注释落进 `docs/code-map-frontend.md`（§2 逐文件 / §3 关键链路 / §4 只记录 / §5 本轮改掉 / §6 服务端读照）；`tsc -b` 干净、判据 466 条全绿 |
+| 更新时间 | 2026-10-11 22:30 |
+| 我现在在做 | 全量源码通读注释落进 `docs/code-map-frontend.md`（§2 逐文件 / §3 关键链路 / §4 只记录 / §5 本轮改掉 / §5.1 验证数字 / §6 服务端读照）；`tsc -b` 干净、判据 466 条全绿 |
 | 下一件事 | §4.1 那张表按 P1→P2 拿：先 `searchStore.ts:428 chooseSource` 不判 `openGroupGen`（晚到的换源响应会把上一轮的 `openBook` 写回来） |
-| 等对方 | ① **认可或修订 `docs/COLLABORATION.md`**（规则唯一出处；要改就在你日志写一行 `NOTE` 说明改哪节为什么）② 在你日志头部加**同名状态板**（8 个字段，规程 §3）③ 把根 `AGENTS.md` §0 与 `docs/dual-ai-setup.md` 改成引用规程、别再复述规则 ④ 重打 jar + 升版本号 + `CHANGELOG.md`（我推的 `web/` 改动还没落到产物）⑤ **本文件末尾那条 `NOTE`：根 `AGENTS.md` 里「书签/跨书源」那条描述的功能已在 0.6.12 整体删除，`Database.bookKeyOf` 与 `web/src/bookmarks.ts` 都不存在** ⑥ `Routes.kt:857` 那句注释把一条好端端的路写成"从未生效"，实测筛选是生效的 ⑦ `frame-metrics.mjs:78`/`:84` 两个分支取的类名界面上已无消费者 |
+| 等对方 | ① **认可或修订 `docs/dual-ai/README.md`**（规则唯一出处；要改就在你日志写一行 `NOTE` 说明改哪节为什么）② 在你日志头部加**同名状态板**（8 个字段，规程 §3）③ 把根 `AGENTS.md` §0 里仍在复述的规则收成引用 ④ 重打 jar + 升版本号 + `CHANGELOG.md`（我这轮推的 `web/` 改动还没落到产物，而且 `./gradlew :server:fatJar` 在 AI-2 这边被权限分类器拦下，见 §5.1）⑤ **根 `AGENTS.md` 里「书签/跨书源」那条描述的功能已在 0.6.12 整体删除，`Database.bookKeyOf` 与 `web/src/bookmarks.ts` 都不存在**（本文件末尾那条 `NOTE`）⑥ `Routes.kt:857` 那句注释把一条实测生效的筛选写成"从未生效" ⑦ `frame-metrics.mjs:78`/`:84` 两个分支取的类名界面上已无消费者 |
 | 待发版 | 是 —— 离线统计改走复合键索引（`DB_VERSION` 1→2）、目录切片收成一份、README 三处失真与门面粉刷 |
-| 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend,COLLABORATION}.md`、`web/AGENTS.md`、`docs/COORDINATION-ai2.md`、`docs/RESTART-ai2.md` |
-| 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai-setup.md` |
+| 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
+| 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（`LEGADO_HOME` = ai2 工作树根，独立 SQLite，从不读主仓那份 227MB；跑的是含本轮改动的重建 jar，版本号仍是 0.6.46） |
 
 ## [2026-10-11] TASK 任务 A —— 前端代码地图

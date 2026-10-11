@@ -1,9 +1,20 @@
 # AI-1 协作日志
 
-> 只由 **AI-1** 追加，AI-2 只读。
-> 格式：## [日期] [类型] [标题]，类型为 `TASK` / `API-CHANGE` / `NOTE` / `BLOCKER`
+> 只由 **AI-1** 追加，AI-2 只读。规则见本目录 [`README.md`](README.md)（唯一出处），这里不复述。
+> 下面这一节是**活的**，每轮开头更新它；再往下的正文是**只追加的历史**。
 
-（空，等 AI-1 首次填）
+## 状态板（AI-1）
+
+| 字段 | 内容 |
+| :--- | :--- |
+| 更新时间 | 2026-10-11 16:50 |
+| 我现在在做 | 装置收拢 / 合入 ai2/frontend / 设置页居中 / 自定义皮肤库 —— 四件都做完，待推送 |
+| 下一件事 | 把 main 推到 origin（网络恢复后）；等 AI-2 认可 `docs/dual-ai/README.md` |
+| 等对方 | AI-2 认可 `docs/dual-ai/README.md`（原 `COLLABORATION.md` 已并入），并刷新自己的状态板 |
+| 待发版 | 是（AI-2 的离线统计 / 目录切片 + AI-1 的设置页居中 / 皮肤库，尚未落到产物） |
+| 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
+| 我不碰 | `web/**`、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
+| 自测实例 | 8081（库 `data/ai1.db`，日志 `logs/ai1/server.log`） |
 
 ## [2026-10-11] TASK 建立双 AI 协作基础文件
 - 内容：在 `main` 分支建立三份协作文件 —— `docs/API-CONTRACT.md`（后端对外接口契约初稿，从 `server/` 代码提取）、`docs/COORDINATION-ai1.md`（本文件，AI-1 日志）、`docs/COORDINATION-ai2.md`（AI-2 日志，只读）。
@@ -60,3 +71,20 @@
 - **端口定稿**：AI-1 后端 = **8081**（库 `data/ai1.db`、日志 `logs/ai1/server.log`，由 `qingyue-ai1/.env` 提供）。此前 `server/AGENTS.md` 误写 8080/`ai1.sqlite`/`ai1.log`，**已修正**；根 `AGENTS.md` §0、`web/AGENTS.md`、`docs/dual-ai-setup.md` 本就是 8081，现全仓一致。
 - **AGENTS.md 去重**：根 `AGENTS.md` §0 是通用总纲的唯一权威。`server/AGENTS.md` 已精简——删掉与根 §0 重复的「角色 / 目录 / 端口 / 提交格式 / 协作 / 重开」，只留 AI-1 独有（隔离运行 `.env`、服务端测试口径、接口契约流程）。
 - **请 AI-2 同步**：`web/AGENTS.md` §1–§4 同样是根 §0 的复述，建议精简为只留 **§5（前端验证 + 403 坑）** 与 **§6（八条前端潜规则）** 等前端独有内容。`web/AGENTS.md` 是 AI-2 领地，AI-1 不动。
+
+## [2026-10-11] COLLAB-REQUEST 把 `docs/COLLABORATION.md` 并进 `docs/dual-ai/README.md`
+- 用户拍板：两套唯一事实源并存（`docs/dual-ai/README.md` 与 `docs/COLLABORATION.md`）就是新的错乱 → **以 `docs/dual-ai/README.md` 为主，把 `COLLABORATION.md` 并进来**。
+- 做了：`README.md` 吸收规程六节（领地 / 情况→动作 / 状态板 / 发版队列 / 红因归属 / 违规与事故）；删 `docs/COLLABORATION.md`；`web/test/CollabProtocol.test.ts` 与 `docs/architecture.md` §7 改指新址；清掉 README 里的绝对盘符路径与个人 fork 账号（`opensource-hygiene-check` 9/2 → 11/0）。
+- 顺带：`ai2/frontend` 已 **merge** 进 main（`3797d38`，未重写历史）——AI-2 下次 `git fetch && git rebase origin/main` 变快进，不再撞文件搬迁。
+- 请 AI-2：认可本改动；并刷新你自己的状态板（原条目还指着 `docs/COLLABORATION.md`）。
+
+## [2026-10-11] NOTE AI-1 直接改了 web/ 三处（用户点名）
+- ②设置页 / 关于页恢复居中（`web/src/styles.css`，撤 PROPOSAL-018 §3.2 的去居中）；③自定义皮肤扩成**皮肤库**（`readerSettings.ts` / `main.tsx` / `CustomizeModal.tsx` / `styles.css` + `web/test/CustomizeSkin.test.ts`）。
+- 依据：用户 2026-10-11 直接点名要 AI-1 做这两件（属 README §1 的「用户点名越界」，已记本条）。
+- 影响 AI-2：这几个文件我动过，你下次改之前先 `git fetch`；皮肤库把旧的 `customSkinId` / `customSkinCss` / `customSkinBase` 换成了 `customSkins: CustomSkin[]`（旧值会自动迁进库，不丢数据）。
+
+## [2026-10-11] COLLAB-REQUEST B 档：web/dist 不再进版本库，构建入口收成 npm scripts
+- 用户让做「B 档」。① 单一构建/开发入口：根 `package.json` 的 scripts 扩成 `build` / `test` / `dev` / `start`（`build` = 前端 → web/dist 再 fatJar；编排在 `scripts/tasks.mjs`，按平台选 `gradlew.bat` / `./gradlew`）。
+- ② `web/dist` 不再进版本库（17 个文件 `git rm --cached`，文件仍在盘上；`web/.gitignore` 加 `dist/`）。它每次源码改动都产生一次产物 diff，且不是源。
+- 护栏：`server/build.gradle` 的 fatJar 加了 `doFirst` —— 缺 `web/dist/index.html` 就报错，不再静默产出「只有后端、没有界面」的包；**只拦 fatJar**，`:server:test` 不受影响。
+- 影响 AI-2：**以后别再提交 `web/dist`**；打 jar 前先 `npm run build`。Docker 与 CI 本来就自己构建前端，不受影响。

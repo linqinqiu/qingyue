@@ -5399,6 +5399,18 @@ input[type="checkbox"] {
 .customize-error { margin: 0; color: var(--danger); font-size: 13px; }
 .customize-note { margin: 0; color: var(--muted); font-size: 12px; }
 .customize-note code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.skin-library-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.skin-library { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
+.skin-library-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--surface); }
+.skin-library-row.active { background: var(--surface-muted); }
+.skin-library-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.skin-library-name { font-size: var(--t-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skin-library-meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skin-library-meta code { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.skin-library-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.skin-library-actions .is-danger { color: var(--danger); }
+.skin-editor { display: grid; gap: 10px; margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.skin-editor h4 { margin: 0; font-size: 13px; font-weight: 600; }
 /* ==========================================================================
  * 「本地书分章规则」弹窗（2026-10-03：从「自定义」里搬出来，挂在书架导入旁边）
  * 壳沿用「自定义」弹窗那一套尺寸与圆角：同一应用里两种弹窗几何只会显得随机。
@@ -5447,9 +5459,9 @@ input[type="checkbox"] {
 .customize-saved { color: var(--muted); font-size: 12px; }
 
 /* —— 「关于」页：与更新日志同一条正文栏，读起来是同一份文档 —— */
-.about-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0; padding: 36px 32px 64px; }
+.about-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 /* —— 「设置」页：一行一件事，右侧一个动作。它不重复实现编辑器，只负责分类与跳转 —— */
-.settings-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0; padding: 36px 32px 64px; }
+.settings-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 .settings-section { margin-top: 30px; }
 .settings-section h2 { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; }
 .settings-rows { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
@@ -5485,12 +5497,12 @@ input[type="checkbox"] {
 .about-table td:last-child { width: 88px; color: var(--muted); white-space: nowrap; }
 @media (max-width: 640px) { .about-page { padding: 32px 18px 44px; } }
 
-/* —— C 类页（设置 / 备份 / 关于）去居中 + 宽屏两栏 ——
-   PROPOSAL-018 §3.2：C 类页不再居中。原来是"限宽 760/920 居中"——1180 屏上设置页两侧
-   死白 41%、1440 屏 25%。改法：① 单栏不再居中（margin:0，靠左排），限宽 960（1180 屏
-   实测两侧死白 41%→24%）；② ≥1200px 仍把分组左右并排、页头横跨两栏（1440 屏两侧死白
-   25%）。**断点保持 1200 不降到 1180**：1180 若走两栏，内容变矮会让底部死白从 0% 涨到
-   20%（"底部不得变差"那条判据会红）—— 两侧死白 24% 已经达标，不必拿底部空白去换。 */
+/* —— C 类页（设置 / 备份 / 关于）居中 + 宽屏两栏 ——
+   2026-10-11 用户拍板：设置页不居中、偏左，恢复居中。PROPOSAL-018 §3.2 当年为压两侧死白
+   把单栏改成 margin:0 靠左排（1180 屏设置页两侧死白 41%→24%），现改回 margin:0 auto
+   （备份页本就是 auto，三页一致）。≥1200px 的分组左右并排 + 页头横跨两栏保留。
+   **断点保持 1200 不降到 1180**：1180 若走两栏，内容变矮会让底部死白从 0% 涨到 20%
+   （底部不得变差那条判据会红）。 */
 @media (min-width: 1200px) {
   .settings-page, .backup-page, .about-page {
     max-width: 1120px;

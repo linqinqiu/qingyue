@@ -96,5 +96,5 @@
 ## 7. 改动边界
 
 三个 git 工作树共享一份历史：`main`（合流目标）、`ai1/backend`、`ai2/frontend`。
-**谁改什么、遇到具体情况照哪一行做，只在 [`COLLABORATION.md`](COLLABORATION.md) 里**——本文件不复述规则，
-复述就是下一次"同一个真相写两处"。工作树与分支的对应关系见 [`dual-ai-setup.md`](dual-ai-setup.md)。
+**谁改什么、遇到具体情况照哪一行做，只在 [`docs/dual-ai/README.md`](dual-ai/README.md) 里**——本文件不复述规则，
+复述就是下一次"同一个真相写两处"。工作树与分支的对应关系见 [`docs/dual-ai/README.md`](dual-ai/README.md)。

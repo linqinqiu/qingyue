@@ -58,6 +58,14 @@ tasks.register('fatJar', Jar) {
     archiveBaseName.set('legado-server')
     archiveClassifier.set('all')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // web/dist 自 2026-10-11（B 档）起不再进版本库：干净检出里它不存在，而 processResources
+    // 只在它存在时才拷进 jar —— 不在这里拦一道，就会得到一个"只有后端、没有界面"的包，
+    // 而且静默成功。注意只拦 fatJar：:server:test 不依赖界面产物，不能连带卡住。
+    doFirst {
+        if (!file("${rootProject.projectDir}/web/dist/index.html").exists()) {
+            throw new GradleException("web/dist is missing — run `npm run build` first (or `npm --prefix web run build`).\nweb/dist 里没有界面产物 —— 先跑 `npm run build` 再打 fatJar。")
+        }
+    }
     manifest {
         attributes(
             'Main-Class': 'io.legado.server.ApplicationKt',

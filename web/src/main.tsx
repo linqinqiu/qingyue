@@ -11,7 +11,7 @@ import { Logo } from './Logo'
 import { BookCover, CoverFallback, SearchCover } from './Cover'
 import { OpenBook, ReaderScreen } from './ReaderScreen'
 import { ErrorBoundary } from './ErrorBoundary'
-import { loadReaderSettings, parseSkinId, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
+import { activeCustomSkin, loadReaderSettings, ReaderSettings, saveReaderSettings, themeClassNames } from './readerSettings'
 import { AppHeader } from './AppHeader'
 import { ChangelogPage } from './ChangelogPage'
 import { AboutPage } from './AboutPage'
@@ -87,8 +87,9 @@ const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ?
  * id 过一遍白名单（`parseSkinId`），只允许 `[a-z0-9-_]`。
  */
 function SkinStyle({ settings }: { settings: ReaderSettings }) {
-  const id = parseSkinId(settings.customSkinId)
-  const css = (settings.customSkinCss ?? '').trim()
+  const active = activeCustomSkin(settings)
+  const id = active?.id ?? ''
+  const css = (active?.css ?? '').trim()
   useEffect(() => {
     const marker = 'legado-custom-skin'
     const existing = document.getElementById(marker)
