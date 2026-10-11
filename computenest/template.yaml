@@ -1,5 +1,5 @@
 ROSTemplateFormatVersion: '2015-09-01'
-Description: 'Legado 开源阅读服务端（ECI 容器 + NAS 持久化存储一键部署）'
+Description: '青阅 · Legado 书源服务端（ECI 容器 + NAS 持久化存储一键部署）'
 
 Metadata:
   ALIYUN::ROS::Interface:
@@ -27,7 +27,7 @@ Parameters:
   ContainerCpu:
     Type: Number
     Label: ECI 容器 CPU (核)
-    Description: '分配给 Legado 容器的 CPU 核数。'
+    Description: '分配给青阅容器的 CPU 核数。'
     Default: 1
     AllowedValues:
       - 0.25
@@ -39,7 +39,7 @@ Parameters:
   ContainerMemory:
     Type: Number
     Label: ECI 容器内存 (GiB)
-    Description: '分配给 Legado 容器的内存大小（GiB）。'
+    Description: '分配给青阅容器的内存大小（GiB）。'
     Default: 2
     AllowedValues:
       - 0.5
@@ -203,7 +203,7 @@ Resources:
 
 Outputs:
   WebUrl:
-    Description: 'Legado 阅读器 Web 界面访问地址'
+    Description: '青阅 Web 界面访问地址'
     Value:
       Fn::Sub: 'http://${Eip.EipAddress}:8080'
 

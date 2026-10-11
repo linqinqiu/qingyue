@@ -1,9 +1,15 @@
 ---
 id: ACCEPT-015
 title: 内置 WebDAV 服务端（数据目录 webdav 存储区）验收手册
-status: pending
+status: superseded（功能已于 2026-09-29 删除）
 date: 2026-09-17
 ---
+> [!WARNING]
+> **本手册描述的内置 WebDAV 文件服务已删除**（PROPOSAL-015 / ADR-015 已标 Superseded）。
+> 下面是**当时的验收记录**，仅作历史留存：照抄这里的命令拿不到 /webdav 端点，
+> 那个密码环境变量也早就不存在 —— 这台服务不设身份，写操作唯一的门是同源闸门。
+> 手机直传备份现在走浏览器直传，见 README 的「备份」一节。
+
 
 # ACCEPT-015: 内置 WebDAV 服务端验收手册
 
@@ -20,15 +26,13 @@ date: 2026-09-17
 docker build -f Dockerfile.server -t test-legado-server:latest .
 docker rm -f test-legado 2>/dev/null || true
 docker run -d --name test-legado -p 8080:8080 \
-  -e ADMIN_PASSWORD=admin123456789 \
-  -e LEGADO_SECURE_COOKIES=false \
   -v $(pwd)/.data:/data test-legado-server:latest
 ```
 
 ### 0.2 或本机 JAR / Gradle 方式
 
 ```bash
-LEGADO_DATA_DIR=./.data ADMIN_PASSWORD=admin123456789 LEGADO_SECURE_COOKIES=false ./gradlew :server:run
+LEGADO_DATA_DIR=./.data ./gradlew :server:run
 ```
 
 ### 0.3 连接参数
@@ -37,7 +41,7 @@ LEGADO_DATA_DIR=./.data ADMIN_PASSWORD=admin123456789 LEGADO_SECURE_COOKIES=fals
 | --- | --- |
 | 地址（URL） | `http://127.0.0.1:8080/webdav` |
 | 用户名 | 任意（例如 `legado`、`admin`，服务端不校验用户名） |
-| 密码 | `ADMIN_PASSWORD`（本手册示例为 `admin123456789`） |
+| 密码 | 当时由 `ADMIN_PASSWORD` 提供；**该变量已随鉴权一起删除**，现在没有口令这一层 |
 
 > 首次启动后数据目录会自动创建 `webdav/` 子文件夹；`.data/webdav`（容器内 `/data/webdav`）即存储区根目录。
 
