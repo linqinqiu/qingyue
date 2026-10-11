@@ -22,7 +22,11 @@ node start.mjs --no-open --port 1299             # LEGADO_HOME=qingyue-ai2 → d
 curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"...","status":"ok"}
 ```
 
-- 前端判据：`npm --prefix web run check`（tsc，必须干净）、`npx tsx web/test/run-all.ts`（2026-10-11 基线 **414/414**）。
+- 前端判据：`npm --prefix web run check`（tsc，必须干净）、`npx tsx web/test/run-all.ts`（2026-10-11 通读那轮之后基线 **466/466**）。
+- **`./gradlew :server:fatJar` 在 AI-2 这边会被权限分类器挡下**（`server/` 不是我的领地，2026-10-11 实测被拦）。
+  所以"界面改动落到产物"这一步只能请 AI-1 或用户做；我这侧能做的验证上限是
+  `npm --prefix web run build` + 把 `web/dist` 用临时静态服务器发出去、`/api` 转给 1299 演**读侧**版面
+  （写侧一律 403，见下一条）。脚本形状见 `tmp/serve-dist.mjs` + `tmp/shelf-state-verify.mjs`。
 - 浏览器门禁（AI-1 的 `tools/verify/`，**只跑不改**）：`LEGADO_BASE_URL=http://127.0.0.1:1299 node tools/verify/<gate>.mjs`，一律**串行**。
 - **为什么不用 dev server 验证写操作**：同源闸门按 Origin 的主机+端口与服务绑定身份比，
   `Origin: http://127.0.0.1:5174` → 403 `cross_origin`，同源 → 200（2026-10-11 三条 curl 实测）。
