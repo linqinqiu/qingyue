@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { TapZoneEditor } from '../src/reader/TapZoneEditor'
@@ -46,4 +48,19 @@ test('编辑层盖在正文上、正文仍渲染：surface 是独立一层（不
   const html = render(DEFAULT_MAPS.paginate)
   assert.ok(html.includes('tap-zone-surface'), '要有覆盖层容器')
   assert.equal((html.match(/tap-zone-cell/g) || []).length, 3, '默认三格')
+})
+
+/**
+ * 双击删虚线的两条把手都必须走 `removeCut`。
+ * 静态渲染演不出"双击之后线少了"（React 合成事件不在 renderToStaticMarkup 里跑），
+ * 所以这条钉的是源码结构，防的是已经发生过的笔误：
+ * `cuts.filter((_, item) => item !== index)` —— 回调第二个参数是**值**不是下标，
+ * 于是"双击删一条线"静默无效、界面上也没有任何报错。
+ * 竖线那条先被发现修掉，横线这条是同一轮通读读出来的，两条一起钉住。
+ */
+test('两条把手都按 removeCut 删线，不许再出现按下标比值的 filter', () => {
+  const code = fs.readFileSync(path.resolve(import.meta.dirname, '../src/reader', 'TapZoneEditor.tsx'), 'utf8')
+  assert.equal((code.match(/filter\(\(_, item\)/g) || []).length, 0, '按下标比值的写法要清零')
+  assert.equal((code.match(/withCuts\('x', removeCut\(map\.x, index\)\)/g) || []).length, 1, '竖线把手')
+  assert.equal((code.match(/withCuts\('y', removeCut\(map\.y, index\)\)/g) || []).length, 1, '横线把手')
 })

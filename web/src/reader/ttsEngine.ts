@@ -16,9 +16,11 @@ export type TtsChunkContext = {
  */
 function isEffectiveText(text: string): boolean {
   if (!text) return false
-  // Strip all punctuation, CJK brackets, quotes, whitespace
+  // Strip all punctuation, CJK brackets, quotes, whitespace.
+  // 全角区间跳过数字与字母（０-９ / Ａ-Ｚ / ａ-ｚ）：`１２３４` 是有效内容，
+  // 整段 \uFF00-\uFFEF 当标点会把这类分片判成"没东西可播"而静默跳过。
   const stripped = text.replace(
-    /[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u2000-\u206F\u2018\u2019\u201C\u201D\u3000-\u303F\uFF00-\uFFEF]/g,
+    /[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u2000-\u206F\u2018\u2019\u201C\u201D\u3000-\u303F\uFF00-\uFF0F\uFF1A-\uFF20\uFF3B-\uFF40\uFF5B-\uFFEF]/g,
     '',
   )
   return stripped.length >= 2

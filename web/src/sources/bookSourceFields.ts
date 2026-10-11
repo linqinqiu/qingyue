@@ -690,5 +690,3 @@ export const SOURCE_FIELD_GROUPS: SourceFieldGroup[] = [
   ]
  }
 ]
-
-export const SOURCE_FIELD_COUNT = 95

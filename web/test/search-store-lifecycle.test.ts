@@ -190,6 +190,47 @@ test('searchStore - stopSearch lifecycle and status flag', () => {
   }
 })
 
+/**
+ * 服务端把「sourceIds 为空」当不限制（`Database.kt` 里的 `takeIf { it.isNotEmpty() }`），
+ * 所以"只搜这一个分组、但组里零个启用源"若把 `[]` 发出去就变成搜全库。
+ * 反向对照在同一条里：同一个 store 换成非空范围必须真的开得出连接，否则前面那条是空判。
+ */
+test('startSearch - 范围是空表时一次请求都不发，非空时照常发', () => {
+  const originalWebSocket = globalThis.WebSocket
+  const originalLocation = globalThis.location
+  let opened = 0
+
+  class CountingWebSocket {
+    static OPEN = 1
+    readyState = 1
+    addEventListener(_event: string, _cb: unknown) {}
+    send(_data: string) {}
+    close() {}
+    constructor() { opened += 1 }
+  }
+
+  ;(globalThis as any).WebSocket = CountingWebSocket
+  ;(globalThis as any).location = { protocol: 'http:', host: 'localhost:8080' }
+
+  try {
+    searchStore.reset()
+    searchStore.setSelectedSourceIds([])
+    searchStore.startSearch('空范围关键词')
+    assert.equal(opened, 0, '零个源不该发出搜索请求')
+    assert.equal(searchStore.getSnapshot().loading, false, '没发请求就不许装成在搜')
+
+    searchStore.setSelectedSourceIds(['https://one.example'])
+    searchStore.startSearch('有范围关键词')
+    assert.equal(opened, 1, '反向对照：范围非空时必须真的开一条')
+    assert.equal(searchStore.getSnapshot().loading, true)
+    searchStore.stopSearch()
+  } finally {
+    globalThis.WebSocket = originalWebSocket
+    globalThis.location = originalLocation
+    searchStore.reset()
+  }
+})
+
 
 // ———— 流式搜索的判重与攒批（AI-2 任务 C·模块 2「搜索 UI」，也是 R4 第一项）————
 

@@ -1588,16 +1588,23 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
       return next
     })
   }
-  const handleSearch = (event: FormEvent) => {
-    event.preventDefault()
+  /** 发起一次搜索：范围闸门 + 记历史。历史词条（:1693 那颗 chip）与表单提交走同一条路，
+   *  否则 chip 会绕过"零个源就别搜"的守卫，被服务端当成"不限制"搜完全库。 */
+  const runSearch = (keyword?: string) => {
+    const query = (keyword ?? search.keyword).trim()
+    if (!query) return
     if (scopeMode !== 'all' && !scopeIds.length) {
-      search.setKeyword(search.keyword)
       toast.warning(scopeMode === 'group' ? '这个分组里没有处于启用状态的书源，换一组或先去「书源」页启用' : '先选一个书源，或改用「全部书源」')
       return
     }
+    if (keyword !== undefined) search.setKeyword(keyword)
     search.setSelectedSourceIds(scopeMode === 'all' ? null : scopeIds)
-    recordHistory(search.keyword)
+    recordHistory(query)
     search.startSearch()
+  }
+  const handleSearch = (event: FormEvent) => {
+    event.preventDefault()
+    runSearch()
   }
   const groupOptions = useMemo(() => {
     const tally = new Map<string, { total: number; ready: number }>()
@@ -1692,7 +1699,7 @@ function LibraryPage({ sources, onSourcesChanged, onOpen }: { sources: SourceSum
                   key={item}
                   type="button"
                   className="library-history-chip"
-                  onClick={() => { search.setKeyword(item); search.setSelectedSourceIds(scopeMode === 'all' ? null : scopeIds); recordHistory(item); search.startSearch() }}
+                  onClick={() => runSearch(item)}
                 >
                   {item}
                 </button>
@@ -2265,6 +2272,8 @@ function ShelfPage({
   tocRulesSignal: number
 }) {
   const [items, setItems] = useState<BookshelfItem[]>([])
+  /** 还没到手 ≠ 一条都没有：空态卡只能由"取到了且是空的"触发。 */
+  const [itemsLoaded, setItemsLoaded] = useState(false)
   const [message, setMessage] = useState('')
   const [switchingItem, setSwitchingItem] = useState<BookshelfItem | null>(null)
   const [managingItem, setManagingItem] = useState<BookshelfItem | null>(null)
@@ -2362,11 +2371,6 @@ function ShelfPage({
     }
   }
   
-  const selectAllBooks = () => {
-    const keys = items.map(item => `${item.sourceId}::${item.bookUrl}`)
-    setSelectedBooks(new Set(keys))
-  }
-  
   const clearSelection = () => {
     setSelectedBooks(new Set())
   }
@@ -2407,6 +2411,8 @@ function ShelfPage({
       setItems(list)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '无法载入书架')
+    } finally {
+      setItemsLoaded(true)
     }
   }, [])
 
@@ -2558,7 +2564,14 @@ function ShelfPage({
     }
     return sorted
   }, [items, view, sort, groupFilter])
+  // 「全选」全选的是**看得见的那一列**：按钮 title 写着"全选当前页所有书籍"，
+  // 而页签与分组只作用于 visibleItems —— 按 items 整架选会让批量删除动到当前筛不出来的书。
+  const selectAllBooks = () => {
+    setSelectedBooks(new Set(visibleItems.map(item => `${item.sourceId}::${item.bookUrl}`)))
+  }
   const counts = { reading: items.filter(item => !item.completed).length, completed: items.filter(item => item.completed).length, all: items.length }
+  /** 取失败时上面那行 form-error 已经把原因说了，列表区不能再声称"书架是空的"。 */
+  const shelfFailedEmpty = !!message && items.length === 0
 
   /*
     长按拖动排序（用户 2026-10-02：「批量管理功能在，长按书籍可移动能排顺序（自定义）」）。
@@ -2901,7 +2914,14 @@ function ShelfPage({
 
       {message && <p className="form-error">{message}</p>}
 
-      {items.length === 0 && !message ? (
+      {!itemsLoaded && !message ? (
+        <section className="shelf-empty" aria-live="polite">
+          <Icon name="book" />
+          <h2>正在读书架…</h2>
+        </section>
+      ) : shelfFailedEmpty ? (
+        null
+      ) : items.length === 0 ? (
         <section className="shelf-empty">
           <Icon name="book" />
           <h2>书架还是空的</h2>
@@ -3052,7 +3072,7 @@ function ShelfPage({
                     <span className={`shelf-meta-chapter ${item.completed ? 'completed' : ''}`}>
                       {item.completed ? '已读完' : item.chapterIndex === undefined ? '刚加入书架' : `第 ${item.chapterIndex + 1} 章`}
                     </span>
-                    {item.totalChapters > 0 && <span className="shelf-meta-percent">{Math.min(100, Math.round(((item.chapterIndex ?? 0) / item.totalChapters) * 100))}%</span>}
+                    {item.totalChapters > 0 && <span className="shelf-meta-percent">{Math.min(100, Math.round((((item.chapterIndex ?? 0) + 1) / item.totalChapters) * 100))}%</span>}
                     <time className="shelf-meta-when" dateTime={new Date(item.lastReadAt).toISOString()}>
                       {new Date(item.lastReadAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
                     </time>

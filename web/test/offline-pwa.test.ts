@@ -4,6 +4,7 @@ import {
   putOfflineChapter,
   getOfflineChapter,
   getOfflineChaptersSet,
+  downloadChaptersToOffline,
   clearOfflineBook,
   clearAllOffline,
   saveShelfSnapshot,
@@ -596,4 +597,26 @@ test('v1 库升到 v2 只补索引，不动表也不清老缓存', async () => {
   assert.equal(stats.totalChapters, 2, '老记录也要被新索引统计到')
   assert.equal(stats.books.length, 2)
   assert.equal(store.fullCursorCalls, 0, '升级后的库应当直接吃上快路径')
+})
+
+test('本地同步进度：分子只能数这一次切片，不能数整本书已缓存的章', async () => {
+  setupMockIndexedDB()
+  // 这本"书"其实已经缓存了 120 章，而用户这次点的是"往后 3 章"
+  for (let i = 0; i < 120; i++) {
+    await putOfflineChapter('src-p', 'book-p', `old-${i}`, `旧${i}章`, '内容内容')
+  }
+  const chapters = [0, 1, 2].map(i => ({ index: i, title: `第${i + 1}章`, url: `new-${i}` }))
+  const seen: Array<[number, number]> = []
+  const result = await downloadChaptersToOffline(
+    'src-p',
+    'book-p',
+    chapters,
+    async () => ({ title: 'x', content: '新下载的正文' }),
+    (current, total) => seen.push([current, total]),
+  )
+  assert.equal(result.successful, 3)
+  assert.ok(seen.length > 0, '进度回调至少要演一次')
+  assert.ok(seen.every(([current, total]) => current <= total && current >= 0),
+    `进度不许超过总数：${JSON.stringify(seen)}`)
+  assert.deepEqual(seen.at(-1), [3, 3], '最后一格要正好落在 3 / 3 章')
 })

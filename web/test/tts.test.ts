@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import { cleanTextForSpeech, splitSentences, processChapterForTts } from '../src/reader/ttsTextProcessor'
 
 test('TTS Text Processor - cleanTextForSpeech filters noise and decorative symbols', () => {
@@ -69,4 +71,32 @@ test('TTS Text Processor - handles empty chapter gracefully', () => {
   const data = processChapterForTts('', [], true)
   assert.equal(data.chunks.length, 0)
   assert.equal(data.totalChars, 0)
+})
+
+/**
+ * 「剥掉标点后有效字符 < 2 就丢掉这一片」是为了不给后端送纯标点（0 字节音频 → 前端 416）。
+ * 全角数字与全角字母不是标点：以前的剥除区间写作 `\uFF00-\uFFEF`，整段当标点，
+ * 于是 `１２３４５` 这种句子被判成"没东西可播"而静默跳过。两处口径也必须同源。
+ */
+test('splitSentences - 全角数字与字母是有效内容，纯标点仍然丢掉', () => {
+  assert.deepEqual(splitSentences('风声呼啸。１２３４５。天亮了。'), [
+    '风声呼啸。',
+    '１２３４５。',
+    '天亮了。',
+  ])
+  assert.deepEqual(splitSentences('ＡＢＣＤＥ！'), ['ＡＢＣＤＥ！'])
+  assert.deepEqual(splitSentences('。，、！？'), ['。，、！？'], '整章都是标点时退回原文（与原来一致）')
+  assert.deepEqual(splitSentences('他开口了：“”。走了两步。'), ['他开口了：“”。', '走了两步。'],
+    '反向对照：真·纯标点碎片仍然要被丢掉')
+})
+
+/** 两处"什么算标点"必须一模一样：引擎侧与分句侧各写一份迟早漂（漂了就是有的句子静默不出声）。 */
+test('ttsEngine 与 ttsTextProcessor 的剥除区间是同一份口径', () => {
+  const read = (name: string) => fs.readFileSync(path.resolve(import.meta.dirname, '../src/reader', name), 'utf8')
+  const pattern = /\/\[\\s[^/\n]*\]\/g/g
+  const engine = read('ttsEngine.ts').match(pattern) ?? []
+  const processor = read('ttsTextProcessor.ts').match(pattern) ?? []
+  assert.equal(engine.length, 1, `ttsEngine 里应当只有一处剥除区间，实际 ${engine.length}`)
+  assert.equal(processor.length, 1, `ttsTextProcessor 里应当只有一处剥除区间，实际 ${processor.length}`)
+  assert.deepEqual(processor, engine, '两处剥除区间不许是两个答案')
 })

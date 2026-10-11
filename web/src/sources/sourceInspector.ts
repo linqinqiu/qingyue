@@ -182,10 +182,6 @@ export function getInitialOrStoredInspections(sources: SearchResult[]): Map<stri
   return map
 }
 
-export function createInitialInspections(sources: SearchResult[]): Map<string, SourceHealthInspection> {
-  return getInitialOrStoredInspections(sources)
-}
-
 export async function inspectSingleSource(
   result: SearchResult,
   alternateSources?: SearchResult[],

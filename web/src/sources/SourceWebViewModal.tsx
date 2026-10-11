@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { Icon } from '../icons'import { useEscapeClose } from '../lib/useEscapeClose'
+import { Icon } from '../icons'
+import { useEscapeClose } from '../lib/useEscapeClose'
 
 
 interface SourceWebViewModalProps {

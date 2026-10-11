@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import { api } from '../src/lib/api.ts'
 
 test('Source Login API Client - getSourceLoginUi, save, action, check, and delete', async () => {
@@ -98,4 +100,23 @@ test('Source Login API Client - getSourceLoginUi, save, action, check, and delet
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+/**
+ * 「书签同步」那段 javascript: 代码跑在**目标站点的页面上**，是跨站请求：
+ * 服务端 `POST /api/sources/{id}/login-cookie` 只放行确实属于该书源域名的 Origin
+ * （`Routes.kt` 的 `allowCookieSyncOrigin`），跨域不同就回 403 并带一个能 parse 的 JSON 错误体。
+ * 第一版写的是 `.then(r => r.json()).then(() => alert('已把…同步进青阅'))` —— 不判 `r.ok`，
+ * 于是**被拒绝也报成功**，用户看到的是一句假话加上界面毫无变化。
+ * 这段代码是拼在模板字符串里的，跑不进 jsdom，所以钉源码结构。
+ */
+test('书签代码必须先判响应状态，被闸门挡下时不许报成功', () => {
+  const code = fs.readFileSync(path.resolve(import.meta.dirname, '../src/sources', 'SourceLoginModal.tsx'), 'utf8')
+  const bookmarklet = code.match(/const bookmarkletCode[\s\S]*?\n  \}, \[sourceId\]\)/)
+  assert.ok(bookmarklet, '书签代码要还在（换了实现就同步改这条判据）')
+  const body = bookmarklet[0]
+  assert.ok(/ok:r\.ok/.test(body), '要带 ok:r.ok —— 否则 403 的 JSON 体也算成功')
+  assert.ok(/同步失败/.test(body), '非 2xx 要报失败')
+  assert.ok(!/\.then\(function\(r\)\{return r\.json\(\)\}\)\.then\(function\([^)]*\)\{alert\('已把/.test(body),
+    '反向对照：不判状态直接 alert 成功的那种写法要清零')
 })

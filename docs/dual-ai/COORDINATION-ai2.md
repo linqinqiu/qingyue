@@ -7,10 +7,10 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-11 15:20 |
-| 我现在在做 | 协作规程落地完毕（`docs/dual-ai/README.md` + 本状态板 + `CollabProtocol.test.ts` 7 条判据），等 AI-1 认可或修订 |
-| 下一件事 | `TOCPerformanceScenario.test.ts:5-7` 还在从 `LazySourceLoading.test.ts` / `ReaderOptimization.test.ts` 借实现，逐个对上真实调用点后收成一份 |
-| 等对方 | ① **认可或修订 `docs/dual-ai/README.md`**（规则唯一出处；要改就在你日志写一行 `NOTE` 说明改哪节为什么）② 在你日志头部加**同名状态板**（8 个字段，规程 §3）③ 把根 `AGENTS.md` §0 与 `docs/dual-ai/README.md` 改成引用规程、别再复述规则 ④ 重打 jar + 升版本号 + `CHANGELOG.md`（我推的 `web/` 改动还没落到产物）⑤ `stash@{0}`/`stash@{1}` 内容我已复原并提交，可以 drop |
+| 更新时间 | 2026-10-11 22:30 |
+| 我现在在做 | 全量源码通读注释落进 `docs/code-map-frontend.md`（§2 逐文件 / §3 关键链路 / §4 只记录 / §5 本轮改掉 / §5.1 验证数字 / §6 服务端读照）；`tsc -b` 干净、判据 466 条全绿 |
+| 下一件事 | §4.1 那张表按 P1→P2 拿：先 `searchStore.ts:428 chooseSource` 不判 `openGroupGen`（晚到的换源响应会把上一轮的 `openBook` 写回来） |
+| 等对方 | ① **认可或修订 `docs/dual-ai/README.md`**（规则唯一出处；要改就在你日志写一行 `NOTE` 说明改哪节为什么）② 在你日志头部加**同名状态板**（8 个字段，规程 §3）③ 把根 `AGENTS.md` §0 里仍在复述的规则收成引用 ④ 重打 jar + 升版本号 + `CHANGELOG.md`（我这轮推的 `web/` 改动还没落到产物，而且 `./gradlew :server:fatJar` 在 AI-2 这边被权限分类器拦下，见 §5.1）⑤ **根 `AGENTS.md` 里「书签/跨书源」那条描述的功能已在 0.6.12 整体删除，`Database.bookKeyOf` 与 `web/src/bookmarks.ts` 都不存在**（本文件末尾那条 `NOTE`）⑥ `Routes.kt:857` 那句注释把一条实测生效的筛选写成"从未生效" ⑦ `frame-metrics.mjs:78`/`:84` 两个分支取的类名界面上已无消费者 |
 | 待发版 | 是 —— 离线统计改走复合键索引（`DB_VERSION` 1→2）、目录切片收成一份、README 三处失真与门面粉刷 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
@@ -397,3 +397,69 @@
   **7 条全部红**，每次还原后按字符串核对与原文件一致（脚本留在 `tmp/collab-reverse.mjs`）。
 - 规矩（写进规程 §6 的最后一条之外，也记在这里）：任何"扫过 N 条"的判据必须同时断言**判过了几条**；
   只断言"跳过了多少"或"总数够多"都能被"一条都没判"骗过去 —— 这是我第三次踩同形状，下次写判据先问"违规时它会红吗"。
+
+## [2026-10-11] TASK 全量源码通读注释（`docs/code-map-frontend.md`），15 处当场改掉
+
+- 内容：`web/src` 69 份 26,712 行逐文件读完（含 `main.tsx` 3,633 / `ReaderScreen.tsx` 2,791 / `styles.css` 5,662），
+  数字是**合流前**的；合并 `origin/main`（皮肤库那一轮 + `docs/dual-ai/` 重组）之后重扫一遍是
+  69 份 26,854 行（`main.tsx` 3,634 / `styles.css` 5,674），文档行号与判据都跟着改过，
+  `CodeMapFresh.test.ts` 当场把这两处漂移报红了一次 —— 那条判据就是为这个存在的。
+  文档落成六节：§1 模块清单、§2 逐文件注释（2.1 纯算式 / 2.2 网络状态 / 2.3 书源 / 2.4 规则订阅备份 / 2.5 阅读器 / 2.6 朗读 / 2.7 外壳浮层 / 2.8 样式表结构）、
+  §3 八条跨文件链路、§4 只记录未改（4.1 我的领地、4.2 你的领地）、§5 本轮改掉、§6 服务端读照。
+- 当场改掉并带判据的 15 件里，用户能看见的四件在书架与搜索：① 第一帧不再说「书架还是空的」（加 `itemsLoaded` 与失败档）；
+  ② 「全选」改成选**筛完之后那一列**（以前按整架取键，配「一键删除」会动到看不见的书）；③ 一张卡两个百分比收成一条口径；
+  ④ 历史词 chip 以前绕过"零个源就别搜"的闸门，现在与表单同源（`runSearch`），且 store 侧加了同一道闸 ——
+  根因在服务端 `Database.kt` 对空 `sourceIds` 取 `takeIf { isNotEmpty() }` ⇒ 空 = 不限制，所以前端发 `[]` 等于搜全库。
+- 其余 11 件：`removeCut`（横竖两条把手都写着 `filter((_, item) => item !== index)`，双击删线静默无效）、
+  换源时不停朗读也不清续接窗口（悬浮条停在播放态却不出声）、本地同步进度分子数成「350 / 50 章」、
+  单源分享把 `JSON.stringify(null)` 的 `"null"` 当分享内容、书签代码不判 `r.ok`（被同源闸门拒了也报成功）、
+  全角数字/字母被当标点丢掉（`１２３４５` 整句静默不播，两处口径钉成同一串）、两份 Esc 监听（一次按键关两层）、
+  四份文件里的裸 `\r` 行断裂（JS 认它所以不报错，按行处理的工具把两条 import 读成一条）、两个死导出
+  （`SOURCE_FIELD_COUNT`、`createInitialInspections`）、`api.ts` 的 `statusCategory` 注释缺 `explore_only`/`no_search`。
+- 判据：新增 `CodeMapFresh.test.ts`（钉"文档写的行数 == 磁盘行数"+"文档点的文件必须存在"+"`web/src` 每份文件都被覆盖"）
+  与 `ShelfState.test.ts`（书架三态 / 全选口径 / 一张卡一个百分比，每条带反向对照），另有 4 条加在既有文件里；
+  全部在 `run-all.ts` 注册。**466/466 绿**，六处注入逐条验证会红（`tmp/inject/`，gitignore 内）。
+  过程中被自己的判据逮到一次真漂移：`api.ts` 加了 5 行注释后文档还写着 653 —— 这正是这条判据存在的理由。
+- 影响 AI-1：见下一条 `NOTE` 的三处；本条不动你的文件一行。
+
+## [2026-10-11] NOTE 三处文档/注释与事实不符（都在你领地，我没动）
+
+1. **根 `AGENTS.md` 的「[书签/跨书源]」整条描述的是一套已删除的功能。**
+   - 证据：`grep -rn "bookKeyOf" server/src web/src` → 零命中；`web/src` 里没有 `bookmarks.ts`；
+     `web/src/AppHeader.tsx:252` 明写「书签功能已在 0.6.12 整体删掉」。
+   - 同族第二处：那条「[界面/分配] 一级导航…」写「『我的』只留 书签 / 关于 / 全屏 / 自定义」，
+     现在菜单实际只剩 自定义(`AppHeader.tsx:206`) / 关于 / 全屏。
+   - 影响：部落知识条目会被人当事实引用 —— 本轮我就是照着它去找 `bookKeyOf`，找了个空。
+     按「文档里指向一个不存在的文件比不引用更坏」那条规矩，这条要么删、要么改成"已移除，若重做只能有一份归一化"。
+2. **`Routes.kt:857-858` 的注释把一条好端端的路写成"从来没生效过"。**
+   - 注释说 `call.parameters["q"]` 读的是路径参数、永远为 null；而 `:859` 实际写的就是 `call.request.queryParameters["q"]`。
+   - 实测（我自己的 1299 实例）：`GET /api/rss/tabs?sourceUrl=…feed` → 200，`DELETE /api/rss/sources?sourceUrl=…` → 204，
+     `GET /api/rss/sources?q=探针` → 1/1/0 条筛选结果。筛选一直是生效的。
+   - 影响：下一个人照着这句注释去"修"，会把好的改坏。改成正确说明或直接删掉。
+3. **`tools/verify/frame-metrics.mjs:78`/`:84` 的两个分支取的类名界面上已无消费者**
+   （`.desk-header`、`.search-results` 只剩样式表声明，见 `docs/code-map-frontend.md` §2.8 死样式清单）。
+   影响：这两条量到 0 会被读成"密度不对"。样式表里的死样式我列了清单但**没删** —— 那是你的领地，
+   删之前也想听你一句：要不要留几条当门禁锚点。
+
+## [2026-10-11] NOTE 合流吸收了 `docs/dual-ai/` 重组与皮肤库那轮，两处冲突按"内容都留"解
+
+- 你那一轮把双 AI 文档整体搬进 `docs/dual-ai/`（`COLLABORATION.md` → `dual-ai/README.md`，两份日志与两份 RESTART 同批），
+  并把 `web/dist` 出库。我这侧跟着改了引用：文档里所有 `docs/COLLABORATION.md` / `docs/COORDINATION-ai2.md` 的链接与
+  状态板措辞都换成新路径；产物不再提交。
+- 两处冲突的解法：`docs/code-map-frontend.md` 里你补的「与 AI-1 的边界」**整段保留**并收成 §0，我原来被顶掉的
+  `## 1. 模块清单` 标题补回来；`docs/dual-ai/COORDINATION-ai2.md` 的状态板取我这轮的新内容（你那份的 ①②③ 路径同时改成新位置）。
+  两边内容都没丢，也没动你的历史提交。
+- 皮肤库那轮改了 `web/src/readerSettings.ts`(+51) / `CustomizeModal.tsx`(+78) / `styles.css`(+12) / `main.tsx`(+1)，
+  我的通读注释与 `CodeMapFresh.test.ts` 一起把这些文件的行号引用全部重新 grep 过一遍；`readerSettings.ts` 那张表里
+  原本写的 `customSkinId/customSkinCss/customSkinBase` 三个字段已被 `customSkins: CustomSkin[]` 取代，注释跟着改了。
+  `styles.css` 的浮层一档行号 +12（`.overlay-backdrop` 5585→5597 等），死样式清单重扫后类名集合没变。
+
+## [2026-10-11] COLLAB-REQUEST C 档「目录结构复刻」单独开一轮，本轮先不做
+
+- 用户 2026-10-11 拍板：`server/src/main/kotlin/io/legado/server/` 36 个 `.kt` 全在一个包、`web/src` 69 份平铺、
+  `web/test` 也平铺（靠 `run-all.ts` 逐个 import，漏登记就静默不跑）—— 这是"错杂"的主体，**要单独立项一轮做**，
+  不许和 A/B 档那些低风险整理混在一张 diff 里。
+- 我这侧的范围：只动 `web/**` 的目录与 import 路径，配一条"每个源文件都在预期子目录、每条 import 都能解析"的回归判据；
+  `tools/verify` 里写死的前端路径断言只有 3 份文件命中（`Select.tsx`、`SourceHealthModal.tsx`、`main.tsx`），
+  那些归你改，我动目录前会先在这里点名列出来，改完一起验。
+- 本轮**不动**：先把通读注释 + 15 处修复推上去。开工前我会先出一份"移动清单"（谁搬到哪、影响哪些判据与门禁）等你或用户点头。

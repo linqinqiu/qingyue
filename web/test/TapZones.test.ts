@@ -9,6 +9,7 @@ import {
   migrateGrid,
   MIN_CUT_GAP,
   remapActions,
+  removeCut,
   sanitizeMap,
   TAP_ACTION_ORDER,
   TAP_PRESETS,
@@ -127,4 +128,16 @@ test('反向对照：把中间那格改成 next，正中间就必须是"下一�
   const map: TapMap = { x: [1 / 3, 2 / 3], y: [], actions: ['previous', 'next', 'next'] }
   assert.equal(zoneAt(map, 600, 400, 1200, 800), 'next')
   assert.equal(zoneAt(DEFAULT_MAPS.paginate, 600, 400, 1200, 800), 'toggle')
+})
+
+/**
+ * `removeCut` 删的是**下标**那一条。编辑器里原先写的是 `cuts.filter((_, item) => item !== index)`，
+ * 第二个回调参数是值不是下标，与整数下标比较几乎永远不等 —— "双击删一条虚线"静默无效，
+ * 横竖两个把手都犯过同一个笔误（竖的那条先修，横的这条由本条判据钉住）。
+ */
+test('removeCut - 按下标删，不按值删', () => {
+  assert.deepEqual(removeCut([0.25, 0.5, 0.75], 1), [0.25, 0.75])
+  assert.deepEqual(removeCut([0, 0.5], 0), [0.5], '值为 0 的第一条也要删得掉（按值比会当成下标 0 相等而误删/漏删）')
+  assert.deepEqual(removeCut([0.5], 0), [], '只剩一条时双击要真的把它摘掉')
+  assert.deepEqual(removeCut([0.5], 5), [0.5], '下标越界不该动任何东西')
 })
