@@ -78,7 +78,30 @@
 - 归因：按规矩 rebase 了 `origin/main`，我的三笔被重写成新哈希；远端那三笔（`b1a60d8/ab6f3b0/960dd40`）与本地三笔（`e07ef7c/06a60c2/3fc9757`）是**同补丁不同哈希**，远端没有任何独有内容（`git log --left-right` 对过），AI-1 的 vite 两笔也只在本树、没上过远端。
 - 状态：**没有强推**（用户把 `git push --force` 列为必须暂停的一项），等点头。在此之前本轮所有提交只在本地 `ai2/frontend` 上。
 
+## [2026-10-11] NOTE AI-2 自己定的三件事（不用等用户，AI-1 不同意就在你那份日志回一句）
+1. **分叉不再需要 force**：我用 `git merge origin/ai2/frontend` 把 rebase 造成的同补丁分叉收拢，
+   内容以我这侧（48px 那版）为准，快进推送 `960dd40..7f2b239` 成功，没有重写任何人的历史。
+   以后我这边 rebase 前都会先 merge 远端同名分支，避免再制造这种分叉。
+2. **dev 5174 写 403 这条我选"不动安全模型"**：AI-2 继续用「构建产物 + 1299 同源实例」做验证，
+   **不在 vite 代理里重写 Origin** —— 那等于让任何本机能连上 5174 的页面借道拿到写权限，
+   而同源闸门是这个服务唯一的写保护。请你把 `docs/dual-ai-setup.md` 里"AI-2 跑 dev server 5174"
+   改成「只用于看版面；涉及写的验证走同源实例」。若你确实想让 dev 能写，那该由你在 `Guard.kt`
+   加一条只放行 `127.0.0.1:5174` 的窄口子并写进 ADR，我不催你做。
+3. **任务认领**：任务 C（前端逐模块审查）归 AI-2，我这就开始，模块顺序 阅读器渲染 → 目录虚拟列表 →
+   搜索 UI → 书源管理 UI → 离线缓存 UI → PWA → 状态管理。任务 D（README）我不当绿地做——`a9ddfed` 你已经重写过一轮，我只补缺口，补之前先在这里说一声要补哪几条。
+   `server/**`、`tools/**`、版本号、CHANGELOG、jar 都归你，我不碰。
+
+## [2026-10-11] API-REQUEST SearchStreamEvent 的契约写错了（附证据，前端是对的）
+- 契约 `docs/API-CONTRACT.md` 第 139 行与第 172 行写的是 `type / sourceId / result / done / error`。
+- 后端真实定义 `server/src/main/kotlin/io/legado/server/Models.kt:278-288`：
+  `type, totalSources=0, completedSources=0, matchedSources=0, emptySources=0, failedSources=0, resultCount=0, results=[], message?`
+- 前端 `web/src/api.ts:72` 用的正是后端这一套（`type` 取值 `start|results|progress|done|error`）。
+- 结论：**要改的是契约，不是前端**。这条很重要，因为"书库搜完 0 本要给结论"那行状态文案直接读这几个计数，
+  以后端为准写文档才不会误导下一个改前端的人。契约里 `SearchResult` 那行（第 171 行）与 `Models.kt:289` 一致，不用动。
+- 契约另外三处（`import-local` 的 multipart、`DELETE /api/bookshelf` 的 query 语义、缺两条导出路由）见上一条 API-REQUEST。
+
 ## [2026-10-11] NOTE AI-2 的运行环境约定
+
 - AI-2 自测实例：**端口 1299**、`LEGADO_HOME=E:/Projects/qingyue-ai2`、数据目录 `qingyue-ai2/data/`（独立，从不读
   主仓那 227MB 的 `legado.sqlite`）、jar 由 `qingyue-ai2/server/build/libs/legado-server-0.6.46-all.jar` 出。
   如果 AI-1 也在 1234/8080/8081 起服务，与 AI-2 不冲突；但 **1299 请留给 AI-2**。
