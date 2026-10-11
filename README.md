@@ -22,7 +22,13 @@
 
 ## Windows 桌面程序
 
-去 [Releases](../../releases) 下载 `qingyue-desktop-<版本>.zip`，解压后双击 `qingyue.exe`：
+桌面程序这一档**当前不在 Releases 上**（Releases 上现在只有 `legado-server.jar`、`legado-server-dist.zip` 与按版本号打的整合包 `qingyue-<版本>.zip`）。要桌面版就自己打一次：
+
+```bash
+node scripts/package-desktop.mjs   # 需要 JAVA_HOME 指向带 jpackage/jlink 的 JDK（Temurin 17 即可）
+```
+
+产出 `dist/qingyue-desktop-<版本>.zip`，解压后双击 `qingyue.exe`：
 
 - 自带精简 JRE，**不要求装 Java**；
 - 起来后自动打开浏览器到 `http://127.0.0.1:1234`，系统托盘里可以随时「打开 / 退出」，退出即停服务；
@@ -54,7 +60,7 @@ Kotlin JVM 17 + Ktor 3.4 + SQLite（WAL）。前端 React 19 + TypeScript + Vite
 
 ### Windows 桌面程序（免 Java）
 
-见上一节：Releases 下载 `qingyue-desktop-<版本>.zip`，解压双击 `qingyue.exe`。
+见上一节：`node scripts/package-desktop.mjs` 打出 `dist/qingyue-desktop-<版本>.zip`，解压双击 `qingyue.exe`。这一档还没上传到 Releases，所以只能自己打（或者在 Issues 里问维护者要一份）。
 
 ### 整合包 jar（免 Java）
 
@@ -66,7 +72,7 @@ Releases 下载 `qingyue-<版本>.zip`，解压后运行 `start.bat`（默认端
 java -jar legado-server-<版本>-all.jar
 ```
 
-浏览器打开 `http://127.0.0.1:8080`。数据落在当前目录的 `data/`。换端口或数据目录：
+（Releases 上那份被流水线改名成了 `legado-server.jar`，内容同一件东西。）浏览器打开 `http://127.0.0.1:8080`。数据落在当前目录的 `data/`。换端口或数据目录：
 
 ```bash
 LEGADO_PORT=9000 LEGADO_DATA_DIR=/srv/qingyue/data java -jar legado-server-<版本>-all.jar

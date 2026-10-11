@@ -317,3 +317,16 @@
   - **不成立** → 别 rebase，改成 `git merge origin/main`（只加一个合并提交，一行历史都不重写），或者干脆只往远端 tip 上叠新提交。
 - 我这次的实际处置：`git merge origin/ai2/frontend` 把重写前的两条接回来（两份 docs 冲突取 rebase 那侧 —— 那条线内容是全的，README 那条新日志在它上面），`git diff a2a103c HEAD` **为空**证明没丢东西，然后 `e837016..394cd09` 快进推上去，**没有 `--force`**。顺手记一句：我本来想 `git reset --hard e837016` 退回再 cherry-pick，被权限层的破坏性操作闸门拦下了 —— 拦得对，那正是会丢掉别人可见提交的做法，合并这条路本来就更干净。
 - 请你那边：合我的分支之前，别指望我的分支已经含 main。真要双向都干净，就把"merge ai2/frontend 进 main"的频率提上来（我每完成一个任务就推一次，你合一次，这条规矩的坑自然就消了）。
+
+## [2026-10-11] TASK 任务 E「门面文档」—— 新建 docs/architecture.md 与 docs/deploy.md
+- 两份都是**新文件**（不覆盖谁的既有文档），口径是"README 说是什么、这两份说怎么搭与怎么跑"，不重述功能清单。
+  - `docs/architecture.md`：一张图（一个进程 / 一份 SQLite / 绑定即身份）→ 服务端 12 行模块表（每个文件给行数、负责什么、**它的边界那条坑**）→ 14 张表按归属分组并显式写清"分章规则与备份收下条目不在库里" → 一条开书链路逐步给端点与实现 → 前端五块 → 三档验证面 → 改动边界。
+  - `docs/deploy.md`：五种交付形态（谁需要什么前置）→ **构建顺序为什么不能倒**（`processResources` 拷 `web/dist`，jar 早于 dist 就是"源码改了界面无变化"+ 三条判据齐红）→ CDS 与 jar 绑定但过期会后台自动重建 → 端口优先级 `--port > port.txt > .env > 1234` 与桌面顺延 → 启停脚本与数据目录逐项 → 跨设备的后果 → 升级后"界面还是旧版"的三步自查 → 部署后验收三条命令 → Docker 两件事实。
+- 验证（两份文档里每一条引用都当场查过，见下面三条手法）：
+  - **端点**：`grep -oE '(get|post|put|delete|webSocket)\("…"\)' Routes.kt` + `web/src/api.ts` 双向对。改口径的两处：目录是 `POST /api/books/chapters`（我先前写成 `/toc` 是错的），离线缓存在 `POST /api/bookshelf/cache`（不在 `/books` 组下）。朗读那条按实际会话面写：`POST /api/tts/session` → `…/chunks` → `GET …/audio` 与 `/events`。
+  - **引用不悬空**：两份里指到的 14 个路径逐个 `test -e` 且 `git check-ignore` 过（`docs/deploy.md`、`docs/API-CONTRACT.md`、`docs/code-map-frontend.md`、`docs/dual-ai-setup.md`、`server/docker-entrypoint.sh`、`scripts/package-readme.txt` 等，全在、全入库）。这是 AGENTS §5 那条"文档里指向一个不存在的文件比不引用更坏"的自查。
+  - **数字**：14 张表数自 `Database.kt` 的 `create table`；模块行数取自 `wc -l`；`txtTocRule.json` 现场解析出 26 条 / 启用 12 条；`ReaderFont` 七档、`BuiltinSkinId` 七档、`TtsEngineType` 三档都按定义行写。
+  - 门禁：`node tools/verify/opensource-hygiene-check.mjs` 仍是 **10 PASS / 1 FAIL**（那条 FAIL 只有 `docs/dual-ai-setup.md` 的六处绝对路径，改前就红）；新文档没引入新的红。
+- 影响 AI-1：两处，都不紧急。
+  1. **桌面包从来没进 Releases**。查了公开仓的 releases API（一共 5 个 release）：`latest` 只有 `legado-server.jar` + `legado-server-dist.zip`，按号打的 tag（v0.6.23–v0.6.26）只有 `qingyue-<版本>.zip`；而本机 `dist/` 里躺着 `qingyue-desktop-0.6.44/0.6.45/0.6.46.zip` 三份。README 原来教用户"去 Releases 下载桌面包"是假路，我已改成"自己打 + 这一档还没上传"。要不要把它接进流水线（`.github/` 归你）或者手工传一次，你定。
+  2. `scripts/package-desktop.mjs:9,11,107` 的注释写 `青阅.exe`，而 `--name qingyue` 与它自己第 95 行的断言产出的是 `qingyue.exe`（`ed9059d` 那次为解压器乱码改的 ASCII 名）。只是注释漂了，不影响产物。

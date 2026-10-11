@@ -49,7 +49,8 @@ curl -s http://127.0.0.1:1299/healthz            # {"title":"青阅","version":"
 | 模块 5 补 · 全表游标 | ✅ | `by_book_totals` 复合键索引 + `openKeyCursor`（`DB_VERSION` 1→2，升级只补索引不动存量）；分组算式收进 `accumulateBookStats` 一处，顺带修掉「`::` 拼组键会把两本书并成一本」；`store.count()` 对账不过就退回整表扫描，宁可慢一次也不少报数字。真浏览器 7/7：老库 450 章由应用自己升到 v2、键游标 450 次回调 `value === undefined`、弹窗数字不变 |
 | 登记未动（AI-2 侧） | ⏳ | ① R4 剩下的「阅读器渲染性能」；② `VirtualChapterList.test.ts` 里那份 `computeVirtualSlice` 是产品切片算法的手写孪生，该抽成 `src` 的纯函数两边共用 |
 | D README 补缺口（P1） | ✅ 只改失真与缺项，结构未动 | `a9ddfed` 已由 AI-1 重写过一轮，我没重刷。改错三处（字体档数 5→实际 7、皮肤 3→实际 7+自定义、朗读漏了默认的服务端 Edge-TTS、桌面"端口占用不起第二实例"已被 0.6.46 的顺延取代）；补四项（书架 / 发现 / 订阅 / 键盘，逐条对着源码写）；备份表补「原样收下」一行；环境变量补 `LEGADO_HOME`；目录结构把 `web/src` 指到 `docs/code-map-frontend.md`。门禁：`md-table-check` OK、`opensource-hygiene-check` 10/1（那条红是 `docs/dual-ai-setup.md` 里你的六处绝对路径，改前就红着） |
-| E 门面文档（P2） | ⏳ | `docs/architecture.md`、`docs/deploy.md`、`web/AGENTS.md`（已有，继续完善） |
+| E 门面文档（P2） | ✅ | 新建 `docs/architecture.md`（一张图 / 服务端 12 层模块表 + 边界 / 14 张表分组 / 一条开书链路逐端到点 / 前端五块 / 三档验证面 / 改动边界）与 `docs/deploy.md`（五种交付形态 / 构建顺序为什么不能倒 / 端口优先级 / 启停与数据目录 / 跨设备 / SW 升级排查三步 / 部署后验收 / Docker 两件事实）。两份都逐条回读过引用：14 个被指路径全部存在、`/api/*` 端点全部对着 `Routes.kt` 与 `web/src/api.ts` 核过（目录是 `POST /api/books/chapters` 不是 `/toc`，离线是 `POST /api/bookshelf/cache`）。`web/AGENTS.md` 已有。 |
+| 顺带抓到一处 README 失真 | ✅ 已改 | README 说"去 Releases 下载 `qingyue-desktop-<版本>.zip`" —— 查了 Releases API（公开仓，5 个 release）：只有 `legado-server.jar` / `legado-server-dist.zip` / `qingyue-<版本>.zip`，**桌面包一次都没上传过**（本地 `dist/` 里有 0.6.44–0.6.46 三份）。改成"当前不在 Releases 上，自己打 `node scripts/package-desktop.mjs`"，并补一句裸 jar 在 Release 上被改名成 `legado-server.jar`。要不要把桌面包接进流水线是 `.github/`，归 AI-1。 |
 
 ## 5. 交付节奏
 
