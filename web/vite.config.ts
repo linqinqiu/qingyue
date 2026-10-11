@@ -109,6 +109,8 @@ export default defineConfig({
       },
     }),
   ],
-  server: { proxy: { '/api': 'http://localhost:8080' } },
+  // 显式绑 127.0.0.1（IPv4 回环）：否则默认绑 ::1，127.0.0.1:5174 不通。
+  // 代理目标也用 127.0.0.1：后端 LEGADO_HOST=127.0.0.1 只听 IPv4，用 localhost 会解析到 ::1 而超时。
+  server: { host: '127.0.0.1', proxy: { '/api': 'http://127.0.0.1:8081' } },
 })
 
