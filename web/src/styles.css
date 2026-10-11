@@ -1059,6 +1059,15 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .text-indent-choice { display: grid; gap: 6px; color: var(--ink); font-size: 12px; }
 .text-indent-choice .indent-modes { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .setting-hint { color: var(--muted); font-size: 11px; }
+/* 工具栏配置（用户 2026-10-11「阅读菜单可配置」）：一行一项，勾选框 + 上移/下移。 */
+.reader-menu-config { display: grid; gap: 6px; }
+.reader-menu-row { display: flex; align-items: center; gap: 8px; }
+.reader-menu-row.is-hidden { opacity: .55; }
+.reader-menu-toggle { display: inline-flex; align-items: center; gap: 7px; flex: 1; min-width: 0; justify-content: flex-start; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.reader-menu-toggle svg { width: 14px; height: 14px; flex: none; }
+.reader-menu-move { display: inline-flex; gap: 4px; }
+.reader-menu-move button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.reader-menu-move button:disabled { opacity: .35; }
 .reset-settings { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-muted); color: var(--ink); font-size: 12px; cursor: pointer; }
 
 /* Main Reading Canvas */
