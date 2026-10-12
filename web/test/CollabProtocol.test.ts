@@ -139,8 +139,12 @@ test('协作文档的表格每行列数一致，且没有空格子', () => {
     read(file).split(/\r?\n/).forEach((line, index) => {
       if (!line.startsWith('|')) { header = null; return }
       const cells = cellsOf(line)
-      if (cells.some(cell => cell.trim() === '')) problems.push(`${file} 第 ${index + 1} 行有空格子`)
-      if (header === null) { header = cells.length; tables += 1; return }
+      const atHeader = header === null
+      // 「行标签 × 列」这种矩阵表，表头左上角那一格天生是空的（README 的「环境要求」就是这张）：
+      // 只放过**表头行的第一格**，其余一格都不许空 —— 放宽整行就把真正漏填的格子也放过去了。
+      const blanks = cells.filter((cell, at) => (atHeader && at === 0) ? false : cell.trim() === '').length
+      if (blanks) problems.push(`${file} 第 ${index + 1} 行有 ${blanks} 个空格子`)
+      if (atHeader) { header = cells.length; tables += 1; return }
       if (cells.length !== header) problems.push(`${file} 第 ${index + 1} 行 ${cells.length} 列 vs 表头 ${header}`)
     })
   }
