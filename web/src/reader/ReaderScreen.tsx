@@ -13,6 +13,8 @@ import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { NoteToolbar, type NoteDraft } from './NoteToolbar'
 import { NotesPanel } from './NotesPanel'
+import { IconButton } from './IconButton'
+import { ReaderContentSkeleton } from './ReaderContentSkeleton'
 import { ReaderSettingsControls, themes } from './ReaderSettingsControls'
 import { clampScrollPosition, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { ReaderMenuAction } from './readerMenu'
@@ -66,11 +68,6 @@ type ReaderScreenProps = {
 }
 
 
-function IconButton({ label, icon, onClick, className = '', onDoubleClick, hint, disabled = false }: { label: string; icon: Parameters<typeof Icon>[0]['name']; onClick: () => void; className?: string; onDoubleClick?: () => void; hint?: string; disabled?: boolean }) {
-  return <button className={`reader-icon-button ${className}`} title={hint ? `${label} · ${hint}` : label} aria-label={label} onClick={onClick} onDoubleClick={onDoubleClick} disabled={disabled}><Icon name={icon} /></button>
-}
-
-
 /**
  * 正文按行切成段落。单独抽出来是因为"屏幕上显示的"与"正在朗读的"两件事在切章过渡期间
  * 不是一回事：前者可以继续挂着上一章，后者必须等新章到位，否则朗读会一路读进旧章剩下的段落。
@@ -89,30 +86,6 @@ function splitParagraphs(content: string): string[] {
   }
   return result
 }
-
-function ReaderContentSkeleton() {
-  return (
-    <div className="reader-loading-container" aria-label="正在加载正文">
-      <div className="reader-loading-badge">
-        <span className="reader-loading-spinner-ring" />
-        <span>正在从书源拉取正文…</span>
-      </div>
-      <div className="reader-skeleton-paragraphs">
-        <div className="skeleton-line" style={{ width: '100%' }} />
-        <div className="skeleton-line" style={{ width: '94%' }} />
-        <div className="skeleton-line" style={{ width: '98%' }} />
-        <div className="skeleton-line" style={{ width: '91%' }} />
-        <div className="skeleton-line" style={{ width: '62%' }} />
-        <div className="skeleton-gap" />
-        <div className="skeleton-line" style={{ width: '100%' }} />
-        <div className="skeleton-line" style={{ width: '96%' }} />
-        <div className="skeleton-line" style={{ width: '92%' }} />
-        <div className="skeleton-line" style={{ width: '48%' }} />
-      </div>
-    </div>
-  )
-}
-
 
 export interface VirtualChapterListProps {
   chapters: Chapter[]
