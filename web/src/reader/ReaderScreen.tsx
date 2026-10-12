@@ -15,6 +15,7 @@ import { NoteToolbar, type NoteDraft } from './NoteToolbar'
 import { NotesPanel } from './NotesPanel'
 import { TocDrawerHeader } from './TocDrawerHeader'
 import { ReaderHeader } from './ReaderHeader'
+import { MediaBlock } from './MediaBlock'
 import { IconButton } from './IconButton'
 import { ReaderContentSkeleton } from './ReaderContentSkeleton'
 import { ReaderSettingsControls, themes } from './ReaderSettingsControls'
@@ -1170,35 +1171,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       >
         {renderParagraphContent(line, index, owner?.index ?? chapterIndex)}
       </p>
-    )
-  }
-
-  /** 非文本章节的渲染：音频播放器 / 视频播放器 / 文件下载（`mediaSrc` 为空时返回 null）。 */
-  const renderMediaBlock = () => {
-    if (!mediaSrc) return null
-    if (sourceType === 1) {
-      return (
-        <div className="reader-media" data-media-type="audio">
-          <audio
-            src={mediaSrc}
-            controls
-            autoPlay
-            onEnded={() => { if (chapterIndex < currentBook.chapters.length - 1) changeChapter(chapterIndex + 1) }}
-          />
-        </div>
-      )
-    }
-    if (sourceType === 4) {
-      return (
-        <div className="reader-media" data-media-type="video">
-          <video src={mediaSrc} controls />
-        </div>
-      )
-    }
-    return (
-      <div className="reader-media" data-media-type="file">
-        <a className="reader-media-download" href={mediaSrc} target="_blank" rel="noreferrer" download>下载文件</a>
-      </div>
     )
   }
 
@@ -2358,7 +2330,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{convert(incomingChapterTitle)}</p>}
         {loading && !content && <ReaderContentSkeleton />}
         {message && <p className="reader-error">{message}</p>}
-        {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
+        {mediaSrc ? <MediaBlock mediaSrc={mediaSrc} sourceType={sourceType} onEnded={() => { if (chapterIndex < currentBook.chapters.length - 1) changeChapter(chapterIndex + 1) }} /> : paragraphs.map((line, index) => renderContentBlock(line, index))}
       </section>
       {flowTail.map((item, tailIndex) => (
         <Fragment key={item.chapter.url}>
@@ -2685,7 +2657,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{convert(incomingChapterTitle)}</p>}
             {loading && !content && <ReaderContentSkeleton />}
             {message && <p className="reader-error">{message}</p>}
-            {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
+            {mediaSrc ? <MediaBlock mediaSrc={mediaSrc} sourceType={sourceType} onEnded={() => { if (chapterIndex < currentBook.chapters.length - 1) changeChapter(chapterIndex + 1) }} /> : paragraphs.map((line, index) => renderContentBlock(line, index))}
           </section>
           {flowTail.map(item => (
             <section key={item.chapter.url} className="reader-flow-chapter reader-flow-tail" data-chapter-index={item.chapter.index}>
