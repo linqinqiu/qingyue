@@ -13,6 +13,7 @@ import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { NoteToolbar, type NoteDraft } from './NoteToolbar'
 import { NotesPanel } from './NotesPanel'
+import { TocDrawerHeader } from './TocDrawerHeader'
 import { IconButton } from './IconButton'
 import { ReaderContentSkeleton } from './ReaderContentSkeleton'
 import { ReaderSettingsControls, themes } from './ReaderSettingsControls'
@@ -2419,51 +2420,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
     {/* TOC Drawer (Left) */}
     <aside className={`reader-drawer reader-drawer-left ${activeDrawer === 'toc' ? 'open' : ''} ${settings.sidebarPinned ? 'pinned' : ''}`} aria-label="目录抽屉">
-      <header className="drawer-header">
-        {/*
-          标题栏原来只写「共 N 章」，不告诉你在读哪一章（用户 2026-10-09：「目录你怎么不标注章节名」）。
-          现在把当前章名放进来；章名可能很长，CSS 截断 + title 里给全名。
-        */}
-        <div className="drawer-title">
-          <Icon name="list" /><strong>目录</strong>
-          <small className="drawer-title-current" title={chapter?.title ? convert(chapter.title) : undefined}>
-            {chapter?.title ? `正在读：${convert(chapter.title)}` : `共 ${currentBook.chapters.length} 章`}
-          </small>
-        </div>
-        <div className="drawer-header-actions">
-          <IconButton
-            className={`desktop-reverse-btn ${tocReverse ? 'reversed' : ''}`}
-            label={tocReverse ? '切换为正序目录' : '切换为倒序目录'}
-            icon="list"
-            onClick={() => setTocReverse(value => !value)}
-          />
-          <IconButton
-            className={`desktop-pin-btn ${settings.sidebarPinned ? 'pinned' : ''}`}
-            label={settings.sidebarPinned ? '取消固定目录' : '固定目录到侧边栏'}
-            icon={settings.sidebarPinned ? 'pinOff' : 'pin'}
-            onClick={() => onSettingsChange({ ...settings, sidebarPinned: !settings.sidebarPinned })}
-          />
-          <IconButton
-            className={notesPanel ? 'active' : ''}
-            label={notesPanel ? '回到目录' : `笔记（${notes.length}）`}
-            icon="edit"
-            onClick={() => setNotesPanel(value => !value)}
-          />
-          <IconButton
-            // 固定态下抽屉由 `pinned` 类撑着，光 setActiveDrawer(null) 关不掉 —— 这颗必须顺带解除固定。
-            // 审计把它报成"一个控件兼两个职务"，核了 :1917 的 className 才确认是必需的；
-            // 该修的是标签：它得说自己按下去会发生什么。
-            label={settings.sidebarPinned ? '取消固定并关闭目录' : '关闭目录'}
-            icon="close"
-            onClick={() => {
-              if (settings.sidebarPinned) {
-                onSettingsChange({ ...settings, sidebarPinned: false })
-              }
-              setActiveDrawer(null)
-            }}
-          />
-        </div>
-      </header>
+      <TocDrawerHeader
+        chapterTitle={chapter?.title ? convert(chapter.title) : null}
+        chapterCount={currentBook.chapters.length}
+        tocReverse={tocReverse}
+        onToggleReverse={() => setTocReverse(value => !value)}
+        sidebarPinned={settings.sidebarPinned}
+        onTogglePin={() => onSettingsChange({ ...settings, sidebarPinned: !settings.sidebarPinned })}
+        notesPanel={notesPanel}
+        notesCount={notes.length}
+        onToggleNotes={() => setNotesPanel(value => !value)}
+        onClose={() => {
+          if (settings.sidebarPinned) {
+            onSettingsChange({ ...settings, sidebarPinned: false })
+          }
+          setActiveDrawer(null)
+        }}
+      />
       {notesPanel ? (
         /* 「笔记」面板（PROPOSAL-019 E）：这本书的全部划线 / 备注，点一条跳到那一章。 */
         <NotesPanel notes={notes} onJump={jumpToNote} />
