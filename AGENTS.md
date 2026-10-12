@@ -240,6 +240,33 @@ AI 与人类协作时必须明确当前达到的完成度阶梯，严禁混淆�
 - **[前端/浮层] 引用一个不存在的 `@keyframes` 不报错，表现是"动画从来没演过"**：朗读设置弹窗写着 `animation: modal-enter .2s`，而样式表里从来没有 `@keyframes modal-enter` —— 浏览器就当没有动画，点开硬蹦。和类名一样，**动画名是两处各写一份的字符串**（声明处与引用处），所以并档时顺手扫两向：① TSX 挂着而样式表 0 命中的类名（W1 已常驻）；② 样式表里声明了而界面不用的浮层类与动画名（这一轮扫出 `.header-view-dialog` / `.header-view-code` 整个弹窗样式没人用、`menuBackdropFadeIn` 随挡片并档变成孤儿）。判据只写正向的那一半，另一半就会一直烂在那儿。
 - **[门禁/选择器] 关闭键的选择器必须带弹窗作用域，裸 `.overlay-close` 会点到上一张没关掉的弹窗那颗**：并档之后全界面只剩一颗关闭键类名，`document.querySelector('.overlay-close')` 取的是 **DOM 里第一个**。实测：`ui-shell-check` ② 那条还去点 `.logs-modal .logs-btn[aria-label="关闭"]`（旧类名），日志弹窗根本没关，于是 ③ 点「快捷键」那张表时 `querySelector('.overlay-close')` 命中的是**日志那颗**，把日志又关了一遍 —— 两个 FAIL、一个根因，而它长得极像"并档把 Esc/关闭键改坏了"。规矩：① 改口要连着改**门禁里那些带属性选择器的复合串**（`grep` 类名只能逮到一半）；② 判"关得掉"之前先断言此刻 DOM 里有几层挡片，红的时候先看残留的是哪一层。
 
+- **[前端/数据] 简繁转换的词表要「取现成的 + 按用处裁剪 + 开了才载」，手写必漏**（2026-10-11）：
+  简繁不是一一对应（发→發/髮、干→乾/幹、里→裡/里），手列几百个常用字一定会漏，漏掉的那几个字就是
+  「整页繁体里混着几个简体」，比不转还刺眼。数据取 OpenCC（Apache-2.0）经 `opencc-js` 分发，
+  `tools/gen-script-dict.mjs` 只做裁剪：词组表**只留字表处理不对的**（每条先按字表转一遍，
+  结果相同就丢），简→繁再按长度 ≤4 截一刀 —— 实测 1MB → 174KB（gzip 76KB），繁→简本来就只要 35KB。
+  产物 `web/src/reader/dict/openccData.ts` **要提交**（跑起来不依赖网络，也不依赖那个 npm 包）。
+  三条纪律：① 简→繁末了要过一遍台港字形表（爲→為、僞→偽、裏→裡），OpenCC 的 `s2t` 给的是《康熙》
+  那一路字形，读者心里的繁体是台港排版的样子；但**不许**上 TWPhrases 那种词汇本地化（软件→軟體），
+  那换的是词不是字。② 这个模块只许 `await import()` —— 静态引入会让每个访客为一项多数人不会开的
+  功能付 200KB。③ **转换器是函数，凡是被 React 当"值"收的地方都要包一层**：`setConvert(() => loaded)`
+  （直接 `setConvert(loaded)` 会被当 updater 调用，入参是上一轮 state，表现是「设置开了但正文没变」），
+  **以及 `useState(() => IDENTITY_CONVERTER)`**（直接 `useState(IDENTITY_CONVERTER)` 会被当**惰性初始化器**
+  调用一次，`(text=>text)()` 无参返回 `undefined` → `convert` 是 `undefined` → 阅读器一渲染就
+  `convert is not a function`、整屏「阅读器崩了」）。后者 2026-10-11 真发生了：只写了 setter 那半边的注释，
+  漏了初始化器，单元测试又是源码判据（不渲染 ReaderScreen）所以全绿，最后靠 `paginate-flow-check`
+  起真浏览器才逮住 —— 教训是**"注释写了坑"不等于"坑堵上了"**，两边都得堵。
+- **[门禁] 非递归的文件扫描会在重构之后**静默**变瞎**（2026-10-11）：`opensource-hygiene-check` 那条
+  「README 承诺的端点必须真的存在」原来用 `readdirSync` **只读 `io/legado/server/` 一层**，
+  而后端在 e982890 拆包时把 `Routes.kt` 挪进了 `http/` —— 从此它读到的全是目录名、`read()` 全抛、
+  拼出来近乎空串，于是**每一条** `/api/...` 都成了「悬空」（实测报 2 条悬空，而两条都好端端躺在
+  `Routes.kt` 里）。这种门禁不会稳定变红，它只是**失去分辨力**，比红更危险。规矩：判据里凡是
+  `readdirSync` / `ls` / glob，先问一句「将来这些文件挪进子目录，它还看得见吗」，要看得见就递归走。
+  同一轮还收窄了「私人身份残留」那条：它原来连 `linqinqiu` 一起挡，可那是**本项目自己的仓库 owner**
+  （package.json 的 repository、SECURITY 的私密报告地址、CODEOWNERS、`LEGADO_REPO` 都得写它），
+  写成占位符只会让「检查更新」直接失灵；现在只挡真正属于这台机器的旧身份（`qinqiu` / `wfanan`），
+  两边都带 `\b`，所以 `linqinqiu` 里的 `qinqiu` 不会误伤。
+
 ---
 
 ## 6. 标准文档体系索引 (Proposals, Decisions & Sessions Index)

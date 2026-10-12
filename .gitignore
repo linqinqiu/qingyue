@@ -55,6 +55,10 @@ local-patches.diff
 /tools/*
 # 顶层这个不是探针而是启动链路的一环（AGENTS/CHANGELOG 都让贡献者跑它），单独放行。
 !/tools/make-cds.mjs
+# 简繁转换词表的生成脚本。产物 web/src/reader/dict/openccData.ts 是提交的，
+# 而它的文件头与 AGENTS.md 都指着这个脚本说"重跑口径在这里" —— 不放行就是又一份
+# "文档里写着、仓库里没有"。裁剪口径与实测体积都写在脚本里。
+!/tools/gen-script-dict.mjs
 !/tools/verify/
 /tools/verify/*
 !/tools/verify/baselines/

@@ -1,5 +1,6 @@
 import { DEFAULT_MAPS, looksLikeGrid, migrateGrid, sanitizeMap, type TapMap } from './tapZones'
 import { DEFAULT_READER_MENU, parseReaderMenu, type ReaderMenuAction } from './readerMenu'
+import { parseScriptMode, type ScriptMode } from './scriptConvert'
 
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
@@ -105,6 +106,12 @@ export type ReaderSettings = {
    * 出厂值 = 改动前那一排；配置项见 `readerMenu.ts`（唯一来源，工具栏与配置面板共用）。
    */
   menuItems: ReaderMenuAction[]
+  /**
+   * 简繁转换（用户 2026-10-11 的 A–F 里 C 项）：`off` 原文 / `s2t` 简→繁 / `t2s` 繁→简。
+   * 正文与章名一起转（只转正文会出现"标题简体、正文繁体"）。词表在 `scriptConvert.ts`，
+   * 那一份 200KB 上下的字典**开了才载**，默认不进首屏。
+   */
+  scriptMode: ScriptMode
 }
 
 const storageKey = 'legado-reader-settings-v2'
@@ -142,6 +149,7 @@ export const defaultReaderSettings: ReaderSettings = {
   readerBgDim: 0.25,
   tapZones: { paginate: DEFAULT_MAPS.paginate, scroll: DEFAULT_MAPS.scroll },
   menuItems: DEFAULT_READER_MENU,
+  scriptMode: 'off',
 }
 
 export function clampScrollPosition(value: number): number {
@@ -409,6 +417,7 @@ export function loadReaderSettings(): ReaderSettings {
         scroll: loadTapMap((saved.tapZones as Record<string, unknown> | undefined)?.scroll, DEFAULT_MAPS.scroll),
       },
       menuItems: parseReaderMenu(saved.menuItems),
+      scriptMode: parseScriptMode(saved.scriptMode),
     }
   } catch {
     return defaultReaderSettings

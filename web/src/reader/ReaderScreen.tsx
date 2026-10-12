@@ -14,6 +14,7 @@ import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { moveReaderMenu, READER_MENU_ITEMS, ReaderMenuAction, toggleReaderMenu } from './readerMenu'
+import { IDENTITY_CONVERTER, loadScriptConverter, SCRIPT_MODE_OPTIONS, type ScriptConverter } from './scriptConvert'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, resolveMeasuredPage, sectionAtPage, sectionProgress } from './readerFlow'
 import { computeCenterScrollOffset, computeVirtualWindow } from './virtualSlice'
 import { SourceSwitchModal } from '../sources/SourceSwitchModal'
@@ -149,6 +150,15 @@ function ReaderSettingsControls({
         <small className="setting-hint">颜色与背景图铺在阅读区上，压暗让文字保持可读；全部清空则跟随主题。背景图只存在这台浏览器里。</small>
       </section>
     </section>
+    {/*
+      简繁转换（用户 2026-10-11 的 A–F 里 C 项）。只换字形不换词 ——
+      不摆"台湾用词"那种档，读小说时把「软件」写成「軟體」只会觉得译者换了个人。
+    */}
+    <section className="setting-section"><span className="setting-label">简繁转换</span><div className="page-modes">
+      {SCRIPT_MODE_OPTIONS.map(option => (
+        <button key={option.id} type="button" className={settings.scriptMode === option.id ? 'selected' : ''} onClick={() => update({ scriptMode: option.id })}>{option.label}</button>
+      ))}
+    </div><small className="setting-hint">{settings.scriptMode === 'off' ? '按原样显示书里的字。' : `正文、章名、目录一起转${settings.scriptMode === 's2t' ? '，繁体按台港排版习惯（因为 → 因為）' : ''}；第一次打开要取一次词表，稍等一下。`}</small></section>
     <section className="setting-section"><span className="setting-label">翻页方式</span><div className="page-modes"><button className={settings.pageMode === 'scroll' ? 'selected' : ''} onClick={() => update({ pageMode: 'scroll' })}>连续滚动</button><button className={settings.pageMode === 'paginate' ? 'selected' : ''} onClick={() => update({ pageMode: 'paginate' })}>平移分页</button></div><small className="setting-hint">{settings.pageMode === 'paginate' ? '左右轻扫或点击屏幕两侧平滑翻页' : '垂直滚动阅读，点击上下可快速翻滚'}</small></section>
     {settings.pageMode === 'paginate' && (
       <section className="setting-section"><span className="setting-label">翻页动画</span><div className="page-modes">
@@ -310,6 +320,8 @@ export interface VirtualChapterListProps {
   overscan?: number
   className?: string
   autoScrollKey?: string | number
+  /** 章名的显示变换（简繁转换）。缺省是恒等 —— 不传就一个字都不动。 */
+  convertTitle?: (title: string) => string
 }
 
 export function VirtualChapterList({
@@ -321,6 +333,7 @@ export function VirtualChapterList({
   overscan = 8,
   className = '',
   autoScrollKey,
+  convertTitle = IDENTITY_CONVERTER,
 }: VirtualChapterListProps) {
   const containerRef = useRef<HTMLElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -404,7 +417,7 @@ export function VirtualChapterList({
               style={{ height: itemHeight }}
               className="reader-chapter-volume"
             >
-              {chapter.title}
+              {convertTitle(chapter.title)}
             </div>
           )
         }
@@ -417,10 +430,10 @@ export function VirtualChapterList({
             style={{ height: itemHeight }}
             className={`reader-chapter-item ${chapter.index === activeChapterIndex ? 'current' : ''} ${isCached ? 'cached' : ''}`}
             onClick={() => onSelect(chapter.index)}
-            title={`${chapter.title}${isCached ? '（已离线缓存）' : ''}`}
+            title={`${convertTitle(chapter.title)}${isCached ? '（已离线缓存）' : ''}`}
           >
             <i />
-            <span className="reader-chapter-title">{chapter.title}</span>
+            <span className="reader-chapter-title">{convertTitle(chapter.title)}</span>
             {isCached && <span className="chapter-cached-badge" title="已离线缓存" />}
           </button>
         )
@@ -433,6 +446,30 @@ export function VirtualChapterList({
 
 export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange, onClose }: ReaderScreenProps) {
   const [currentBook, setCurrentBook] = useState<OpenBook>(openBook)
+  /**
+   * 简繁转换（用户 2026-10-11 的 A–F 里 C 项）。词表 200KB 上下，只有开了才去拉 chunk，
+   * 所以这里是"先恒等、载好了再换"——没开的人一点代价都不付。
+   *
+   * 声明放在最前面：章名、正文、目录、页脚、浏览器标题栏、朗读都过它，
+   * 摆在中途会让前半段的调用撞上暂时性死区。
+   *
+   * **转换器是函数，凡是被 React 当"值"收的地方都要包一层**：
+   * ① 初始化器 `useState(() => IDENTITY_CONVERTER)` —— 直接写 `useState(IDENTITY_CONVERTER)`
+   *    会被当**惰性初始化器**调用一次（`IDENTITY_CONVERTER()` 无参 → 返回 `undefined`），
+   *    于是 `convert` 是 `undefined`，正文一渲染就 `convert is not a function`、整屏"阅读器崩了"。
+   * ② `setConvert(() => loaded)` —— 直接 `setConvert(loaded)` 会被当 updater 调用（入参是上一轮
+   *    state），表现为"设置开了但正文没变"。两处是同一个坑的两面。
+   */
+  const [convert, setConvert] = useState<ScriptConverter>(() => IDENTITY_CONVERTER)
+  useEffect(() => {
+    let alive = true
+    loadScriptConverter(settings.scriptMode)
+      .then(loaded => { if (alive) setConvert(() => loaded) })
+      // 词表拉不下来（离线首开、chunk 404）就退回原文：读得慢总好过读不了
+      .catch(() => { if (alive) setConvert(() => IDENTITY_CONVERTER) })
+    return () => { alive = false }
+  }, [settings.scriptMode])
+
   /** 可选的目录规则清单（只在读本地书时取一次）；取不到就不摆这一档控件。 */
   const [tocRuleOptions, setTocRuleOptions] = useState<TocRuleOption[]>([])
   /** 这本本地书**实际**用的规则，来自书架记录（设置里那条只是下一本的默认值）。 */
@@ -690,12 +727,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [cacheStatus.state, syncCacheStatus])
 
   useEffect(() => {
-    const title = chapter?.title ? `${bookName} - ${chapter.title} | 青阅` : `${bookName} | 青阅`
+    const shown = chapter?.title ? convert(chapter.title) : ''
+    const title = shown ? `${bookName} - ${shown} | 青阅` : `${bookName} | 青阅`
     document.title = title
     return () => {
       document.title = '青阅'
     }
-  }, [bookName, chapter?.title])
+  }, [bookName, chapter?.title, convert])
 
   const filteredChapters = useMemo(() => {
     const query = deferredQuery.trim().toLowerCase()
@@ -725,7 +763,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 顶部一条「正在载入」），而不是被骨架屏挖空。
   const isStaleContent = loading && !!content && loadedChapterUrl !== (chapter?.url ?? '')
 
-  const paragraphs = useMemo(() => (content ? splitParagraphs(content) : []), [content])
+  /**
+   * 续接进来的章（`flowHead` / `flowTail`）也走这条：**拆段之后逐段转**，不是把整章转完再拆。
+   * 词组的匹配范围因此止于段内 —— 不会让上一段末尾和下一段开头凑出一个词组来。
+   */
+  const splitBody = useCallback((text: string) => splitParagraphs(text).map(convert), [convert])
+  const paragraphs = useMemo(() => (content ? splitBody(content) : []), [content, splitBody])
   // 朗读管线只认"当前这一章已经到位"的正文，过渡期间给空数组，避免读进上一章剩下的段落。
   const ttsParagraphs = useMemo(() => (isCurrentChapterLoaded ? paragraphs : []), [isCurrentChapterLoaded, paragraphs])
   // 非文本章节（音频/视频/文件）：这一章的"正文"其实是一个媒体地址，不能当段落排出来。
@@ -782,8 +825,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [currentBook.bookUrl, currentBook.details.sourceId])
 
   const ttsData: TtsChapterData = useMemo(() => {
-    return processChapterForTts(chapter?.title || '', ttsParagraphs, settings.ttsFilterSymbols)
-  }, [chapter?.title, ttsParagraphs, settings.ttsFilterSymbols])
+    return processChapterForTts(convert(chapter?.title || ''), ttsParagraphs, settings.ttsFilterSymbols)
+  }, [chapter?.title, ttsParagraphs, settings.ttsFilterSymbols, convert])
 
   const currentChunk = ttsData.chunks[currentChunkIndex] ?? null
   const activeParagraphIndex = currentChunk ? currentChunk.paragraphIndex : -1
@@ -2343,8 +2386,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         */}
         <div className="drawer-title">
           <Icon name="list" /><strong>目录</strong>
-          <small className="drawer-title-current" title={chapter?.title || undefined}>
-            {chapter?.title ? `正在读：${chapter.title}` : `共 ${currentBook.chapters.length} 章`}
+          <small className="drawer-title-current" title={chapter?.title ? convert(chapter.title) : undefined}>
+            {chapter?.title ? `正在读：${convert(chapter.title)}` : `共 ${currentBook.chapters.length} 章`}
           </small>
         </div>
         <div className="drawer-header-actions">
@@ -2391,6 +2434,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         }}
         itemHeight={TOC_ROW_HEIGHT}
         overscan={8}
+        convertTitle={convert}
         autoScrollKey={activeDrawer === 'toc' || settings.sidebarPinned ? 1 : 0}
       />
       <footer className={`drawer-footer ${drawerFooterOpen ? 'is-open' : ''}`}>
@@ -2610,15 +2654,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   <Fragment key={item.chapter.url}>
                     {headIndex > 0 && (pageFillers[headIndex - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
                     <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
-                      <h1>{item.chapter.title}</h1>
-                      {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+                      <h1>{convert(item.chapter.title)}</h1>
+                      {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
                     </section>
                   </Fragment>
                 ))}
                 {flowHead.length > 0 && (pageFillers[flowHead.length - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
                 <section className="reader-page-chapter" data-chapter-index={chapter?.index ?? 0}>
-                  <h1>{shownChapterTitle}</h1>
-                  {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
+                  <h1>{convert(shownChapterTitle ?? '')}</h1>
+                  {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{convert(incomingChapterTitle)}</p>}
                   {loading && !content && <ReaderContentSkeleton />}
                   {message && <p className="reader-error">{message}</p>}
                   {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
@@ -2627,8 +2671,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                   <Fragment key={item.chapter.url}>
                     {(pageFillers[flowHead.length + tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
                     <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
-                      <h1>{item.chapter.title}</h1>
-                      {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+                      <h1>{convert(item.chapter.title)}</h1>
+                      {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
                     </section>
                   </Fragment>
                 ))}
@@ -2636,7 +2680,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             </div>
           </div>
           <footer className="reader-paginated-footer">
-            <span>{paginatedFooterTitle || ''}</span>
+            <span>{convert(paginatedFooterTitle || '')}</span>
             <span>{pageIndex + 1} / {pageCount}</span>
           </footer>
         </div>
@@ -2648,22 +2692,22 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             每章一个 <section>，标题与正文成组；章与章之间是一条分隔线，不是"翻页"。
           */}
           <section ref={anchorSectionRef} className="reader-flow-chapter" data-chapter-index={chapter?.index ?? 0}>
-            <h1>{shownChapterTitle}</h1>
-            {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{incomingChapterTitle}</p>}
+            <h1>{convert(shownChapterTitle ?? '')}</h1>
+            {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{convert(incomingChapterTitle)}</p>}
             {loading && !content && <ReaderContentSkeleton />}
             {message && <p className="reader-error">{message}</p>}
             {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
           </section>
           {flowTail.map(item => (
             <section key={item.chapter.url} className="reader-flow-chapter reader-flow-tail" data-chapter-index={item.chapter.index}>
-              <h1>{item.chapter.title}</h1>
-              {splitParagraphs(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+              <h1>{convert(item.chapter.title)}</h1>
+              {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
             </section>
           ))}
           {!!content && !loading && loadedChapterUrl === chapter?.url && !!nextChapterTitle && flowTail.length === 0 && (
             <div className="reader-next-hint">
               <button type="button" onClick={() => changeChapter(chapterIndex + 1, 'first')}>
-                <span>下一章 · {nextChapterTitle}</span>
+                <span>下一章 · {convert(nextChapterTitle)}</span>
                 <Icon name="chevronDown" />
               </button>
               <small>这是最后一章之前唯一没有续接上的位置：滚到底再向下滑即进入</small>

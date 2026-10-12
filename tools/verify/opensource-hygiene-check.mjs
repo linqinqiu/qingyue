@@ -44,7 +44,18 @@ const rules = [
     // 要挡的是"这台开发机的私人身份"混进可分发面：Windows 用户名、个人 fork 账号，
     // 以及 LICENSE 把本项目的版权写成上游作者。
     name: '没有私人身份残留（Windows 用户名、个人 fork 账号、LICENSE 错标上游作者）',
-    pattern: /\b(Qinqiu|qinqiu|linqinqiu|wfanan)\b/,
+    /**
+     * 2026-10-11 收窄：原来连 `linqinqiu` 一起挡，但那是**本项目自己的仓库 owner** ——
+     * package.json 的 repository、SECURITY 的私密报告地址、CODEOWNERS 的 `@linqinqiu`、
+     * 「关于」页默认的 `LEGADO_REPO` 都得写它，写成占位符只会让检查更新直接失灵。
+     * 项目对外唯一的地址不是"私人身份残留"。
+     *
+     * 所以名单只剩真正属于**这台机器/这个人的旧身份**：`qinqiu`（本机 Windows 用户名，
+     * 会以「盘符 + Users + 用户名」那种形状溜进文档，上面那条规则也管它）
+     * 与 `wfanan`（项目迁过来之前那个 fork 账号）。
+     * 两边都带 `\b`，所以 `linqinqiu` 里的 `qinqiu` 不会误伤（前面是 `n`，没有词边界）。
+     */
+    pattern: /\b(qinqiu|wfanan)\b/i,
     // 这份检测名单就写在门禁自己里，扫描时不跳过自身会自匹配成假红
     exempt: ['tools/verify/opensource-hygiene-check.mjs'],
   },
@@ -117,10 +128,21 @@ for (const rule of rules) {
 // ── README 承诺的端点必须真的存在（文档说谎最常见的形态就是这个）──────────
 // 路由是嵌在 `route("/api") { get("/backup/import") … }` 里的，所以拿"去掉 /api 前缀的尾巴"去源码里找，
 // 而不是要求整串出现 —— 否则 `/api/backup/import` 这种明明存在的端点会被判成悬空。
+//
+// 2026-10-11 修：这里原来是 `readdirSync` **只读一层**，而后端在 e982890 拆过包
+// （`Routes.kt` 从 `io/legado/server/` 挪进了 `io/legado/server/http/`），
+// 于是这个函数读到的一串全是目录名、`read()` 全抛、拼出来基本是空串 ——
+// 端点这条断言从那次重构起就**一直是瞎的**，它现在报"悬空"纯粹是因为看不清。
+// 改成递归走整棵 kotlin 树。
+const kotlinRoot = path.join(ROOT, 'server/src/main/kotlin')
+const walkKotlin = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+  const full = path.join(dir, entry.name)
+  return entry.isDirectory() ? walkKotlin(full) : [full]
+})
+const appSource = walkKotlin(kotlinRoot)
+  .map(file => { try { return fs.readFileSync(file, 'utf8') } catch { return '' } }).join('\n')
 const readme = read('README.md')
 const declared = [...new Set([...readme.matchAll(/\/api\/[a-z0-9\-_/{}]+\w/gi)].map(m => m[0].replace(/\/$/, '')))]
-const appSource = fs.readdirSync(path.join(ROOT, 'server/src/main/kotlin/io/legado/server'))
-  .map(name => { try { return read(`server/src/main/kotlin/io/legado/server/${name}`) } catch { return '' } }).join('\n')
 const missing = declared.filter(entry => {
   const tail = entry.replace(/^\/api/, '')
   return !(appSource.includes('"' + entry + '"') || appSource.includes('"' + tail + '"'))

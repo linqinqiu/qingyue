@@ -172,7 +172,8 @@ test('章节过渡 - 预载命中要在绘制前换好正文，朗读管线只�
   )
   assert.match(
     readerSource,
-    /processChapterForTts\(chapter\?\.title \|\| '', ttsParagraphs/,
+    // 第一个参数（章名）后来会过一层简繁转换的 `convert(...)`，所以这里只钉"喂进去的是 ttsParagraphs"
+    /processChapterForTts\([^\n]*ttsParagraphs/,
     '朗读必须吃 ttsParagraphs（过渡期间为空），否则会一路读进上一章剩下的段落 —— 这是当年"切章就清 content"的真实理由',
   )
   assert.match(
