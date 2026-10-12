@@ -86,7 +86,13 @@ const jpkgArgs = [
   '--main-class', 'io.legado.server.DesktopLauncherKt',
   '--runtime-image', runtimeDir,
   '--dest', destDir,
+  // 编码统一（2026-10-12）：只给 file.encoding 的话，JDK 17 的控制台输出仍落回系统 ANSI（GBK）。
+  // sun.stdout/stderr 是 17 认的，无前缀两个是 18+（CI 的 21）认的，两套都带。
   '--java-options', '-Dfile.encoding=UTF-8',
+  '--java-options', '-Dsun.stdout.encoding=UTF-8',
+  '--java-options', '-Dsun.stderr.encoding=UTF-8',
+  '--java-options', '-Dstdout.encoding=UTF-8',
+  '--java-options', '-Dstderr.encoding=UTF-8',
 ]
 if (fs.existsSync(icon)) jpkgArgs.push('--icon', icon)
 const ran = spawnSync(jbin('jpackage'), jpkgArgs, { cwd: ROOT, stdio: 'inherit' })

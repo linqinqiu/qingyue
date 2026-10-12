@@ -70,6 +70,13 @@ function resolveRuntime(target) {
 /**
  * 启动脚本：cmd 按 GBK 读，所以这里只许 ASCII；行尾必须是 CRLF。
  *
+ * 编码统一（2026-10-12）：便携包裸起 JVM 时，JDK 17 的控制台/管道编码落回系统 ANSI（GBK），
+ * 中文日志（LogService 的 [SYSTEM] 行等）在 UTF-8 终端/管道里全是乱码 —— 修法是两端一起统一成 UTF-8：
+ * 控制台 `chcp 65001` 负责把字节**渲染**成 UTF-8，五个 `-D` 旗标负责让 JVM **写出** UTF-8
+ * （`file.encoding` 管重定向到文件的输出；`sun.stdout/stderr.encoding` JDK 17 认，
+ * 无前缀的 `stdout/stderr.encoding` JDK 18+ 认，两套都带，CI 的 21 也能吃）。
+ * start.mjs 早就带这套旗标（那里 server.log 已是 UTF-8），start.bat 是当时漏掉的口子。
+ *
  * 端口可自定义（学 workbuddy-switch 的 `--port`）：`start.bat 1235` 优先，其次包内的
  * `port.txt`，都没有才是 1234。服务冷启动要几十秒，所以另起一个后台 PowerShell **等端口
  * 真的能连上再开浏览器** —— 一上来就开会只看到"无法访问此页面"。
@@ -79,6 +86,7 @@ const psOpenWhenReady = 'for($i=0;$i -lt 240;$i++){try{$c=New-Object Net.Sockets
   + "Start-Process 'http://127.0.0.1:%LEGADO_PORT%/';break}catch{Start-Sleep -Milliseconds 500}}"
 const startBat = [
   '@echo off', 'setlocal', 'cd /d "%~dp0"',
+  'chcp 65001 >nul',
   'set LEGADO_PORT=1234',
   'if not "%~1"=="" set LEGADO_PORT=%~1',
   'if exist "%~dp0port.txt" for /f "usebackq delims=" %%p in ("%~dp0port.txt") do set LEGADO_PORT=%%p',
@@ -90,8 +98,8 @@ const startBat = [
   'echo  Stop with Ctrl+C.  Data stays in .\\data',
   'echo  Change port:  start.bat 1235   (or write a number into port.txt)',
   'echo.',
-  `start "" /b powershell -NoProfile -WindowStyle Hidden -Command "${psOpenWhenReady}"`,
-  `"${'%~dp0'}runtime\\bin\\java.exe" -Djava.io.tmpdir="${'%~dp0'}tmp" -jar "${'%~dp0'}${jarName}"`,
+  'start "" /b powershell -NoProfile -WindowStyle Hidden -Command "' + psOpenWhenReady + '"',
+  `"${'%~dp0'}runtime\\bin\\java.exe" -Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Djava.io.tmpdir="${'%~dp0'}tmp" -jar "${'%~dp0'}${jarName}"`,
   '', '',
 ].join('\r\n')
 if (/[^\x00-\x7F]/.test(startBat)) fail('start.bat 混进了非 ASCII 字符，cmd 会按 GBK 读成乱码')
