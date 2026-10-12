@@ -354,6 +354,37 @@ data class SourceLoginStateRecord(
     val chapterIndex: Int = 0,
     val seconds: Int,
 )
+/**
+ * 笔记 / 划线（PROPOSAL-019 E）。偏移是**章节内字符偏移**，不是像素 / 列号 ——
+ * 字号、字体、分栏一改位置就跳。`excerpt` 同时留一份选中原文：偏移算错还能靠它找回，导出也可读。
+ */
+@Serializable data class BookNote(
+    val id: Long = 0,
+    val sourceId: String,
+    val bookUrl: String,
+    val bookName: String = "",
+    val chapterUrl: String = "",
+    val chapterIndex: Int = 0,
+    val startOffset: Int,
+    val endOffset: Int,
+    val excerpt: String,
+    val note: String = "",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+@Serializable data class BookNoteWrite(
+    val sourceId: String,
+    val bookUrl: String,
+    val bookName: String = "",
+    val chapterUrl: String = "",
+    val chapterIndex: Int = 0,
+    val startOffset: Int,
+    val endOffset: Int,
+    val excerpt: String,
+    val note: String = "",
+)
+/** 改备注（只改 `note` 这一栏；划线的位置与原文不动）。 */
+@Serializable data class BookNoteUpdate(val note: String = "")
 @Serializable data class BookshelfWriteRequest(
     val sourceId: String,
     val bookUrl: String,

@@ -125,6 +125,8 @@ import io.legado.server.model.LocalBookReparseResult
 import io.legado.server.model.ReadingProgress
 import io.legado.server.model.ReadingLogEntry
 import io.legado.server.model.ReadingLogRequest
+import io.legado.server.model.BookNoteUpdate
+import io.legado.server.model.BookNoteWrite
 import io.legado.server.model.RssArticlesRequest
 import io.legado.server.model.RssContentRequest
 import io.legado.server.model.RssSourceEnabledRequest
@@ -1834,6 +1836,34 @@ fun Route.apiRoutes(
                 return@post
             }
             call.respond(database.addReadingLog(entry))
+        }
+        // 笔记 / 划线（PROPOSAL-019 E）：按书读、增、改备注、删。偏移是章节内字符偏移。
+        get("/notes") {
+            val sourceId = call.request.queryParameters["sourceId"]
+            val bookUrl = call.request.queryParameters["bookUrl"]
+            if (sourceId.isNullOrBlank() || bookUrl.isNullOrBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_note", "缺少 sourceId 或 bookUrl")); return@get }
+            call.respond(database.listNotes(sourceId, bookUrl))
+        }
+        post("/notes") {
+            if (!call.requireSameOriginWrite()) return@post
+            val write = call.receive<BookNoteWrite>()
+            if (write.sourceId.isBlank() || write.bookUrl.isBlank() || write.excerpt.isBlank() || write.startOffset < 0 || write.endOffset < write.startOffset) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_note", "笔记无效"))
+                return@post
+            }
+            call.respond(database.addNote(write))
+        }
+        put("/notes/{id}") {
+            if (!call.requireSameOriginWrite()) return@put
+            val id = call.parameters["id"]?.toLongOrNull() ?: return@put call.respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "笔记 ID 无效"))
+            if (database.updateNote(id, call.receive<BookNoteUpdate>().note)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "笔记不存在"))
+        }
+        delete("/notes/{id}") {
+            if (!call.requireSameOriginWrite()) return@delete
+            val id = call.parameters["id"]?.toLongOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest, ApiError("invalid_id", "笔记 ID 无效"))
+            if (database.deleteNote(id)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "笔记不存在"))
         }
         route("/tts") {
             get("/voices") {

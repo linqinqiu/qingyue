@@ -5680,6 +5680,23 @@ input[type="checkbox"] {
 .reading-log-book { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); font-size: var(--t-md); color: var(--ink-soft, #444); }
 .reading-log-book-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reading-log-book-time { flex: none; color: var(--muted); }
+
+/* 笔记 / 划线（PROPOSAL-019 E）：正文高亮、选中后的浮层、抽屉里的「笔记」面板。 */
+.reader-note-highlight { background: rgba(255, 208, 92, .38); color: inherit; border-radius: 2px; cursor: pointer; }
+.reader-note-highlight.has-note { text-decoration: underline dotted var(--accent); text-underline-offset: 3px; }
+.reader-note-toolbar { position: fixed; transform: translate(-50%, calc(-100% - 10px)); z-index: 40; display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 32px)); padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-2, 12px); background: var(--surface); box-shadow: 0 12px 32px rgba(0, 0, 0, .18); }
+.reader-note-excerpt { margin: 0; max-height: 3.4em; overflow: hidden; color: var(--muted); font-size: var(--t-sm); line-height: 1.5; }
+.reader-note-input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); color: var(--ink); font: inherit; font-size: var(--t-sm); outline: 0; }
+.reader-note-input:focus { border-color: var(--accent); }
+.reader-note-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.reader-notes-list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.reader-notes-empty { padding: 16px 8px; color: var(--muted); font-size: var(--t-md); line-height: 1.7; }
+.reader-note-item { margin: 0; }
+.reader-note-item-main { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
+.reader-note-item-main:hover { border-color: var(--accent); }
+.reader-note-item-excerpt { font-size: var(--t-md); line-height: 1.6; }
+.reader-note-item-text { color: var(--accent); font-size: var(--t-sm); }
+.reader-note-item-meta { color: var(--muted); font-size: var(--t-xs); }
 /* 正文引导语：替代原来的整页大标题（标题已由 .dialog-head 给，正文不再重复一遍 h1） */
 .page-dialog .page-lead { margin: 0 0 var(--s-4); color: var(--muted); font-size: var(--t-lg); line-height: 1.7; }
 

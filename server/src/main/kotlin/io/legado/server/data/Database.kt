@@ -51,6 +51,8 @@ import io.legado.server.model.ImportResponse
 import io.legado.server.model.ReadingProgress
 import io.legado.server.model.ReadingLogEntry
 import io.legado.server.model.ReadingLogRequest
+import io.legado.server.model.BookNote
+import io.legado.server.model.BookNoteWrite
 import io.legado.server.model.RssSourceSummary
 import io.legado.server.model.SearchResult
 import io.legado.server.model.SourceRecord
@@ -260,6 +262,18 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                   primary key (day, source_id, book_url)
                 );
                 create index if not exists idx_reading_log_day on reading_log(day desc);
+                -- 笔记 / 划线（PROPOSAL-019 E）。偏移是**章节内字符偏移**（`start_offset`/`end_offset`），
+                -- 不是像素 / 列号 —— 字号、字体、分栏一改位置就跳，这是阅读器那条老教训。
+                -- 同时留一份 `excerpt`（选中的原文）：偏移算错了还能靠它找回来，也让导出可读。
+                create table if not exists book_note (
+                  id integer primary key autoincrement,
+                  source_id text not null, book_url text not null, book_name text,
+                  chapter_url text, chapter_index integer not null default 0,
+                  start_offset integer not null, end_offset integer not null,
+                  excerpt text not null, note text not null default '',
+                  created_at integer not null, updated_at integer not null
+                );
+                create index if not exists idx_book_note_book on book_note(source_id, book_url, chapter_index);
             """.trimIndent())
             // 不再有账号与会话：这台服务不设身份（写操作只留 Guard.kt 的同源闸门）。
             // 老库里的这两张表是死重量，启动时收掉。
@@ -618,6 +632,40 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             }
         }
     }
+    // —— 笔记 / 划线（PROPOSAL-019 E）——
+    /** 新增一条划线 / 备注。偏移是章节内字符偏移，`excerpt` 是选中原文。 */
+    fun addNote(write: BookNoteWrite): BookNote = write { db ->
+        val now = System.currentTimeMillis()
+        val id = db.prepareStatement("""insert into book_note(source_id,book_url,book_name,chapter_url,chapter_index,start_offset,end_offset,excerpt,note,created_at,updated_at)
+            values(?,?,?,?,?,?,?,?,?,?,?)""", java.sql.Statement.RETURN_GENERATED_KEYS).use { st ->
+            st.setString(1, write.sourceId); st.setString(2, write.bookUrl); st.setString(3, write.bookName)
+            st.setString(4, write.chapterUrl); st.setInt(5, write.chapterIndex)
+            st.setInt(6, write.startOffset); st.setInt(7, write.endOffset); st.setString(8, write.excerpt)
+            st.setString(9, write.note); st.setLong(10, now); st.setLong(11, now)
+            st.executeUpdate()
+            st.generatedKeys.use { rs -> if (rs.next()) rs.getLong(1) else 0L }
+        }
+        BookNote(id, write.sourceId, write.bookUrl, write.bookName, write.chapterUrl, write.chapterIndex, write.startOffset, write.endOffset, write.excerpt, write.note, now, now)
+    }
+    /** 这本书的全部笔记，按章、按章内位置排 —— 阅读器按这个顺序渲染高亮与列表。 */
+    fun listNotes(sourceId: String, bookUrl: String): List<BookNote> = connect { db ->
+        db.prepareStatement("select id,source_id,book_url,book_name,chapter_url,chapter_index,start_offset,end_offset,excerpt,note,created_at,updated_at from book_note where source_id=? and book_url=? order by chapter_index asc, start_offset asc").use {
+            it.setString(1, sourceId); it.setString(2, bookUrl)
+            it.executeQuery().use { rs ->
+                val list = mutableListOf<BookNote>()
+                while (rs.next()) list += BookNote(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4) ?: "", rs.getString(5) ?: "", rs.getInt(6), rs.getInt(7), rs.getInt(8), rs.getString(9), rs.getString(10) ?: "", rs.getLong(11), rs.getLong(12))
+                list
+            }
+        }
+    }
+    fun updateNote(id: Long, note: String): Boolean = write { db ->
+        db.prepareStatement("update book_note set note=?, updated_at=? where id=?").use {
+            it.setString(1, note); it.setLong(2, System.currentTimeMillis()); it.setLong(3, id); it.executeUpdate() > 0
+        }
+    }
+    fun deleteNote(id: Long): Boolean = write { db ->
+        db.prepareStatement("delete from book_note where id=?").use { it.setLong(1, id); it.executeUpdate() > 0 }
+    }
     fun saveBookshelf(request: BookshelfWriteRequest, cover: CachedCover?): BookshelfItem = write { db ->
         val now = System.currentTimeMillis()
         db.autoCommit = false
@@ -825,6 +873,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
             val key = db.prepareStatement("select cover_key from book_shelf where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null } }
             db.prepareStatement("delete from book_shelf where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
             db.prepareStatement("delete from reading_progress where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
+            db.prepareStatement("delete from book_note where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_content_cache where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_cache_status where source_id=? and book_url=?").use { it.setString(1, sourceId); it.setString(2, bookUrl); it.executeUpdate() }
             // 用 instr 而不是 like '%x%'：bookUrl 里的 `%`/`_` 会被 LIKE 当通配符，删一本书会连带删掉别的书的目录缓存。
@@ -846,6 +895,9 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                     it.setString(1, book.sourceId); it.setString(2, book.bookUrl); it.executeUpdate() 
                 }
                 db.prepareStatement("delete from reading_progress where source_id=? and book_url=?").use { 
+                    it.setString(1, book.sourceId); it.setString(2, book.bookUrl); it.executeUpdate() 
+                }
+                db.prepareStatement("delete from book_note where source_id=? and book_url=?").use { 
                     it.setString(1, book.sourceId); it.setString(2, book.bookUrl); it.executeUpdate() 
                 }
                 db.prepareStatement("delete from book_content_cache where source_id=? and book_url=?").use { 
@@ -913,6 +965,7 @@ class Database(private val path: String) : Closeable, AutoCloseable {
 
             db.prepareStatement("delete from book_shelf where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
             db.prepareStatement("delete from reading_progress where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
+            db.prepareStatement("delete from book_note where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_content_cache where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_cache_status where source_id=? and book_url=?").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.executeUpdate() }
             db.prepareStatement("delete from book_toc_cache where source_id=? and (toc_url=? or instr(toc_url, ?) > 0)").use { it.setString(1, oldSourceId); it.setString(2, oldBookUrl); it.setString(3, oldBookUrl); it.executeUpdate() }

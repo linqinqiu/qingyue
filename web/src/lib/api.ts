@@ -34,6 +34,9 @@ export type Chapter = { index: number; title: string; url: string; isVolume?: bo
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
 /** 阅读记录（PROPOSAL-019 D）：粒度「一天 · 一本书」一行，秒数只累加。`day` 是本地日 YYYY-MM-DD。 */
 export type ReadingLogEntry = { day: string; sourceId: string; bookUrl: string; bookName: string; chapterIndex: number; seconds: number; updatedAt: number }
+/** 笔记 / 划线（PROPOSAL-019 E）。偏移是**章节内字符偏移**，不是像素 / 列号。 */
+export type BookNote = { id: number; sourceId: string; bookUrl: string; bookName: string; chapterUrl: string; chapterIndex: number; startOffset: number; endOffset: number; excerpt: string; note: string; createdAt: number; updatedAt: number }
+export type BookNoteWrite = { sourceId: string; bookUrl: string; bookName?: string; chapterUrl?: string; chapterIndex?: number; startOffset: number; endOffset: number; excerpt: string; note?: string }
 export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null; /** 自定义排序位（1 起）；null/缺省 = 没参与过自定义排序 */ sortOrder?: number | null; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
@@ -493,6 +496,15 @@ export const api = {
   readingLog: (days = 30, signal?: AbortSignal) => request<ReadingLogEntry[]>(`/api/reading-log?days=${days}`, { signal }),
   addReadingLog: (entry: { sourceId: string; bookUrl: string; bookName?: string; chapterIndex?: number; seconds: number }) =>
     request<ReadingLogEntry>('/api/reading-log', { method: 'POST', body: JSON.stringify(entry) }),
+  /**
+   * 笔记 / 划线（PROPOSAL-019 E）。按书读、增、改备注、删。
+   * 偏移是**章节内字符偏移**（不是像素 / 列号）——字号、字体、分栏一改位置就跳，这是阅读器那条老教训。
+   */
+  notes: (sourceId: string, bookUrl: string, signal?: AbortSignal) =>
+    request<BookNote[]>(`/api/notes?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}`, { signal }),
+  addNote: (write: BookNoteWrite) => request<BookNote>('/api/notes', { method: 'POST', body: JSON.stringify(write) }),
+  updateNote: (id: number, note: string) => request<void>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ note }) }),
+  deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
   bookshelf: async () => {
     try {
       const list = await request<BookshelfItem[]>('/api/bookshelf')

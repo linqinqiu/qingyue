@@ -3,7 +3,7 @@
 // 少这一行时页面与构建都正常，只有用例抛 `React is not defined`（AGENTS §5 的同形坑第三次：
 // PageBar/Notice 一回、ShortcutHelp+useEscapeClose 一回、TapZoneEditor 一回，这是第四回）。
 import React, { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, BookDetails, Chapter, ReadingProgress, SearchResult, TocRuleOption } from '../lib/api'
+import { api, BookDetails, BookNote, Chapter, ReadingProgress, SearchResult, TocRuleOption } from '../lib/api'
 import { ContextMenuItem, showContextMenu } from '../components/ContextMenu'
 import { Icon } from '../icons'
 import { useEscapeClose } from '../lib/useEscapeClose'
@@ -846,6 +846,152 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    */
   const splitBody = useCallback((text: string) => splitParagraphs(text).map(convert), [convert])
   const paragraphs = useMemo(() => (content ? splitBody(content) : []), [content, splitBody])
+
+  /**
+   * 笔记 / 划线（PROPOSAL-019 E）。
+   *
+   * 偏移是**章节内字符偏移**（段落在章里的起点 + 段内偏移），不用像素 / 列号 ——
+   * 字号、字体、分栏一改位置就跳，这是阅读器那条老教训。
+   * `excerpt` 另外留一份选中原文：高亮按它在这段文字里定位，简繁转换换了字形也找得到。
+   */
+  const [notes, setNotes] = useState<BookNote[]>([])
+  useEffect(() => {
+    let alive = true
+    api.notes(currentBook.details.sourceId, currentBook.bookUrl)
+      .then(list => { if (alive) setNotes(list) })
+      .catch(() => { if (alive) setNotes([]) })
+    return () => { alive = false }
+  }, [currentBook.details.sourceId, currentBook.bookUrl])
+  /** 每一段在**本章原文**里的起始字符偏移（段与段之间按一个换行算）。 */
+  const paragraphStarts = useMemo(() => {
+    if (!content) return [] as number[]
+    const starts: number[] = []
+    let running = 0
+    for (const line of splitParagraphs(content)) { starts.push(running); running += line.length + 1 }
+    return starts
+  }, [content])
+  /**
+   * 待保存 / 正在编辑的那一条。`id === null` = 刚从选区新建；否则是点已有高亮打开的。
+   * `x`/`y` 是浮层要摆的位置（视口坐标，横向以选中处为中心）。
+   */
+  const [noteDraft, setNoteDraft] = useState<{ id: number | null; chapterIndex: number; chapterUrl: string; startOffset: number; endOffset: number; excerpt: string; text: string; x: number; y: number } | null>(null)
+  /** 目录抽屉里的「笔记」面板开关（按书查看）。 */
+  const [notesPanel, setNotesPanel] = useState(false)
+
+  /** 段落里某个节点位置 → 段内字符偏移（选区跨多个文本节点时，前面那些也要加上）。 */
+  const offsetWithin = (root: HTMLElement, node: Node, offset: number): number => {
+    let total = 0
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const current = walker.currentNode
+      if (current === node) return total + offset
+      total += (current.textContent ?? '').length
+    }
+    return total
+  }
+
+  /** 松手时看有没有选中正文；选中了就摆出浮层（划线 / 写备注都在那一层里）。 */
+  const onReaderMouseUp = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    const startEl = (range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer as HTMLElement)
+    const endEl = (range.endContainer.nodeType === Node.TEXT_NODE ? range.endContainer.parentElement : range.endContainer as HTMLElement)
+    const startP = startEl?.closest<HTMLElement>('.reader-paragraph')
+    const endP = endEl?.closest<HTMLElement>('.reader-paragraph')
+    if (!startP || !endP) return
+    const startIndex = Number(startP.dataset.paragraphIndex ?? -1)
+    const endIndex = Number(endP.dataset.paragraphIndex ?? -1)
+    if (startIndex < 0 || endIndex < startIndex) return
+    const excerpt = selection.toString().trim()
+    if (!excerpt) return
+    const startOffset = (paragraphStarts[startIndex] ?? 0) + offsetWithin(startP, range.startContainer, range.startOffset)
+    const endOffset = (paragraphStarts[endIndex] ?? 0) + offsetWithin(endP, range.endContainer, range.endOffset)
+    // 选中的那一段属于**哪一章**：续接上来的下一章也在同一个容器里，不能一律按锚点章记
+    const ownerIndex = Number(startP.closest<HTMLElement>('[data-chapter-index]')?.dataset.chapterIndex ?? chapterIndex)
+    const rect = range.getBoundingClientRect()
+    setNoteDraft({
+      id: null, chapterIndex: ownerIndex, chapterUrl: currentBook.chapters[ownerIndex]?.url ?? '',
+      startOffset, endOffset: Math.max(endOffset, startOffset + excerpt.length), excerpt, text: '',
+      x: rect.left + rect.width / 2, y: rect.top,
+    })
+  }
+
+  /** 保存（新建或改备注）。备注留空就是纯划线。 */
+  const saveNote = async () => {
+    const draft = noteDraft
+    if (!draft) return
+    if (draft.id === null) {
+      const created = await api.addNote({
+        sourceId: currentBook.details.sourceId, bookUrl: currentBook.bookUrl, bookName,
+        chapterUrl: draft.chapterUrl, chapterIndex: draft.chapterIndex,
+        startOffset: draft.startOffset, endOffset: draft.endOffset, excerpt: draft.excerpt, note: draft.text,
+      }).catch(() => null)
+      if (created) setNotes(list => [...list, created])
+    } else {
+      const ok = await api.updateNote(draft.id, draft.text).then(() => true).catch(() => false)
+      if (ok) setNotes(list => list.map(item => (item.id === draft.id ? { ...item, note: draft.text } : item)))
+    }
+    setNoteDraft(null)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const removeNote = async () => {
+    const draft = noteDraft
+    if (!draft || draft.id === null) return
+    const ok = await api.deleteNote(draft.id).then(() => true).catch(() => false)
+    if (ok) setNotes(list => list.filter(item => item.id !== draft.id))
+    setNoteDraft(null)
+  }
+
+  /** 点已有高亮：打开编辑（改备注 / 删）。 */
+  const openNote = (note: BookNote, x: number, y: number) => {
+    setNoteDraft({ id: note.id, chapterIndex: note.chapterIndex, chapterUrl: note.chapterUrl, startOffset: note.startOffset, endOffset: note.endOffset, excerpt: note.excerpt, text: note.note, x, y })
+  }
+
+  /** 从「笔记」面板跳到那一条所在的章。 */
+  const jumpToNote = (note: BookNote) => {
+    const index = currentBook.chapters.findIndex(item => item.url === note.chapterUrl)
+    if (index >= 0 && index !== chapterIndex) changeChapter(index, 'first')
+    setNotesPanel(false)
+    setActiveDrawer(null)
+  }
+
+  /**
+   * 这一段里落着的笔记高亮。按 `excerpt` 在这段文字里定位 ——
+   * 简繁转换只换字形不换词，转换后仍然找得到；找不到（原文被源站改过）就安静跳过。
+   */
+  const renderNoteHighlights = (text: string, ownerIndex: number) => {
+    const chapterNotes = notes.filter(note => note.chapterIndex === ownerIndex && note.excerpt && text.includes(note.excerpt))
+    if (!chapterNotes.length) return null
+    const marks: Array<{ start: number; end: number; note: BookNote }> = []
+    for (const note of chapterNotes) {
+      const at = text.indexOf(note.excerpt)
+      if (at < 0) continue
+      // 与已有高亮重叠的跳过：重叠的 <mark> 没法叠着画
+      if (marks.some(mark => at < mark.end && at + note.excerpt.length > mark.start)) continue
+      marks.push({ start: at, end: at + note.excerpt.length, note })
+    }
+    if (!marks.length) return null
+    marks.sort((a, b) => a.start - b.start)
+    const out: React.ReactNode[] = []
+    let cursor = 0
+    for (const mark of marks) {
+      if (mark.start > cursor) out.push(text.slice(cursor, mark.start))
+      out.push(
+        <mark
+          key={`note-${mark.note.id}`}
+          className={`reader-note-highlight${mark.note.note ? ' has-note' : ''}`}
+          data-note-id={mark.note.id}
+          title={mark.note.note || '划线'}
+          onClick={event => { event.stopPropagation(); openNote(mark.note, event.clientX, event.clientY) }}
+        >{text.slice(mark.start, mark.end)}</mark>,
+      )
+      cursor = mark.end
+    }
+    if (cursor < text.length) out.push(text.slice(cursor))
+    return out
+  }
   // 朗读管线只认"当前这一章已经到位"的正文，过渡期间给空数组，避免读进上一章剩下的段落。
   const ttsParagraphs = useMemo(() => (isCurrentChapterLoaded ? paragraphs : []), [isCurrentChapterLoaded, paragraphs])
   // 非文本章节（音频/视频/文件）：这一章的"正文"其实是一个媒体地址，不能当段落排出来。
@@ -1194,7 +1340,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
   }, [chapterIndex, currentBook.chapters.length, persist])
 
-  const renderParagraphContent = (rawLine: string, pIndex: number) => {
+  const renderParagraphContent = (rawLine: string, pIndex: number, ownerIndex = chapterIndex) => {
+    // 有笔记就先画高亮。一段里「笔记高亮」与「朗读到哪句」叠着画不出来，笔记优先。
+    const highlighted = renderNoteHighlights(rawLine, ownerIndex)
+    if (highlighted) return highlighted
     if (!ttsActive || activeParagraphIndex !== pIndex || !currentChunk) {
       return rawLine
     }
@@ -1243,7 +1392,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         className={`reader-paragraph ${ttsActive && activeParagraphIndex === index ? 'tts-active-paragraph' : ''}`}
         onClick={() => handleParagraphClick(index)}
       >
-        {renderParagraphContent(line, index)}
+        {renderParagraphContent(line, index, owner?.index ?? chapterIndex)}
       </p>
     )
   }
@@ -2521,6 +2670,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             onClick={() => onSettingsChange({ ...settings, sidebarPinned: !settings.sidebarPinned })}
           />
           <IconButton
+            className={notesPanel ? 'active' : ''}
+            label={notesPanel ? '回到目录' : `笔记（${notes.length}）`}
+            icon="edit"
+            onClick={() => setNotesPanel(value => !value)}
+          />
+          <IconButton
             // 固定态下抽屉由 `pinned` 类撑着，光 setActiveDrawer(null) 关不掉 —— 这颗必须顺带解除固定。
             // 审计把它报成"一个控件兼两个职务"，核了 :1917 的 className 才确认是必需的；
             // 该修的是标签：它得说自己按下去会发生什么。
@@ -2535,25 +2690,43 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           />
         </div>
       </header>
-      <div className="chapter-search">
-        <Icon name="search" />
-        <input value={chapterQuery} onChange={event => setChapterQuery(event.target.value)} placeholder="搜索章节" />
-      </div>
-      <VirtualChapterList
-        chapters={tocList}
-        activeChapterIndex={chapterIndex}
-        cachedUrlsSet={cachedChapterUrls}
-        onSelect={index => {
-          changeChapter(index)
-          if (!settings.sidebarPinned) {
-            setActiveDrawer(null)
-          }
-        }}
-        itemHeight={TOC_ROW_HEIGHT}
-        overscan={8}
-        convertTitle={convert}
-        autoScrollKey={activeDrawer === 'toc' || settings.sidebarPinned ? 1 : 0}
-      />
+      {notesPanel ? (
+        /* 「笔记」面板（PROPOSAL-019 E）：这本书的全部划线 / 备注，点一条跳到那一章。 */
+        <ul className="reader-notes-list">
+          {notes.length === 0 && <li className="reader-notes-empty">这本书还没有笔记。选中正文可以划线、写备注。</li>}
+          {notes.map(note => (
+            <li key={note.id} className="reader-note-item">
+              <button type="button" className="reader-note-item-main" onClick={() => jumpToNote(note)}>
+                <span className="reader-note-item-excerpt">{note.excerpt}</span>
+                {note.note && <span className="reader-note-item-text">{note.note}</span>}
+                <span className="reader-note-item-meta">第 {note.chapterIndex + 1} 章</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <>
+          <div className="chapter-search">
+            <Icon name="search" />
+            <input value={chapterQuery} onChange={event => setChapterQuery(event.target.value)} placeholder="搜索章节" />
+          </div>
+          <VirtualChapterList
+            chapters={tocList}
+            activeChapterIndex={chapterIndex}
+            cachedUrlsSet={cachedChapterUrls}
+            onSelect={index => {
+              changeChapter(index)
+              if (!settings.sidebarPinned) {
+                setActiveDrawer(null)
+              }
+            }}
+            itemHeight={TOC_ROW_HEIGHT}
+            overscan={8}
+            convertTitle={convert}
+            autoScrollKey={activeDrawer === 'toc' || settings.sidebarPinned ? 1 : 0}
+          />
+        </>
+      )}
       <footer className={`drawer-footer ${drawerFooterOpen ? 'is-open' : ''}`}>
         {/* 收起态只有这一行；展开才露出缓存与「这本书」那两组（见 drawerFooterOpen 的注释） */}
         <button
@@ -2746,7 +2919,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     )}
 
     {/* Central Reading Canvas */}
-    <section ref={readerMainRef} className="reader-main">
+    <section ref={readerMainRef} className="reader-main" onMouseUp={onReaderMouseUp}>
       {settings.pageMode === 'paginate' ? (
         <div className="reader-paginated-wrap" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onWheel={onWheelPaginate} onContextMenu={onBodyContextMenu}>
           <div ref={viewportRef} className={`reader-paginated-viewport ${isDoubleColumn ? 'is-double-column' : ''}${pageAnim === 'fade' && fading ? ' is-fading' : ''}`}>
@@ -2972,6 +3145,32 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       <div className="overlay-backdrop is-viewer" onClick={() => setLightboxSrc(null)} role="dialog" aria-label="图片预览">
         <button type="button" className="reader-image-lightbox-close" aria-label="关闭预览" onClick={() => setLightboxSrc(null)}><Icon name="close" /></button>
         <img src={lightboxSrc} alt="" onClick={event => event.stopPropagation()} />
+      </div>
+    )}
+    {/*
+      笔记浮层（PROPOSAL-019 E）：选中正文后摆出来，也用来改 / 删已有的高亮。
+      挂在 `<section class="reader-main">` **之外** —— 它自己的点击不该再触发 onReaderMouseUp。
+    */}
+    {noteDraft && (
+      <div className="reader-note-toolbar" style={{ left: noteDraft.x, top: noteDraft.y }} role="dialog" aria-label="笔记">
+        {noteDraft.id !== null && <p className="reader-note-excerpt">{noteDraft.excerpt}</p>}
+        <input
+          className="reader-note-input"
+          value={noteDraft.text}
+          autoFocus
+          placeholder="写点备注（留空就只划线）"
+          aria-label="备注"
+          onChange={event => setNoteDraft(current => (current ? { ...current, text: event.target.value } : current))}
+          onKeyDown={event => {
+            if (event.key === 'Enter') void saveNote()
+            if (event.key === 'Escape') setNoteDraft(null)
+          }}
+        />
+        <div className="reader-note-actions">
+          <button type="button" className="primary-button" onClick={() => void saveNote()}>保存</button>
+          {noteDraft.id !== null && <button type="button" className="subtle-button is-danger" onClick={() => void removeNote()}>删除</button>}
+          <button type="button" className="subtle-button" onClick={() => { setNoteDraft(null); window.getSelection()?.removeAllRanges() }}>取消</button>
+        </div>
       </div>
     )}
   </main>
