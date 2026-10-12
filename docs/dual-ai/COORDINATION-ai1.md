@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-11 16:50 |
-| 我现在在做 | 装置收拢 / 合入 ai2/frontend / 设置页居中 / 自定义皮肤库 —— 四件都做完，待推送 |
-| 下一件事 | 把 main 推到 origin（网络恢复后）；等 AI-2 认可 `docs/dual-ai/README.md` |
-| 等对方 | AI-2 认可 `docs/dual-ai/README.md`（原 `COLLABORATION.md` 已并入），并刷新自己的状态板 |
-| 待发版 | 是（AI-2 的离线统计 / 目录切片 + AI-1 的设置页居中 / 皮肤库，尚未落到产物） |
+| 更新时间 | 2026-10-12 09:20 |
+| 我现在在做 | 全量功能审计（用户要求"研究所有功能是否完善正常"）—— 37 条浏览器门禁 + 单测 + 自检跑完，修了 5 处假红，待推送 |
+| 下一件事 | PROPOSAL-019 F（拆 `ReaderScreen.tsx`，3177 行）；把 main 推到 origin |
+| 等对方 | AI-2 认可 `docs/dual-ai/README.md`，并刷新自己的状态板 |
+| 待发版 | 否（0.6.48 已发；本轮只改门禁/测试，不动产品产物） |
 | 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
 | 我不碰 | `web/**`、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 自测实例 | 8081（库 `data/ai1.db`，日志 `logs/ai1/server.log`） |
@@ -88,3 +88,25 @@
 - ② `web/dist` 不再进版本库（17 个文件 `git rm --cached`，文件仍在盘上；`web/.gitignore` 加 `dist/`）。它每次源码改动都产生一次产物 diff，且不是源。
 - 护栏：`server/build.gradle` 的 fatJar 加了 `doFirst` —— 缺 `web/dist/index.html` 就报错，不再静默产出「只有后端、没有界面」的包；**只拦 fatJar**，`:server:test` 不受影响。
 - 影响 AI-2：**以后别再提交 `web/dist`**；打 jar 前先 `npm run build`。Docker 与 CI 本来就自己构建前端，不受影响。
+
+## [2026-10-12] TASK 全量功能审计：单测 + 37 条浏览器门禁 + 自检，修 5 处假红
+
+- 起因：用户要求「研究所有现有功能与历史更新是否完善正常」。
+- 做法：新建隔离实例（端口 18081，库 = 真库的 `VACUUM INTO` 快照 + `covers` 拷贝），
+  串行跑 `tools/verify/*` 37 条 + 前端 `web/test/run-all.ts` + `:server:test` + `selfcheck.mjs`。
+- **产品侧结论**：前端 **498/498**、`tsc -b` 干净；服务端 **318/318**（单跑）；
+  HTTP 自检 **30/33**（3 条红 = 外网书源超时 ×2 + 本机同时开了多个实例 ×1，均非产品缺陷）。
+  历史功能逐条对照 `CHANGELOG.md`（0.2.0→0.6.48）**均在位**。
+- **修掉的 5 处假红**（判据/测试跟产品脱节，不是产品坏了）：
+  1. `overlay-tier-check` 没先关协议浮层 → 量到协议卡（58/3 → **61/0**）
+  2. `specified-source-search-check` 钉 `form.library-search`（表单早没这个类）→ 8/10 → **15/15**
+  3. `reader-flow-check` 清离线副本 `indexedDB.open(...,1)` vs 应用 `DB_VERSION=2` → 20/22 → **22/22**
+  4. `offline-login-check`（本机未入库）断言 2026-10-08 已删的「连不上本机服务」页 → 5/3 → **7/0**
+  5. 服务端 E2E 场景 2 / ReadingLog 的 Windows 临时库文件锁 → 套件 **318/318**
+- **未闭环（数据/探针相关，非产品缺陷，留待）**：`source-health-check` 1 条（2 个 `.test` 源
+  0.2s 扫完、停止键窗口错过 —— 探针自注里已写）、`cache-range-check` / `explore-empty-check`
+  （依赖特定书的 `cacheState` / 源的分栏名，快照里对不上）、`snapshot-coverage`/`archive-verify`
+  要命令行参数（不是跑红）。
+- 另：本机 1234 那个日常实例当时在跑一个**被替换过的 jar**（13:36 起、14:11 重建 jar）——
+  `index.html` 指到新 bundle、旧 jar 目录里没有它 → 静态资源 404；重启即恢复，
+  `version-check` 随之 **17/0**。属"jar 在运行中被重建"的已知坑（见 AGENTS §3），非代码问题。
