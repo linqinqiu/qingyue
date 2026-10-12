@@ -499,17 +499,18 @@ class E2EScenariosTest {
 
     private fun temporaryDatabase(): String = Files.createTempFile("legado-e2e-test", ".sqlite").toString()
 
-    /** Windows 上 WAL 模式的 sqlite 在连接关闭后释放文件句柄有延迟，删除带重试以规避偶发 FileSystemException。 */
+    /**
+     * Windows 上 WAL 模式的 sqlite 在连接关闭后释放文件句柄有延迟（杀软 / 索引器也可能短暂占着），
+     * 删除带重试。重试完还删不掉就放手：这是系统临时目录里的文件，判据是上面的断言，
+     * 不是"临时文件删没删掉" —— 不让清理失败把一条已通过的测试判红（与 `ReadingLogTest.cleanup` 同口径）。
+     */
     private fun deleteDatabaseFileWithRetry(path: String) {
         val file = java.nio.file.Path.of(path)
-        repeat(50) { attempt ->
-            try {
-                Files.deleteIfExists(file)
-                return
-            } catch (e: java.nio.file.FileSystemException) {
-                if (attempt == 49) throw e
-                Thread.sleep(150)
-            }
+        repeat(20) {
+            if (runCatching { Files.deleteIfExists(file) }.isSuccess) return
+            Thread.sleep(150)
         }
+        runCatching { Files.deleteIfExists(java.nio.file.Path.of("$path-wal")) }
+        runCatching { Files.deleteIfExists(java.nio.file.Path.of("$path-shm")) }
     }
 }

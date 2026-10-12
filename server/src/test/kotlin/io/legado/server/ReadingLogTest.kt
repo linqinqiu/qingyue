@@ -42,7 +42,7 @@ class ReadingLogTest {
             assertEquals("书甲", rows[0].bookName)
             db.close()
         } finally {
-            Files.deleteIfExists(Path.of(path))
+            cleanup(path)
         }
     }
 
@@ -59,7 +59,7 @@ class ReadingLogTest {
             assertEquals("读得久的排前面", "乙", rows[0].bookName)
             db.close()
         } finally {
-            Files.deleteIfExists(Path.of(path))
+            cleanup(path)
         }
     }
 
@@ -82,7 +82,7 @@ class ReadingLogTest {
             assertEquals("放宽到 60 天，旧的也在", 2, db.listReadingLog(60).size)
             db.close()
         } finally {
-            Files.deleteIfExists(Path.of(path))
+            cleanup(path)
         }
     }
 
@@ -118,5 +118,17 @@ class ReadingLogTest {
             setBody("""{"sourceId":"src","bookUrl":"book","seconds":-5}""")
         }
         assertEquals(HttpStatusCode.BadRequest, bad.status)
+    }
+    /**
+     * 关掉库之后立刻删文件，在 Windows 上偶尔会被杀软 / 索引器占着（「另一个程序正在使用此文件」）。
+     * 判据是断言，不是临时文件删没删掉，所以重试几次、删不掉就算了（系统临时目录自己会清）。
+     */
+    private fun cleanup(path: String) {
+        repeat(3) {
+            if (runCatching { Files.deleteIfExists(Path.of(path)) }.getOrNull() == true) return
+            Thread.sleep(150)
+        }
+        runCatching { Files.deleteIfExists(Path.of("$path-wal")) }
+        runCatching { Files.deleteIfExists(Path.of("$path-shm")) }
     }
 }
