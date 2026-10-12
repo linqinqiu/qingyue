@@ -8,8 +8,8 @@
 | 字段 | 内容 |
 | :--- | :--- |
 | 更新时间 | 2026-10-12 09:56 |
-| 我现在在做 | 全量功能审计已收口（修 5 处假红 + 重启坏掉的 1234）；PROPOSAL-019 F 拆 `ReaderScreen` 已做三步（`NoteToolbar` / `ReaderSettingsControls` / `NotesPanel`，3165→2954 行） |
-| 下一件事 | 继续 F：目录抽屉主体 / 头部 / 页脚、阅读器 header、分页视口；`TOCPerformanceScenario` 那份「测试里写的产品逻辑」待收（归 AI-2） |
+| 我现在在做 | 全量功能审计已收口（修 5 处假红 + 重启坏掉的 1234）；PROPOSAL-019 F 拆 `ReaderScreen` 已做五步（`NoteToolbar` / `ReaderSettingsControls` / `NotesPanel` / `IconButton`+`ReaderContentSkeleton` / `TocDrawerHeader`，3177→2900 行） |
+| 下一件事 | 继续 F：目录抽屉页脚、阅读器 header、分页视口、媒体块（都是与状态耦合较深的块）；`TOCPerformanceScenario` 那份「测试里写的产品逻辑」待收（归 AI-2） |
 | 等对方 | AI-2 认可 `docs/dual-ai/README.md`，并刷新自己的状态板 |
 | 待发版 | 否（0.6.48 已发；本轮只改门禁/测试/结构，不动用户可见行为） |
 | 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
@@ -119,10 +119,13 @@
   1. `reader/NoteToolbar.tsx`（笔记浮层；`2ba819b`）
   2. `reader/ReaderSettingsControls.tsx`（设置抽屉整块 + `themes`，`b359c14`）
   3. `reader/NotesPanel.tsx`（抽屉里「笔记」一栏，`97de735`）
-  —— `ReaderScreen.tsx` **3165 → 2954 行**。
+  4. `reader/IconButton.tsx` + `reader/ReaderContentSkeleton.tsx`（纯呈现小件，`1d5acc0`）
+  5. `reader/TocDrawerHeader.tsx`（目录抽屉标题栏，`550b08a`）
+  —— `ReaderScreen.tsx` **3177 → 2900 行**（`reader/*.tsx` 现 11 个文件）。
 - **一处副作用要记**：`ReaderScreen` 里那几条"读源码文本"的单测（`Note`/`ScriptConvert`/
   `TocRuleSettings`/`ReaderMenu`）钉的是**某个文件里**的标记；块搬走就得把判据指到新文件，
   并补一条"ReaderScreen 真的挂了它"（防抽走后变成没人渲染的死组件）。四份都已改。
-- 还没拆：目录抽屉的**头部 / 页脚**（离线缓存那两组）、阅读器 `header`、分页视口 ——
-  这几块与翻页/进度/缓存耦合较深，按 F 的"分步"继续，别一次大爆炸。
+- 还没拆（都是与状态耦合较深的块，按 F 的"分步"继续，别一次大爆炸）：目录抽屉**页脚**
+  （离线缓存 + 「这本书」两组，~140 行、十几个 handler）、阅读器顶部 `header`（工具栏 + 朗读）、
+  分页视口、媒体块。
 - 影响 AI-2：`web/src/reader/*` 多了三个文件；`ReaderScreen.tsx` 里那几段不再原地，你下次改前先 `git fetch`。
