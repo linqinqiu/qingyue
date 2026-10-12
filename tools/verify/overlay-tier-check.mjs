@@ -10,7 +10,7 @@
 // 跑法：node tools/verify/overlay-tier-check.mjs   （只读界面；只改 localStorage 的偏好，跑完还原）
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { ROOT, BASE, launchOptions } from './env.mjs'
+import { ROOT, BASE, launchOptions, acceptAgreement } from './env.mjs'
 
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -178,6 +178,15 @@ page.on('pageerror', error => errors.push(String(error.message ?? error)))
 await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
 if (!await waitFor(page, '.app-page-header', 45_000)) {
   check('应用外壳画得出来', false, '停在空白页上，下面全部无从量起')
+  await browser.close()
+  process.exit(1)
+}
+// 首次运行的「用户协议」浮层（0.6.46 引入）也是 `.overlay-backdrop` + 无 size-* 的 `.dialog-shell`，
+// 不先关掉它，measure() 取到的就是它而不是要量的那一张（680px、无 .overlay-close 的假红）。
+await acceptAgreement(page)
+await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 })
+if (!await waitFor(page, '.app-page-header', 45_000)) {
+  check('应用外壳画得出来（关掉协议浮层后）', false, '停在空白页上')
   await browser.close()
   process.exit(1)
 }
