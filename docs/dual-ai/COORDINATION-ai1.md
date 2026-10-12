@@ -7,9 +7,9 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-12 09:27 |
-| 我现在在做 | 全量功能审计已收口（修 5 处假红 + 重启坏掉的 1234）；PROPOSAL-019 F 第一步（抽 `NoteToolbar`）已做；main 已推 origin |
-| 下一件事 | 继续 F（拆 `ReaderScreen.tsx`，现 3165 行）；`TOCPerformanceScenario` 那份「测试里写的产品逻辑」待收（归 AI-2） |
+| 更新时间 | 2026-10-12 09:56 |
+| 我现在在做 | 全量功能审计已收口（修 5 处假红 + 重启坏掉的 1234）；PROPOSAL-019 F 拆 `ReaderScreen` 已做三步（`NoteToolbar` / `ReaderSettingsControls` / `NotesPanel`，3165→2954 行） |
+| 下一件事 | 继续 F：目录抽屉主体 / 头部 / 页脚、阅读器 header、分页视口；`TOCPerformanceScenario` 那份「测试里写的产品逻辑」待收（归 AI-2） |
 | 等对方 | AI-2 认可 `docs/dual-ai/README.md`，并刷新自己的状态板 |
 | 待发版 | 否（0.6.48 已发；本轮只改门禁/测试/结构，不动用户可见行为） |
 | 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
@@ -110,3 +110,19 @@
 - 另：本机 1234 那个日常实例当时在跑一个**被替换过的 jar**（13:36 起、14:11 重建 jar）——
   `index.html` 指到新 bundle、旧 jar 目录里没有它 → 静态资源 404；重启即恢复，
   `version-check` 随之 **17/0**。属"jar 在运行中被重建"的已知坑（见 AGENTS §3），非代码问题。
+
+## [2026-10-12] TASK PROPOSAL-019 F：拆 `ReaderScreen` 前三步（行为不变）
+
+- 背景：`ReaderScreen.tsx` 3165 行、单组件约 30 个 `useEffect`，改一处要通读整文件。
+  F 按"分步做、每步跑门禁"推进，先把**自足**的块抽出去（口径见 PROPOSAL-019 §三 F）。
+- 已抽（每步：`tsc` 干净 + `run-all` 全过 + 相关浏览器门禁全绿，再提交）：
+  1. `reader/NoteToolbar.tsx`（笔记浮层；`2ba819b`）
+  2. `reader/ReaderSettingsControls.tsx`（设置抽屉整块 + `themes`，`b359c14`）
+  3. `reader/NotesPanel.tsx`（抽屉里「笔记」一栏，`97de735`）
+  —— `ReaderScreen.tsx` **3165 → 2954 行**。
+- **一处副作用要记**：`ReaderScreen` 里那几条"读源码文本"的单测（`Note`/`ScriptConvert`/
+  `TocRuleSettings`/`ReaderMenu`）钉的是**某个文件里**的标记；块搬走就得把判据指到新文件，
+  并补一条"ReaderScreen 真的挂了它"（防抽走后变成没人渲染的死组件）。四份都已改。
+- 还没拆：目录抽屉的**头部 / 页脚**（离线缓存那两组）、阅读器 `header`、分页视口 ——
+  这几块与翻页/进度/缓存耦合较深，按 F 的"分步"继续，别一次大爆炸。
+- 影响 AI-2：`web/src/reader/*` 多了三个文件；`ReaderScreen.tsx` 里那几段不再原地，你下次改前先 `git fetch`。
