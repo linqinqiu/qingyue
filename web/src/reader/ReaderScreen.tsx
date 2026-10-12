@@ -12,6 +12,7 @@ import { TapAction, zoneAt } from './tapZones'
 import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { NoteToolbar, type NoteDraft } from './NoteToolbar'
+import { NotesPanel } from './NotesPanel'
 import { ReaderSettingsControls, themes } from './ReaderSettingsControls'
 import { clampScrollPosition, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { ReaderMenuAction } from './readerMenu'
@@ -2492,18 +2493,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       </header>
       {notesPanel ? (
         /* 「笔记」面板（PROPOSAL-019 E）：这本书的全部划线 / 备注，点一条跳到那一章。 */
-        <ul className="reader-notes-list">
-          {notes.length === 0 && <li className="reader-notes-empty">这本书还没有笔记。选中正文可以划线、写备注。</li>}
-          {notes.map(note => (
-            <li key={note.id} className="reader-note-item">
-              <button type="button" className="reader-note-item-main" onClick={() => jumpToNote(note)}>
-                <span className="reader-note-item-excerpt">{note.excerpt}</span>
-                {note.note && <span className="reader-note-item-text">{note.note}</span>}
-                <span className="reader-note-item-meta">第 {note.chapterIndex + 1} 章</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <NotesPanel notes={notes} onJump={jumpToNote} />
       ) : (
         <>
           <div className="chapter-search">

@@ -34,6 +34,8 @@ test('阅读器：选中正文 → 浮层 → 保存，且偏移按章节内字�
 test('阅读器：抽屉里有「笔记」面板，按书查看', () => {
   const reader = read('../src/reader/ReaderScreen.tsx')
   assert.match(reader, /notesPanel/, '面板开关要在')
-  assert.match(reader, /reader-notes-list/, '面板要列得出来')
+  // 面板清单在 PROPOSAL-019 F 里抽成了 NotesPanel.tsx：钉「ReaderScreen 挂了它」+「清单在那一份里」。
+  assert.match(reader, /<NotesPanel/, '面板要挂在抽屉里')
+  assert.match(read('../src/reader/NotesPanel.tsx'), /reader-notes-list/, '面板要列得出来')
   assert.match(reader, /jumpToNote/, '点一条要能跳章')
 })
