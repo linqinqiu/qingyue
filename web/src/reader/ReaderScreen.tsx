@@ -12,6 +12,7 @@ import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagr
 import { mapCells, TapAction, zoneAt } from './tapZones'
 import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
+import { NoteToolbar, type NoteDraft } from './NoteToolbar'
 import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { moveReaderMenu, READER_MENU_ITEMS, ReaderMenuAction, toggleReaderMenu } from './readerMenu'
 import { IDENTITY_CONVERTER, loadScriptConverter, SCRIPT_MODE_OPTIONS, type ScriptConverter } from './scriptConvert'
@@ -874,7 +875,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    * 待保存 / 正在编辑的那一条。`id === null` = 刚从选区新建；否则是点已有高亮打开的。
    * `x`/`y` 是浮层要摆的位置（视口坐标，横向以选中处为中心）。
    */
-  const [noteDraft, setNoteDraft] = useState<{ id: number | null; chapterIndex: number; chapterUrl: string; startOffset: number; endOffset: number; excerpt: string; text: string; x: number; y: number } | null>(null)
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null)
   /** 目录抽屉里的「笔记」面板开关（按书查看）。 */
   const [notesPanel, setNotesPanel] = useState(false)
 
@@ -3152,26 +3153,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       挂在 `<section class="reader-main">` **之外** —— 它自己的点击不该再触发 onReaderMouseUp。
     */}
     {noteDraft && (
-      <div className="reader-note-toolbar" style={{ left: noteDraft.x, top: noteDraft.y }} role="dialog" aria-label="笔记">
-        {noteDraft.id !== null && <p className="reader-note-excerpt">{noteDraft.excerpt}</p>}
-        <input
-          className="reader-note-input"
-          value={noteDraft.text}
-          autoFocus
-          placeholder="写点备注（留空就只划线）"
-          aria-label="备注"
-          onChange={event => setNoteDraft(current => (current ? { ...current, text: event.target.value } : current))}
-          onKeyDown={event => {
-            if (event.key === 'Enter') void saveNote()
-            if (event.key === 'Escape') setNoteDraft(null)
-          }}
-        />
-        <div className="reader-note-actions">
-          <button type="button" className="primary-button" onClick={() => void saveNote()}>保存</button>
-          {noteDraft.id !== null && <button type="button" className="subtle-button is-danger" onClick={() => void removeNote()}>删除</button>}
-          <button type="button" className="subtle-button" onClick={() => { setNoteDraft(null); window.getSelection()?.removeAllRanges() }}>取消</button>
-        </div>
-      </div>
+      <NoteToolbar
+        draft={noteDraft}
+        onChangeText={text => setNoteDraft(current => (current ? { ...current, text } : current))}
+        onSave={() => void saveNote()}
+        onRemove={() => void removeNote()}
+        onDismiss={clearSelection => { setNoteDraft(null); if (clearSelection) window.getSelection()?.removeAllRanges() }}
+      />
     )}
   </main>
 }

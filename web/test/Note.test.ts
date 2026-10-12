@@ -24,7 +24,10 @@ test('阅读器：选中正文 → 浮层 → 保存，且偏移按章节内字�
   assert.match(reader, /data-paragraph-index/, '段落要有索引（偏移换算的起点）')
   assert.match(reader, /paragraphStarts/, '段落起点表要在（章节内字符偏移）')
   assert.match(reader, /api\.addNote\(/, '保存要真的落库')
-  assert.match(reader, /reader-note-toolbar/, '要有浮层')
+  // 浮层外壳在 PROPOSAL-019 F 里抽成了 `NoteToolbar.tsx`：这里钉"ReaderScreen 真的挂了它" +
+  // "外壳标记在那一份里"，两边都判，抽走之后不许变成没人渲染的死组件。
+  assert.match(reader, /<NoteToolbar/, '浮层要在（挂在 ReaderScreen 上）')
+  assert.match(read('../src/reader/NoteToolbar.tsx'), /reader-note-toolbar/, '浮层外壳标记要在')
   assert.match(reader, /reader-note-highlight/, '正文要能画高亮')
 })
 
