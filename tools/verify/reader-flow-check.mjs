@@ -161,7 +161,8 @@ const jumpAndSample = (page, delta) => page.evaluate(({ delta }) => new Promise(
  * 拦请求 ≠ 拿不到：`api.content` 失败会回落到这份缓存，不清掉的话拦截会被兜住、判据空转。
  */
 const clearOfflineChapters = (page, bookUrl) => page.evaluate(target => new Promise(resolve => {
-  const open = indexedDB.open('legado_offline_db', 1)
+  // 不带版本号打开：带上写死的 1 会在应用已经把库升到 2 之后抛 VersionError（这条一直是假红）。
+  const open = indexedDB.open('legado_offline_db')
   open.onerror = () => resolve(-1)
   open.onsuccess = () => {
     const db = open.result

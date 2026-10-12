@@ -173,17 +173,17 @@ try {
   })
 
   const typed = await page.evaluate(word => {
-    // 真正的搜索框在 `form.library-search` 里；`.library-hero` 是那一屏介绍块，
-    // 它的有无随页面状态变 —— 判据要钉在功能本身上，别钉在装饰性容器上。
-    const input = document.querySelector('form.library-search input')
+    // 搜索框钉在书库页那张表单上（`.library-page form`）—— 表单本身没类名，
+    // 旧判据用的 `form.library-search` 早已不在 DOM 里（这条一直是假红）。
+    const input = document.querySelector('.library-page form input')
     if (!input) return false
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
     setter.call(input, word)
     input.dispatchEvent(new Event('input', { bubbles: true }))
     return true
   }, KEYWORD)
-  check('关键词写得进书库搜索框', typed, typed ? KEYWORD : '找不到 form.library-search input')
-  await page.click('form.library-search button[type="submit"]')
+  check('关键词写得进书库搜索框', typed, typed ? KEYWORD : '找不到 .library-page form input')
+  await page.click('.library-page form button[type="submit"]')
 
   let sent = null
   for (let attempt = 0; attempt < 20 && !sent; attempt++) {
