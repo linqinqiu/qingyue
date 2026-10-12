@@ -3,7 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { BASE, OUT, SHOTS, ROOT, launchOptions } from './env.mjs'
+import { BASE, OUT, SHOTS, ROOT, acceptAgreement, launchOptions } from './env.mjs'
 
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -27,6 +27,9 @@ const TEST_NAME = '界面自检临时源'
 
 // ---------- 1. 书源页：新建入口 ----------
 await p.goto(`${BASE}/#sources`, { waitUntil: 'domcontentloaded', timeout: 40000 })
+// 首次协议浮层会挡住真鼠标点击，而本门禁大量用 `p.click` / `p.type`；先标记已同意再重载。
+await acceptAgreement(p)
+await p.reload({ waitUntil: 'domcontentloaded', timeout: 40000 })
 await wait(2500)
 const hasCreate = await p.$('.source-create-btn')
 check('书源侧栏出现「新建书源」按钮', !!hasCreate)
@@ -333,7 +336,7 @@ const bundleHtml = await (await fetch(`${BASE}/`)).text()
 const bundleName = /assets\/(index-[\w-]+\.js)/.exec(bundleHtml)?.[1]
 const bundleJs = bundleName ? await (await fetch(`${BASE}/assets/${bundleName}`)).text() : ''
 check('前端产物已更新（含 progressbar 语义）', bundleJs.includes('progressbar') && bundleJs.includes('source-create-btn'))
-check('体检改成分批推进（源码里进度条不再写死 100%）', !/running \? '100%' : '100%'/.test(fs.readFileSync(path.join(ROOT, 'web/src/SourceHealthModal.tsx'), 'utf8')))
+check('体检改成分批推进（源码里进度条不再写死 100%）', !/running \? '100%' : '100%'/.test(fs.readFileSync(path.join(ROOT, 'web/src/sources/SourceHealthModal.tsx'), 'utf8')))
 
 // ---------- 9. 清理：删掉这次造的源 ----------
 // 上一步停在 #webdav，直接 reload 会回到文件页：那里没有筛选框，清理会静默失败。

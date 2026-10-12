@@ -127,7 +127,7 @@ try {
       hasCustomize: !!document.querySelector('.menu-section-action'),
     }
   })
-  check('②皮肤三档都在（晓白 / 护眼 / 夜读）', menu.skins.join('、') === '晓白、护眼、夜读', menu.skins.join('、') || '(取不到)')
+  check('②皮肤七档都在（晓白 / 护眼 / 夜读 / 青竹 / 暮蓝 / 玫瑰 / 石墨）', menu.skins.join('、') === '晓白、护眼、夜读、青竹、暮蓝、玫瑰、石墨', menu.skins.join('、') || '(取不到)')
   check('②菜单里有「自定义」入口', menu.labels.some(l => l.includes('自定义')) && menu.hasCustomize, menu.labels.join(' / '))
   // 「更新日志」「快捷键」两条从菜单里收掉了（用户 2026-10-03：「顶栏『我的』菜单堆太多」）：
   // 前者有顶栏版本芯片 + 「关于」两条路，后者改由「关于」进。这里按新的分法判。
@@ -301,18 +301,20 @@ try {
     `类 ${persisted.classes || '(空)'} · 注入=${persisted.style}`)
   await page.screenshot({ path: path.join(SHOTS, `ui-custom-skin-${STAMP}.png`) }).catch(() => null)
 
-  check('④「我的」→「自定义」再开一次（清除入口要点得到）', await openUserMenu(page, '自定义'), '')
+  check('④「我的」→「自定义」再开一次（皮肤库的删除入口要点得到）', await openUserMenu(page, '自定义'), '')
   await page.waitForSelector('.customize-dialog', { timeout: 8000 })
-  check('④「清除自定义皮肤」点得动', await clickIn(page, '.customize-actions', '清除'), '')
-  // 等到注入的 <style> 真的摘掉再读数：这一条只等"动作生效"，判据（回到三档、类被摘掉）仍在下面实测
+  // 皮肤库扩成「增 / 改 / 删 / 切换」之后不再有全局「清除自定义皮肤」——删的是库里的那一条。
+  // 删掉的正好是当前这套时，界面要退回它叠着的那一档内置皮肤（见 CustomizeModal.remove）。
+  check('④皮肤库里这条自定义皮肤删得动', await clickIn(page, '.customize-skin-editor', '删除'), '')
+  // 等到注入的 <style> 真的摘掉再读数：这一条只等"动作生效"，判据（回到内置档、类被摘掉）仍在下面实测
   await page.waitForFunction(() => !document.getElementById('legado-custom-skin'), { timeout: 5000 }).catch(() => null)
   const clearedSkin = await page.evaluate(() => ({
     style: !!document.getElementById('legado-custom-skin'),
     classes: document.documentElement.className,
     skins: [...document.querySelectorAll('.customize-skin')].length,
   }))
-  check('④清除之后 <style> 被摘掉、皮肤列表回到三档',
-    !clearedSkin.style && !clearedSkin.classes.includes('theme-gatemidnight') && clearedSkin.skins === 3,
+  check('④删掉之后 <style> 被摘掉、皮肤列表回到内置那七套',
+    !clearedSkin.style && !clearedSkin.classes.includes('theme-gatemidnight') && clearedSkin.skins === 7,
     `注入=${clearedSkin.style} 类=${clearedSkin.classes} 档数=${clearedSkin.skins}`)
 
   // ─────────── ⑤ 分章规则的落点（搬出「自定义」，长在书架导入旁边） ───────────
@@ -388,7 +390,7 @@ try {
   })
   check('⑤「自定义」不再是杂物间：只剩皮肤那两档，没有分章规则',
     customize.tocRows === 0 && !customize.text.includes('分章规则')
-    && customize.sections.join('、') === '皮肤、自定义皮肤',
+    && customize.sections.join('、') === '皮肤、自定义皮肤库',
     `${customize.sections.join('、') || '(没有分节)'} · 规则行 ${customize.tocRows}`)
 
   // ─────────────────────────── ⑥ 收尾 ──────────────────────────
@@ -410,7 +412,7 @@ try {
   // 一行写着 PASS、后面跟着 [命中了 v2 选择器]，读的人只会当成红了 —— 判据写得再对也没人信。
   const v2Left = ['.app-rail', '.rail-item', '.page-bar', '.app-frame', '.rail-tabs'].filter(name => css.includes(name))
   check('⑥样式表里没有 v2 的类名残留', v2Left.length === 0, v2Left.length ? `还留着 ${v2Left.join('、')}` : '干净')
-  const tocBack = fs.readFileSync(path.join(srcDir, 'CustomizeModal.tsx'), 'utf8').includes('tocRules')
+  const tocBack = fs.readFileSync(path.join(srcDir, 'components', 'CustomizeModal.tsx'), 'utf8').includes('tocRules')
   check('⑥「自定义」弹窗的代码里没有分章规则那一段（判代码，不只是判界面）',
     !tocBack, tocBack ? 'CustomizeModal.tsx 又长回了 tocRules' : '干净')
 

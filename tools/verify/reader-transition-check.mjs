@@ -17,7 +17,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { ROOT, OUT, SHOTS, BASE, launchOptions } from './env.mjs'
+import { ROOT, OUT, SHOTS, BASE, launchOptions, acceptAgreement } from './env.mjs'
 
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -53,6 +53,8 @@ const snapshot = page => page.evaluate(() => ({
 async function openBook(page) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     await page.goto(`${BASE}/?t=${Date.now()}#shelf`, { waitUntil: 'domcontentloaded' })
+    // 首次协议浮层会挡住真鼠标点击；先标记已同意（见 env.mjs 的 acceptAgreement）
+    await acceptAgreement(page)
     try {
       await page.waitForFunction(() => !!document.querySelector('.shelf-card'), { timeout: 25000 })
     } catch {

@@ -15,7 +15,7 @@
 // 跑法：node tools/verify/source-picker-check.mjs
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { ROOT, SHOTS, BASE, launchOptions } from './env.mjs'
+import { ROOT, SHOTS, BASE, launchOptions, acceptAgreement } from './env.mjs'
 
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -62,6 +62,8 @@ try {
   page.on('pageerror', error => errors.push(String(error.message)))
   await page.setViewport({ width: 1440, height: 950, deviceScaleFactor: 1 })
   await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded' })
+  // 首次协议浮层会挡住真鼠标点击；先标记已同意（见 env.mjs 的 acceptAgreement）
+  await acceptAgreement(page)
   await sleep(2000)
 
   const inventory = await page.evaluate(async () => {

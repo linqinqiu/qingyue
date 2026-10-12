@@ -12,7 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { ROOT, OUT, SHOTS, BASE, launchOptions } from './env.mjs'
+import { ROOT, OUT, SHOTS, BASE, launchOptions, acceptAgreement } from './env.mjs'
 
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -34,6 +34,8 @@ try {
   page.on('pageerror', error => errors.push(String(error.message)))
 
   await page.goto(`${BASE}/#library`, { waitUntil: 'domcontentloaded' })
+  // 首次协议浮层会挡住真鼠标点击；先标记已同意（见 env.mjs 的 acceptAgreement）
+  await acceptAgreement(page)
   // 先等应用真的起来再写设置：应用启动后会 `saveReaderSettings(settings)` 落一次盘，
   // 冷启动那一屏要 3~30 秒，写早了会被它这次落盘冲掉，于是"夜读模式生效"假红。
   await page.waitForSelector('.page-title h1', { timeout: 60000 }).catch(() => null)

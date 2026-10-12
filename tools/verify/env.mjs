@@ -103,3 +103,15 @@ export function launchOptions(extra = {}) {
 /** 服务地址：默认 127.0.0.1:1234，可用 LEGADO_BASE_URL 指到别的端口。 */
 export const BASE = (process.env.LEGADO_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '')
 export const DB = process.env.LEGADO_DB || path.join(ROOT, 'data/legado.sqlite')
+
+/**
+ * 把首次运行的「用户协议与免责声明」标记成已同意（0.6.46 引入）。
+ *
+ * 门禁每次都用清空的 profile（`gateProfile` 会删掉 `Default/Local Storage`），所以那层全屏浮层
+ * **每轮都会出现**。用**合成点击**（`page.evaluate(el => el.click())`）的门禁不受影响 ——
+ * 合成事件不看遮挡；但用**真鼠标**（`page.click` / `page.keyboard`）的门禁会点到浮层上，
+ * 后面全是假红。所以第一次导航到 `BASE` 之后调一次这个。
+ */
+export async function acceptAgreement(page) {
+  await page.evaluate(() => { try { localStorage.setItem('qingyue-agreement-v1', '1') } catch { /* 隐私模式：存不进就每次都看一遍 */ } })
+}

@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { OUT, SHOTS, BASE, launchOptions } from './env.mjs'
+import { OUT, SHOTS, BASE, launchOptions, acceptAgreement } from './env.mjs'
 
 const require = createRequire(path.join(import.meta.dirname, '../../web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -65,6 +65,8 @@ try {
   page.on('pageerror', error => errors.push(String(error.message)))
 
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  // 首次协议浮层会挡住真鼠标点击；先标记已同意（见 env.mjs 的 acceptAgreement）
+  await acceptAgreement(page)
   await page.evaluate(async () => {
     const regs = await navigator.serviceWorker?.getRegistrations?.() ?? []
     await Promise.all(regs.map(reg => reg.unregister()))

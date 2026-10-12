@@ -13,7 +13,7 @@
 import http from 'node:http'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { BASE, SHOTS, launchOptions } from './env.mjs'
+import { BASE, SHOTS, launchOptions, acceptAgreement } from './env.mjs'
 import { mkdirSync } from 'node:fs'
 
 const require = createRequire(path.join(process.cwd(), 'web/package.json'))
@@ -173,6 +173,8 @@ try {
 
   const goto = async hash => {
     await page.goto(`${BASE}/${hash}`, { waitUntil: 'domcontentloaded' })
+    // 首次协议浮层会挡住真鼠标点击；先标记已同意（见 env.mjs 的 acceptAgreement）
+    await acceptAgreement(page)
     // 冷启动到第一屏要等多久取决于这台机器此刻多忙（同一台机器实测 3~36 秒不等）。
     // 只 sleep 固定 1.4 秒的话，负载高的那一次会把"应用还在载入"读成"这一类数据是空的"，
     // 于是假红一条"本机有真订阅时不显示空态"。先等外壳出现，再给内容一点时间。

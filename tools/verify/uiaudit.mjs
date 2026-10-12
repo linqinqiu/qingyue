@@ -263,7 +263,7 @@ try {
 
   await step('发现页选番茄并出书', async () => {
     await gotoPage(BASE + '#explore');
-    // 这个控件早就不是原生 <select> 了：几千个源用原生下拉没法过滤（见 web/src/Select.tsx），
+    // 这个控件早就不是原生 <select> 了：几千个源用原生下拉没法过滤（见 web/src/components/Select.tsx），
     // 所以按界面真实的用法走一遍 —— 点开、打关键字、点那条，而不是 page.select()。
     await page.waitForSelector('.explore-source-picker .ui-select-trigger', { timeout: 25000 });
     const target = await page.evaluate(async () => {
