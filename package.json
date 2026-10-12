@@ -1,6 +1,6 @@
 {
   "name": "legado-server",
-  "version": "0.6.47",
+  "version": "0.6.48",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",

@@ -15,6 +15,7 @@ import { TapZoneEditor } from './TapZoneEditor'
 import { clampScrollPosition, defaultReaderSettings, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
 import { moveReaderMenu, READER_MENU_ITEMS, ReaderMenuAction, toggleReaderMenu } from './readerMenu'
 import { IDENTITY_CONVERTER, loadScriptConverter, SCRIPT_MODE_OPTIONS, type ScriptConverter } from './scriptConvert'
+import { coverDirection, pageTurnAnim, planNextPage, planPrevPage } from './pageTurn'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, resolveMeasuredPage, sectionAtPage, sectionProgress } from './readerFlow'
 import { computeCenterScrollOffset, computeVirtualWindow } from './virtualSlice'
 import { SourceSwitchModal } from '../sources/SourceSwitchModal'
@@ -163,6 +164,7 @@ function ReaderSettingsControls({
     {settings.pageMode === 'paginate' && (
       <section className="setting-section"><span className="setting-label">翻页动画</span><div className="page-modes">
         <button className={settings.pageAnim === 'slide' ? 'selected' : ''} onClick={() => update({ pageAnim: 'slide' })}>平移过渡</button>
+        <button className={settings.pageAnim === 'cover' ? 'selected' : ''} onClick={() => update({ pageAnim: 'cover' })}>覆盖</button>
         <button className={settings.pageAnim === 'fade' ? 'selected' : ''} onClick={() => update({ pageAnim: 'fade' })}>淡化</button>
         <button className={settings.pageAnim === 'none' ? 'selected' : ''} onClick={() => update({ pageAnim: 'none' })}>无动画</button>
       </div><small className="setting-hint">翻页时怎么过渡。连续滚动模式没有页，用不上这一项。</small></section>
@@ -599,7 +601,12 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const pageAnim = settings.pageMode === 'paginate' ? settings.pageAnim : 'none'
   const prevPageIndexRef = useRef(pageIndex)
   const [fading, setFading] = useState(false)
-  const slideAnimOn = pageAnim === 'slide' && Math.abs(pageIndex - prevPageIndexRef.current) === 1
+  /**
+   * 这一下该播哪种动画：只有**逐页翻**才播（接章补偿/挪窗口是几页的跳，滑过去像又跳了一次）。
+   * 决策在 `pageTurn.ts`，这里只拿去渲染。
+   */
+  const turnAnim = pageTurnAnim(pageAnim, prevPageIndexRef.current, pageIndex)
+  const slideAnimOn = turnAnim === 'slide'
   useEffect(() => { prevPageIndexRef.current = pageIndex }, [pageIndex])
   useEffect(() => {
     if (pageAnim !== 'fade') return
@@ -607,6 +614,40 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const timer = window.setTimeout(() => setFading(false), 150)
     return () => window.clearTimeout(timer)
   }, [pageIndex, pageAnim])
+  /**
+   * 覆盖动画（`pageAnim === 'cover'`）：逐页翻**不立刻改 pageIndex** ——
+   * 先挂一层"新页"从一侧滑进来盖住旧页，动画结束才真正翻页。
+   * `to` 是目标页，`direction` 是新页从哪一侧进来（右=+1、左=-1）。
+   */
+  const [coverTurn, setCoverTurn] = useState<{ to: number; direction: 1 | -1 } | null>(null)
+  const [coverEntered, setCoverEntered] = useState(false)
+  const coverTurnRef = useRef<{ to: number; direction: 1 | -1 } | null>(null)
+  coverTurnRef.current = coverTurn
+  // 先挂上（此时在视口外），下一帧再置 entered —— CSS transition 才有得演。
+  useEffect(() => {
+    if (!coverTurn) { setCoverEntered(false); return }
+    const raf = window.requestAnimationFrame(() => setCoverEntered(true))
+    return () => window.cancelAnimationFrame(raf)
+  }, [coverTurn])
+  const finishCover = useCallback(() => {
+    const current = coverTurnRef.current
+    if (!current) return
+    setPageIndex(current.to)
+    setCoverTurn(null)
+  }, [])
+  /** `transitionend` 是主路径；`coverTurnRef` 挡住重复收尾（兜底定时器与它可能都到）。 */
+  const onCoverTransitionEnd = useCallback((event: React.TransitionEvent) => {
+    if (event.propertyName === 'transform') finishCover()
+  }, [finishCover])
+  /**
+   * 别只靠 `transitionend`：系统开了"减少动态效果"、或这条 transition 被别的规则盖掉时它可能不来，
+   * 那样页码就永远翻不过去。给一个略长于动画时长的兜底，谁先到谁收尾。
+   */
+  useEffect(() => {
+    if (!coverTurn) return
+    const timer = window.setTimeout(finishCover, 600)
+    return () => window.clearTimeout(timer)
+  }, [coverTurn, finishCover])
 
   const currentRef = useRef<{ chapter: Chapter; position: number } | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -1767,16 +1808,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [content, loading, measurePagination, settings.pageMode, windowChapters])
 
   const goNextPage = useCallback(() => {
-    if (pageIndex < pageCount - 1) {
-      setPageIndex(p => p + 1)
-    } else {
-      // 已到本章最后一页，尝试跳转到下一章
-      // 双栏模式下，如果当前页是本章最后一页且处于右栏位置，
-      // 需要确保下一章内容能正确衔接
-      // 翻页模式下这是"下一页"而不是"跳一章"：不换容器 key，就不该重挂 + 重放进场动画
-      changeChapter(chapterIndex + 1, 'first', settings.pageMode === 'paginate')
+    const plan = planNextPage(pageIndex, pageCount)
+    if (plan.kind === 'step') {
+      // 覆盖档要先把"新页"演出来，动画收尾才真翻页；其余档当场翻。
+      if (pageAnim === 'cover') setCoverTurn({ to: plan.page, direction: 1 })
+      else setPageIndex(plan.page)
+      return
     }
-  }, [chapterIndex, changeChapter, pageCount, pageIndex, settings.pageMode])
+    // 已到本章最后一页：翻页模式下这是"下一页"而不是"跳一章"（不换容器 key，不重挂）
+    changeChapter(chapterIndex + 1, 'first', settings.pageMode === 'paginate')
+  }, [chapterIndex, changeChapter, pageCount, pageIndex, pageAnim, settings.pageMode])
 
   /**
    * 往回翻到窗口开头时，把**上一章接到窗口最前面**。
@@ -1809,8 +1850,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [chapter, currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
 
   const goPrevPage = useCallback(() => {
-    if (pageIndex > 0) {
-      setPageIndex(p => p - 1)
+    const plan = planPrevPage(pageIndex)
+    if (plan.kind === 'step') {
+      if (pageAnim === 'cover') setCoverTurn({ to: plan.page, direction: -1 })
+      else setPageIndex(plan.page)
       return
     }
     // 窗口开头：往前接一章，而不是跳去"上一章的最后一页"。接的过程中不重复触发。
@@ -1828,7 +1871,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         showBoundaryNotice('已是第一章')
       }
     })
-  }, [pageIndex, prependPreviousChapter, showBoundaryNotice])
+  }, [pageIndex, pageAnim, prependPreviousChapter, showBoundaryNotice])
 
   // Sync scroll / page progress
   useEffect(() => {
@@ -2353,6 +2396,44 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
   }
 
+  /**
+   * 分页模式那条分栏流里的全部章节（窗口前面接进来的 + 锚点 + 后面续接的）。
+   *
+   * 抽成函数是为了让**覆盖动画那一层**能挂同一份内容（新页从一侧盖上来）——
+   * 两处共用一份 JSX，避免"主轨道改了、覆盖层忘改"。
+   * 垫栏的下标是"这一章在窗口里的绝对位置"：head 占 0..K-1、锚点 K、尾巴 K+1..。
+   */
+  const renderPaginatedSections = () => (
+    <>
+      {flowHead.map((item, headIndex) => (
+        <Fragment key={item.chapter.url}>
+          {headIndex > 0 && (pageFillers[headIndex - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
+          <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
+            <h1>{convert(item.chapter.title)}</h1>
+            {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+          </section>
+        </Fragment>
+      ))}
+      {flowHead.length > 0 && (pageFillers[flowHead.length - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
+      <section className="reader-page-chapter" data-chapter-index={chapter?.index ?? 0}>
+        <h1>{convert(shownChapterTitle ?? '')}</h1>
+        {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{convert(incomingChapterTitle)}</p>}
+        {loading && !content && <ReaderContentSkeleton />}
+        {message && <p className="reader-error">{message}</p>}
+        {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
+      </section>
+      {flowTail.map((item, tailIndex) => (
+        <Fragment key={item.chapter.url}>
+          {(pageFillers[flowHead.length + tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
+          <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
+            <h1>{convert(item.chapter.title)}</h1>
+            {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
+          </section>
+        </Fragment>
+      ))}
+    </>
+  )
+
   return <main className={`reader-workspace ${themeClassNames(settings).join(' ')} ${toolbarsVisible ? 'toolbars-open' : 'toolbars-hidden'} ${settings.sidebarPinned ? 'sidebar-pinned' : ''}`} style={readerStyle}>
     {/* Floating Header */}
     <header className="reader-header">
@@ -2640,44 +2721,28 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
                 容器的 key 只在主动跳章/换书时换（续接推进不换），否则每跨一章白闪一次。
               */}
               <article ref={bodyRef} key={flowKey} className={`reader-paginated-column-body chapter-enter${isStaleContent ? ' is-stale' : ''}`} style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
-                {/*
-                  章末垫的那一栏空白，渲染在两个 <section> **之间**（不是章节里面）：
-                  这一章占了奇数栏时，不垫的话下一章的第一栏正好是上一页的右半格（用户已经看过），
-                  翻页窗口一挪、页码归零，同一栏又挪回左半格 —— 用户 2026-10-03 的"不要这样的跳转"。
-                */}
-                {/*
-                  窗口前面接进来的那些章，排在锚点章**之前**（往回翻就是往这里加一章）。
-                  垫栏的下标是"这一章在窗口里的绝对位置"：head 占 0..K-1、锚点 K、尾巴 K+1..，
-                  所以接进 head 之后，尾巴那些的垫栏下标要整体往后挪 —— 不挪就是把空白垫错章。
-                */}
-                {flowHead.map((item, headIndex) => (
-                  <Fragment key={item.chapter.url}>
-                    {headIndex > 0 && (pageFillers[headIndex - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
-                    <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
-                      <h1>{convert(item.chapter.title)}</h1>
-                      {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
-                    </section>
-                  </Fragment>
-                ))}
-                {flowHead.length > 0 && (pageFillers[flowHead.length - 1] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
-                <section className="reader-page-chapter" data-chapter-index={chapter?.index ?? 0}>
-                  <h1>{convert(shownChapterTitle ?? '')}</h1>
-                  {isStaleContent && <p className="reader-chapter-incoming" role="status">正在载入：{convert(incomingChapterTitle)}</p>}
-                  {loading && !content && <ReaderContentSkeleton />}
-                  {message && <p className="reader-error">{message}</p>}
-                  {mediaSrc ? renderMediaBlock() : paragraphs.map((line, index) => renderContentBlock(line, index))}
-                </section>
-                {flowTail.map((item, tailIndex) => (
-                  <Fragment key={item.chapter.url}>
-                    {(pageFillers[flowHead.length + tailIndex] ?? 0) > 0 && <div className="reader-column-filler" aria-hidden="true" />}
-                    <section className="reader-page-chapter" data-chapter-index={item.chapter.index}>
-                      <h1>{convert(item.chapter.title)}</h1>
-                      {splitBody(item.content).map((line, index) => renderContentBlock(line, index, item.chapter))}
-                    </section>
-                  </Fragment>
-                ))}
+                {renderPaginatedSections()}
               </article>
             </div>
+            {/*
+              覆盖动画（pageAnim === 'cover'）的进场层：新页从一侧盖上来，**旧页原地不动**。
+              做法是再挂一份同样的分栏正文，把它平移到目标页、整体从视口外滑进来 ——
+              与 `slide`（整条栏流滑过去、旧页跟着走）是两回事。动画结束就卸掉，
+              平时不占 DOM；`reader-paginated-column-body` 与主轨道同款，测量只认主轨道的 `bodyRef`。
+            */}
+            {coverTurn && (
+              <div
+                className={`reader-page-cover is-from-${coverTurn.direction === 1 ? 'next' : 'prev'}${coverEntered ? ' is-entered' : ''}`}
+                aria-hidden="true"
+                onTransitionEnd={onCoverTransitionEnd}
+              >
+                <div className="reader-paginated-track" style={{ transform: `translateX(-${coverTurn.to * stride}px)` }}>
+                  <div className="reader-paginated-column-body" style={{ columnWidth: `${columnWidth}px`, columnGap: `${columnGap}px` }}>
+                    {renderPaginatedSections()}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <footer className="reader-paginated-footer">
             <span>{convert(paginatedFooterTitle || '')}</span>

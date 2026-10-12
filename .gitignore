@@ -83,6 +83,7 @@ local-patches.diff
 !/tools/verify/overlay-tier-check.mjs
 !/tools/verify/paginate-flow-check.mjs
 !/tools/verify/reader-flow-check.mjs
+!/tools/verify/reader-page-anim-check.mjs
 !/tools/verify/reader-transition-check.mjs
 !/tools/verify/reader-typography-check.mjs
 !/tools/verify/shortcut-check.mjs

@@ -1,6 +1,7 @@
 import { DEFAULT_MAPS, looksLikeGrid, migrateGrid, sanitizeMap, type TapMap } from './tapZones'
 import { DEFAULT_READER_MENU, parseReaderMenu, type ReaderMenuAction } from './readerMenu'
 import { parseScriptMode, type ScriptMode } from './scriptConvert'
+import type { PageTurnAnim } from './pageTurn'
 
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
@@ -12,12 +13,13 @@ export type BuiltinSkinId = 'light' | 'paper' | 'dark' | 'qingzhu' | 'mulan' | '
 export type ReaderFont = 'song' | 'hei' | 'kai' | 'fangsong' | 'system' | 'yuan' | 'mono' | 'custom'
 export type ReaderPageMode = 'scroll' | 'paginate'
 /**
- * 分页模式的翻页动画（参照 legado-with-MD3 的 PageAnim，取 Web 里能做真的三种；
- * 仿真卷页要 canvas 逐帧重画，先不承诺）：
- * `slide` 平移过渡（默认，整条栏流滑过去）、`fade` 淡化（旧页淡出新页淡入）、`none` 即时切换。
- * 只在 `pageMode === 'paginate'` 下生效。
+ * 分页模式的翻页动画（参照 legado-with-MD3 的 PageAnim）：
+ * `slide` 平移过渡（默认，整条栏流滑过去）、`fade` 淡化（旧页淡出新页淡入）、
+ * `cover` 覆盖（新页从右盖住旧页，旧页不动）、`none` 即时切换。
+ * 仿真卷页要 canvas 逐帧重画，先不承诺 —— 值域与渲染分开，将来加一个值 + 一处渲染即可。
+ * 只在 `pageMode === 'paginate'` 下生效。值域的唯一出处是 `pageTurn.ts`。
  */
-export type ReaderPageAnim = 'slide' | 'fade' | 'none'
+export type ReaderPageAnim = PageTurnAnim
 export type ReaderColumnMode = 'auto' | 'single' | 'double'
 export type TtsEngineType = 'webSpeech' | 'edge' | 'custom'
 
@@ -204,7 +206,7 @@ export function parsePageMode(mode: unknown): ReaderPageMode {
 }
 
 export function parsePageAnim(anim: unknown): ReaderPageAnim {
-  return anim === 'fade' || anim === 'none' ? anim : 'slide'
+  return anim === 'fade' || anim === 'cover' || anim === 'none' ? anim : 'slide'
 }
 
 /**

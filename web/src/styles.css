@@ -1225,6 +1225,15 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-paginated-track { transition: opacity 140ms ease; }
 .reader-paginated-track.is-anim-slide { transition: transform 240ms ease, opacity 140ms ease; }
 .reader-paginated-viewport.is-fading .reader-paginated-track { opacity: .25; }
+/* 覆盖动画（pageAnim=cover）：新页从一侧滑进来**盖住**旧页，旧页原地不动（与 slide 相反）。
+   这一层是同一份分栏正文的副本，先平移到目标页、整体停在视口外，再靠 is-entered 滑到 0。
+   动画一结束 ReaderScreen 就把它卸掉，所以它平时不占 DOM。内层轨道不要再带自己的过渡，
+   否则副本一挂上就会先演一次横向位移。 */
+.reader-page-cover { position: absolute; inset: 0; overflow: hidden; z-index: 2; will-change: transform; transition: transform 240ms cubic-bezier(0.25, 1, 0.5, 1); }
+.reader-page-cover.is-from-next { transform: translateX(100%); }
+.reader-page-cover.is-from-prev { transform: translateX(-100%); }
+.reader-page-cover.is-entered { transform: translateX(0); }
+.reader-page-cover .reader-paginated-track { transition: none; }
 
 /* 首次打开的用户协议与免责声明（FirstRunAgreement）：外壳用统一那套（overlay-backdrop + dialog-shell），
    这里只管内容排版；读完 5 秒才能点同意。 */
