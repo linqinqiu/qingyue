@@ -83,6 +83,9 @@ test('长按才进入拖动，且按在按钮上不抓走整条', () => {
 
 test('双击「朗读本章」接上了复位', () => {
   const reader = read('../src/reader/ReaderScreen.tsx')
-  assert.match(reader, /onDoubleClick=\{resetTtsBarPosition\}/)
+  // 工具栏在 PROPOSAL-019 F 里抽成了 ReaderHeader：双击回调从 ReaderScreen 传下去，两边都要接上。
+  const header = read('../src/reader/ReaderHeader.tsx')
+  assert.match(header, /onDoubleClick=\{onResetTtsBar\}/)
+  assert.match(reader, /onResetTtsBar=\{resetTtsBarPosition\}/)
   assert.match(reader, /import \{ resetTtsBarPosition \} from '\.\/ttsBarPosition'/)
 })

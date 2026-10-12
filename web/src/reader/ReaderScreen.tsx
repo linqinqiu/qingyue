@@ -14,6 +14,7 @@ import { TapZoneEditor } from './TapZoneEditor'
 import { NoteToolbar, type NoteDraft } from './NoteToolbar'
 import { NotesPanel } from './NotesPanel'
 import { TocDrawerHeader } from './TocDrawerHeader'
+import { ReaderHeader } from './ReaderHeader'
 import { IconButton } from './IconButton'
 import { ReaderContentSkeleton } from './ReaderContentSkeleton'
 import { ReaderSettingsControls, themes } from './ReaderSettingsControls'
@@ -2333,29 +2334,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    * 工具栏按钮由 `settings.menuItems` 决定（显示与顺序都在设置抽屉的「工具栏」里配）。
    * 清单的唯一来源是 `readerMenu.ts`，别在这儿另起一套。
    */
-  const readerMenuButton = (id: ReaderMenuAction) => {
-    switch (id) {
-      case 'switchSource':
-        return <IconButton key={id} label="切换书源" icon="sliders" onClick={() => setShowSourceSwitch(true)} />
-      case 'settings':
-        return <IconButton key={id} label="阅读设置" icon="settings" onClick={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')} />
-      case 'fullscreen':
-        return <IconButton key={id} label={isFullscreen ? '退出全屏' : '全屏阅读'} icon="expand" onClick={toggleFullscreen} />
-      case 'tts':
-        return <IconButton
-          key={id}
-          label={mediaSrc ? '本类型不支持朗读' : !ttsActive ? '朗读本章' : ttsPlayState === 'playing' ? '暂停朗读' : '继续朗读'}
-          icon={ttsActive && ttsPlayState === 'playing' ? 'pause' : 'volume2'}
-          onClick={toggleTts}
-          onDoubleClick={resetTtsBarPosition}
-          hint="双击可把朗读悬浮条放回默认位置"
-          disabled={!!mediaSrc}
-        />
-      default:
-        return null
-    }
-  }
-
   /**
    * 分页模式那条分栏流里的全部章节（窗口前面接进来的 + 锚点 + 后面续接的）。
    *
@@ -2396,27 +2374,28 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   return <main className={`reader-workspace ${themeClassNames(settings).join(' ')} ${toolbarsVisible ? 'toolbars-open' : 'toolbars-hidden'} ${settings.sidebarPinned ? 'sidebar-pinned' : ''}`} style={readerStyle}>
     {/* Floating Header */}
-    <header className="reader-header">
-      <div className="reader-header-left">
-        <IconButton label="返回书架" icon="arrowLeft" onClick={() => { persist(); stopTts(); onClose() }} />
-        <IconButton
-          label="目录"
-          icon="list"
-          onClick={() => {
-            if (settings.sidebarPinned) {
-              onSettingsChange({ ...settings, sidebarPinned: false })
-              setActiveDrawer(null)
-            } else {
-              setActiveDrawer(d => d === 'toc' ? null : 'toc')
-            }
-          }}
-        />
-      </div>
-      <strong className="reader-header-title" title={bookName}>{bookName}</strong>
-      <div className="reader-header-actions">
-        {settings.menuItems.map(id => readerMenuButton(id))}
-      </div>
-    </header>
+    <ReaderHeader
+      bookName={bookName}
+      menuItems={settings.menuItems}
+      isFullscreen={isFullscreen}
+      mediaDisabled={!!mediaSrc}
+      ttsActive={ttsActive}
+      ttsPlayState={ttsPlayState}
+      onBack={() => { persist(); stopTts(); onClose() }}
+      onToggleToc={() => {
+        if (settings.sidebarPinned) {
+          onSettingsChange({ ...settings, sidebarPinned: false })
+          setActiveDrawer(null)
+        } else {
+          setActiveDrawer(d => d === 'toc' ? null : 'toc')
+        }
+      }}
+      onOpenSourceSwitch={() => setShowSourceSwitch(true)}
+      onToggleSettings={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')}
+      onToggleFullscreen={toggleFullscreen}
+      onToggleTts={toggleTts}
+      onResetTtsBar={resetTtsBarPosition}
+    />
 
     {/* TOC Drawer (Left) */}
     <aside className={`reader-drawer reader-drawer-left ${activeDrawer === 'toc' ? 'open' : ''} ${settings.sidebarPinned ? 'pinned' : ''}`} aria-label="目录抽屉">

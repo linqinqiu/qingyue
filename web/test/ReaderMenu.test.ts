@@ -55,8 +55,9 @@ test('moveReaderMenu：上移 / 下移；到头不动', () => {
 })
 
 test('工具栏按 settings.menuItems 渲染，且与配置面板同源', () => {
-  assert.match(readerScreen, /settings\.menuItems\.map\(/, '工具栏要从 menuItems 渲染')
-  // 配置面板在 PROPOSAL-019 F 里抽成了 `ReaderSettingsControls.tsx`：清单还是同一份，只是换了文件。
+  // 工具栏在 PROPOSAL-019 F 里抽成了 ReaderHeader：清单从 settings.menuItems 传进去，逐项渲染。
+  assert.match(readerScreen, /menuItems=\{settings\.menuItems\}/, '工具栏要拿 settings.menuItems')
+  assert.match(read('../src/reader/ReaderHeader.tsx'), /menuItems\.map\(/, '工具栏要逐项渲染')
   assert.match(read('../src/reader/ReaderSettingsControls.tsx'), /READER_MENU_ITEMS\.map\(/, '配置面板要按同一份清单列')
   // 旧版那四个写死的按钮不该再直接挂在 header 里（否则配置改了它也不动）
   assert.doesNotMatch(readerScreen, /<IconButton label="切换书源" icon="sliders"/)
