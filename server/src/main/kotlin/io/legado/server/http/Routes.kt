@@ -123,6 +123,8 @@ import io.legado.server.model.ImportRequest
 import io.legado.server.model.LocalBookReparseRequest
 import io.legado.server.model.LocalBookReparseResult
 import io.legado.server.model.ReadingProgress
+import io.legado.server.model.ReadingLogEntry
+import io.legado.server.model.ReadingLogRequest
 import io.legado.server.model.RssArticlesRequest
 import io.legado.server.model.RssContentRequest
 import io.legado.server.model.RssSourceEnabledRequest
@@ -1818,6 +1820,20 @@ fun Route.apiRoutes(
             val progress = call.receive<ReadingProgress>()
             if (progress.sourceId.isBlank() || progress.bookUrl.isBlank() || progress.chapterUrl.isBlank() || progress.chapterIndex < 0 || !progress.scrollPosition.isFinite() || progress.scrollPosition !in 0.0..1.0) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_progress", "阅读进度无效")); return@put }
             call.respond(database.saveProgress(progress))
+        }
+        // 阅读记录（PROPOSAL-019 D）。只增不改：POST 累加、GET 读，没有编辑/删除单条的入口。
+        get("/reading-log") {
+            val days = (call.request.queryParameters["days"]?.toIntOrNull() ?: 30).coerceIn(1, 365)
+            call.respond(database.listReadingLog(days))
+        }
+        post("/reading-log") {
+            if (!call.requireSameOriginWrite()) return@post
+            val entry = call.receive<ReadingLogRequest>()
+            if (entry.sourceId.isBlank() || entry.bookUrl.isBlank() || entry.seconds <= 0 || entry.seconds > 24 * 3600 || entry.chapterIndex < 0) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_reading_log", "阅读记录无效"))
+                return@post
+            }
+            call.respond(database.addReadingLog(entry))
         }
         route("/tts") {
             get("/voices") {

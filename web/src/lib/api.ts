@@ -32,6 +32,8 @@ export type ExploreTab = { title: string; url: string }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[]; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type Chapter = { index: number; title: string; url: string; isVolume?: boolean }
 export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
+/** 阅读记录（PROPOSAL-019 D）：粒度「一天 · 一本书」一行，秒数只累加。`day` 是本地日 YYYY-MM-DD。 */
+export type ReadingLogEntry = { day: string; sourceId: string; bookUrl: string; bookName: string; chapterIndex: number; seconds: number; updatedAt: number }
 export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null; /** 自定义排序位（1 起）；null/缺省 = 没参与过自定义排序 */ sortOrder?: number | null; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
@@ -484,6 +486,13 @@ export const api = {
       return { sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition, updatedAt: progressItem.updatedAt }
     }
   },
+  /**
+   * 阅读记录（PROPOSAL-019 D）。上报一段停留就 `addReadingLog`（只增不改），
+   * 「阅读记录」页读 `readingLog`。上报失败不重试、也不弹错 —— 它是统计，丢了不影响读书。
+   */
+  readingLog: (days = 30, signal?: AbortSignal) => request<ReadingLogEntry[]>(`/api/reading-log?days=${days}`, { signal }),
+  addReadingLog: (entry: { sourceId: string; bookUrl: string; bookName?: string; chapterIndex?: number; seconds: number }) =>
+    request<ReadingLogEntry>('/api/reading-log', { method: 'POST', body: JSON.stringify(entry) }),
   bookshelf: async () => {
     try {
       const list = await request<BookshelfItem[]>('/api/bookshelf')

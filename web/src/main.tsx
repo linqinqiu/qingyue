@@ -14,6 +14,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { activeCustomSkin, loadReaderSettings, ReaderSettings, saveReaderSettings, themeClassNames } from './reader/readerSettings'
 import { AppHeader } from './components/AppHeader'
 import { ChangelogPage } from './pages/ChangelogPage'
+import { ReadingLogPage } from './pages/ReadingLogPage'
 import { AboutPage } from './pages/AboutPage'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
@@ -70,12 +71,12 @@ export type { SourceChoice, SourceChoiceStatus }
 
 type Page = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'settings'
 /** 不占导航栏、也不占整页的目的地（0.6.27 起全部悬浮化）：规则 / 备份 / 更新日志 / 关于 */
-type PageDialogKind = 'rules' | 'backup' | 'changelog' | 'about'
-const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则', backup: '备份包', changelog: '更新日志', about: '关于' }
+type PageDialogKind = 'rules' | 'backup' | 'changelog' | 'about' | 'reading-log'
+const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则', backup: '备份包', changelog: '更新日志', about: '关于', 'reading-log': '阅读记录' }
 const readerStorageKey = 'legado-open-book-v1'
 const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#settings' ? 'settings' : 'library'
 /** 旧深链进来仍开对的那一个悬浮层，不白屏也不跳页 */
-const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : null
+const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : location.hash === '#reading-log' ? 'reading-log' : null
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -3533,6 +3534,7 @@ function App() {
         onNavigate={navigate}
         onOpenChangelog={() => setPageDialog('changelog')}
         onOpenAbout={() => setPageDialog('about')}
+        onOpenReadingLog={() => setPageDialog('reading-log')}
         onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
       />
@@ -3579,6 +3581,7 @@ function App() {
         <PageDialog title={PAGE_DIALOG_TITLES[pageDialog]} onClose={() => setPageDialog(null)}>
           {pageDialog === 'backup' && <BackupPage />}
           {pageDialog === 'changelog' && <ChangelogPage serverVersion={serverVersion} />}
+          {pageDialog === 'reading-log' && <ReadingLogPage />}
           {pageDialog === 'about' && (
             <AboutPage
               onOpenChangelog={() => setPageDialog('changelog')}

@@ -332,6 +332,28 @@ data class SourceLoginStateRecord(
     val scrollPosition: Double = 0.0,
     val updatedAt: Long = 0,
 )
+/**
+ * 阅读记录（PROPOSAL-019 D）。粒度「一天 · 一本书」一行，秒数只累加 ——
+ * 不是为了留审计流水，而是为了「今天读了多久 / 这本书累计读了多久」这类时间轴。
+ * `day` 是**本地日**（服务端与使用者同一台机器，用服务端本地日期即可）。
+ */
+@Serializable data class ReadingLogEntry(
+    val day: String,
+    val sourceId: String,
+    val bookUrl: String,
+    val bookName: String = "",
+    val chapterIndex: Int = 0,
+    val seconds: Long = 0,
+    val updatedAt: Long = 0,
+)
+/** 前端上报一段停留（节流后按段上报，不是每秒一条）。 */
+@Serializable data class ReadingLogRequest(
+    val sourceId: String,
+    val bookUrl: String,
+    val bookName: String = "",
+    val chapterIndex: Int = 0,
+    val seconds: Int,
+)
 @Serializable data class BookshelfWriteRequest(
     val sourceId: String,
     val bookUrl: String,

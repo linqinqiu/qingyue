@@ -49,6 +49,8 @@ import io.legado.server.model.Chapter
 import io.legado.server.model.ChapterContent
 import io.legado.server.model.ImportResponse
 import io.legado.server.model.ReadingProgress
+import io.legado.server.model.ReadingLogEntry
+import io.legado.server.model.ReadingLogRequest
 import io.legado.server.model.RssSourceSummary
 import io.legado.server.model.SearchResult
 import io.legado.server.model.SourceRecord
@@ -248,6 +250,16 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 );
                 create index if not exists idx_log_entry_ts on log_entry(ts desc);
                 create index if not exists idx_log_entry_category on log_entry(category);
+                -- 阅读记录（PROPOSAL-019 D）。粒度是「一天 · 一本书」一行：心跳累加秒数，
+                -- 不是为了留审计流水，而是为了「今天读了多久 / 这本书累计读了多久」这类时间轴。
+                -- 只增不改：接口只有 POST（累加）与 GET（读），没有编辑/删除单条的入口。
+                create table if not exists reading_log (
+                  day text not null, source_id text not null, book_url text not null,
+                  book_name text, chapter_index integer not null default 0,
+                  seconds integer not null default 0, updated_at integer not null,
+                  primary key (day, source_id, book_url)
+                );
+                create index if not exists idx_reading_log_day on reading_log(day desc);
             """.trimIndent())
             // 不再有账号与会话：这台服务不设身份（写操作只留 Guard.kt 的同源闸门）。
             // 老库里的这两张表是死重量，启动时收掉。
@@ -573,6 +585,39 @@ class Database(private val path: String) : Closeable, AutoCloseable {
     fun getProgress(sourceId: String, bookUrl: String): ReadingProgress? = connect { db -> db.prepareStatement("select source_id,book_url,chapter_url,chapter_index,scroll_position,updated_at from reading_progress where source_id=? and book_url=?").use {
         it.setString(1, sourceId); it.setString(2, bookUrl); it.executeQuery().use { rs -> if (rs.next()) ReadingProgress(rs.getString(1), rs.getString(2), rs.getString(3), rs.getInt(4), rs.getDouble(5), rs.getLong(6)) else null }
     } }
+    /**
+     * 阅读记录（PROPOSAL-019 D）：把一段停留累加进「今天 · 这本书」那一行。
+     * 只增不改 —— 没有编辑/删除单条的接口；同一天同一本书再来一段就是秒数相加，
+     * 章节号取当天读到的最远那一章。
+     */
+    fun addReadingLog(request: ReadingLogRequest): ReadingLogEntry = write { db ->
+        val day = java.time.LocalDate.now().toString()
+        val now = System.currentTimeMillis()
+        val seconds = request.seconds.coerceAtLeast(0)
+        db.prepareStatement("""insert into reading_log(day,source_id,book_url,book_name,chapter_index,seconds,updated_at) values(?,?,?,?,?,?,?)
+            on conflict(day,source_id,book_url) do update set
+              seconds = reading_log.seconds + excluded.seconds,
+              chapter_index = max(reading_log.chapter_index, excluded.chapter_index),
+              book_name = case when excluded.book_name <> '' then excluded.book_name else reading_log.book_name end,
+              updated_at = excluded.updated_at""").use {
+            it.setString(1, day); it.setString(2, request.sourceId); it.setString(3, request.bookUrl)
+            it.setString(4, request.bookName); it.setInt(5, request.chapterIndex); it.setInt(6, seconds); it.setLong(7, now)
+            it.executeUpdate()
+        }
+        ReadingLogEntry(day, request.sourceId, request.bookUrl, request.bookName, request.chapterIndex, seconds.toLong(), now)
+    }
+    /** 最近 `days` 天的阅读记录（含今天）。按天倒序、天内按秒数倒序 —— 时间轴直接照这个顺序画。 */
+    fun listReadingLog(days: Int): List<ReadingLogEntry> = connect { db ->
+        val since = java.time.LocalDate.now().minusDays((days - 1).coerceAtLeast(0).toLong()).toString()
+        db.prepareStatement("select day,source_id,book_url,book_name,chapter_index,seconds,updated_at from reading_log where day >= ? order by day desc, seconds desc").use {
+            it.setString(1, since)
+            it.executeQuery().use { rs ->
+                val list = mutableListOf<ReadingLogEntry>()
+                while (rs.next()) list += ReadingLogEntry(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4) ?: "", rs.getInt(5), rs.getLong(6), rs.getLong(7))
+                list
+            }
+        }
+    }
     fun saveBookshelf(request: BookshelfWriteRequest, cover: CachedCover?): BookshelfItem = write { db ->
         val now = System.currentTimeMillis()
         db.autoCommit = false

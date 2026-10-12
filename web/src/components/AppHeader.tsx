@@ -17,6 +17,8 @@ export interface AppHeaderProps {
   onOpenChangelog?: () => void
   /** 「我的」菜单里的「关于」：0.6.27 起是悬浮层，不再走整页导航。 */
   onOpenAbout?: () => void
+  /** 「我的」菜单里的「阅读记录」：同样是悬浮层（PROPOSAL-019 D）。 */
+  onOpenReadingLog?: () => void
   onOpenCustomize?: () => void
   /** 服务端 /healthz 报回来的版本号；空串表示还没问到（离线或启动中）。 */
   version?: string
@@ -33,6 +35,7 @@ export function AppHeader({
   onNavigate,
   onOpenChangelog,
   onOpenAbout,
+  onOpenReadingLog,
   onOpenCustomize,
   version = '',
 }: AppHeaderProps) {
@@ -248,9 +251,22 @@ export function AppHeader({
                   「本地离线缓存管理」「替换净化规则」「运行日志」「备份包」这四条收进「设置」
                   （用户 2026-10-03：「在我的里面新加一个设置，把一些 txt 目录规则、备份、替换净化
                   之类的放进去」+「顶栏『我的』菜单堆太多」；2026-10-04 又把「设置」提到顶栏一级）。
-                  这一栏只剩 关于（+ 装了 PWA 时才出现的"安装到桌面"）：凡是一级目的地都走顶栏，
+                  这一栏只剩 阅读记录 / 关于（+ 装了 PWA 时才出现的"安装到桌面"）：凡是一级目的地都走顶栏，
                   菜单只放"不算一个页面"的动作。书签功能已在 0.6.12 整体删掉。
                 */}
+                <button
+                  type="button"
+                  className="menu-logout-btn"
+                  style={{ color: 'var(--ink)' }}
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onOpenReadingLog?.()
+                  }}
+                >
+                  <Icon name="clock" />
+                  <span>阅读记录</span>
+                </button>
                 <button
                   type="button"
                   className="menu-logout-btn"
