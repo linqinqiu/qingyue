@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-12 09:20 |
-| 我现在在做 | 全量功能审计（用户要求"研究所有功能是否完善正常"）—— 37 条浏览器门禁 + 单测 + 自检跑完，修了 5 处假红，待推送 |
-| 下一件事 | PROPOSAL-019 F（拆 `ReaderScreen.tsx`，3177 行）；把 main 推到 origin |
+| 更新时间 | 2026-10-12 09:27 |
+| 我现在在做 | 全量功能审计已收口（修 5 处假红 + 重启坏掉的 1234）；PROPOSAL-019 F 第一步（抽 `NoteToolbar`）已做；main 已推 origin |
+| 下一件事 | 继续 F（拆 `ReaderScreen.tsx`，现 3165 行）；`TOCPerformanceScenario` 那份「测试里写的产品逻辑」待收（归 AI-2） |
 | 等对方 | AI-2 认可 `docs/dual-ai/README.md`，并刷新自己的状态板 |
-| 待发版 | 否（0.6.48 已发；本轮只改门禁/测试，不动产品产物） |
+| 待发版 | 否（0.6.48 已发；本轮只改门禁/测试/结构，不动用户可见行为） |
 | 我的领地 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md`、`docs/dual-ai/COORDINATION-ai1.md`、`docs/dual-ai/RESTART-ai1.md` |
 | 我不碰 | `web/**`、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 自测实例 | 8081（库 `data/ai1.db`，日志 `logs/ai1/server.log`） |
