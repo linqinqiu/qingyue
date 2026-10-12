@@ -60,18 +60,21 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
 
 test('阅读设置抽屉里那一档只对着手上这本', () => {
   const reader = read('../src/reader/ReaderScreen.tsx')
-  assert.match(reader, /\{!!localBook && \(tocRuleOptions\?\.length \?\? 0\) > 0 && \(/,
+  // 设置面板在 PROPOSAL-019 F 里抽成了 `ReaderSettingsControls.tsx`：面板本身的判据读那一份，
+  // 重切那两条链路（打到服务端、回填服务端说的那条）仍在 ReaderScreen 上。
+  const panel = read('../src/reader/ReaderSettingsControls.tsx')
+  assert.match(panel, /\{!!localBook && \(tocRuleOptions\?\.length \?\? 0\) > 0 && \(/,
     '在线书没有"目录规则"这件事，这一组就跟着本地书出现')
-  assert.match(reader, /setting-label">本地书目录/, '面板里有这一组')
-  assert.match(reader, /现在用的是「\{ruleLabelOf\(localBook\.tocRule\)\}」/, '报的是这本书**实际**用的规则')
-  assert.match(reader, /ariaLabel="换一条规则重切这本"/, '那颗选择器的名字就说清了它只管这本')
-  assert.match(reader, /按这条规则重新识别目录/, '有"重切"这个动作，不是选了不生效')
+  assert.match(panel, /setting-label">本地书目录/, '面板里有这一组')
+  assert.match(panel, /现在用的是「\{ruleLabelOf\(localBook\.tocRule\)\}」/, '报的是这本书**实际**用的规则')
+  assert.match(panel, /ariaLabel="换一条规则重切这本"/, '那颗选择器的名字就说清了它只管这本')
+  assert.match(panel, /按这条规则重新识别目录/, '有"重切"这个动作，不是选了不生效')
   assert.match(reader, /api\.reparseLocalBook/, '重切真的打到服务端')
   assert.match(reader, /setShelfTocRule\(item\?\.tocRule/, '重切之后把服务端说的那条回填进面板，界面不沿用旧值')
-  assert.doesNotMatch(reader, /ariaLabel="TXT 目录规则"/, '"下一本用哪条"不在抽屉里改：抽屉与弹窗各留一条路，避免重复入口')
-  assert.doesNotMatch(reader, /update\(\{ txtTocRule/, '抽屉里的暂选绝不写全局默认（那是"改这本"时最不该发生的事）')
-  assert.match(reader, /onReparseLocal\(repickRule\)/, '重切用的是那颗选择器的暂选')
-  assert.match(reader, /useEffect\(\(\) => \{ setRepick\(null\) \}, \[localBook\?\.name\]\)/,
+  assert.doesNotMatch(panel, /ariaLabel="TXT 目录规则"/, '"下一本用哪条"不在抽屉里改：抽屉与弹窗各留一条路，避免重复入口')
+  assert.doesNotMatch(panel, /update\(\{ txtTocRule/, '抽屉里的暂选绝不写全局默认（那是"改这本"时最不该发生的事）')
+  assert.match(panel, /onReparseLocal\(repickRule\)/, '重切用的是那颗选择器的暂选')
+  assert.match(panel, /useEffect\(\(\) => \{ setRepick\(null\) \}, \[localBook\?\.name\]\)/,
     '换书时暂选归零：抽屉是常驻挂载的，不清就会带着上一本的选择')
   const main = read('../src/main.tsx')
   assert.match(main, /api\.importLocalBooks\(list, txtTocRule\)/, '导入用的是书架那一份选择')
@@ -138,7 +141,7 @@ test('手动可选 与 参与自动打分 是两件事，界面和服务端都�
   assert.match(modal, /<code title=\{rule\.rule\}>/, '正则原文要露出来，否则没人判断得了它适不适合自己的书')
   assert.match(modal, /手动选一条不需要先"启用"它/, '界面文案把这两件事分开讲')
 
-  const reader = read('../src/reader/ReaderScreen.tsx')
-  assert.match(reader, /\.filter\(option => !option\.broken\)/, '阅读设置里那颗选择器同样排除坏正则')
-  assert.match(reader, /（不参与自动）/, '选得到但不打分的那几条要标出来，别让人以为勾了就等于生效')
+  const panel = read('../src/reader/ReaderSettingsControls.tsx')
+  assert.match(panel, /\.filter\(option => !option\.broken\)/, '阅读设置里那颗选择器同样排除坏正则')
+  assert.match(panel, /（不参与自动）/, '选得到但不打分的那几条要标出来，别让人以为勾了就等于生效')
 })
