@@ -17,9 +17,15 @@ FROM ${DOCKER_REGISTRY}gradle:8.13-jdk17 AS server-build
 WORKDIR /src
 COPY gradle/ gradle/
 COPY gradle/libs.versions.toml gradle/libs.versions.toml
+# 根三件套必须进容器：settings.gradle（include ':server' + foojay）是构建的根坐标，
+# 根 build.gradle 声明 kotlin 插件 alias(apply false)，gradle.properties 带内存与编码配置。
+# 少了它们，`gradle -p server` 会把 server/ 当构建根，版本目录（<根>/gradle/）解析不到，
+# plugins 块两个 alias 直接编译失败（issue #11，6 秒即死）。
+COPY settings.gradle gradle.properties build.gradle ./
 COPY server/ server/
 COPY --from=web-build /src/web/dist/ server/src/main/resources/static/
-RUN --mount=type=cache,target=/home/gradle/.gradle gradle -p server clean installDist --no-daemon --no-build-cache \
+# 从仓库根跑任务路径（不再 -p server）：构建根 = /src，settings.gradle 生效。
+RUN --mount=type=cache,target=/home/gradle/.gradle gradle :server:clean :server:installDist --no-daemon --no-build-cache \
     && jar uf "$(ls server/build/install/legado-server/lib/legado-server-*.jar)" -C server/src/main/resources static
 
 FROM ${DOCKER_REGISTRY}eclipse-temurin:17-jre-jammy
