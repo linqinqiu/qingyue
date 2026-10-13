@@ -18,8 +18,9 @@ import { ReaderHeader } from './ReaderHeader'
 import { MediaBlock } from './MediaBlock'
 import { IconButton } from './IconButton'
 import { ReaderContentSkeleton } from './ReaderContentSkeleton'
-import { ReaderSettingsControls, themes } from './ReaderSettingsControls'
-import { clampScrollPosition, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType } from './readerSettings'
+import { ReaderSettingsControls } from './ReaderSettingsControls'
+import { clampScrollPosition, effectiveReaderFontFamily, ReaderSettings, scrollPosition, themeClassNames, ttsSessionKey, TtsEngineType, BUILTIN_SKINS } from './readerSettings'
+import { stepFontSize } from './fontSizeControl'
 import { ReaderMenuAction } from './readerMenu'
 import { IDENTITY_CONVERTER, loadScriptConverter, type ScriptConverter } from './scriptConvert'
 import { coverDirection, pageTurnAnim, planNextPage, planPrevPage } from './pageTurn'
@@ -2018,9 +2019,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           behavior: 'smooth',
         })
       }
-      const stepFontSize = (delta: number) => onSettingsChange({
+      // 名字别叫 stepFontSize：那是纯函数的 import 名，遮蔽它会变成自递归。
+      const bumpFontSize = (delta: number) => onSettingsChange({
         ...settings,
-        fontSize: Math.min(28, Math.max(15, settings.fontSize + delta)),
+        // 字号口径唯一出处 fontSizeControl.ts（设置步进器/快捷键/Ctrl+滚轮三处共用）。
+        fontSize: stepFontSize(settings.fontSize, delta),
       })
       switch (hit.action) {
         case 'close':
@@ -2059,16 +2062,17 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           break
         case 'font-increase':
           event.preventDefault()
-          stepFontSize(1)
+          bumpFontSize(1)
           break
         case 'font-decrease':
           event.preventDefault()
-          stepFontSize(-1)
+          bumpFontSize(-1)
           break
         case 'theme-next': {
           event.preventDefault()
-          const next = themes[(themes.findIndex(entry => entry[0] === settings.theme) + 1) % themes.length]
-          onSettingsChange({ ...settings, theme: next[0] })
+          // T 键在内置七套里循环（自定义皮肤不在轮换里，网格里点选）。
+          const next = BUILTIN_SKINS[(BUILTIN_SKINS.findIndex(skin => skin.id === settings.theme) + 1) % BUILTIN_SKINS.length]
+          onSettingsChange({ ...settings, theme: next.id })
           break
         }
         case 'toc':
@@ -2098,7 +2102,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const onWheel = (event: WheelEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return
       event.preventDefault()
-      const next = Math.min(28, Math.max(15, settings.fontSize + (event.deltaY > 0 ? -1 : 1)))
+      const next = stepFontSize(settings.fontSize, event.deltaY > 0 ? -1 : 1)
       if (next !== settings.fontSize) onSettingsChange({ ...settings, fontSize: next })
     }
     window.addEventListener('wheel', onWheel, { passive: false })
@@ -2113,6 +2117,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     '--reader-text-indent': `${settings.textIndent}em`,
     '--reader-content-padding': `${settings.contentPadding}px`,
     '--reader-max-width': `${settings.maxWidth}px`,
+    '--reader-text-align': settings.textAlign,
     '--reader-sidebar-width': `${settings.sidebarWidth}px`,
     '--reader-font-family': effectiveReaderFontFamily(settings),
     '--reader-bg-color': settings.readerBgColor || 'transparent',

@@ -21,6 +21,11 @@ export type ReaderPageMode = 'scroll' | 'paginate'
  */
 export type ReaderPageAnim = PageTurnAnim
 export type ReaderColumnMode = 'auto' | 'single' | 'double'
+/**
+ * 正文对齐：`justify` 两端对齐（中文出版惯例，默认）、`left` 左对齐（西文混排/等宽字体下更自然）。
+ * CSS 侧从写死的 `text-align: justify` 改读 `--reader-text-align`（styles.css 的正文段落规则）。
+ */
+export type ReaderTextAlign = 'justify' | 'left'
 export type TtsEngineType = 'webSpeech' | 'edge' | 'custom'
 
 /** 一套自定义皮肤（用户可存许多套，见 `customSkins`）。 */
@@ -52,6 +57,7 @@ export type ReaderSettings = {
   pageAnim: ReaderPageAnim
   maxWidth: number
   columnMode: ReaderColumnMode
+  textAlign: ReaderTextAlign
   sidebarPinned: boolean
   /**
    * 固定目录（`sidebarPinned`）时目录栏的宽度，px。
@@ -131,6 +137,7 @@ export const defaultReaderSettings: ReaderSettings = {
   pageAnim: 'slide',
   maxWidth: 860,
   columnMode: 'auto',
+  textAlign: 'justify',
   sidebarPinned: false,
   sidebarWidth: 300,
   ttsEngine: 'edge',
@@ -300,6 +307,10 @@ export function parseColumnMode(mode: unknown): ReaderColumnMode {
   return 'auto'
 }
 
+export function parseTextAlign(value: unknown): ReaderTextAlign {
+  return value === 'left' ? 'left' : 'justify'
+}
+
 /** 首行缩进只认 0 / 1 / 2 三档：滑杆给中间值（比如 1.3em）在中文里没有对应排版惯例，只会显得没对齐。 */
 export const READER_TEXT_INDENTS = [0, 1, 2] as const
 export function parseTextIndent(value: unknown): number {
@@ -392,8 +403,9 @@ export function loadReaderSettings(): ReaderSettings {
       font: parseReaderFont(saved.font),
       pageMode: parsePageMode(saved.pageMode),
       pageAnim: parsePageAnim(saved.pageAnim),
-      maxWidth: parseMaxWidth(saved.maxWidth),
-      columnMode: parseColumnMode(saved.columnMode),
+  maxWidth: parseMaxWidth(saved.maxWidth),
+  columnMode: parseColumnMode(saved.columnMode),
+  textAlign: parseTextAlign(saved.textAlign),
       sidebarPinned: typeof saved.sidebarPinned === 'boolean' ? saved.sidebarPinned : defaultReaderSettings.sidebarPinned,
       sidebarWidth: Math.round(clampNumber(saved.sidebarWidth, 220, 560, defaultReaderSettings.sidebarWidth)),
       ttsEngine: parseTtsEngine(saved.ttsEngine),

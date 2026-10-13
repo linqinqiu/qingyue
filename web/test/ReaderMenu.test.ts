@@ -58,7 +58,7 @@ test('工具栏按 settings.menuItems 渲染，且与配置面板同源', () => 
   // 工具栏在 PROPOSAL-019 F 里抽成了 ReaderHeader：清单从 settings.menuItems 传进去，逐项渲染。
   assert.match(readerScreen, /menuItems=\{settings\.menuItems\}/, '工具栏要拿 settings.menuItems')
   assert.match(read('../src/reader/ReaderHeader.tsx'), /menuItems\.map\(/, '工具栏要逐项渲染')
-  assert.match(read('../src/reader/ReaderSettingsControls.tsx'), /READER_MENU_ITEMS\.map\(/, '配置面板要按同一份清单列')
+  assert.match(read('../src/reader/settingsPanel/BehaviorTab.tsx'), /READER_MENU_ITEMS\.map\(/, '配置面板要按同一份清单列（P1 三标签页后这一节住在行为页）')
   // 旧版那四个写死的按钮不该再直接挂在 header 里（否则配置改了它也不动）
   assert.doesNotMatch(readerScreen, /<IconButton label="切换书源" icon="sliders"/)
 })

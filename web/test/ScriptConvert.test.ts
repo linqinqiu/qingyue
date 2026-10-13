@@ -157,8 +157,8 @@ test('设置项：默认关着，读时过清洗', () => {
 test('设置面板那三档与转换器是同一份清单', () => {
   assert.deepEqual(SCRIPT_MODE_OPTIONS.map(option => option.id), ['off', 's2t', 't2s'])
   const readerScreen = read('../src/reader/ReaderScreen.tsx')
-  // 设置面板在 PROPOSAL-019 F 里抽成了 `ReaderSettingsControls.tsx`：三档的清单跟着搬过去。
-  assert.match(read('../src/reader/ReaderSettingsControls.tsx'), /SCRIPT_MODE_OPTIONS\.map\(/, '面板要按同一份清单列，别各写一份')
+  // 设置面板在 P1 里拆成三标签页，简繁这一节住在 settingsPanel/BehaviorTab.tsx。
+  assert.match(read('../src/reader/settingsPanel/BehaviorTab.tsx'), /SCRIPT_MODE_OPTIONS\.map\(/, '面板要按同一份清单列，别各写一份')
   assert.match(readerScreen, /settings\.scriptMode/, '正文要真的按这一项走')
 })
 

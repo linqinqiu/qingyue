@@ -995,6 +995,22 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 /* Settings Controls Inside Drawer */
 .setting-section { display: grid; gap: 10px; }
+
+/* 阅读设置的三标签页（P1，仿 legado「界面」面板的信息架构）：
+   一条 tab 导航 + 每页独立内容。控件高度/间距走全站 token，别再自己造刻度。 */
+.settings-panel { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.settings-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 12px 12px 0; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.settings-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--ctl-34, 34px); border: 0; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; background: transparent; color: var(--muted); font-size: var(--t-sm, 13px); cursor: pointer; }
+.settings-tab:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.settings-tab.selected { color: var(--accent-solid, var(--accent)); border-bottom-color: var(--accent-solid, var(--accent)); font-weight: 600; }
+.settings-tab svg { width: 15px; height: 15px; }
+/* SettingChoices 的分段选择行：label 在左、互斥按钮组在右（窄屏换行）。 */
+.setting-choice { display: grid; gap: 6px; }
+.setting-choice > span { color: var(--muted); font-size: 12px; }
+.setting-choice .page-modes { justify-content: flex-start; }
+.settings-tab-body { padding: 16px 18px 18px; display: grid; gap: 18px; align-content: start; }
+/* 自定义皮肤在主题网格里没有专属色板 CSS —— 给一块"基档+自定义"的中性格，名字照常显示。 */
+.theme-choice.swatch-custom i { background: linear-gradient(135deg, var(--surface), var(--canvas)); border: 1px dashed var(--line); }
 .setting-label { font-size: 13px; font-weight: 650; }
 .theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .theme-choice { display: grid; gap: 6px; padding: 0; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
@@ -1102,8 +1118,9 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-page-chapter + .reader-page-chapter { margin-top: 1.6em; border-top-color: color-mix(in srgb, var(--line) 65%, transparent); }
 .reader-flow-chapter + .reader-flow-chapter { margin-top: 3.2em; border-top-color: color-mix(in srgb, var(--line) 65%, transparent); }
 /* 首行缩进由「阅读设置 · 排版」的 --reader-text-indent 控制（正文段落的 trim 会先剥掉源站自带的
-   全角空格，缩进只能有一个主人）；标题 h1 与配图不跟着缩。 */
-.reading-content p, .reader-paginated-column-body p { margin-bottom: var(--reader-paragraph-spacing); color: var(--ink); text-align: justify; text-wrap: pretty; text-indent: var(--reader-text-indent, 2em); }
+   全角空格，缩进只能有一个主人）；标题 h1 与配图不跟着缩。对齐（--reader-text-align）同理：
+   两端对齐是中文出版惯例（默认），左对齐给西文混排/等宽字体用。 */
+.reading-content p, .reader-paginated-column-body p { margin-bottom: var(--reader-paragraph-spacing); color: var(--ink); text-align: var(--reader-text-align, justify); text-wrap: pretty; text-indent: var(--reader-text-indent, 2em); }
 .reader-boundary-message { position: fixed; z-index: 25; top: calc(18px + var(--safe-top)); left: 50%; transform: translateX(-50%); padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 6px 20px rgba(0, 0, 0, .12); color: var(--ink); font-size: 13px; pointer-events: none; }
 .reader-status, .reader-error { color: var(--muted) !important; text-align: center !important; padding: 60px 0; }
 .reader-error { color: var(--danger) !important; }
