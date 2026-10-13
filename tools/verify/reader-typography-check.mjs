@@ -136,37 +136,44 @@ try {
         `${phoneSmall?.contentWidth}px → ${phoneLarge?.contentWidth}px`)
       check('手机档：正文不撑出横向滚动', !!phoneLarge && phoneLarge.docOverflowX <= 1, `溢出 ${phoneLarge?.docOverflowX}px`)
 
-      // 抽屉里要有「排版」这一组，且点按钮当场生效（用户是从这里操作的，不是从 localStorage）
+      // 抽屉是「排版 / 颜色 / 行为」三标签页（0.7.0 起），排版是默认档；
+      // 首行缩进行是 .setting-choice[aria-label=首行缩进]，按钮组沿用 .page-modes 观感。
+      // 点按钮当场生效（用户是从这里操作的，不是从 localStorage）。
       await openWithSettings({ textIndent: 2 }, 1440)
       await page.evaluate(() => document.querySelector('.reader-header-actions button[aria-label="阅读设置"]')?.click())
       await sleep(900)
       const drawer = await page.evaluate(() => {
-        const labels = [...document.querySelectorAll('.setting-label')].map(node => node.textContent?.trim() ?? '')
-        const group = document.querySelector('.text-indent-choice')
+        const tabs = [...document.querySelectorAll('.settings-tab')].map(node => ({
+          label: node.textContent?.trim() ?? '',
+          selected: node.getAttribute('aria-selected') === 'true',
+        }))
+        const group = document.querySelector('.setting-choice[aria-label="首行缩进"]')
         return {
-          hasTypography: labels.includes('排版'),
-          labels,
-          indentLabel: group?.querySelector(':scope > span')?.textContent?.trim() ?? '',
+          tabs,
+          typographySelected: tabs.find(tab => tab.label === '排版')?.selected === true,
+          indentLabel: group?.getAttribute('aria-label') ?? '',
           buttons: [...(group?.querySelectorAll('button') ?? [])].map(node => ({ text: node.textContent?.trim() ?? '', selected: node.className.includes('selected') })),
         }
       })
-      check('设置抽屉里有「排版」这一组', drawer.hasTypography, drawer.labels.join(' / '))
-      check('排版组里有「首行缩进」三档按钮，且当前档是选中态',
-        drawer.indentLabel.includes('首行缩进')
+      check('设置抽屉是三标签页且「排版」默认选中',
+        drawer.tabs.map(tab => tab.label).join('/') === '排版/颜色/行为' && drawer.typographySelected,
+        drawer.tabs.map(tab => `${tab.label}${tab.selected ? '*' : ''}`).join(' '))
+      check('排版页里有「首行缩进」三档按钮，且当前档是选中态',
+        drawer.indentLabel === '首行缩进'
         && drawer.buttons.length === 3
         && drawer.buttons.filter(button => button.selected).length === 1,
         `${drawer.indentLabel}: ${drawer.buttons.map(button => `${button.text}${button.selected ? '*' : ''}`).join(' ')}`)
 
       const clicked = await page.evaluate(async () => {
         const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
-        const buttons = [...(document.querySelector('.text-indent-choice .indent-modes')?.querySelectorAll('button') ?? [])]
+        const buttons = [...(document.querySelector('.setting-choice[aria-label="首行缩进"] .page-modes')?.querySelectorAll('button') ?? [])]
         const zero = buttons.find(node => node.textContent?.trim() === '不缩进')
         zero?.click()
         await wait(700)
         const paragraph = document.querySelector('.reading-content p, .reader-paginated-column-body p')
         return {
           textIndent: paragraph ? getComputedStyle(paragraph).textIndent : '(没量到)',
-          selected: [...(document.querySelectorAll('.text-indent-choice button') ?? [])]
+          selected: [...(document.querySelectorAll('.setting-choice[aria-label="首行缩进"] button') ?? [])]
             .map(node => `${node.textContent?.trim()}${node.className.includes('selected') ? '*' : ''}`).join(' '),
         }
       })
