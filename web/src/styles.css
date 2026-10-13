@@ -5810,3 +5810,37 @@ input[type="checkbox"] {
 }
 .md3-pill:hover { background: var(--accent-soft); color: var(--accent-ink); }
 .md3-pill.is-active { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* ---- MD3 底部弹层（PROPOSAL-020 P3/P4）：界面 / 设置 ----
+ * 浮层并档（PROPOSAL-018 W2）：不新造外壳/遮罩，只给统一原语加一个 `.is-sheet` 开关，
+ * 把它从"居中"改成"贴底"。外壳几何（宽高/圆角/阴影/动画）仍来自 `.dialog-shell`。 */
+.overlay-backdrop.is-sheet { place-items: end center; padding: 0; z-index: 38; }
+.dialog-shell.is-sheet {
+  width: min(720px, 100%);
+  max-height: min(78vh, 760px);
+  border-radius: 22px 22px 0 0;
+  border-bottom: 0;
+  animation: md3-sheet-up .26s cubic-bezier(.2, .8, .2, 1);
+}
+.md3-sheet-header { flex: none; padding: 10px 16px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.md3-sheet-handle { display: block; width: 36px; height: 4px; margin: 0 auto 8px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 20%, transparent); }
+.md3-sheet-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.md3-sheet-title strong { font-size: 16px; font-weight: 650; }
+.md3-sheet-body {
+  flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
+  display: grid; gap: 16px; align-content: start;
+  padding-bottom: calc(20px + var(--safe-bottom));
+}
+/* 内层不再自己滚：滚动交给弹层本体，避免套两层滚条 */
+.md3-sheet-body > .drawer-scroll-content { overflow: visible; }
+.md3-sheet-body > .setting-section { padding: 0 18px; }
+@keyframes md3-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* ---- P5 玻璃增强：支持 backdrop-filter 才加，不支持就是上面的纯渐隐（降级） ---- */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .md3-topbar,
+  .md3-bottombar {
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    backdrop-filter: blur(18px) saturate(1.5);
+  }
+}

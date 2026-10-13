@@ -1,6 +1,8 @@
+import { useSyncExternalStore } from 'react'
 import { Icon } from '../icons'
 import { ReaderMenuAction } from './readerMenu'
 import { TtsPlayState } from './ttsEngine'
+import { getProgress, overallProgress, subscribeProgress } from './readerProgress'
 
 /**
  * MD3 阅读外壳（PROPOSAL-020 P1）：顶栏 + 底栏，参照 legado-with-MD3 的阅读界面。
@@ -67,7 +69,7 @@ export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleT
   </header>
 }
 
-export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesCount, ttsActive, onSeekChapter, onPrev, onNext, onToggleToc, onToggleNotes, onToggleTts, onToggleSettings }: {
+export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesCount, ttsActive, onSeekChapter, onPrev, onNext, onToggleToc, onToggleNotes, onToggleTts, onToggleSettings, onOpenOtherSettings }: {
   chapterIndex: number
   totalChapters: number
   chapterTitle: string | null
@@ -80,25 +82,33 @@ export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesC
   onToggleNotes: () => void
   onToggleTts: () => void
   onToggleSettings: () => void
+  onOpenOtherSettings: () => void
 }) {
   const max = Math.max(0, totalChapters - 1)
   const atStart = chapterIndex <= 0
   const atEnd = chapterIndex >= max
+  // 真实进度（PROPOSAL-020 P2）：章 + 章内比例。订阅独立 store，只让这条进度条重渲染，不拖累整屏。
+  const progress = useSyncExternalStore(subscribeProgress, getProgress)
+  const fraction = progress.chapterIndex === chapterIndex ? progress.fraction : 0
+  const percent = Math.round(overallProgress({ chapterIndex, total: totalChapters, fraction }) * 100)
   return <footer className="md3-bottombar" data-testid="reader-bottombar">
     <div className="md3-progress-row">
       <button className="md3-icon-btn" aria-label="上一章" title="上一章" disabled={atStart} onClick={onPrev}><Icon name="skipBack" /></button>
       <div className="md3-progress">
         <div className="md3-progress-meta">
           <span className="md3-progress-chapter">{chapterTitle || '—'}</span>
-          <span className="md3-progress-count">{chapterIndex + 1} / {totalChapters}</span>
+          <span className="md3-progress-count">{chapterIndex + 1} / {totalChapters} · {percent}%</span>
         </div>
         <input
           type="range"
           aria-label="阅读进度"
           min={0}
-          max={max || 1}
-          value={chapterIndex}
-          onChange={event => onSeekChapter(Number(event.target.value))}
+          max={100}
+          value={percent}
+          onChange={event => {
+            const pct = Number(event.target.value) / 100
+            onSeekChapter(Math.min(max, Math.max(0, Math.round(pct * max))))
+          }}
         />
       </div>
       <button className="md3-icon-btn" aria-label="下一章" title="下一章" disabled={atEnd} onClick={onNext}><Icon name="skipForward" /></button>
@@ -108,6 +118,7 @@ export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesC
       <button className="md3-pill" aria-label={`笔记（${notesCount}）`} onClick={onToggleNotes}><Icon name="bookmark" /><span>笔记{notesCount > 0 ? ` ${notesCount}` : ''}</span></button>
       <button className={`md3-pill${ttsActive ? ' is-active' : ''}`} aria-label="朗读" onClick={onToggleTts}><Icon name="volume2" /><span>朗读</span></button>
       <button className="md3-pill" aria-label="阅读设置" onClick={onToggleSettings}><Icon name="sliders" /><span>界面</span></button>
+      <button className="md3-pill" aria-label="更多设置" onClick={onOpenOtherSettings}><Icon name="settings" /><span>设置</span></button>
     </div>
   </footer>
 }

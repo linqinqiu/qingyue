@@ -60,9 +60,9 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
 
 test('阅读设置抽屉里那一档只对着手上这本', () => {
   const reader = read('../src/reader/ReaderScreen.tsx')
-  // 设置面板在 P1 里拆成三标签页，面板本身的判据读 BehaviorTab（本地书目录那节住在那儿），
+  // PROPOSAL-020 P4：「本地书目录」这节从「行为」页搬去了「设置」弹层（OtherSettingsPanel），
   // 重切那两条链路（打到服务端、回填服务端说的那条）仍在 ReaderScreen 上。
-  const panel = read('../src/reader/settingsPanel/BehaviorTab.tsx')
+  const panel = read('../src/reader/OtherSettingsPanel.tsx')
   assert.match(panel, /\{!!localBook && \(tocRuleOptions\?\.length \?\? 0\) > 0 && \(/,
     '在线书没有"目录规则"这件事，这一组就跟着本地书出现')
   assert.match(panel, /title="本地书目录"/, "面板里有这一组")
@@ -141,7 +141,7 @@ test('手动可选 与 参与自动打分 是两件事，界面和服务端都�
   assert.match(modal, /<code title=\{rule\.rule\}>/, '正则原文要露出来，否则没人判断得了它适不适合自己的书')
   assert.match(modal, /手动选一条不需要先"启用"它/, '界面文案把这两件事分开讲')
 
-  const panel = read('../src/reader/settingsPanel/BehaviorTab.tsx')
+  const panel = read('../src/reader/OtherSettingsPanel.tsx')
   assert.match(panel, /\.filter\(option => !option\.broken\)/, '阅读设置里那颗选择器同样排除坏正则')
   assert.match(panel, /（不参与自动）/, '选得到但不打分的那几条要标出来，别让人以为勾了就等于生效')
 })

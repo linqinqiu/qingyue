@@ -16,6 +16,9 @@ import { NotesPanel } from './NotesPanel'
 import { TocDrawerHeader } from './TocDrawerHeader'
 import { ReaderHeader } from './ReaderHeader'
 import { Md3BottomBar, Md3TopBar } from './Md3Chrome'
+import { ReaderSheet } from './ReaderSheet'
+import { OtherSettingsPanel } from './OtherSettingsPanel'
+import { reportProgress } from './readerProgress'
 import { MediaBlock } from './MediaBlock'
 import { IconButton } from './IconButton'
 import { ReaderContentSkeleton } from './ReaderContentSkeleton'
@@ -310,7 +313,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [loading, setLoading] = useState(true)
   const [chapterQuery, setChapterQuery] = useState('')
   const deferredQuery = useDeferredValue(chapterQuery)
-  const [activeDrawer, setActiveDrawer] = useState<'toc' | 'settings' | null>(null)
+  const [activeDrawer, setActiveDrawer] = useState<'toc' | 'settings' | 'other' | null>(null)
   /** 「在正文上编辑点击区域」那层开着没有（见 TapZoneEditor）。 */
   const [tapZoneEditing, setTapZoneEditing] = useState(false)
   /** 正在拖「目录 | 正文」那条边界（只为高亮它）。 */
@@ -402,6 +405,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const timer = window.setTimeout(() => setFading(false), 150)
     return () => window.clearTimeout(timer)
   }, [pageIndex, pageAnim])
+  // 分页模式的进度上报（PROPOSAL-020 P2）：章内页码比例，供底栏进度条显示真实进度。
+  useEffect(() => {
+    if (settings.pageMode !== 'paginate') return
+    reportProgress({ chapterIndex, total: currentBook.chapters.length, fraction: pageCount > 1 ? pageIndex / (pageCount - 1) : 0 })
+  }, [chapterIndex, pageIndex, pageCount, settings.pageMode, currentBook.chapters.length])
   /**
    * 覆盖动画（`pageAnim === 'cover'`）：逐页翻**不立刻改 pageIndex** ——
    * 先挂一层"新页"从一侧滑进来盖住旧页，动画结束才真正翻页。
@@ -1862,6 +1870,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         } else {
           current.position = scrollPosition(currentY, scrollHeight, clientHeight)
         }
+        reportProgress({ chapterIndex: chapterIndexRef.current, total: currentBook.chapters.length, fraction: current.position })
         if (current.position >= 0.7) {
           preloadNextChapter(current.chapter.index)
         } else if (current.position <= 0.3) {
@@ -2420,6 +2429,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       onToggleNotes={() => { setActiveDrawer('toc'); setNotesPanel(true) }}
       onToggleTts={toggleTts}
       onToggleSettings={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')}
+      onOpenOtherSettings={() => setActiveDrawer(d => d === 'other' ? null : 'other')}
     />}
 
     {/* TOC Drawer (Left) */}
@@ -2615,13 +2625,30 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       />
     )}
 
-    {/* Settings Drawer (Right) */}
-    <aside className={`reader-drawer reader-drawer-right ${activeDrawer === 'settings' ? 'open' : ''}`} aria-label="阅读设置">
+    {/* 阅读设置：MD3 底部弹层（界面 / 设置）或旧右侧抽屉（PROPOSAL-020 P3/P4） */}
+    {uiV2 ? <>
+      <ReaderSheet open={activeDrawer === 'settings'} title="界面" onClose={() => setActiveDrawer(null)}>
+        <ReaderSettingsControls settings={settings} onChange={onSettingsChange} />
+      </ReaderSheet>
+      <ReaderSheet open={activeDrawer === 'other'} title="设置" onClose={() => setActiveDrawer(null)}>
+        <OtherSettingsPanel
+          settings={settings}
+          onChange={onSettingsChange}
+          onOpenReplaceRules={() => setShowReplaceRules(true)}
+          onEditTapZones={() => { setActiveDrawer(null); setTapZoneEditing(true) }}
+          localBook={currentBook.details.sourceId === 'loc_book' ? { name: bookName, tocRule: shelfTocRule } : null}
+          tocRuleOptions={tocRuleOptions}
+          onReparseLocal={currentBook.details.sourceId === 'loc_book' ? reparseLocalBook : undefined}
+        />
+      </ReaderSheet>
+    </> : <aside className={`reader-drawer reader-drawer-right ${activeDrawer === 'settings' ? 'open' : ''}`} aria-label="阅读设置">
       <header className="drawer-header">
         <div className="drawer-title"><Icon name="settings" /><strong>阅读设置</strong></div>
         <IconButton label="关闭设置" icon="close" onClick={() => setActiveDrawer(null)} />
       </header>
-      <ReaderSettingsControls
+      {/* 旧界面把「界面」三标签与「设置」那批都挂在这条抽屉里，功能不缺。 */}
+      <ReaderSettingsControls settings={settings} onChange={onSettingsChange} />
+      <OtherSettingsPanel
         settings={settings}
         onChange={onSettingsChange}
         onOpenReplaceRules={() => setShowReplaceRules(true)}
@@ -2630,10 +2657,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         tocRuleOptions={tocRuleOptions}
         onReparseLocal={currentBook.details.sourceId === 'loc_book' ? reparseLocalBook : undefined}
       />
-    </aside>
+    </aside>}
 
-    {/* Backdrop for Drawers */}
-    {activeDrawer && (activeDrawer !== 'toc' || !settings.sidebarPinned) && (
+    {/* Backdrop for Drawers：目录抽屉两种界面都用；设置抽屉在 MD3 下改由弹层自带遮罩 */}
+    {activeDrawer && (activeDrawer === 'toc' ? !settings.sidebarPinned : !uiV2) && (
       <div className="reader-drawer-backdrop" onClick={() => setActiveDrawer(null)} aria-hidden="true" />
     )}
 
