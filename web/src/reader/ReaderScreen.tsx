@@ -15,6 +15,7 @@ import { NoteToolbar, type NoteDraft } from './NoteToolbar'
 import { NotesPanel } from './NotesPanel'
 import { TocDrawerHeader } from './TocDrawerHeader'
 import { ReaderHeader } from './ReaderHeader'
+import { Md3BottomBar, Md3TopBar } from './Md3Chrome'
 import { MediaBlock } from './MediaBlock'
 import { IconButton } from './IconButton'
 import { ReaderContentSkeleton } from './ReaderContentSkeleton'
@@ -315,6 +316,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   /** 正在拖「目录 | 正文」那条边界（只为高亮它）。 */
   const [resizingSidebar, setResizingSidebar] = useState(false)
   const [toolbarsVisible, setToolbarsVisible] = useState(false)
+  // PROPOSAL-020：MD3 阅读外壳，**默认开启**；`?ui=legacy` 或 localStorage 置 0 时回旧界面（回退用）。
+  const [uiV2] = useState(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get('ui')
+      if (q === 'legacy') return false
+      if (q === 'md3') return true
+      return window.localStorage.getItem('reader-ui-v2') !== '0'
+    } catch { return true }
+  })
   const [boundaryMessage, setBoundaryMessage] = useState('')
   const [inShelf, setInShelf] = useState(true)
   const [ttsActive, setTtsActive] = useState(false)
@@ -2350,8 +2360,30 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   )
 
   return <main className={`reader-workspace ${themeClassNames(settings).join(' ')} ${toolbarsVisible ? 'toolbars-open' : 'toolbars-hidden'} ${settings.sidebarPinned ? 'sidebar-pinned' : ''}`} style={readerStyle}>
-    {/* Floating Header */}
-    <ReaderHeader
+    {/* 顶栏：MD3 外壳（PROPOSAL-020）或旧浮动工具栏，由 uiV2 开关切换 */}
+    {uiV2 ? <Md3TopBar
+      bookName={bookName}
+      chapterTitle={chapter?.title ? convert(chapter.title) : null}
+      menuItems={settings.menuItems}
+      isFullscreen={isFullscreen}
+      mediaDisabled={!!mediaSrc}
+      ttsActive={ttsActive}
+      ttsPlayState={ttsPlayState}
+      onBack={() => { persist(); stopTts(); onClose() }}
+      onToggleToc={() => {
+        if (settings.sidebarPinned) {
+          onSettingsChange({ ...settings, sidebarPinned: false })
+          setActiveDrawer(null)
+        } else {
+          setActiveDrawer(d => d === 'toc' ? null : 'toc')
+        }
+      }}
+      onOpenSourceSwitch={() => setShowSourceSwitch(true)}
+      onToggleSettings={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')}
+      onToggleFullscreen={toggleFullscreen}
+      onToggleTts={toggleTts}
+      onResetTtsBar={resetTtsBarPosition}
+    /> : <ReaderHeader
       bookName={bookName}
       menuItems={settings.menuItems}
       isFullscreen={isFullscreen}
@@ -2372,7 +2404,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       onToggleFullscreen={toggleFullscreen}
       onToggleTts={toggleTts}
       onResetTtsBar={resetTtsBarPosition}
-    />
+    />}
+
+    {/* MD3 底栏（PROPOSAL-020 P1）：上一章 · 章节进度 · 下一章 + 目录/笔记/朗读/界面 */}
+    {uiV2 && <Md3BottomBar
+      chapterIndex={chapterIndex}
+      totalChapters={currentBook.chapters.length}
+      chapterTitle={chapter?.title ? convert(chapter.title) : null}
+      notesCount={notes.length}
+      ttsActive={ttsActive}
+      onSeekChapter={index => { if (index !== chapterIndex) changeChapter(index, 'first') }}
+      onPrev={() => { if (chapterIndex > 0) { persist(); changeChapter(chapterIndex - 1) } }}
+      onNext={() => { if (chapterIndex < currentBook.chapters.length - 1) { persist(); changeChapter(chapterIndex + 1) } }}
+      onToggleToc={() => setActiveDrawer(d => d === 'toc' ? null : 'toc')}
+      onToggleNotes={() => { setActiveDrawer('toc'); setNotesPanel(true) }}
+      onToggleTts={toggleTts}
+      onToggleSettings={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')}
+    />}
 
     {/* TOC Drawer (Left) */}
     <aside className={`reader-drawer reader-drawer-left ${activeDrawer === 'toc' ? 'open' : ''} ${settings.sidebarPinned ? 'pinned' : ''}`} aria-label="目录抽屉">

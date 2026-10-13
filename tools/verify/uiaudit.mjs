@@ -219,7 +219,7 @@ try {
     const cards = await page.$$eval('.shelf-card', (els) => els.map((e) => e.innerText.replace(/\s+/g, ' ').slice(0, 26)));
     const brokenCovers = await page.$$eval('.shelf-card img', (imgs) => imgs.filter((i) => i.complete && i.naturalWidth === 0).length);
     await page.click('.shelf-card .shelf-card-cover');
-    await waitFor('.reader-header, .reader-chapter-title', 30000);
+    await waitFor('[data-testid="reader-header"], .reader-chapter-title', 30000);
     // 等正文真正落地（按条件等待，上限 30s），取代原来写死的 12s 固定等待。
     await page.waitForFunction(() => {
       const el = document.querySelector('.reader-content, article, [class*=content]');
@@ -231,7 +231,7 @@ try {
 
   await step('阅读器设置抽屉', async () => {
     const opened = await page.evaluate(() => {
-      const cands = Array.from(document.querySelectorAll('.reader-header button, .reader-header-actions button, .mobile-reader-nav button, button[title], button[aria-label]'));
+      const cands = Array.from(document.querySelectorAll('[data-testid="reader-header"] button, .mobile-reader-nav button, button[title], button[aria-label]'));
       const b = cands.find((x) => /设置|Aa|字体|外观/.test(`${x.getAttribute('aria-label') || ''} ${x.title || ''} ${x.textContent || ''}`));
       if (b) { b.click(); return `${b.getAttribute('aria-label') || b.title || b.textContent}`.trim().slice(0, 10); }
       return null;

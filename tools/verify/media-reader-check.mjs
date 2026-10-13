@@ -73,7 +73,7 @@ try {
 
     // A5：非文本章节不参与朗读 —— 朗读入口应是灰的（标题栏那颗按 aria-label 找，移动端那颗按文案找）
     const tts = await page.evaluate(() => {
-      const header = document.querySelector('.reader-header-actions button[aria-label="本类型不支持朗读"]')
+      const header = document.querySelector('[data-testid="reader-header"] button[aria-label="本类型不支持朗读"]')
       const nav = [...document.querySelectorAll('.mobile-reader-nav button')].find(b => b.textContent?.includes('朗读'))
       return { header: !!header && header.disabled, nav: nav ? nav.disabled : null }
     })

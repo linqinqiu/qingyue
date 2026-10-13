@@ -5739,3 +5739,74 @@ input[type="checkbox"] {
 }
 .error-boundary-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); }
 .error-boundary-hint { color: var(--muted); font-size: var(--t-sm); }
+
+/* ============================================================
+ * MD3 阅读外壳（PROPOSAL-020 P1）—— 参照 legado-with-MD3 的阅读界面：
+ * 顶栏（章名 + 可配置动作）/ 底栏（上一章·进度条·下一章 + 目录/笔记/朗读/界面）。
+ * 由 `reader-ui-v2` 开关切换，与旧 `reader-header` 并列存在、互不影响。
+ * 背景走「顶/底渐隐」（不透明→透明），玻璃质感留到 P5 用 @supports 增强。
+ * ============================================================ */
+.md3-topbar,
+.md3-bottombar {
+  position: fixed; left: 0; right: 0; z-index: 20;
+  color: var(--ink);
+  transition: transform .28s cubic-bezier(.2, .8, .2, 1), opacity .28s ease;
+}
+.md3-topbar {
+  top: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(8px + var(--safe-top)) max(12px, var(--safe-right)) 22px max(12px, var(--safe-left));
+  background: linear-gradient(to bottom,
+    var(--surface) 0%,
+    color-mix(in srgb, var(--surface) 74%, transparent) 58%,
+    transparent 100%);
+}
+.md3-bottombar {
+  bottom: 0;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 26px max(12px, var(--safe-right)) calc(10px + var(--safe-bottom)) max(12px, var(--safe-left));
+  background: linear-gradient(to top,
+    var(--surface) 0%,
+    color-mix(in srgb, var(--surface) 76%, transparent) 58%,
+    transparent 100%);
+}
+.reader-workspace.toolbars-hidden .md3-topbar { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+.reader-workspace.toolbars-hidden .md3-bottombar { transform: translateY(100%); opacity: 0; pointer-events: none; }
+
+.md3-topbar-side { display: flex; align-items: center; gap: 4px; flex: none; }
+.md3-topbar-actions { justify-content: flex-end; }
+.md3-topbar-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: center; }
+.md3-topbar-title strong {
+  font-size: 15px; font-weight: 650; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: Georgia, "Noto Serif SC", serif;
+}
+.md3-topbar-title small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.md3-icon-btn {
+  width: 40px; height: 40px; flex: none; display: grid; place-items: center; padding: 0;
+  color: var(--ink); background: transparent; border-radius: 12px;
+  transition: background .16s ease, color .16s ease;
+}
+.md3-icon-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.md3-icon-btn.is-active { background: var(--accent-soft); color: var(--accent-ink); }
+
+.md3-progress-row { display: flex; align-items: center; gap: 6px; }
+.md3-progress { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.md3-progress-meta { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--muted); }
+.md3-progress-chapter { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md3-progress-count { flex: none; font-variant-numeric: tabular-nums; }
+.md3-progress input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+.md3-progress input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.md3-progress input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--accent-solid); }
+.md3-progress input[type=range]::-moz-range-track { height: 4px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.md3-progress input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--accent-solid); }
+
+.md3-actions-row { display: flex; justify-content: center; gap: 4px; }
+.md3-pill {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+  min-width: 60px; padding: 6px 12px; color: var(--ink); background: transparent; border-radius: 16px;
+  font-size: 11px; transition: background .16s ease, color .16s ease;
+}
+.md3-pill:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.md3-pill.is-active { background: var(--accent-soft); color: var(--accent-ink); }

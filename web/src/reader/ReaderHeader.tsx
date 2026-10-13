@@ -47,7 +47,7 @@ export function ReaderHeader({ bookName, menuItems, isFullscreen, mediaDisabled,
     }
   }
   return (
-    <header className="reader-header">
+    <header className="reader-header" data-testid="reader-header">
       <div className="reader-header-left">
         <IconButton label="返回书架" icon="arrowLeft" onClick={onBack} />
         <IconButton label="目录" icon="list" onClick={onToggleToc} />

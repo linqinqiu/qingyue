@@ -140,7 +140,7 @@ try {
       // 首行缩进行是 .setting-choice[aria-label=首行缩进]，按钮组沿用 .page-modes 观感。
       // 点按钮当场生效（用户是从这里操作的，不是从 localStorage）。
       await openWithSettings({ textIndent: 2 }, 1440)
-      await page.evaluate(() => document.querySelector('.reader-header-actions button[aria-label="阅读设置"]')?.click())
+      await page.evaluate(() => document.querySelector('[data-testid="reader-header"] button[aria-label="阅读设置"]')?.click())
       await sleep(900)
       const drawer = await page.evaluate(() => {
         const tabs = [...document.querySelectorAll('.settings-tab')].map(node => ({
