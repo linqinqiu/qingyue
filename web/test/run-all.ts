@@ -1,83 +1,27 @@
 /**
- * 这个文件只做一件事：**逐个 import 所有判据文件**。
- * 没有扫描、没有 glob —— `node:test` 的 `test()` 在被 import 时就会登记，进程退出时自动跑，
- * 所以这里不需要 `run()` / `spec` 那套（先前挂着五个从未使用的导入：run / spec / glob / path / fileURLToPath，
- * 2026-10-14 清掉）。"每个 *.test.ts 都必须出现在这里"由 `CustomizeSkin.test.ts` 最后那条判据钉住（递归扫）。
+ * 前端判据的总入口：**扫目录，不手抄清单**。
+ *
+ * 规则本身在 `discover.ts`（纯函数，能被判据反过来核）。`node:test` 的 `test()` 在文件被
+ * import 时就登记，进程退出时自动跑，所以这里只要把每份文件载进来即可 —— 不需要 `run()` / `spec`。
+ *
+ * 为什么不让加测试的人手动加一行 import：这条链上已经出过三次"文件在、名字像测试、跑起来一片绿，
+ * 其实一条都没执行"（`HeaderMenu.test.ts` 被顺手摘掉、`LocalBookImport.test.ts` 从来没被引过、
+ * 0.7.0 rebase 只取走文档提交而连代码带判据一起丢）。清单式的失效方式不是报错，是少跑。
  */
+import process from 'node:process'
+import { testFiles } from './discover.ts'
 
-// Import all test suites to register test definitions
-import './VirtualChapterList.test.ts'
-import './LazySourceLoading.test.ts'
-import './ReaderOptimization.test.ts'
-import './ReaderPagination.test.ts'
-import './TOCPerformanceScenario.test.ts'
-import './ChallengerEmpiricalStress.test.ts'
-import './Challenger2EmpiricalVerification.test.ts'
-import './SourceSwitchAndCache.test.ts'
-import './SearchStatePersistence.test.ts'
-import './search-sort.test.ts'
-import './source-inspector.test.ts'
-import './HeaderMenu.test.ts'
-import './api-client.test.ts'
-import './source-inspector-concurrent.test.ts'
-import './search-store-lifecycle.test.ts'
-import './reader-interactions-settings.test.ts'
-import './ToastStore.test.ts'
-import './ShelfInstantOpen.test.ts'
-import './ShelfLayout.test.ts'
-import './SearchLayout.test.ts'
-import './intro-text.test.ts'
-import './tap-zone-editor.test.ts'
-import './ReaderFlow.test.ts'
-import './Shortcuts.test.ts'
-import './TocRuleSettings.test.ts'
-import './source-login.test.ts'
-import './source-import.test.ts'
-import './backup-page.test.ts'
-import './ReplaceRulesModal.test.ts'
-import './tts.test.ts'
-import './tts-stream.test.ts'
-import './offline-pwa.test.ts'
-import './CollabProtocol.test.ts'
-import './source-batch-health.test.ts'
-import './SubscriptionGuidance.test.ts'
-import './SourcePicker.test.ts'
-import './ReaderTypography.test.ts'
-import './SourceGrouping.test.ts'
-import './BackupPreferences.test.ts'
-import './PerfCriteria.test.ts'
-import './CopyStyle.test.ts'
-import './TtsEngineSwitch.test.ts'
-import './ErrorBoundary.test.ts'
-import './PwaCacheRules.test.ts'
-import './ExploreGroupFilter.test.ts'
-import './ShelfDragOrder.test.ts'
-import './AboutPage.test.ts'
-import './TtsBarPosition.test.ts'
-import './SettingsPage.test.ts'
-import './UiContract.test.ts'
-import './SourceHealthRun.test.ts'
-import './SourceOrder.test.ts'
-import './TapZones.test.ts'
-import './FontSizeControl.test.ts'
-import './ReaderMenu.test.ts'
-import './ScriptConvert.test.ts'
-import './PageTurn.test.ts'
-import './ReadingLog.test.ts'
-import './Note.test.ts'
-/*
-  下面几份曾经**存在但没被 import**（`run-all.ts` 是逐个 import 的，不是 glob 扫描）：
-  文件在、名字像测试、跑起来一片绿，其实一条都没执行 —— 这是最难发现的假绿。
-  以后加测试文件必须同时加这一行；"test 目录里的 *.test.ts 都在 run-all.ts 里注册过"
-  本身就是 `CustomizeSkin.test.ts` 最后一条判据。
-*/
-import './LocalBookImport.test.ts'
-import './Changelog.test.ts'
-import './CustomizeSkin.test.ts'
+const dir = import.meta.dirname
+const files = testFiles(dir)
 
-console.log('🚀 Running Legado Web Frontend Comprehensive Test Suite (Tier 1, 2, 4 + Challenger Stress)...\n')
+// 扫出来空表 / 只剩几条，一律当失败：否则"过滤器写错"会表现成套件全绿而实际什么都没跑。
+if (files.length < 60) {
+  console.error(`只发现 ${files.length} 份 *.test.ts（磁盘上应当远多于此）—— 扫描规则坏了，拒绝当成通过`)
+  process.exit(1)
+}
 
-import './BrandLogo.test.ts'
+console.log(`Running ${files.length} frontend test files (web/test/**, sorted by path)\n`)
 
-import './ReadThroughFixes.test.ts'
-import './CodeMapFresh.test.ts'
+for (const name of files) {
+  await import(`./${name}`)
+}

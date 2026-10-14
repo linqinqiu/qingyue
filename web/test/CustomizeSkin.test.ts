@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { testFiles } from './discover.ts'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { CustomizeModal } from '../src/components/CustomizeModal'
@@ -195,37 +197,44 @@ test('样式表里两张新界面都有规则（更新日志页、自定义弹�
 })
 
 /**
- * `run-all.ts` 是一个一个 import 的，不是扫目录。
- * 上一轮就有两份测试**存在但没被注册**（HeaderMenu、LocalBookImport）：文件在、名字像测试、
- * 跑起来一片绿，其实一条都没执行。这条判据把"注册"本身钉住，以后新加文件忘了 import 会直接红。
+ * `run-all.ts` 改成**扫目录**之后，这条判据的职责跟着换了。
  *
- * **必须递归**：第一版用 `readdirSync(dir)` 只看一层，而 `web/src` 已经在 C 档那次拆成六个子目录 ——
- * 谁把测试放进 `web/test/<组>/`，这条就看不见它，等于注册判据自己变成假绿（AGENTS「非递归的扫描会静默变瞎」那条）。
+ * 清单时代它钉的是"每个文件都得在清单上出现过"；而清单本身的失效方式（少抄一行 = 少跑一份，
+ * 套件照样全绿）在这个仓库出过三次，所以入口改成了 `discover.ts` 的 `testFiles(dir)`。
+ * 现在这条钉的是**扫描规则本身**：拿一个独立的、最朴素的递归走查当参照物，两边必须一模一样。
+ * 参照物故意写得"笨"（只认 `endsWith('.test.ts')`）—— 谁把过滤条件写窄（比如漏了子目录、
+ * 改成只认大写开头），笨参照物就会多出一项，当场红。
  */
-function missingRegistrations(files: string[], runner: string): string[] {
-  return files.filter(relative => !runner.includes(`'./${relative}'`))
-}
-
-test('web/test 下每个 *.test.ts 都必须在 run-all.ts 里注册（递归找，含子目录）', () => {
+test('run-all.ts 的扫描规则覆盖 web/test 下每一份 *.test.ts', () => {
   const dir = path.resolve(import.meta.dirname)
-  const runner = read('..', 'test', 'run-all.ts')
-  const walk = (current: string, prefix: string): string[] => fs.readdirSync(current, { withFileTypes: true })
-    .flatMap(entry => entry.isDirectory()
-      ? walk(path.join(current, entry.name), `${prefix}${entry.name}/`)
-      : entry.name.endsWith('.test.ts') ? [`${prefix}${entry.name}`] : [])
-  const files = walk(dir, '')
-  assert.ok(files.length >= 60, `只枚举到 ${files.length} 份 *.test.ts —— 枚举方式没对上，这条在演空戏`)
-  assert.deepEqual(missingRegistrations(files, runner), [],
-    `这些测试文件没被 run-all.ts 引进去，等于没跑：${missingRegistrations(files, runner).join('、')}`)
-  // 注册数与文件数必须相等：多出来的那一条指向的是不存在的文件（run 时会炸），少一条就是漏。
-  const registered = (runner.match(/^import '\.\/.+\.test\.ts'$/gm) ?? []).length
-  assert.equal(registered, files.length,
-    `run-all.ts 里注册了 ${registered} 条，磁盘上有 ${files.length} 份测试 —— 两边对不上（重复注册、或引了不存在的文件）`)
+  const oracle = (() => {
+    const found: string[] = []
+    const walk = (current: string, prefix: string) => {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        if (entry.isDirectory()) { walk(path.join(current, entry.name), `${prefix}${entry.name}/`); continue }
+        if (entry.name.endsWith('.test.ts')) found.push(`${prefix}${entry.name}`)
+      }
+    }
+    walk(dir, '')
+    return found.sort()
+  })()
+  const discovered = testFiles(dir)
+  assert.ok(oracle.length >= 60, `只枚举到 ${oracle.length} 份判据文件 —— 参照物自己也没扫对，这条无从判断`)
+  assert.deepEqual(discovered, oracle,
+    `run-all.ts 会加载的文件与磁盘上的对不上。少了：${oracle.filter(n => !discovered.includes(n)).join('、')}；`
+    + `多了：${discovered.filter(n => !oracle.includes(n)).join('、')}`)
 
-  // 反向对照：把一条真注册从 runner 文本里删掉，必须被逮住；换成子目录路径的写法也必须认得。
-  const one = files[0]!
-  assert.deepEqual(missingRegistrations([one], runner.replace(`'./${one}'`, "'./别的.test.ts'")), [one],
-    '反向对照失效：删掉一条注册它不报红，说明这条根本没在比对')
-  assert.deepEqual(missingRegistrations(['reader/Example.test.ts'], "import './reader/Example.test.ts'\n"), [],
-    '子目录里的测试要按相对路径认，不许误报')
+  // 反向对照：临时造一棵两层的小目录树，子目录那份必须被看见；非 .test.ts 的不许混进来。
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'legado-discover-'))
+  try {
+    fs.mkdirSync(path.join(temp, 'reader'))
+    fs.writeFileSync(path.join(temp, 'Top.test.ts'), '')
+    fs.writeFileSync(path.join(temp, 'reader', 'Deep.test.ts'), '')
+    fs.writeFileSync(path.join(temp, 'helper.ts'), '')
+    fs.writeFileSync(path.join(temp, 'notes.md'), '')
+    assert.deepEqual(testFiles(temp), ['Top.test.ts', 'reader/Deep.test.ts'],
+      '扫描要么漏了子目录那份，要么把不该跑的也收进来了')
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true })
+  }
 })

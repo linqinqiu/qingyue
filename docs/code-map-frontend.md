@@ -279,17 +279,25 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | 22 | `web/test/CustomizeSkin.test.ts` 那条"每个 `*.test.ts` 都必须在 run-all.ts 里注册" | 这条判据自己**是瞎的**：用 `fs.readdirSync(dir)` 只扫一层，而 `web/src` 早在 C 档就拆成六个子目录 —— 谁把测试放进 `web/test/<组>/`，它既不在枚举里、`run-all.ts` 的 `'./X.test.ts'` 形式也配不上，于是"注册判据"本身变成假绿（AGENTS「非递归的扫描会静默变瞎」那条的同形） | 改成递归枚举 + 按相对路径核注册；另加一条**数量相等**断言（注册条数 == 磁盘份数，重复注册或引了不存在的文件也会红）；反向对照：从 runner 文本里删掉一条真注册必须报红 | 该条自身（含 `reader/Example.test.ts` 这种子目录写法不误报）；实测当前 65 份 / 65 条注册，无遗漏 |
 | 23 | `web/tsconfig.json` 的 `include` 只有 `["src"]` | **`web/test/**` 从来没被类型核过**（本地 `check` 与 `build-jar.yml` 里那条都是 `tsc -b`）。第一次拿一份带 `allowImportingTsExtensions` 的配置去核，量出 **16 处真漂移**，全是"判据在断一个产品里已经不存在的形状"：`putOfflineChapter` 被喂第 6 个参数（产品签名 5 个，多出来的静默丢掉）、离线进度夹具写 `chapterTitle`/`readProgress` 而接口是 `chapterUrl`/`scrollPosition`、`setFilters` 喂 `minChapters` 并断言它原样回来（store 整对象存，所以"过"得毫无意义）、`SearchGroup` 从 `searchStore` 导入其实导出在 `searchFilters`、`ToastListener`/`ToastMessage` 根本没导出且从未使用、`sortMode:'relevance'` 不是 `SortMode` 的档、`ShelfDragOrder` 的夹具缺 `cachedChapters` 等必填项 | 逐条按现行契约改判据（不是改产品）；再加 `web/tsconfig.test.json` + `npm --prefix web run check:test` 这条命令；`readdirSync(..., { recursive: true })` 八处补 `encoding: 'utf8'` 去掉类型噪声 | `check:test` 现在 0 错；**没并进 `check`**（CI 跑的是 `check`，并进去等于让 npm 依赖一动就可能红在探针上），要并先在协作日志里说一声 |
 | 24 | `web/test/HeaderMenu.test.ts` 两条空判 | `'Theme change handling'` 自己定义 `onSettingsChange`、自己调用、再断言"刚赋的值等于我赋的那个"；`'Logout confirmation safety'` 自己写一个 `confirmLogout` 再断言它调了 `onLogout` —— 两条都不碰 `AppHeader`，因此**不可能失败**；后者测的还是已经删掉的鉴权 | 删（真覆盖在 `CustomizeSkin.test.ts` 与 `tools/verify/portal-theme-check.mjs`，"鉴权已删"那条由同文件的静态渲染用例钉着） | 套件 537 → 535；`web/AGENTS.md` 潜规则第 12 条 |
+| 25 | `web/test/run-all.ts` 的整份形态 | 上一条把注册判据改成"递归扫 + 数量相等"之后，剩下的病其实是**清单本身**：65 行手写 import，少抄一行就是"存在但从未运行"，而这是本仓库出过三次的同一条（`HeaderMenu`、`LocalBookImport`、0.7.0 那次连代码带判据被 rebase 丢掉）。判据能事后逮住，逮不住"这一轮没人跑判据" | 入口改成**扫目录**：规则单列成纯函数 `web/test/discover.ts`（递归 + 按路径排序 + 把 `\\` 归一成 `/` —— Windows 的递归 `readdir` 给的是反斜杠，不归一就没法 import 子目录那份），`run-all.ts` 只做"逐份 `await import`"，并且**少于 60 份就 `exit 1`** —— 过滤器写错最坏的表现是"全绿而什么都没跑"，宁可拒绝通过。判据跟着换职责：拿一个独立的朴素递归走查当参照物比对，再用临时目录做反向对照（子目录那份必须被看见、非 `.test.ts` 不许收进来） | 排序加载后 65 份 / **535 条全绿**（与清单时代逐条对得上，没暴露顺序耦合）；现场演过"扔进一份新测试、不改任何清单就被跑到"：66 份 / 536 条，探针随后删掉；`CustomizeSkin.test.ts` 那条在两种注入下各红过一次（漏子目录、把非判据文件收进来） |
 
 ## 5.1 这一轮是怎么验的（数字，不是形容词）
 
 ### 2026-10-14 · 把 0.7.0 丢掉的那轮重新落地
 
 - `npm --prefix web run check`（`tsc -b`）干净；`npx tsx web/test/run-all.ts` **537 条全绿**（本轮新增 12 条：`ReadThroughFixes.test.ts` 11 条 + `CodeMapFresh.test.ts` 的三条指针/总量判据，减去上一轮那两条的合并）。
-- **补一轮"判据自身的体检"**（用户 2026-10-14 追问 run-all 有没有漏之后做的）：注册面 65 份 / 65 条**没有遗漏**，
-  但那条"每个测试都要注册"的判据自己只扫一层目录（子目录里的测试会同时躲开枚举与匹配）—— 已改递归并加数量相等断言；
-  另外发现 **`web/test/**` 从来没被类型核过**（`tsconfig.json` 的 `include` 只有 `src`），第一次核就量出 16 处
-  "判据在断产品里已经不存在的形状"，逐条按现行契约改判据 + 新开 `npm --prefix web run check:test`（0 错），
-  并删掉两条不可能失败的自证用例（537 → **535**，末了这条数字以运行结果为准）。详见 §5 第 22–24 条。
+- **判据自身再体检**（用户追问"run-all 还有没有漏的测试项"之后）：注册面 65 份 / 65 条**没有遗漏**，但查的过程里量出三件事，
+  最后一件改变了入口本身的形态 ——
+  ① 那条"每个测试都要注册"的判据自己只扫一层目录；先改成递归 + 数量相等 + 反向对照；
+  ② `web/test/**` **从来没被类型核过**（`web/tsconfig.json` 的 `include` 只有 `["src"]`，本地 `check` 与 `build-jar.yml` 都是 `tsc -b`），
+     第一次核量出 **16 处**"判据在断产品里已经不存在的形状"（第 6 个参数、`chapterTitle`/`minChapters`/`relevance` 这些没有的字段、
+     从错的模块导 `SearchGroup`、两个从未导出的 `Toast*` 类型），逐条按现行契约改判据（产品一行没动），
+     另开 `npm --prefix web run check:test`（现在 0 错，**没并进 CI 那条 `check`**，理由见 §5 第 23 条）；
+  ③ 清单式注册真正的病不是"判据扫了几层"，而是**少抄一行只是少跑、不会红** —— 所以 `run-all.ts` 改成扫目录
+     （规则单列在 `web/test/discover.ts`），判据跟着改核"扫描规则本身"（朴素递归走查当参照物 + 临时目录反扫），
+     `run-all.ts` 还带一个"少于 60 份就 `exit 1`"的闸门。
+  另删两条不可能失败的自证用例。末了数字：**65 份 / 535 条全绿**（原 537，减掉的两条是空判），
+  并现场演过"扔进一份新测试、不改任何清单就被跑到"（66 份 / 536 条）。详见 §5 第 22–25 条。
 - **先承认失效方式**：`2fd86de` 那 15 处 `web/` 修复与两条防腐烂判据**没进 `main`**（0.7.0 那条线 rebase 时只取走了文档提交）。症状不是报错，是"已经修好的东西又坏回去而套件全绿" —— 这正是这两条判据存在的理由，所以本轮第一件事是让它们先红一遍再改回来。
 - 重新落地的动作由两个幂等脚本做完（`tmp/reapply-readthrough-fixes.cjs`、`tmp/reapply-shelf-search.cjs`）：第二次跑时已应用的条目报 NO-MATCH，所以"跑了两遍"不会把代码改坏。**踩到的坑记一条**：为了回滚一次注入而 `git checkout -- web/src/main.tsx`，把没提交的书架三件（`itemsLoaded` / `selectAllBooks` 按可见列 / meta 百分比）一起冲掉了 —— 脏文件上不许用 `checkout`，改用"重放脚本"。
 - 新增/恢复的判据逐条带反向对照：

@@ -180,7 +180,7 @@ web/                        前端（React 19 + TS + Vite，构建产物进同�
   src/pages/                关于、更新日志、备份、发现、设置
   src/shelf/                封面、空态引导、书架布局与拖动排序
   src/icons.tsx · styles.css  全站单色图标 · 样式与皮肤令牌
-  test/                     单元与静态判据，入口是 test/run-all.ts（它逐个 import 登记，新加测试文件要同时加那一行，否则"存在但从未运行"）
+  test/                     单元与静态判据，入口是 test/run-all.ts（它扫目录登记，新加测试文件不用改清单）
   AGENTS.md                 前端的工程口径：判据怎么写、什么才算验过
 tools/verify/               在真实浏览器和真实服务上跑的门禁脚本
 scripts/                    tasks.mjs（build / package / dev 单一入口）· runtime.mjs 启动运行时 · package-desktop.mjs 桌面打包

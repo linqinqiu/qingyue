@@ -89,7 +89,7 @@
 
 | 档 | 命令 | 覆盖 | 注意 |
 | :--- | :--- | :--- | :--- |
-| 单测与静态判据 | `npm --prefix web test`（= `tsx test/run-all.ts`）、`./gradlew :server:test` | 纯算式、组件静态渲染、规则求值、库层 | `run-all.ts` 是逐个 `import` 登记的，新文件不加那一行等于没跑；Windows 上服务端有既有失败基线，**判回归比失败集合，不比数量** |
+| 单测与静态判据 | `npm --prefix web test`（= `tsx test/run-all.ts`）、`./gradlew :server:test` | 纯算式、组件静态渲染、规则求值、库层 | `run-all.ts` 现在扫目录登记（规则在 `web/test/discover.ts`，由判据核扫描本身），新加判据文件不用改清单；Windows 上服务端有既有失败基线，**判回归比失败集合，不比数量** |
 | 真浏览器门禁 | `node tools/verify/<name>-check.mjs` | 版面、图层、交互、端到端链路，全部 `getComputedStyle` / `getBoundingClientRect` 现量，不打桩 | **一律串行跑**（多个门禁会互删探针、抢同一个 profile）；判据等条件不 `sleep`；探针带本轮 STAMP 并自清 |
 | 部署后 | `node tools/verify/selfcheck.mjs`、`version-check.mjs` | 搜索→详情→目录→正文→净化，以及"版本号五处同号" | jar 必须在 `web/dist` 之后打，否则烤进旧 bundle，三条判据齐红 |
 

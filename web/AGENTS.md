@@ -36,7 +36,7 @@ npx tsx web/test/run-all.ts         # 全量用例，2026-10-14 基线 535/535
 ## 前端潜规则（改 `web/` 前先看这几条，都是从红过门禁的坑里来的）
 
 1. **组件被 `web/test/*.test.ts` 用 `renderToStaticMarkup` 渲染的，必须 `import React`** —— Vite 构建走 automatic runtime，只有测试走 classic JSX。少这行时页面和构建都正常，只有套件红（`TapZoneEditor.tsx` 就这么漏过，基线上一直红着四条）。
-2. **新加 `web/test/*.test.ts` 必须在 `web/test/run-all.ts` 里 import 一行** —— runner 不扫目录，没注册等于没跑。
+2. **新加 `web/test/**.test.ts` 不用改任何清单** —— `run-all.ts` 现在**扫目录**（规则在 `web/test/discover.ts`：递归、按路径排序、`import` 说明符统一成 `/`）。先前它是手抄的 65 行 import，这条链上出过三次"文件在、名字像测试、跑起来一片绿，其实一条都没执行"。扫描规则本身由 `CustomizeSkin.test.ts`「run-all.ts 的扫描规则覆盖 web/test 下每一份 *.test.ts」钉住：拿一个独立的朴素递归走查当参照物比对，并用临时目录做反向对照（子目录那份必须被看见、非 `.test.ts` 不许收）；`run-all.ts` 自己还有个"少于 60 份就退出"的闸门，防止过滤器写错表现成"全绿但什么都没跑"。
 3. **翻页模式的页码是"相对当前窗口"的**：换锚点（跳章）必须重算落点，同一个锚点内重量才允许原地不动。算术在 `web/src/reader/readerFlow.ts`（`resolveMeasuredPage`），别在组件里写第四份判法。
 4. **滚轮增量必须先按 `deltaMode` 归一化成像素再累计**（`readerInteractions.wheelPixels` / `paginateWheelStep`）—— 直接拿 `event.deltaY` 和固定阈值比，行模式与触控板都翻不动。
 5. **主题变量必须挂在 `<html>` 上**：portal 到 `document.body` 的浮层（`Select` / 菜单 / 抽屉）在只有 `.app-shell.theme-*` 时一个变量都取不到。
