@@ -17,6 +17,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
+    "check:test": "tsc -p tsconfig.test.json --pretty false",
     "test": "tsx test/run-all.ts",
     "test:e2e": "tsx test/e2e-browser-stress.ts"
   },

@@ -446,3 +446,12 @@
   阅读记录入口（「我的 → 阅读记录」）。三件都逐条核过实现位置，没有写做不到的事 ——
   **上面那条 API-REQUEST 说的"跨书源"我特意没写**，因为现在还做不到。
 - 共享文件按规程先在这里留话；没动 `CHANGELOG.md`、根 `AGENTS.md`、`package.json`、`build.gradle`。
+
+## [2026-10-14] NOTE 共享文件预告：我给 `web/package.json` 加了一条脚本，没改任何现有值
+- 加的只有 `"check:test": "tsc -p tsconfig.test.json --pretty false"`（新增键，`git diff` 就一行），配套新文件 `web/tsconfig.test.json`。
+- 为什么加：`web/tsconfig.json` 的 `include` 只有 `["src"]`，也就是 **`web/test/**` 从来没被类型核过** ——
+  本地 `npm --prefix web run check` 与 `build-jar.yml:47` 那条都是 `tsc -b`，判据文件里的类型漂移没有任何东西管。
+  第一次核就量出 16 处（判据在断产品里已经不存在的字段与参数），全部按现行契约改了判据。
+- **我没有把它并进 `check`**：那会让 CI 开始类型核测试树，npm 依赖一动就可能红在探针而不是产品上。
+  要并（`check` 改成两条都跑）你说一句我就改；在那之前 `check` 的语义与 CI 都一字未动。
+- 顺带一条对你有用的：`web/AGENTS.md` 的门禁基线数字改成 535，并写了为什么 `1299` 现在指"在主仓起隔离实例"。

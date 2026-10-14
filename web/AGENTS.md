@@ -7,9 +7,19 @@
 ## 前端验证怎么跑（含一个已实测的坑）
 
 ```sh
-npm --prefix web run check          # tsc -b，必须干净
-npx tsx web/test/run-all.ts         # 全量用例，2026-10-14 基线 537/537
+npm --prefix web run check          # tsc -b，只覆盖 web/src（tsconfig 的 include 就写这一个目录）
+npm --prefix web run check:test     # 把 web/test 也一起核（要 allowImportingTsExtensions，测试里 import 带 .ts 是 tsx 的用法）
+npx tsx web/test/run-all.ts         # 全量用例，2026-10-14 基线 535/535
 ```
+
+**为什么单开 `check:test`**：`check` 从来不看 `web/test/**`，所以判据文件里的类型漂移没有任何东西管。
+第一次拿去核，量出 **16 处真漂移**（2026-10-14）：判据在断一个产品里已经不存在的字段与参数 ——
+`putOfflineChapter` 被喂了第 6 个参数（产品签名只有 5 个，多那个静默丢掉）、离线进度队列的夹具用了
+`chapterTitle` / `readProgress` 两个界面上没有的键、`setFilters` 喂 `minChapters` 并断言它原样回来
+（store 是整对象存的，所以"过"了，测的是自己塞进去的野字段）、`SearchGroup` 从 `searchStore` 导入而它
+其实导出在 `searchFilters`。还有一条 CI 上的取舍：**没把 `check:test` 并进 `check`**，因为
+`build-jar.yml` 跑的就是 `npm --prefix web run check`，把测试树并进那条 CI 意味着 npm 依赖一动就可能红在
+探针上而不是产品上 —— 要并的话先在 AI-1 日志里说一声。
 
 浏览器级判据在 `tools/verify/`（AI-1 的领地，AI-2 只跑不改），必须**串行**跑，
 并指向同源实例：`LEGADO_BASE_URL=http://127.0.0.1:1299 node tools/verify/<gate>.mjs`。
@@ -36,3 +46,4 @@ npx tsx web/test/run-all.ts         # 全量用例，2026-10-14 基线 537/537
 9. **注释与文档里的行号是"指针"，不是事实**：跨文件引用只写符号名 / 类名，不写 `xxx.ts:1917` 这种裸行号 —— 文件一加长它就指向别处，而且没有任何东西会红（本轮在 `TocDrawerHeader.tsx` 与 `ReaderScreen.tsx` 各逮到一条，判据是 `ReadThroughFixes.test.ts`「源码注释里不许写跨文件的裸行号」）。文档 `docs/code-map-frontend.md` 里的行号由 `CodeMapFresh.test.ts` 逐条核"那一行确实写着这个符号"，改了源码就重跑它，别手抄。
 10. **"只有一个出处"这句话必须被扫出来**：`fontSizeControl.ts` 表头写着唯一口径，而 `readerSettings.ts` 与 `lib/backupPreferences.ts` 各又抄了一遍 `15, 28`，套件全绿三周。判据在 `FontSizeControl.test.ts`——写这类"收成一份"的注释时，同一条里就要带一条扫描。
 11. **同一棵树上挂两个同类浮层，Esc / 外点这类全局监听必须按"开着的那一个"过滤**：`ReaderSheet` 两张同时挂着时，`useEscapeClose(onClose)` 让一次按键触发两次关闭。这类"此刻看不出症状的重叠"要按判据钉前提（`<ReaderSheet ` 恰好两处），别只钉结果。
+12. **判据不许测自己**：`HeaderMenu.test.ts` 里原本挂着两条 —— 一条"自己定义一个回调、自己调用、再断言刚赋的值"，一条自己写了个 `confirmLogout` 再断言它调了 `onLogout`，两条都不碰 `AppHeader`，也因此**都不可能失败**；后者测的还是已经删掉的鉴权。已删（537 → 535）。写任何一条判据之前先问一句：**产品改了它会红吗**。

@@ -134,7 +134,7 @@ async function setupPageMocks(page: Page) {
     if (msg.type() === 'error') console.log('PAGE LOG ERROR:', msg.text())
   })
   page.on('pageerror', err => {
-    console.log('PAGE ERROR:', err.message)
+    console.log('PAGE ERROR:', err instanceof Error ? err.message : String(err))
   })
 
   await page.setRequestInterception(true)

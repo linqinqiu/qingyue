@@ -280,7 +280,7 @@ test('几何重复判据会红：把 340 塞回样式表，必须报出 MENU_MAX
 
 test('每个弹窗都接了 Esc、套了 .dialog-shell、有 role="dialog" 与名字，且不用 inline style 压宽高', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
-  const files = fs.readdirSync(dir, { recursive: true }).filter(n => n.endsWith('.tsx'))
+  const files = fs.readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(n => n.endsWith('.tsx'))
     .map(n => ({ name: n, src: fs.readFileSync(path.join(dir, n), 'utf8') }))
   assert.deepEqual(auditOverlays(files), [],
     '浮层的 Esc / 外壳 / role / 名字 / inline 宽高不许再靠自觉（PROPOSAL-018 W1 ②④ + W2 §3.3）')
@@ -396,7 +396,7 @@ test('门禁里的选择器锚点都还长在界面上（删类名要先查门�
   const gates = fs.readdirSync(verifyDir).filter(n => n.endsWith('.mjs') && !AUDIT_ONLY.test(n) && !/^(next-|env|multipart|zip-make|make-ico|render-icons|preview|snapshot|commit-pending|extract-|testreport|test-failure|chaincheck|archive-verify|md-table-check|frame-metrics)/.test(n))
     .map(n => ({ name: n, src: fs.readFileSync(path.join(verifyDir, n), 'utf8') }))
   const dir = path.resolve(import.meta.dirname, '../src')
-  const appText = fs.readdirSync(dir, { recursive: true }).filter(n => /\.(ts|tsx|css)$/.test(n))
+  const appText = fs.readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(n => /\.(ts|tsx|css)$/.test(n))
     .map(n => fs.readFileSync(path.join(dir, n), 'utf8')).join('\n')
   assert.deepEqual(gateAnchorProblems(gates, appText), [],
     '门禁点的东西在旧界面里不存在 —— 要么是被当死类名删了，要么是界面改了口而门禁没跟')
@@ -448,7 +448,7 @@ function classNamesIn(src: string): string[] {
 test('界面类名不再有"挂着而样式表 0 命中"的新增项', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
   const used = new Map<string, string>()
-  for (const file of fs.readdirSync(dir, { recursive: true }).filter(name => name.endsWith('.tsx'))) {
+  for (const file of fs.readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(name => name.endsWith('.tsx'))) {
     const src = fs.readFileSync(path.join(dir, file), 'utf8')
     for (const token of classNamesIn(src)) {
       if (!/^[a-z][a-z0-9_-]*$/i.test(token)) continue
@@ -469,7 +469,7 @@ test('界面类名不再有"挂着而样式表 0 命中"的新增项', () => {
 
 test('标记类白名单不腐：每一项都还要被界面用着，并且真的有门禁在引它', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
-  const srcTokens = fs.readdirSync(dir, { recursive: true }).filter(n => n.endsWith('.tsx'))
+  const srcTokens = fs.readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(n => n.endsWith('.tsx'))
     .flatMap(n => classNamesIn(fs.readFileSync(path.join(dir, n), 'utf8')))
   const gatesDir = path.resolve(import.meta.dirname, '../../tools/verify')
   const testsDir = path.resolve(import.meta.dirname, './')
@@ -531,7 +531,7 @@ test('web/src 里每颗粒复选框都要有可访问名字', () => {
   const dir = path.resolve(import.meta.dirname, '..', 'src')
   const unnamed: string[] = []
   let total = 0
-  for (const file of fs.readdirSync(dir, { recursive: true }).filter(name => name.endsWith('.tsx'))) {
+  for (const file of fs.readdirSync(dir, { recursive: true, encoding: "utf8" }).filter(name => name.endsWith('.tsx'))) {
     const source = fs.readFileSync(path.join(dir, file), 'utf8')
     for (const site of checkboxSites(source)) {
       total += 1

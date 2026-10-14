@@ -5,10 +5,9 @@ import {
   searchStore,
   bookKey,
   loadSourceBook,
-  SearchGroup,
   SourceChoice,
 } from '../src/lib/searchStore.ts'
-import { mergeStreamedResults, PROGRESS_FLUSH_MS, progressCanCoalesce, streamDedupeKey } from '../src/lib/searchFilters.ts'
+import { mergeStreamedResults, PROGRESS_FLUSH_MS, progressCanCoalesce, streamDedupeKey, SearchGroup } from '../src/lib/searchFilters.ts'
 import { assertScalesLinearly, warmUp } from './perfCriteria.ts'
 
 test('searchStore - bookKey and loadSourceBook helper', async () => {
@@ -122,18 +121,17 @@ test('searchStore - state mutators and reset lifecycle', () => {
   searchStore.reset()
   searchStore.setKeyword('大奉打更人')
   searchStore.setSelectedSourceId('https://src.com')
-  searchStore.setFilters({
-    query: '大奉',
-    category: 'all',
-    minChapters: 100,
-    author: '',
-    sortMode: 'relevance',
-  })
+  // 契约按 searchFilters.ts 的 SearchFilters 写：现在只有 query + sortMode 两项。
+  // 这里原本喂的是 { category, minChapters, author, sortMode:'relevance' } —— 四个字段产品里都没有，
+  // 而 setFilters 是整对象存进去的，于是 assert.equal(snap.filters.minChapters, 100) 也一直"过"：
+  // 它测的是自己刚塞进去的野字段，不是产品的筛选契约（web/test 不在 tsc 的 include 里，所以没人报）。
+  searchStore.setFilters({ query: '大奉', sortMode: 'sources' })
 
   let snap = searchStore.getSnapshot()
   assert.equal(snap.keyword, '大奉打更人')
   assert.equal(snap.selectedSourceId, 'https://src.com')
-  assert.equal(snap.filters.minChapters, 100)
+  assert.equal(snap.filters.query, '大奉')
+  assert.equal(snap.filters.sortMode, 'sources')
 
   searchStore.reset()
   snap = searchStore.getSnapshot()

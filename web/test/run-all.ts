@@ -1,8 +1,9 @@
-import { run } from 'node:test'
-import { spec } from 'node:test/reporters'
-import { glob } from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+/**
+ * 这个文件只做一件事：**逐个 import 所有判据文件**。
+ * 没有扫描、没有 glob —— `node:test` 的 `test()` 在被 import 时就会登记，进程退出时自动跑，
+ * 所以这里不需要 `run()` / `spec` 那套（先前挂着五个从未使用的导入：run / spec / glob / path / fileURLToPath，
+ * 2026-10-14 清掉）。"每个 *.test.ts 都必须出现在这里"由 `CustomizeSkin.test.ts` 最后那条判据钉住（递归扫）。
+ */
 
 // Import all test suites to register test definitions
 import './VirtualChapterList.test.ts'

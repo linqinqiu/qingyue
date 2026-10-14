@@ -61,7 +61,7 @@ test('导入结果播报：原样收下的条目单独一句，不和"不承接"
   const unsubscribe = toast.subscribe(items => { items.forEach(item => { if (!shown.includes(item.message)) shown.push(item.message) }) })
   try {
     reportImportSummary({
-      sources: 1, rules: 0, books: 0, progress: 0,
+      sources: 1, sourcesUpdated: 0, rules: 0, rulesUpdated: 0, books: 0, booksUpdated: 0, progress: 0,
       keptSections: [
         { name: 'readConfig.json', label: '阅读样式', bytes: 2048, items: 3, appliable: true, updatedAt: 1 },
         { name: 'dictRule.json', label: '字典规则', bytes: 512, items: 2, appliable: false, updatedAt: 1 },
@@ -92,7 +92,6 @@ test('导航：一级是 书库/书架/书源/发现/订阅/设置；书源回�
       settings: { ...defaultReaderSettings },
       onSettingsChange: () => undefined,
       onNavigate: () => undefined,
-      onLogout: () => undefined,
     }),
   )
   // 一级入口就是这六个（用户 2026-10-08 定框架，2026-10-09 要求把「书源」放回顶栏）
@@ -153,7 +152,7 @@ function stripComments(source: string) {
 }
 
 test('前端代码里彻底没有 WebDAV 残留（注释里的历史说明不算）', () => {
-  const files = fs.readdirSync(SRC, { recursive: true }).filter(name => /\.(ts|tsx|css)$/.test(name))
+  const files = fs.readdirSync(SRC, { recursive: true, encoding: "utf8" }).filter(name => /\.(ts|tsx|css)$/.test(name))
   const hits = files
     .map(name => [name, stripComments(fs.readFileSync(path.join(SRC, name), 'utf8'))] as const)
     .filter(([, code]) => /webdav/i.test(code))

@@ -21,14 +21,12 @@ test('HeaderMenu - AppHeader static rendering', () => {
   const settings: ReaderSettings = { ...defaultReaderSettings, theme: 'paper' }
   let navigatedTo: AppPage | null = null
   let nextSettings: ReaderSettings | null = null
-  let loggedOut = false
 
   const element = React.createElement(AppHeader, {
     page: 'library',
     settings,
     onSettingsChange: (next) => { nextSettings = next },
     onNavigate: (p) => { navigatedTo = p },
-    onLogout: () => { loggedOut = true },
   })
 
   const html = renderToStaticMarkup(element)
@@ -51,42 +49,13 @@ test('HeaderMenu - AppHeader static rendering', () => {
   assert.ok(html.includes('header-menu-btn'), 'Header should contain hamburger menu button')
 })
 
-test('HeaderMenu - Theme change handling', () => {
-  const currentSettings: ReaderSettings = { ...defaultReaderSettings, theme: 'light' }
-  let appliedSettings: ReaderSettings | null = null
-
-  const onSettingsChange = (next: ReaderSettings) => {
-    appliedSettings = next
-  }
-
-  // Simulate theme change
-  onSettingsChange({ ...currentSettings, theme: 'dark' })
-  assert.equal(appliedSettings?.theme, 'dark')
-
-  onSettingsChange({ ...currentSettings, theme: 'paper' })
-  assert.equal(appliedSettings?.theme, 'paper')
-})
-
-test('HeaderMenu - Logout confirmation safety', () => {
-  let loggedOut = false
-  const onLogout = () => {
-    loggedOut = true
-  }
-
-  const confirmLogout = (confirmed: boolean) => {
-    if (confirmed) {
-      onLogout()
-    }
-  }
-
-  // User cancels confirm
-  confirmLogout(false)
-  assert.equal(loggedOut, false, 'Should not log out when user cancels confirmation')
-
-  // User confirms
-  confirmLogout(true)
-  assert.equal(loggedOut, true, 'Should log out when user accepts confirmation')
-})
+// 原先这里挂着两条"看起来在测组件、其实只在自己手里绕圈"的用例：
+//   'Theme change handling' 自己定义一个回调、自己调用、再断言"我刚赋的值等于我赋的那个"；
+//   'Logout confirmation safety' 自己写一个 confirmLogout 再断言它调了 onLogout。
+// 两条都不碰 AppHeader，也因此都不可能失败；后者测的还是**已经删掉的鉴权**。
+// 主题那条的真覆盖在 CustomizeSkin.test.ts（themeClassNames 叠加、皮肤库清洗）与
+// tools/verify/portal-theme-check.mjs（三套皮肤 × portal 面，带摘掉 <html> 主题类的反向对照）；
+// "鉴权已删"这条由下面那个静态渲染用例钉（不许再出现「已登录」）。
 
 test('Logo - 品牌位与桌面/标签页图标同一套几何', () => {
   const element = React.createElement(Logo, { size: 28 })
@@ -128,7 +97,7 @@ test('HeaderMenu - 版本号来自 /healthz，前端不写死', () => {
 
 test('前端源码里没有任何写死的版本号', () => {
   const dir = path.resolve(import.meta.dirname, '../src')
-  const offenders = fs.readdirSync(dir, { recursive: true })
+  const offenders = fs.readdirSync(dir, { recursive: true, encoding: "utf8" })
     .filter(name => /\.(ts|tsx)$/.test(name))
     .map(name => [name, fs.readFileSync(path.join(dir, name), 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')] as const)
     .filter(([, code]) => /['"`]\d+\.\d+\.\d+['"`]/.test(code))

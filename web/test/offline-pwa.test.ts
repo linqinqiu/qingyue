@@ -302,8 +302,8 @@ const mockStorage = new Map<string, string>()
 test('OfflineStorage - Chapter saving, retrieving, and list cached URLs', async () => {
   setupMockIndexedDB()
 
-  await putOfflineChapter('src-1', 'book-url-1', 'chapter-url-1', '第1章', '这是第1章正文内容', '测试书1')
-  await putOfflineChapter('src-1', 'book-url-1', 'chapter-url-2', '第2章', '这是第2章正文内容', '测试书1')
+  await putOfflineChapter('src-1', 'book-url-1', 'chapter-url-1', '第1章', '这是第1章正文内容')
+  await putOfflineChapter('src-1', 'book-url-1', 'chapter-url-2', '第2章', '这是第2章正文内容')
 
   const result1 = await getOfflineChapter('src-1', 'book-url-1', 'chapter-url-1')
   assert.ok(result1)
@@ -342,18 +342,18 @@ test('OfflineStorage - Offline Reading Progress Queue Lifecycle and Flush', asyn
   enqueueOfflineProgress({
     sourceId: 'src-1',
     bookUrl: 'b1',
+    chapterUrl: 'c1',
     chapterIndex: 5,
-    chapterTitle: '第5章',
-    readProgress: 0.8,
+    scrollPosition: 0.8,
     updatedAt: Date.now()
   })
 
   enqueueOfflineProgress({
     sourceId: 'src-2',
     bookUrl: 'b2',
+    chapterUrl: 'c2',
     chapterIndex: 10,
-    chapterTitle: '第10章',
-    readProgress: 0.2,
+    scrollPosition: 0.2,
     updatedAt: Date.now() + 100
   })
 
@@ -375,7 +375,7 @@ test('OfflineStorage - Storage Stats, LRU Toggle and Eviction', async () => {
   setupMockIndexedDB()
 
   // Save chapters for book 1
-  await putOfflineChapter('src-1', 'b1', 'c1', '第1章', '内容1'.repeat(100), 'Book 1')
+  await putOfflineChapter('src-1', 'b1', 'c1', '第1章', '内容1'.repeat(100))
   
   const statsBefore = await getOfflineStorageStats()
   assert.equal(statsBefore.books.length, 1)

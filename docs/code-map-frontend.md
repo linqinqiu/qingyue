@@ -276,12 +276,20 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | 19 | `reader/TocDrawerHeader.tsx:56` 与 `reader/ReaderScreen.tsx:208` 的注释 | 注释用**裸行号**指代别的文件（「核了 `:1917` 的 className」「`RuleRunner.kt:1389`」）。`ReaderScreen` 在 0.7.0 长了 148 行、`RuleRunner.kt` 拆包后也漂了 —— 两句现在都指向不相干的一段 | 改成按名字指代（`reader-drawer-left` 那条 className、`RuleRunner.kt` 的 `chapters()`） | `ReadThroughFixes.test.ts`「源码注释里不许写跨文件的裸行号」：递归扫 `web/src` 的注释行，违规样本两种各有反扫自证（`tmp/comment-pointer-recheck.cjs`） |
 | 20 | 本文件的**行号指针** | 325 处 `symbol`(`:N`) 里 **120 处（37%）指错**：0.7.0 重做阅读器让 `ReaderScreen` +148 行、`main.tsx` +37、`api.ts` +21…，表格「行数」那一列有判据而指针没有，于是文档看起来"像是对的"，照着跳过去找到的是别的东西 | `tmp/fix-doc-pointers.cjs` 按符号声明行重抄 121 处（A 式）+ 10 处（B 式散文带文件名），选点先按"像不像声明"分档、同档取离原行号最近 —— 全按"第一次出现"会把引用使用点的指针挪到毫不相干的声明行上 | `CodeMapFresh.test.ts` 三条新判据：A/B 式逐条核"那一行写着这个符号"、C 式（裸行号段）核范围，加"指错与越界都必须被逮住"的反向对照；`checked >= 500` 防空判 |
 | 21 | 本文件的**章节标题总量** | 标题里那几个"总数"全过期：ReaderScreen 写着 2,791（实际 2,939）、styles.css 写着 5,674（实际 5,846）、服务端 36 份写总行 14,346（实际 14,593）、web/src 写 69 份 26,854 行（实际 91 份 28,592）。表格列有判据，**标题里没有** —— 而标题是人先看的那一个数 | 数字全部按磁盘实量重写 | `CodeMapFresh.test.ts`「章节标题里写的总量与磁盘一致」，认两种写法（反引号文件名 + N 行 / 反引号目录 + N 份 M 行），解析不到就判红 |
+| 22 | `web/test/CustomizeSkin.test.ts` 那条"每个 `*.test.ts` 都必须在 run-all.ts 里注册" | 这条判据自己**是瞎的**：用 `fs.readdirSync(dir)` 只扫一层，而 `web/src` 早在 C 档就拆成六个子目录 —— 谁把测试放进 `web/test/<组>/`，它既不在枚举里、`run-all.ts` 的 `'./X.test.ts'` 形式也配不上，于是"注册判据"本身变成假绿（AGENTS「非递归的扫描会静默变瞎」那条的同形） | 改成递归枚举 + 按相对路径核注册；另加一条**数量相等**断言（注册条数 == 磁盘份数，重复注册或引了不存在的文件也会红）；反向对照：从 runner 文本里删掉一条真注册必须报红 | 该条自身（含 `reader/Example.test.ts` 这种子目录写法不误报）；实测当前 65 份 / 65 条注册，无遗漏 |
+| 23 | `web/tsconfig.json` 的 `include` 只有 `["src"]` | **`web/test/**` 从来没被类型核过**（本地 `check` 与 `build-jar.yml` 里那条都是 `tsc -b`）。第一次拿一份带 `allowImportingTsExtensions` 的配置去核，量出 **16 处真漂移**，全是"判据在断一个产品里已经不存在的形状"：`putOfflineChapter` 被喂第 6 个参数（产品签名 5 个，多出来的静默丢掉）、离线进度夹具写 `chapterTitle`/`readProgress` 而接口是 `chapterUrl`/`scrollPosition`、`setFilters` 喂 `minChapters` 并断言它原样回来（store 整对象存，所以"过"得毫无意义）、`SearchGroup` 从 `searchStore` 导入其实导出在 `searchFilters`、`ToastListener`/`ToastMessage` 根本没导出且从未使用、`sortMode:'relevance'` 不是 `SortMode` 的档、`ShelfDragOrder` 的夹具缺 `cachedChapters` 等必填项 | 逐条按现行契约改判据（不是改产品）；再加 `web/tsconfig.test.json` + `npm --prefix web run check:test` 这条命令；`readdirSync(..., { recursive: true })` 八处补 `encoding: 'utf8'` 去掉类型噪声 | `check:test` 现在 0 错；**没并进 `check`**（CI 跑的是 `check`，并进去等于让 npm 依赖一动就可能红在探针上），要并先在协作日志里说一声 |
+| 24 | `web/test/HeaderMenu.test.ts` 两条空判 | `'Theme change handling'` 自己定义 `onSettingsChange`、自己调用、再断言"刚赋的值等于我赋的那个"；`'Logout confirmation safety'` 自己写一个 `confirmLogout` 再断言它调了 `onLogout` —— 两条都不碰 `AppHeader`，因此**不可能失败**；后者测的还是已经删掉的鉴权 | 删（真覆盖在 `CustomizeSkin.test.ts` 与 `tools/verify/portal-theme-check.mjs`，"鉴权已删"那条由同文件的静态渲染用例钉着） | 套件 537 → 535；`web/AGENTS.md` 潜规则第 12 条 |
 
 ## 5.1 这一轮是怎么验的（数字，不是形容词）
 
 ### 2026-10-14 · 把 0.7.0 丢掉的那轮重新落地
 
 - `npm --prefix web run check`（`tsc -b`）干净；`npx tsx web/test/run-all.ts` **537 条全绿**（本轮新增 12 条：`ReadThroughFixes.test.ts` 11 条 + `CodeMapFresh.test.ts` 的三条指针/总量判据，减去上一轮那两条的合并）。
+- **补一轮"判据自身的体检"**（用户 2026-10-14 追问 run-all 有没有漏之后做的）：注册面 65 份 / 65 条**没有遗漏**，
+  但那条"每个测试都要注册"的判据自己只扫一层目录（子目录里的测试会同时躲开枚举与匹配）—— 已改递归并加数量相等断言；
+  另外发现 **`web/test/**` 从来没被类型核过**（`tsconfig.json` 的 `include` 只有 `src`），第一次核就量出 16 处
+  "判据在断产品里已经不存在的形状"，逐条按现行契约改判据 + 新开 `npm --prefix web run check:test`（0 错），
+  并删掉两条不可能失败的自证用例（537 → **535**，末了这条数字以运行结果为准）。详见 §5 第 22–24 条。
 - **先承认失效方式**：`2fd86de` 那 15 处 `web/` 修复与两条防腐烂判据**没进 `main`**（0.7.0 那条线 rebase 时只取走了文档提交）。症状不是报错，是"已经修好的东西又坏回去而套件全绿" —— 这正是这两条判据存在的理由，所以本轮第一件事是让它们先红一遍再改回来。
 - 重新落地的动作由两个幂等脚本做完（`tmp/reapply-readthrough-fixes.cjs`、`tmp/reapply-shelf-search.cjs`）：第二次跑时已应用的条目报 NO-MATCH，所以"跑了两遍"不会把代码改坏。**踩到的坑记一条**：为了回滚一次注入而 `git checkout -- web/src/main.tsx`，把没提交的书架三件（`itemsLoaded` / `selectAllBooks` 按可见列 / meta 百分比）一起冲掉了 —— 脏文件上不许用 `checkout`，改用"重放脚本"。
 - 新增/恢复的判据逐条带反向对照：

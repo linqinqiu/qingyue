@@ -198,11 +198,34 @@ test('样式表里两张新界面都有规则（更新日志页、自定义弹�
  * `run-all.ts` 是一个一个 import 的，不是扫目录。
  * 上一轮就有两份测试**存在但没被注册**（HeaderMenu、LocalBookImport）：文件在、名字像测试、
  * 跑起来一片绿，其实一条都没执行。这条判据把"注册"本身钉住，以后新加文件忘了 import 会直接红。
+ *
+ * **必须递归**：第一版用 `readdirSync(dir)` 只看一层，而 `web/src` 已经在 C 档那次拆成六个子目录 ——
+ * 谁把测试放进 `web/test/<组>/`，这条就看不见它，等于注册判据自己变成假绿（AGENTS「非递归的扫描会静默变瞎」那条）。
  */
-test('web/test 下每个 *.test.ts 都必须在 run-all.ts 里注册', () => {
+function missingRegistrations(files: string[], runner: string): string[] {
+  return files.filter(relative => !runner.includes(`'./${relative}'`))
+}
+
+test('web/test 下每个 *.test.ts 都必须在 run-all.ts 里注册（递归找，含子目录）', () => {
   const dir = path.resolve(import.meta.dirname)
   const runner = read('..', 'test', 'run-all.ts')
-  const files = fs.readdirSync(dir).filter(name => name.endsWith('.test.ts'))
-  const missing = files.filter(name => !runner.includes(`'./${name}'`))
-  assert.deepEqual(missing, [], `这些测试文件没被 run-all.ts 引进去，等于没跑：${missing.join('、')}`)
+  const walk = (current: string, prefix: string): string[] => fs.readdirSync(current, { withFileTypes: true })
+    .flatMap(entry => entry.isDirectory()
+      ? walk(path.join(current, entry.name), `${prefix}${entry.name}/`)
+      : entry.name.endsWith('.test.ts') ? [`${prefix}${entry.name}`] : [])
+  const files = walk(dir, '')
+  assert.ok(files.length >= 60, `只枚举到 ${files.length} 份 *.test.ts —— 枚举方式没对上，这条在演空戏`)
+  assert.deepEqual(missingRegistrations(files, runner), [],
+    `这些测试文件没被 run-all.ts 引进去，等于没跑：${missingRegistrations(files, runner).join('、')}`)
+  // 注册数与文件数必须相等：多出来的那一条指向的是不存在的文件（run 时会炸），少一条就是漏。
+  const registered = (runner.match(/^import '\.\/.+\.test\.ts'$/gm) ?? []).length
+  assert.equal(registered, files.length,
+    `run-all.ts 里注册了 ${registered} 条，磁盘上有 ${files.length} 份测试 —— 两边对不上（重复注册、或引了不存在的文件）`)
+
+  // 反向对照：把一条真注册从 runner 文本里删掉，必须被逮住；换成子目录路径的写法也必须认得。
+  const one = files[0]!
+  assert.deepEqual(missingRegistrations([one], runner.replace(`'./${one}'`, "'./别的.test.ts'")), [one],
+    '反向对照失效：删掉一条注册它不报红，说明这条根本没在比对')
+  assert.deepEqual(missingRegistrations(['reader/Example.test.ts'], "import './reader/Example.test.ts'\n"), [],
+    '子目录里的测试要按相对路径认，不许误报')
 })

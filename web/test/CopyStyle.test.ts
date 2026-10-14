@@ -10,7 +10,7 @@ import path from 'node:path'
  * 只扫**字符串字面量与 JSX 文本**，注释与代码本身不算 —— 注释里出现 `...` 或箭头是正常书写。
  */
 const SRC = path.resolve(import.meta.dirname, '../src')
-const files = () => fs.readdirSync(SRC, { recursive: true }).filter(name => /\.(tsx|ts)$/.test(name))
+const files = () => fs.readdirSync(SRC, { recursive: true, encoding: "utf8" }).filter(name => /\.(tsx|ts)$/.test(name))
 
 /** 项目口径：不用彩色 emoji、不用装饰性字形，图标一律单色 SVG（AGENTS §5、用户 2026-09 起）。 */
 const BANNED_GLYPHS = [

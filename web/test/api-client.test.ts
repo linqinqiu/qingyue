@@ -128,7 +128,9 @@ test('api client - streamSearch WebSocket lifecycle and error handling', async (
     // Trigger open event
     listeners['open']?.forEach(cb => cb())
     // Wait microtask
-    await new Promise(resolve => queueMicrotask(resolve))
+    // 保持"排一个 microtask 再往下"的原语义：直接把 resolve 交给 queueMicrotask 会让
+  // resolve 收到一个值参数（TS 的 Promise<void> 重载不接受），改成显式调用。
+  await new Promise<void>(resolve => { queueMicrotask(() => resolve()) })
     assert.equal(sentMessages.length, 1)
     assert.deepEqual(JSON.parse(sentMessages[0]), { keyword: '凡人修仙传', sourceIds: ['https://src1.com'] })
 

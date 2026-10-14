@@ -12,7 +12,7 @@ import type { BookshelfItem } from '../src/lib/api'
  */
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
 const book = (name: string, over: Partial<BookshelfItem> = {}): BookshelfItem =>
-  ({ sourceId: 's', bookUrl: `https://b/${name}`, name, tocUrl: '', lastReadAt: 0, ...over })
+  ({ sourceId: 's', bookUrl: `https://b/${name}`, name, tocUrl: '', lastReadAt: 0, cachedChapters: 0, totalChapters: 0, cacheState: 'idle', completed: false, ...over })
 const row = (index: number) => ({ left: index * 100, top: 0, width: 100, height: 140 })
 
 test('自定义排序 - 排过序的在前，没排过的按最后阅读跟在有序段之后', () => {
