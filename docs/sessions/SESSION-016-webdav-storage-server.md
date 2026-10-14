@@ -1,8 +1,9 @@
 # 工作记忆归档：内置 WebDAV 服务端与数据目录 webdav 存储区 (SESSION-016)
 
-> **关联提案**：[`docs/proposals/PROPOSAL-015-webdav-storage-server.md`](docs/proposals/PROPOSAL-015-webdav-storage-server.md)  
-> **关联架构决策**：[`docs/decisions/ADR-015-webdav-server-class2-minimal.md`](docs/decisions/ADR-015-webdav-server-class2-minimal.md)  
-> **关联验收手册**：[`docs/acceptance/ACCEPT-015-webdav-storage.md`](docs/acceptance/ACCEPT-015-webdav-storage.md)
+> **关联提案**：[`docs/proposals/PROPOSAL-015-webdav-storage-server.md`](../proposals/PROPOSAL-015-webdav-storage-server.md) —— 已标 **Superseded**
+> **关联架构决策**：[`docs/decisions/ADR-015-webdav-server-class2-minimal.md`](../decisions/ADR-015-webdav-server-class2-minimal.md) —— 已标 **Superseded**
+> **关联验收手册**：原 `docs/acceptance/ACCEPT-015-webdav-storage.md` **已删除**（WebDAV 服务端与「文件」页面于 2026-09-29 整体移除，
+> 那份手册教的 `/webdav` 挂载、Basic 认证与锁全部无处可用；2026-10-14 清理，要原文就跑 `git log --diff-filter=D -- docs/acceptance/ACCEPT-015-webdav-storage.md`）。
 
 ---
 

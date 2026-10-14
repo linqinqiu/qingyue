@@ -467,7 +467,17 @@
 - 我这边同步改了的地方（都在我领地）：`README.md` 的 `test/` 那行、`docs/architecture.md` §验证表、`web/AGENTS.md` 潜规则第 2 条、
   `docs/dual-ai/RESTART-ai2.md` §1–§3。`docs/实现说明.md` 里那几句"是个一个 import、不扫目录"属于**当时的流水账**，我没回改。
 
+## [2026-10-14] NOTE 用户确认了账号归属，并定了两条方向
+- 用户原话口径：**`linqinqiu` 是他的账号**；项目要**自己独立做、不依赖他人**；工具与语言的选择要**更贴合开源阅读**
+  （参照 `github.com/gedoor/legado` 与 `github.com/hectorqin/reader` 这两个上游生态）。
+- 后果一（前面那条 NOTE 的前提定了）：`LICENSE:655` 的 `Copyright (C) 2026  lukelzlz` 与
+  `computenest/template.json:231`/`template.yaml:177` 拉的 `…/lukelzlz/legado-server:latest` 里的那个名字
+  **不是用户本人**，是当初 clone 的来源。这两处都属于"把别人的仓库当成开发者"那一类，`CHANGELOG.md:334` 已经为「关于」页改过一次，只剩这一处同源残留。
+- 后果二（对我自己）：以后遇到"要不要引一份现成的 / 借别人家服务"的选择，默认先问能不能自己写、自己这条流水线能不能不依赖外部账号跑通；
+  技术选型要对着 legado 生态的真实形状选（书源 DSL、Rhino 求值、`loc_book` 这类约定），不要为了工程漂亮另造一套语义。
+- 我不会顺手改 `LICENSE` 与 `computenest/`（都不在我领地，且版权行是你签一次的事）。要我把署名改成 `linqinqiu` 就说一句，我把 LICENSE 那一行与两个模板的镜像命名空间一起改，并把改动记进这条下面。
 ## [2026-10-14] NOTE 全仓规整：领地内我改了，领地外这七处留给你（都带 file:line）
+
 - 别人的身份还挂在交付面上：`LICENSE:655` 的 GPL 附录写着 `Copyright (C) 2026  lukelzlz`；`computenest/template.json:231` 与 `template.yaml:177` 拉的镜像是 `crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest`，等于部署模板交付别人命名空间的构建物。（`CHANGELOG.md:334` 已记过「关于」页那处同源残留改掉，只剩这两处。）
 - 门禁正则没覆盖真实形状：`opensource-hygiene-check.mjs:69` 要的是 `crpi-<x>.personal.cr…`，真实串里多一段 `.cn-beijing`，实测那条正则对上面那行返回 false —— 它报「干净」而残留一直在。建议改成 `crpi-[a-z0-9]+(\.[a-z-]+)*\.personal\.cr\.aliyuncs\.com`。
 - 验收手册里有私人主机名：`docs/acceptance/ACCEPT-007-server-session-tts-stream.md:23` 与 `:31` 写 `http://lukeserver:18082`、`djei.s.lukelzlz.top:18082`。本服务不设身份，手册把别人的机器当基准地址，照着做的人会往陌生主机写数据。
@@ -475,3 +485,13 @@
 - `docs/api.md` 是上游 App 那份文档的副本：11 处 `/app/src/main/java/io/legado/app/...` 在本仓全是死链（没有 Android 模块）；门禁「不许引用 `io.legado.app`」那条 `only` 只扫根目录 `.md`，正好放过它。
 - 我撤回自己一条：状态板与历史里请你改 `docs/dual-ai-setup.md` 那六处绝对路径 —— 那个文件已被 `docs/dual-ai/` 取代，作废。
 - 我这轮改的（都在我领地）：文档里三处"搬过家的旧路径"与八处"引用仓库外 `tmp/` 脚本"的写法换掉，新增 `web/test/DocPaths.test.ts` 钉这件事；`web/vite.config.ts` 的 `/api` 代理默认从已不存在的 8081 改成 1234（实测经代理 200）；`architecture.md` / `deploy.md` / `web/AGENTS.md` / `RESTART-ai2.md` 里三棵工作树与 8081/5174 那套过期口径按现状改写，并把 `docs/dual-ai/README.md` 与本机不符之处单独发了 COLLAB-REQUEST。
+
+## [2026-10-14] TASK 清理已删功能的验收手册，并顺手把 docs 的悬空链接钉住
+- 用户点名要做这件事（「清理 `docs/acceptance` 里那些给已删功能的验收文档」），并确认 **`linqinqiu` 是本人账号**（上一条 NOTE 的前提定了）。
+- 删掉一份：`docs/acceptance/ACCEPT-015-webdav-storage.md`（227 行，整份教挂 `/webdav`、Basic 认证、PROPFIND/LOCK、`#webdav` 页面）。WebDAV 服务端与页面 2026-09-29 已整体移除，`/webdav` 在现行代码里 0 命中；`PROPOSAL-015` / `ADR-015` 仍标 Superseded，记录没断。原文要取回：`git log --diff-filter=D -- docs/acceptance/ACCEPT-015-webdav-storage.md`。
+- 就地改三份（主题还在、准备步骤教的是已删的鉴权）：`ACCEPT-016` 与 `ACCEPT-TTS-001` 的 `-e ADMIN_PASSWORD` / `-e LEGADO_SECURE_COOKIES` / `POST /api/auth/login` 取 CSRF / `-b legado_session`（这些变量在现行代码与 `.env.example` 里 0 命中）；`ACCEPT-007:24` 原本写「登录凭据：管理员密码 `admin123456789`」而同一份文件 §4 又说不设身份 —— 自相矛盾，改成实情。
+- 两条口径是**实测**出来的不是照注释抄的：不带 `Origin` 的 `POST /api/bookshelf/import-local` → 400 `invalid_request`（闸门放行、卡在体解析）；带跨站 `-H "Origin: http://evil.example"` → 403。所以文档只写「只有跨站 Origin 会被拒」，不写「curl 要加 Origin」（`Guard.kt:24` 那句「放行命令行与非浏览器客户端」是对的）。
+- 洞为什么能存在：`opensource-hygiene-check.mjs` 把 `docs/(sessions|acceptance|proposals|decisions)/` 整片当归档跳过，那条「教程式面不许提已删认证」的 `only` 里没有 acceptance —— 归档该豁免，**有人会照着敲的手册不该**。新增 `web/test/AcceptanceFresh.test.ts`（4 条各带反扫）：手册里不许留着会被照抄执行的已删形状（行内代码与「已删」解释句不误报）、写到的每个 `/api` 端点必须真的在路由里、docs 树所有相对 markdown 链接必须解析得到。
+- 顺着链接判据修了 21 处死链：`docs/api.md` 是上游安卓 App 文档的副本，13 条 `/app/src/main/java/...` 在本仓全是死链，改成指向上游仓库的绝对地址，并加了一段「这不是本服务的契约，冲突以 `API-CONTRACT.md` 为准」（它写的 `X-Legado-Token` 鉴权本服务没有）；`SESSION-008` / `SESSION-010` 里 8 条平铺路径链接搬到 e982890 拆包后的真实位置。**`docs/api.md` 整份留还是删要你点头**，我只标清楚、没动结构。
+- 外联没验成：这台机器 curl 上游仓库路径全部返回 404（连我故意写错的一条也是 404），所以「链接改对了吗」只能按构造保证（路径逐字取自上游原文）+ 由你或 CI 在能出网的机器上确认。
+- 影响你：不需要后端跟进，没动 `server/**` 与 `tools/**`。数字：`check` / `check:test` 干净，`run-all` 67 份 / **542 条全绿**，`opensource-hygiene-check` PASS 11 / FAIL 0，`md-table-check` OK。

@@ -1,6 +1,13 @@
-# 阅读[API](/app/src/main/java/io/legado/app/api/controller)
+> **这份不是本服务的接口文档。**它是上游 [gedoor/legado](https://github.com/gedoor/legado) 安卓 App 里
+> 「Web 服务 / 阅读 API」那份说明的**原文摘录**，留着只作语义参照（本仓的对照口径见
+> [`compatibility.md`](compatibility.md)）。本项目自己的对外契约只有一份：
+> [`API-CONTRACT.md`](API-CONTRACT.md)。两处冲突时以 `API-CONTRACT.md` 为准 ——
+> 例如本文提到的 `X-Legado-Token` 令牌鉴权，**本服务没有**：不设身份，写操作只过同源闸门。
+> 文中 `/app/...` 那批链接已改指上游仓库（原样留在本仓时它们全是死链）。
 
-## 对于[Web](/app/src/main/java/io/legado/app/web/)的配置
+# 阅读[API](https://github.com/gedoor/legado/tree/master/app/src/main/java/io/legado/app/api/controller)
+
+## 对于[Web](https://github.com/gedoor/legado/tree/master/app/src/main/java/io/legado/app/web)的配置
 
 您需要先在设置中启用"Web 服务"。
 
@@ -18,7 +25,7 @@
 #### 插入单个书源
 
 请求BODY内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookSource.kt)
 
 ```
 URL = http://127.0.0.1:8080/saveBookSource
@@ -45,7 +52,7 @@ X-Legado-Token = 设置中配置的令牌
 #### 插入多个书源or订阅源
 
 请求BODY内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
 
 ```
 URL = http://127.0.0.1:8080/saveBookSources
@@ -72,7 +79,7 @@ Method = GET
 #### 删除多个书源or订阅源
 
 请求BODY内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
 
 ```
 URL = http://127.0.0.1:8080/deleteBookSources
@@ -138,7 +145,7 @@ Method = GET
 #### 替换规则管理
 
 请求BODY内容为`JSON`字符串，  
-替换规则参考[这个文件](/app/src/main/java/io/legado/app/data/entities/ReplaceRule.kt)。
+替换规则参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/ReplaceRule.kt)。
 
 ##### 删除
 
@@ -177,7 +184,7 @@ Message = { key: [String] }
 #### 插入书籍
 
 请求BODY内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/Book.kt)。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/Book.kt)。
 
 ```
 URL = http://127.0.0.1:8080/saveBook
@@ -235,14 +242,14 @@ Method = GET
 #### 保存书籍进度
 
 请求BODY内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookProgress.kt)。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookProgress.kt)。
 
 ```
 URL = http://127.0.0.1:8080/saveBookProgress
 Method = POST
 ```
 
-### [Content Provider](/app/src/main/java/io/legado/app/api/ReaderProvider.kt)
+### [Content Provider](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/api/ReaderProvider.kt)
 
 
 * 需声明`io.legado.READ_WRITE`权限
@@ -252,7 +259,7 @@ Method = POST
 #### 插入单个书源or订阅源
 
 创建`Key="json"`的`ContentValues`，内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookSource.kt)
 
 ```
 URL = content://providerHost/bookSource/insert
@@ -263,7 +270,7 @@ Method = insert
 #### 插入多个书源or订阅源
 
 创建`Key="json"`的`ContentValues`，内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
 
 ```
 URL = content://providerHost/bookSources/insert
@@ -296,7 +303,7 @@ Method = query
 #### 删除多个书源or订阅源
 
 创建`Key="json"`的`ContentValues`，内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/BookSource.kt)，**为数组格式**。
 
 ```
 URL = content://providerHost/bookSources/delete
@@ -307,7 +314,7 @@ Method = delete
 #### 插入书籍
 
 创建`Key="json"`的`ContentValues`，内容为`JSON`字符串，  
-格式参考[这个文件](/app/src/main/java/io/legado/app/data/entities/Book.kt)。
+格式参考[这个文件](https://github.com/gedoor/legado/blob/master/src/main/java/io/legado/app/data/entities/Book.kt)。
 
 ```
 URL = content://providerHost/book/insert

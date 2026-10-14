@@ -21,8 +21,6 @@ docker build -f Dockerfile.server -t test-legado-server:latest .
 docker stop test-legado 2>/dev/null || true
 docker rm -f test-legado 2>/dev/null || true
 docker run -d --name test-legado -p 8080:8080 \
-  -e ADMIN_PASSWORD=admin123 \
-  -e LEGADO_SECURE_COOKIES=false \
   -v $(pwd)/.data:/data test-legado-server:latest
 
 # 验证服务已就绪
@@ -54,13 +52,16 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/index.html
 3. **预期效果**：切换后下一句即刻使用高清神经网络音色播放，无卡顿断音。
 4. 亦可通过 API 验证：
    ```sh
-   # 快速接口验证（需先登录获取 Cookie）
+   # 快速接口验证（**不需要登录、不需要 Cookie** —— 本服务不设身份）
    curl -s -o /tmp/tts-test.mp3 -w "size=%{size_download} status=%{http_code}\n" \
      -X POST http://127.0.0.1:8080/api/tts/speak \
      -H "Content-Type: application/json" \
-     -b "legado_session=<your-session>" \
      -d '{"text":"你好，欢迎使用听书功能","voice":"zh-CN-YunxiNeural","rate":0}'
    # 预期：status=200，size > 10000（字节）
+   # 如果回 500 `tts_failed` + `java.net.http.WebSocketHandshakeException`：那是微软拒绝握手，
+   # 十有八九是 `AppConfig.kt:41` 钉的 Chromium 版本（默认 143.0.3650.75）落后了，
+   # 用 `LEGADO_EDGE_TTS_CHROMIUM_VERSION=<当前版本>` 覆盖即可，**不是朗读管线坏了**。
+   # 2026-10-14 本机实测：这个 500 就是当前状态，所以这一条先按"已知不通过"记着。
    ```
 
 ### 用例 4：引号/特殊标点容错（Regression）

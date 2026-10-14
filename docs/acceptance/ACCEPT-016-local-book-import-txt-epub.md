@@ -23,23 +23,28 @@ docker build -f Dockerfile.server -t test-legado-server:latest .
 docker stop test-legado 2>/dev/null || true
 docker rm -f test-legado 2>/dev/null || true
 docker run -d --name test-legado -p 8080:8080 \
-  -e ADMIN_PASSWORD=admin123 \
-  -e LEGADO_SECURE_COOKIES=false \
   -v $(pwd)/.data:/data test-legado-server:latest
 ```
 
 ### 0.2 方式 B：本地 Gradle 运行
 
 ```bash
-LEGADO_DATA_DIR=./.data ADMIN_PASSWORD=admin123 LEGADO_SECURE_COOKIES=false ./gradlew :server:run
+LEGADO_DATA_DIR=./.data ./gradlew :server:run
 ```
+
+> 这两个变量已经随鉴权一起删掉了，别再往命令里写：`ADMIN_PASSWORD`、`LEGADO_SECURE_COOKIES`
+> （现行代码与 `.env.example` 里 0 命中，写了也不生效）。本服务**不设身份**——没有登录页、没有密码、没有会话；
+> 默认只绑 `127.0.0.1`，绑定地址就是唯一的门。写操作另有一道同源闸门（`Guard.kt`）：只有**带跨站 `Origin` 的请求**会被判 403，
+> curl 这类不带 `Origin` 的命令行客户端按设计直接放行。两头都实测过（打在 1234 上）：
+> `POST /api/bookshelf/import-local` **不带任何头 → 400** `invalid_request`「Content-Type header is required」（被闸门放过、卡在体解析）；
+> 加一个跨站的 `-H "Origin: http://evil.example"` **→ 403**。
 
 ---
 
 ## 1. 核心功能验收步骤 (Step-by-Step Verification)
 
 ### 用例 1：Web UI 导入本地 TXT 小说 (Happy Path)
-1. 浏览器打开 `http://127.0.0.1:8080`，输入管理员密码 `admin123` 登录。
+1. 浏览器打开 `http://127.0.0.1:8080`（没有登录步骤，打开就是书架/书库）。
 2. 进入一级导航 **「书架」**。
 3. 点击书架顶栏右侧的 **「导入本地」** 按钮，选择一个测试 `.txt` 文件（如 `《修仙传奇》作者：青云.txt`），或直接将 `.txt` 文件拖拽至书架页面。
 4. **预期表现**：
@@ -82,10 +87,8 @@ LEGADO_DATA_DIR=./.data ADMIN_PASSWORD=admin123 LEGADO_SECURE_COOKIES=false ./gr
 可直接运行以下命令测试接口：
 
 ```bash
-# 1. 登录获取 Cookie 与 CSRF Token
-CSRF_TOKEN=$(curl -s -c cookies.txt -X POST http://127.0.0.1:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"password":"admin123"}' | grep -o '"csrfToken":"[^"]*' | cut -d'"' -f4)
+# 1. 先确认服务在（这个服务没有登录接口，不要再取 Cookie / CSRF）
+curl -s http://127.0.0.1:8080/healthz
 
 # 2. 构造临时 TXT 文件并上传导入
 cat << 'EOF' > /tmp/test_book.txt
@@ -96,7 +99,7 @@ cat << 'EOF' > /tmp/test_book.txt
 少年踏上了前行的征途。
 EOF
 
-curl -s -b cookies.txt -H "X-CSRF-Token: $CSRF_TOKEN" \
+curl -s -H "Origin: http://127.0.0.1:8080" \
   -F "file=@/tmp/test_book.txt;filename=《星空彼岸》作者：辰星.txt" \
   http://127.0.0.1:8080/api/bookshelf/import-local
 
