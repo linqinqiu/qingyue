@@ -31,7 +31,10 @@ node scripts/package-desktop.mjs   # 需要 JAVA_HOME 指向带 jpackage/jlink �
 产出 `dist/qingyue-desktop-<版本>.zip`，解压后双击 `qingyue.exe`：
 
 - 自带精简 JRE，**不要求装 Java**；
-- 起来后自动打开浏览器到 `http://127.0.0.1:1234`，系统托盘里可以随时「打开 / 退出」，退出即停服务；
+- 起来后开一个**独立的应用窗口**（无地址栏、无标签页，任务栏里是青阅自己的图标），地址仍是 `http://127.0.0.1:<端口>`；
+  找不到可用的 Edge / Chrome 时才退回系统默认浏览器开标签页。**关掉这个窗口就是退出青阅**（服务干净停止、端口释放）；
+  想让服务常驻而不要窗口，用 `qingyue.exe --no-open` 起，托盘里的「打开 / 退出」照常在；
+  浏览器可执行文件不按机器默认找的顺序时，用 `.env` 写 `LEGADO_BROWSER_PATH=<路径>` 指定；
 - 数据默认放在 exe 旁边的 `data/`；想用已有的书架，在 exe 旁放一个 `.env` 写 `LEGADO_DATA_DIR=<你的数据目录>`；
 - 端口上已经是青阅在跑 → 不再起第二个进程，只把界面打开；端口被**别的程序**占了 → 从下一个端口起顺延找一个空闲的（往后 20 个内），并用它写回 `port.txt`，下次启动仍稳定在那个端口（界面上「设置 → 服务 → 服务端口」看到的也是它）。
 
@@ -223,8 +226,8 @@ node tools/verify/selfcheck.mjs    # 对着跑着的服务过一遍：搜索 →
 
 | 参照对象 | 关系 | 协议 |
 | --- | --- | --- |
-| [gedoor/legado](https://github.com/gedoor/legado) | 书源规则 DSL 求值语义、`checkKeyWord` 体检、书源编辑字段分组的参照基准；未拷贝代码，按 Kotlin 逐条自实现 | GPL-3.0 |
-| [hectorqin/reader](https://github.com/hectorqin/reader) | 仅交互与信息架构参考；**其代码不得引入本仓库**（AGPL-3.0 网络服务条款与本项目 GPL-3.0 不等价） | AGPL-3.0 |
+| [gedoor/legado](https://github.com/gedoor/legado) | 书源规则 DSL 求值语义、`checkKeyWord` 体检、书源编辑字段分组的参照基准；未拷贝代码，按 Kotlin 逐条自实现。**2026-10 实测它默认分支只剩 `README.md` 与一张图**，要读现行 Android 实现看仍在维护的延续仓 [LegadoTeam/legado](https://github.com/LegadoTeam/legado) | GPL-3.0 |
+| [hectorqin/reader](https://github.com/hectorqin/reader) | 仅交互与信息架构参考；**其代码不得引入本仓库**（AGPL-3.0 网络服务条款与本项目 GPL-3.0 不等价）。**2026-10 实测它已换骨**：`master` 只剩一行 `deleted`，`main` 是 Node/TS 重写，已经没有书源 / RSS / 发现这套模型 —— 接口设计可看，数据模型不能当 legado 兼容的依据 | AGPL-3.0 |
 
 后续贡献同样适用：可以参考交互，实现必须自己写。
 

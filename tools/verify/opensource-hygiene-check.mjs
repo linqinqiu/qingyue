@@ -89,6 +89,9 @@ const rules = [
       'tools/verify/rss-check.mjs',
       'tools/verify/source-editor-check.mjs',
       'web/test/backup-page.test.ts',
+      // 这条判据的职责就是"断言验收手册里不再出现已删功能的形状"，所以它的正则与注释里必须出现那些字面串。
+      // 与上面几份负向测试同理（AGENTS：门禁扫到的是守卫的文本，那要进 exempt，不是把测试删掉）。
+      'web/test/AcceptanceFresh.test.ts',
     ],
   },
   {

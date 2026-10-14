@@ -26,7 +26,8 @@ import kotlin.system.exitProcess
  * 职责只有三件，与 PROPOSAL-017 / ADR-017 一期一致：
  *  1. 探测端口（占用即退出，顺便充当单实例锁）；
  *  2. 带 `LEGADO_*` 起服务（复用 `createLegadoEngine`，不改 `Guard.kt`、不加鉴权）；
- *  3. 服务就绪后打开浏览器；并在系统托盘给一个"打开 / 退出"，退出时优雅关服务。
+ *  3. 服务就绪后开一个**应用窗口**（Chromium 系的 `--app`：没有地址栏也没有标签页；找不到浏览器可执行文件
+ *     才退回系统默认浏览器），并在系统托盘给一个"打开 / 退出"，退出时优雅关服务。
  *
  * webview 一律直接开到 `http://127.0.0.1:<port>`，壳只当"进程管家 + 窗口"，
  * 绝不自己加载界面当"前端宿主" —— 否则同源闸门会让所有写操作 403（详见 ADR-017 §2）。
@@ -64,7 +65,8 @@ fun main(args: Array<String>) {
         if (isQingyueOn(host, port)) {
             val runningUrl = "http://${if (host == "0.0.0.0" || host == "::") "127.0.0.1" else host}:$port"
             logDesktop("青阅已在运行 $runningUrl")
-            if (!noOpen) openBrowser(runningUrl)
+            // 已经有一个实例在跑：这一份壳开完窗口就退，所以不装「关窗口收服务」的看门狗。
+            if (!noOpen) openBrowser(runningUrl, imageRoot, env, watchExit = false)
             exitProcess(0)
         }
         val shifted = shiftToFreePort(host, port, imageRoot) ?: run {
@@ -115,8 +117,8 @@ fun main(args: Array<String>) {
         exitProcess(1)
     }
     logDesktop("服务已就绪 $url")
-    if (!noOpen) openBrowser(url)
-    showTray("青阅", url, imageRoot, noOpen)
+    if (!noOpen) openBrowser(url, imageRoot, env)
+    showTray("青阅", url, imageRoot, noOpen, env)
     CountDownLatch(1).await() // 守住主线程，靠托盘"退出"或外部信号结束
 }
 
@@ -198,10 +200,65 @@ private fun waitForHealth(url: String, timeoutMs: Long = 120_000): Boolean {
     return false
 }
 
-private fun openBrowser(url: String) {
-    try {
-        if (Desktop.isDesktopSupported()) Desktop.getDesktop().browse(URI(url))
-    } catch (_: Throwable) { /* 打不开就只打印地址 */ }
+private fun openBrowser(url: String, imageRoot: Path, env: Map<String, String>, watchExit: Boolean = true): Boolean {
+    val browser = browserExecutable(env)
+    if (browser != null) {
+        val opened = runCatching {
+            val process = ProcessBuilder(
+                browser.absolutePath,
+                "--app=$url",
+                // 专用 profile：Edge/Chrome 已经用默认 profile 开着窗时，`--app` 会被并进那个进程
+                // 变成**又一个标签页** —— 换一个 profile 目录才保证是"一个新窗口"（用户的原话诉求）。
+                "--user-data-dir=${imageRoot.resolve("browser-profile").absolutePathString()}",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ).start()
+            // 关窗口 = 收服务（PROPOSAL-017 §6-5 的"桌面直觉"）。要服务常驻就用 `--no-open` 起壳，托盘还在。
+            // 从托盘再开一个窗口时**不装这个看门狗**：那扇窗关掉不该把整个服务带走（watchExit=false）。
+            if (watchExit) {
+                Thread {
+                    runCatching { process.waitFor() }
+                    logDesktop("窗口已关闭，退出服务")
+                    exitProcess(0) // shutdown hook 会 engine.stop(...)，端口与进程都干净归零
+                }.apply { isDaemon = true; name = "qingyue-window-watcher" }.start()
+            }
+            true
+        }.getOrDefault(false)
+        if (opened) return true
+    }
+    // `Desktop.browse` 返回 Unit，直接放进 runCatching 会让整块推断成 Any 而不是 Boolean。
+    val openedDefault = runCatching {
+        if (!Desktop.isDesktopSupported()) false
+        else {
+            Desktop.getDesktop().browse(URI(url))
+            true
+        }
+    }.getOrDefault(false)
+    if (!openedDefault) logDesktop("没能自动打开界面，手动访问 $url")
+    return openedDefault
+}
+
+/**
+ * 找一个能开 `--app` 窗口的浏览器可执行文件：环境变量优先，然后按系统目录找 Edge / Chrome。
+ * 一律从 `PROGRAMFILES(X86)` / `PROGRAMFILES` / `LOCALAPPDATA` 这几个环境变量拼，
+ * 不写死任何一台机器的绝对路径（`opensource-hygiene-check` 那条「不许有个人盘符路径」也在管这个）。
+ */
+private fun browserExecutable(env: Map<String, String>): File? {
+    // `.env` 里写的也算（壳自己读的这份文件优先于进程环境，与其它 LEGADO_* 一个口径）。
+    (env["LEGADO_BROWSER_PATH"] ?: System.getenv("LEGADO_BROWSER_PATH"))?.let { declared ->
+        val file = File(declared)
+        if (file.isFile) return file
+    }
+    val roots = listOf("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)")
+        .mapNotNull { System.getenv(it) }
+        .map(::File)
+    val candidates = roots.flatMap { root ->
+        listOf(
+            File(root, "Microsoft/Edge/Application/msedge.exe"),
+            File(root, "Google/Chrome/Application/chrome.exe"),
+        )
+    }
+    return candidates.firstOrNull { it.isFile }
 }
 
 private fun logDesktop(message: String) {
@@ -215,18 +272,18 @@ private fun loadIcon(imageRoot: Path): java.awt.Image? {
     return java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB)
 }
 
-private fun showTray(title: String, url: String, imageRoot: Path, noOpen: Boolean) {
+private fun showTray(title: String, url: String, imageRoot: Path, noOpen: Boolean, env: Map<String, String>) {
     if (!SystemTray.isSupported()) return
     runCatching {
         val tray = SystemTray.getSystemTray()
         val popup = PopupMenu()
-        val openItem = MenuItem("打开青阅").also { it.addActionListener(ActionListener { openBrowser(url) }) }
+        val openItem = MenuItem("打开青阅").also { it.addActionListener(ActionListener { openBrowser(url, imageRoot, env, watchExit = false) }) }
         val exitItem = MenuItem("退出").also { it.addActionListener(ActionListener { exitProcess(0) }) }
         popup.add(openItem)
         popup.add(exitItem)
         val icon = TrayIcon(loadIcon(imageRoot), title, popup).also {
             it.isImageAutoSize = true
-            if (!noOpen) it.addActionListener(ActionListener { openBrowser(url) })
+            if (!noOpen) it.addActionListener(ActionListener { openBrowser(url, imageRoot, env, watchExit = false) })
         }
         tray.add(icon)
     }

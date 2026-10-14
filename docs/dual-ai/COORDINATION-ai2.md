@@ -495,3 +495,46 @@
 - 顺着链接判据修了 21 处死链：`docs/api.md` 是上游安卓 App 文档的副本，13 条 `/app/src/main/java/...` 在本仓全是死链，改成指向上游仓库的绝对地址，并加了一段「这不是本服务的契约，冲突以 `API-CONTRACT.md` 为准」（它写的 `X-Legado-Token` 鉴权本服务没有）；`SESSION-008` / `SESSION-010` 里 8 条平铺路径链接搬到 e982890 拆包后的真实位置。**`docs/api.md` 整份留还是删要你点头**，我只标清楚、没动结构。
 - 外联没验成：这台机器 curl 上游仓库路径全部返回 404（连我故意写错的一条也是 404），所以「链接改对了吗」只能按构造保证（路径逐字取自上游原文）+ 由你或 CI 在能出网的机器上确认。
 - 影响你：不需要后端跟进，没动 `server/**` 与 `tools/**`。数字：`check` / `check:test` 干净，`run-all` 67 份 / **542 条全绿**，`opensource-hygiene-check` PASS 11 / FAIL 0，`md-table-check` OK。
+
+## [2026-10-14] COLLAB-REQUEST 我要动 `server/DesktopLauncher.kt` 一处：双击 exe 开的是应用窗口，不是浏览器标签
+- 用户口径（原话）：**「我想将其做成 exe 应用程序，而不只限于在浏览器用端口打开」**。
+- 现状实测：`node scripts/package-desktop.mjs` 已经能出 `dist/desktop/qingyue/qingyue.exe`（今天打的包内 jar 带 `static/assets/index-DF9mHlvS.js`，与现行 `web/dist` 同一份），
+  但 `DesktopLauncher.openBrowser()`（`:201`）走的是 `Desktop.getDesktop().browse(URI)` —— 双击之后是**默认浏览器新开一个标签页**，
+  这正是用户不要的那个体验。
+- 我要改的（最小、可回退）：优先用 Chromium 系的 `--app=<url>` 起一个**无地址栏、无标签页、独立任务栏图标**的窗口，
+  带一个专用 `--user-data-dir=<镜像>/browser-profile`（否则 Edge 已经开着的时候 `--app` 会被并进那个进程变成一个标签），
+  并"关窗口 = 收服务"（PROPOSAL-017 §6-5 那条桌面直觉；要服务常驻就 `--no-open` 起壳，托盘还在）。
+  浏览器可执行文件按 `LEGADO_BROWSER_PATH` → `%PROGRAMFILES(X86)%`/`%PROGRAMFILES%`/`%LOCALAPPDATA%` 下的 Edge/Chrome 找，
+  **找不到就退回原来的 `Desktop.browse`**，所以不会比现在更脆。地址仍是 `http://127.0.0.1:<port>`，**`Guard.kt` 同源闸门一行没改**。
+- 真原生窗口壳（WebView2 / Tauri，ADR-017 的二期）我没动，那是你要不要立尖峰的决定；这条只是把一期体验补直。
+- 你的领地我按上面打招呼了才动；不认可就说一句，我把它退回 `Desktop.browse` 并改成只加一段 README 说明。
+
+## [2026-10-14] TASK 桌面壳改完并实测：双击 exe 开的是应用窗口，关窗口=收服务
+- 兑现上面那条 COLLAB-REQUEST：`DesktopLauncher.openBrowser()` 现在优先用 Chromium 系 `--app=<url>` + 专用 `--user-data-dir=<镜像>/browser-profile`
+  起独立窗口，实测进程是 `msedge.exe --app=http://127.0.0.1:1311 --user-data-dir=…\browser-profile`；找不到浏览器才退回 `Desktop.browse`。
+  地址仍走 127.0.0.1 同源，`Guard.kt` 一行没改。浏览器路径按 `LEGADO_BROWSER_PATH`（`.env` 与进程环境都读，我把 env 那份映射穿进来了）
+  → `PROGRAMFILES(X86)`/`PROGRAMFILES`/`LOCALAPPDATA` 下的 Edge/Chrome 顺序找，源码里不写死任何机器绝对路径。
+- 关窗口收服务：杀掉那扇窗口进程 → 壳日志出「服务器正在停止 / 已停止」，`/healthz` 变 000（端口释放）。要常驻用 `qingyue.exe --no-open`（托盘照旧，从托盘再开窗口不装看门狗）。
+- 门禁与产物：`node tools/verify/desktop-check.mjs --port 1297` **12 条全 PASS**（含"壳内写 200 / 跨站写 403 / 单实例 / 数据目录遵守 `LEGADO_DATA_DIR` / 端口顺延写回 port.txt"）；
+  新包 `dist/qingyue-desktop-0.7.0.zip`（53.1 MB，177 条，带 sha256），里面 jar 是 22:33 重建的、含今天前端（jar 内 `static/assets/index-DF9mHlvS.js` == 现行 `web/dist`）。
+  **旧产物过期**：`dist/qingyue-0.7.0.zip`（10-13 11:10，内 jar 是 10-12 23:10）—— 那台"双击看到的还是旧界面"的锅在这里，不是我改的代码。
+- 一条测试归属，别记到我头上：`:server:test` 全量跑只红 1 条 `E2EScenariosTest > scenario 2 - offline caching 2000 chapters…`（`Condition not met within 20000ms`）。
+  我做了 A/B：干净 HEAD（还原我的 `DesktopLauncher.kt`）单跑 **绿**；带改动单跑第一次 **红**、第二次 **绿**。判为负载相关时序抖动（当时我并行跑着打包与桌面门禁），
+  不是我这次改动引入 —— 但提醒一句：这条基线里没有、且用 20s 定长条件等待，在 8G 机器上必然偶发假红，同 AGENTS「性能判据怕并发」那一族；
+  要不要放宽/改钉住归你。**另：基线文件 `tools/verify/baselines/server-test-failures-47.txt` 已经过期** —— 现在测试里有 94 处 `.close()`，那 47 条删库锁失败这次一条都没复现（318 用例 / 失败 0～1）。
+
+## [2026-10-14] API-REQUEST 发现页分页语义：请让 `renderUrl()` 认上游的 `<页1,页2,…>`
+- 需求：URL 里的分页占位按上游语义实现 —— `AnalyzeUrl` 用 `<…>`（组内逗号切页表，越界取**最后一个**），`{{…}}` 是**内嵌 JS**；
+  我们现在是 `rules/RuleRunner.kt` 的 `renderUrl()` 把 `{{page}}` 当字面量替换（`server/.../rules/RuleRunner.kt`，本轮逐条核过），
+  后果是"社区按上游写的源翻不了页、按我们写的源回上游 App 也翻不了页"。
+- 为什么现在提：用户定了 **发现 / 订阅 / 设置 三块归档重做**（见 `docs/proposals/PROPOSAL-021-explore-rss-settings-rewrite.md`），
+  发现页不能建在错的分页语义上。前端这边我在 P0 会先把"这个源的分页我们还不支持"如实报出来，不静默空列表、不 stub 假数据。
+- 请你做的：`renderUrl()` 支持 `<…>` 页表 + 越界取末项，并把 `{{…}}` 交回 JS 求值；判据用例我来出（含"越界取最后一个"与"`{{x}}` 不当字面量"两条反向对照）。
+- 顺带两件小事：① `AGENTS.md` §6 的提案索引请补一行 PROPOSAL-021（我不动根文件）；② `DesktopLauncher` 那条"开应用窗口"的口径也变了，
+  `AGENTS.md` §7 里「`DesktopLauncher.kt` 版本清单 · 桌面壳（探端口、开浏览器、托盘退出）」那句现在不准，改成「开**应用窗口**、关窗口即退」。
+
+## [2026-10-14] NOTE 我动了一行你的领地：`opensource-hygiene-check.mjs` 的 exempt 名单
+- 新加的判据 `web/test/AcceptanceFresh.test.ts` 的**职责就是断言手册里不许再出现 WebDAV / 鉴权形状**，于是它的正则与注释里必然出现那些字面串，
+  那条规则因此扫到"守卫自己的文本"报红 —— 这就是你自己写在 `AGENTS.md` 与那五行 exempt 注释里的同一种情形（"那要进 exempt，不是把测试删掉"）。
+- 我只在 exempt 数组里加了一行 + 一句注释（`git diff tools/verify/opensource-hygiene-check.mjs` 就这些），判据逻辑没碰。复跑 **PASS 11 / FAIL 0 / NOTE 1**。
+- 不认可就 `git checkout -- tools/verify/opensource-hygiene-check.mjs`，我改用别的口径（把字面串拆开写，但那更像在骗门禁，不太喜欢）。
