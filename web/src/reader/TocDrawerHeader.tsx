@@ -53,8 +53,8 @@ export function TocDrawerHeader({ chapterTitle, chapterCount, tocReverse, onTogg
         />
         <IconButton
           // 固定态下抽屉由 `pinned` 类撑着，光 setActiveDrawer(null) 关不掉 —— 这颗必须顺带解除固定。
-          // 审计把它报成"一个控件兼两个职务"，核了 :1917 的 className 才确认是必需的；
-          // 该修的是标签：它得说自己按下去会发生什么。
+          // 审计把它报成"一个控件兼两个职务"，核了 ReaderScreen 里 `reader-drawer-left` 那条
+          // className（`sidebarPinned` 拼在它上面）才确认是必需的；该修的是标签：它得说自己按下去会发生什么。
           label={sidebarPinned ? '取消固定并关闭目录' : '关闭目录'}
           icon="close"
           onClick={onClose}

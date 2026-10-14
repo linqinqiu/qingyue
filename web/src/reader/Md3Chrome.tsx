@@ -7,8 +7,9 @@ import { getProgress, overallProgress, subscribeProgress } from './readerProgres
 /**
  * MD3 阅读外壳（PROPOSAL-020 P1）：顶栏 + 底栏，参照 legado-with-MD3 的阅读界面。
  *
- * 与旧 `ReaderHeader` 并列、由 `reader-ui-v2` 开关切换（默认走旧界面）。只换摆放与观感，
- * 功能一律复用现有回调，不新增能力。底栏进度条本阶段按**章节**走（真实页码进度见 P2）。
+ * **这是默认界面**；旧 `ReaderHeader` 那套留着当回退档（`?ui=legacy` 或 localStorage
+ * `reader-ui-v2=0` 才走它），开关的判据在 `ReaderScreen` 的 `uiV2`。只换摆放与观感，
+ * 功能一律复用现有回调，不新增能力。底栏进度按**章 + 章内真实比例**走（`readerProgress.ts`）。
  */
 
 type ActionProps = {

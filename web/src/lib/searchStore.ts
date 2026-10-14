@@ -259,13 +259,16 @@ export class SearchStore {
   }
 
   startSearch = (keyword?: string, sourceId?: string) => {
-    this.openGroupGen++ // 作废任何在途的 openGroup
     const query = (keyword !== undefined ? keyword : this.state.keyword).trim()
     if (!query) return
 
     const source = sourceId !== undefined ? sourceId : this.state.selectedSourceId
-    // 服务端把「sourceIds 为空」当作不限制=搜全部启用源，所以 null（不限制）与 []（零个源）必须分清
+    // 服务端把「sourceIds 为空」当作不限制（Database.kt 的 takeIf { it.isNotEmpty() }），
+    // 所以 null（不限制）与 []（零个源）必须分清：范围是空表时一次请求都不发，
+    // 否则"只搜这一组、组里零个启用源"会变成搜全库。
     const scopeIds = sourceId !== undefined ? (source ? [source] : undefined) : (this.state.selectedSourceIds ?? (source ? [source] : undefined))
+    if (scopeIds && scopeIds.length === 0) return
+    this.openGroupGen++ // 作废任何在途的 openGroup
 
     if (this.socket) {
       try {
@@ -423,6 +426,8 @@ export class SearchStore {
   }
 
   chooseSource = async (choice: SourceChoice, groupSources?: SearchResult[]) => {
+    // 与 openGroup 同一套作废机制：新一轮搜索发出后，这次换源的响应再回来就不许写屏
+    const gen = this.openGroupGen
     const allCandidates = groupSources || this.state.choices.map(c => c.result)
     const fallbackCover = allCandidates.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
     const candidateIntros = allCandidates.map(s => s.intro?.trim()).filter((intro): intro is string => Boolean(intro))
@@ -463,6 +468,8 @@ export class SearchStore {
 
     try {
       const book = await loadSourceBook(choice.result, allCandidates)
+      if (gen !== this.openGroupGen) return // 新一轮已经开始了：不许把上一轮的书重新摆回屏幕上
+      if (gen !== this.openGroupGen) return // 新一轮已经开始了：不许把上一轮的书重新摆回屏幕上
       this.setState(prev => ({
         choices: prev.choices.map(c =>
           c.result.sourceId === choice.result.sourceId && c.result.bookUrl === choice.result.bookUrl

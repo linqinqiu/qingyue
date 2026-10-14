@@ -44,7 +44,6 @@ import { OfflineCacheModal } from '../components/OfflineCacheModal'
 import {
   downloadChaptersToOffline,
   getOfflineChaptersSet,
-  putOfflineChapter,
 } from '../lib/offlineStorage'
 
 /**
@@ -206,8 +205,8 @@ export function VirtualChapterList({
           )
         }
         const isCached = cachedUrlsSet ? cachedUrlsSet.has(chapter.url) : false
-        // url 不能单独当 key：服务端 chapters() 不按地址去重（RuleRunner.kt:1389），
-        // 上下篇共用一页、"本章完"重复条目都会给出同 url 两行 —— 撞 key 只 warning，门禁看不见
+        // url 不能单独当 key：服务端 `RuleRunner.kt` 的 `chapters()`（HTTP 规则与 JS 书源两条实现）
+        // 都不按地址去重，上下篇共用一页、"本章完"重复条目都会给出同 url 两行 —— 撞 key 只 warning，门禁看不见
         return (
           <button
             key={`${chapter.index}-${chapter.url}`}
@@ -1435,6 +1434,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     setCurrentBook(newOpenBook)
     setChapterIndex(chosen.targetChapterIndex)
     preloadedContentRef.current.clear()
+    // 换源等于"这本书的正文全部重来"：旧书的续接章节挂在新 currentBook 下面会画出别的源的章节，
+    // 而朗读管线此刻不会再出声（chunks 跟着新书清空），悬浮条却停在播放态。
+    stopTts()
+    flowAdvanceRef.current = false
+    pendingKeepRef.current = null
+    pendingPrependRef.current = null
+    setFlowTail([])
+    setFlowHead([])
+    setFlowKey(chosen.chapters[chosen.targetChapterIndex]?.url ?? newOpenBook.bookUrl)
     sessionStorage.setItem('legado-open-book-v1', JSON.stringify({ book: newOpenBook, index: chosen.targetChapterIndex }))
   }
 

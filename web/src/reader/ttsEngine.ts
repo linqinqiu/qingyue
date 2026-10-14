@@ -18,7 +18,7 @@ function isEffectiveText(text: string): boolean {
   if (!text) return false
   // Strip all punctuation, CJK brackets, quotes, whitespace
   const stripped = text.replace(
-    /[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u2000-\u206F\u2018\u2019\u201C\u201D\u3000-\u303F\uFF00-\uFFEF]/g,
+    /[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u2000-\u206F\u2018\u2019\u201C\u201D\u3000-\u303F\uFF00-\uFF0F\uFF1A-\uFF20\uFF3B-\uFF40\uFF5B-\uFFEF]/g,
     '',
   )
   return stripped.length >= 2

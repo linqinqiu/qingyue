@@ -41,8 +41,9 @@ export function SourceShareModal({ sourceIds, sources, onClose, onToast }: Sourc
       if (cancelled) return
       const parsed = list.map(item => runCatchingParse(item))
       const missing = list.length - parsed.filter(Boolean).length
-      const body = sourceIds.length === 1 ? parsed[0] : parsed.filter(Boolean)
-      setPayload(JSON.stringify(body, null, 2))
+      const single = sourceIds.length === 1 ? parsed[0] : parsed.filter(Boolean)
+      // 单源且那条存储不是合法 JSON：宁可不给内容，也不能把 `null` 当成"能复制的分享体"
+      setPayload(single ? JSON.stringify(single, null, 2) : '')
       if (missing) setError(`有 ${missing} 个书源的存储内容不是合法 JSON，已从分享结果里跳过`)
     }).catch(reason => {
       if (!cancelled) setError(reason instanceof Error ? reason.message : '导出失败')

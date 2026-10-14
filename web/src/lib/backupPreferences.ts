@@ -1,5 +1,6 @@
 import type { ReaderSettings, ReaderFont } from '../reader/readerSettings'
 import { defaultReaderSettings } from '../reader/readerSettings'
+import { clampFontSize } from '../reader/fontSizeControl'
 
 /**
  * 把备份包里"阅读样式 / 朗读引擎"两条映射到本机 `ReaderSettings`。
@@ -59,7 +60,7 @@ export function mapReadStyle(raw: string, current: ReaderSettings): PreferencePa
 
   const fontSize = asNumber(style.fontSize)
   if (fontSize && fontSize >= 10 && fontSize <= 40) {
-    patch.fontSize = clamp(Math.round(fontSize), 15, 28)
+    patch.fontSize = clampFontSize(Math.round(fontSize))
     applied.push(`字号 ${patch.fontSize}`)
   }
 

@@ -77,3 +77,6 @@ import './CustomizeSkin.test.ts'
 console.log('🚀 Running Legado Web Frontend Comprehensive Test Suite (Tier 1, 2, 4 + Challenger Stress)...\n')
 
 import './BrandLogo.test.ts'
+
+import './ReadThroughFixes.test.ts'
+import './CodeMapFresh.test.ts'

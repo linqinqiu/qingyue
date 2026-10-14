@@ -67,7 +67,7 @@ export function splitSentences(paragraphText: string, filterSymbols = true): str
   for (const item of matches) {
     const trimmed = item.trim()
     // Skip punctuation-only fragments (e.g. a lone `"` or `。`) that would produce 0-byte audio
-    const stripped = trimmed.replace(/[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u2000-\u206F\u2018\u2019\u201C\u201D\u3000-\u303F\uFF00-\uFFEF]/g, '')
+    const stripped = trimmed.replace(/[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u2000-\u206F\u2018\u2019\u201C\u201D\u3000-\u303F\uFF00-\uFF0F\uFF1A-\uFF20\uFF3B-\uFF40\uFF5B-\uFFEF]/g, '')
     if (stripped.length >= 2) {
       result.push(trimmed)
     }

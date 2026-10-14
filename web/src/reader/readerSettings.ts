@@ -2,6 +2,7 @@ import { DEFAULT_MAPS, looksLikeGrid, migrateGrid, sanitizeMap, type TapMap } fr
 import { DEFAULT_READER_MENU, parseReaderMenu, type ReaderMenuAction } from './readerMenu'
 import { parseScriptMode, type ScriptMode } from './scriptConvert'
 import type { PageTurnAnim } from './pageTurn'
+import { READER_FONT_SIZE_MAX, READER_FONT_SIZE_MIN } from './fontSizeControl'
 
 /** 内置三套皮肤；同时允许任意自定义 id —— 配合注入 `.theme-<id>` 的 CSS 变量即可加皮肤，不必改这个类型。 */
 export type ReaderTheme = 'light' | 'paper' | 'dark' | (string & {})
@@ -394,7 +395,7 @@ export function loadReaderSettings(): ReaderSettings {
     return {
       theme: typeof saved.theme === 'string' && saved.theme.trim() ? saved.theme.trim() : defaultReaderSettings.theme,
       customSkins: loadCustomSkins(saved as unknown as Record<string, unknown>),
-      fontSize: clampNumber(saved.fontSize, 15, 28, defaultReaderSettings.fontSize),
+      fontSize: clampNumber(saved.fontSize, READER_FONT_SIZE_MIN, READER_FONT_SIZE_MAX, defaultReaderSettings.fontSize),
       lineHeight: clampNumber(saved.lineHeight, 1.45, 2.4, defaultReaderSettings.lineHeight),
       letterSpacing: clampNumber(saved.letterSpacing, -.25, 1.5, defaultReaderSettings.letterSpacing),
       paragraphSpacing: clampNumber(saved.paragraphSpacing, .7, 2, defaultReaderSettings.paragraphSpacing),

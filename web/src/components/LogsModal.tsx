@@ -90,11 +90,8 @@ export function LogsModal({ onClose }: { onClose: () => void }) {
     return () => clearInterval(timer)
   }, [follow, load])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    addEventListener('keydown', onKey)
-    return () => removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Esc 统一走下面的 useEscapeClose：这里原先另挂了一份 window keydown，
+  // 同一次按键触发两次关闭，并且不参与"一次只关最上面一层"的让位约定。
 
   const merged = useMemo(() => entries.reduce((sum, entry) => sum + Math.max(1, entry.count ?? 1), 0), [entries])
 
