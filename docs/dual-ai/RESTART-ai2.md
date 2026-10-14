@@ -5,7 +5,7 @@
 ## 1. 第一条命令（照抄即可）
 
 ```sh
-cd /e/Projects/legado-server          # 2026-10-14 实测：本机只剩这一棵树（不再有 qingyue-ai2）
+cd 仓库根            # 2026-10-14 实测：本机只剩这一棵树（不再有 qingyue-ai2），下面所有命令都在仓库根跑
 git -c http.proxy= -c http.postBuffer=134217728 fetch origin -q
 git rebase origin/main 2>&1 | tail -2 && git status --short | head
 ```

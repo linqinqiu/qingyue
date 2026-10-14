@@ -11,7 +11,7 @@
 | 整合包 `qingyue-<版本>.zip` | `node scripts/package.mjs`（先 `./gradlew :server:fatJar`） | 包内 `runtime/bin/java.exe`，同样免装 Java | `1234` | 想整个文件夹搬盘的人 |
 | 裸 jar `legado-server-<版本>-all.jar` | `./gradlew :server:fatJar` | 需要本机 Java 17+ | `8080` | 已经有 JVM 的人 |
 | Docker | `docker build -f Dockerfile.server -t qingyue .` | 三段构建：node 打前端 → gradle 打服务端 → `eclipse-temurin:17-jre` | 容器内 `8080`，`LEGADO_HOST=0.0.0.0` | 有 NAS / 服务器的人 |
-| 源码 | `cd web && npm install && npm run dev` + `./gradlew :server:run` | 本机 JDK | dev server 5174 代理到 8081 | 改代码的人 |
+| 源码 | `cd web && npm install && npm run dev` + `./gradlew :server:run` | 本机 JDK | dev server 5174 代理到 1234（可用 `LEGADO_PROXY_TARGET` 换） | 改代码的人 |
 
 **当前 Releases 上有的**：`latest`（流水线连续构建）给 `legado-server.jar` + `legado-server-dist.zip`；
 按版本号打的 tag 给 `qingyue-<版本>.zip`。**桌面包还没上传**，所以现在要用桌面版只能自己打（`dist/qingyue-desktop-<版本>.zip`）。

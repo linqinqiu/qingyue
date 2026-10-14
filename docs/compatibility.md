@@ -16,8 +16,8 @@
 | `bookSourceUrl` **只要求非空**，不强制 `http(s)://` —— 社区里大量融合书源用它当唯一标识（中文、自定义串都合法） | `source/SourceCodec.kt:52-:56` |
 | 主键是**剥掉 `#` / `##` 注解后的域名**；带注解导入与不带注解导入落到同一条记录 | `source/SourceCodec.kt:97 normalizeSourceId`，前端同口径 `web/src/sources/bookSourceFields.ts` + `SourceEditorPanel.tsx` 的 `declaredSourceId` |
 | **UTF-8 BOM 要先剥**，否则整份 JSON 解析失败 | `source/SourceCodec.kt:48`、`:105`（`removePrefix("\uFEFF")`） |
-| 外层包装认 `data` / `sources` / `bookSources` / 裸数组四种；单条坏 JSON 退到逐行解析 | `web/src/lib/sourceImport.ts`（前端侧），服务端另有一条同口径路径 |
-| 一个源能存能改，靠的是**原样存 payload**而不是重新序列化模型 —— 未识别字段不会因为"我们没有这个属性"而丢 | `server/.../data/Database.kt` 的 `source` 表存 `payload`；编辑走 `SourceCodec` |
+| 外层包装认 `data` / `sources` / `bookSources` / 裸数组四种；单条坏 JSON 退到逐行解析 | `web/src/sources/sourceImport.ts`（前端侧），服务端另有一条同口径路径 |
+| 一个源能存能改，靠的是**原样存 payload**而不是重新序列化模型 —— 未识别字段不会因为"我们没有这个属性"而丢 | `server/src/main/kotlin/io/legado/server/data/Database.kt` 的 `source` 表存 `payload`；编辑走 `SourceCodec` |
 
 ## 3. 执行期支持哪些规则写法
 
@@ -65,7 +65,7 @@
 1. **需要执行 JS 过挑战/风控的站点**：服务端没有真浏览器，正文与目录都可能拿不到 → 体检给 `needs_webview`（§4 第一条），不是停用的理由。
 2. **`ruleReview` 类书源**：段评永远为空（§4）。
 3. **依赖 Java 反射的 `jsLib`**：`JavaImporter` 是空替身，这类工具函数取不到真实类 → 表现是某个字段恒空而不是报错。
-4. **顶层没配 `searchUrl` 的源**：只能当发现页用，界面单列「未配搜索」一档，**不计入"连不上"**，也不参与一键停用/删除（`source/SourceHealth.kt:54`、`web/src/lib/sourceGrouping.ts`）。
+4. **顶层没配 `searchUrl` 的源**：只能当发现页用，界面单列「未配搜索」一档，**不计入"连不上"**，也不参与一键停用/删除（`source/SourceHealth.kt:54`、`web/src/sources/sourceGrouping.ts`）。
 5. **纯前端渲染的登录页**：内置反代浏览器帮不上（表单挂在框架里、或先要过挑战），要改填表或粘 Cookie。
 6. **跨书源的"同一本书"身份**：只能是书名 + 作者，章节坐标只能是标题 —— 换源时 `sourceId + bookUrl` 两个都会变。这条现在只在前端有实现与判据，服务端侧曾写进过 `AGENTS.md` 的条目所指符号（`bookKeyOf`）在代码里不存在，已交 AI-1（见 `docs/code-map-frontend.md` §4.2）。
 

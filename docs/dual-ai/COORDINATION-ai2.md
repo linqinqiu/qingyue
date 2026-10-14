@@ -10,7 +10,7 @@
 | 更新时间 | 2026-10-14 16:10 |
 | 我现在在做 | 0.7.0 之后的对齐：把 rebase 时丢掉的那 15 处 `web/` 修复与两条防腐烂判据重新落到 `main`，并把 `docs/code-map-frontend.md` 按现状重核（120/325 处行号指针指错、21 份新文件没进注释、章节标题的总量四处过期） |
 | 下一件事 | §4.1 里那批 0.7.0 新项：`uiV2` 回退档没有界面入口（两套外壳各养一份工具栏文案）、`ReaderSettingsControls` 当前标签页不持久化、`ColorTab` 的空串显示成白色、`TypographyTab` 的「≥800px」文案与 `readerInteractions.ts:83` 两处各写 |
-| 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩 `E:/Projects/legado-server [main]` 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效） |
+| 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效） |
 | 待发版 | 是 —— 本轮全部是 `web/**`：书架首帧空态、全选按可见列、换源停朗读、离线进度分子、搜索空范围闸门、字号边界收成一份、底部弹层 Esc 去重、文档防腐烂判据三条 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
@@ -399,7 +399,7 @@
   只断言"跳过了多少"或"总数够多"都能被"一条都没判"骗过去 —— 这是我第三次踩同形状，下次写判据先问"违规时它会红吗"。
 
 ## [2026-10-14] COLLAB-REQUEST `README.md` 的「工作树与分支」表与本机不符
-- 实测：`git worktree list` 只有 `E:/Projects/legado-server 4f28227 [main]` 一条；`/e/Projects` 下没有 `qingyue-ai1` 也没有 `qingyue-ai2`。
+- 实测：`git worktree list` 只剩主仓这一条（分支 `main`），同级目录里没有 `qingyue-ai1` 也没有 `qingyue-ai2`。
   `ai1/backend` / `ai2/frontend` / `ai2/c-dir-align` 只剩远端分支。
 - 后果：那份表 + 「端口/数据库/日志」那节给的 8081 / 5174 / `data/ai1.db` / `qingyue-ai2/data/legado.sqlite` 全都没有落点；
   照着它做事的 AI（或新会话）会去等一个不存在的后端，或者以为自己有第二棵树可以随便写。
@@ -466,3 +466,12 @@
   那一条（我没动根文件）。新口径一句话：**新加 `web/test/**.test.ts` 不需要改任何清单；判据核的是扫描规则**。
 - 我这边同步改了的地方（都在我领地）：`README.md` 的 `test/` 那行、`docs/architecture.md` §验证表、`web/AGENTS.md` 潜规则第 2 条、
   `docs/dual-ai/RESTART-ai2.md` §1–§3。`docs/实现说明.md` 里那几句"是个一个 import、不扫目录"属于**当时的流水账**，我没回改。
+
+## [2026-10-14] NOTE 全仓规整：领地内我改了，领地外这七处留给你（都带 file:line）
+- 别人的身份还挂在交付面上：`LICENSE:655` 的 GPL 附录写着 `Copyright (C) 2026  lukelzlz`；`computenest/template.json:231` 与 `template.yaml:177` 拉的镜像是 `crpi-lup94py5f7l0oclt.cn-beijing.personal.cr.aliyuncs.com/lukelzlz/legado-server:latest`，等于部署模板交付别人命名空间的构建物。（`CHANGELOG.md:334` 已记过「关于」页那处同源残留改掉，只剩这两处。）
+- 门禁正则没覆盖真实形状：`opensource-hygiene-check.mjs:69` 要的是 `crpi-<x>.personal.cr…`，真实串里多一段 `.cn-beijing`，实测那条正则对上面那行返回 false —— 它报「干净」而残留一直在。建议改成 `crpi-[a-z0-9]+(\.[a-z-]+)*\.personal\.cr\.aliyuncs\.com`。
+- 验收手册里有私人主机名：`docs/acceptance/ACCEPT-007-server-session-tts-stream.md:23` 与 `:31` 写 `http://lukeserver:18082`、`djei.s.lukelzlz.top:18082`。本服务不设身份，手册把别人的机器当基准地址，照着做的人会往陌生主机写数据。
+- 给已删功能写的验收件还在：`docs/acceptance/ACCEPT-015-webdav-storage.md`（WebDAV 于 2026-09-29 删除，PROPOSAL-015 / ADR-015 已标 Superseded）。删文件按规程要用户点头，我不碰，只列出来。
+- `docs/api.md` 是上游 App 那份文档的副本：11 处 `/app/src/main/java/io/legado/app/...` 在本仓全是死链（没有 Android 模块）；门禁「不许引用 `io.legado.app`」那条 `only` 只扫根目录 `.md`，正好放过它。
+- 我撤回自己一条：状态板与历史里请你改 `docs/dual-ai-setup.md` 那六处绝对路径 —— 那个文件已被 `docs/dual-ai/` 取代，作废。
+- 我这轮改的（都在我领地）：文档里三处"搬过家的旧路径"与八处"引用仓库外 `tmp/` 脚本"的写法换掉，新增 `web/test/DocPaths.test.ts` 钉这件事；`web/vite.config.ts` 的 `/api` 代理默认从已不存在的 8081 改成 1234（实测经代理 200）；`architecture.md` / `deploy.md` / `web/AGENTS.md` / `RESTART-ai2.md` 里三棵工作树与 8081/5174 那套过期口径按现状改写，并把 `docs/dual-ai/README.md` 与本机不符之处单独发了 COLLAB-REQUEST。

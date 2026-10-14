@@ -9,6 +9,13 @@ import { VitePWA } from 'vite-plugin-pwa'
  * 每次动 `web/public` 下的图标就 +1。
  */
 const ICON_VERSION = '2'
+/**
+ * dev server 把 `/api` 转给谁。默认打在**本机日常那个实例**（`start.mjs` 起的 1234）——
+ * 先前这里写死 8081，那是双 AI 三棵工作树时代 AI-1 后端端口，那棵树 2026-10-14 实测已不存在，
+ * 于是 `npm --prefix web run dev` 一直打在一个没人听的端口上（页面开得出、接口全断）。
+ * 换实例就带环境变量：`LEGADO_PROXY_TARGET=http://127.0.0.1:1299 npm --prefix web run dev`。
+ */
+const PROXY_TARGET = process.env.LEGADO_PROXY_TARGET ?? 'http://127.0.0.1:1234'
 const icon = (src: string, sizes: string, type: string, purpose = 'any') => ({
   src: `${src}?v=${ICON_VERSION}`,
   sizes,
@@ -114,6 +121,6 @@ export default defineConfig({
   // 显式绑 127.0.0.1（IPv4 回环）：否则默认绑 ::1，127.0.0.1:5174 不通。
   // 代理目标也用 127.0.0.1：后端 LEGADO_HOST=127.0.0.1 只听 IPv4，用 localhost 会解析到 ::1 而超时。
   // 钉死 5174 + strictPort：避免端口被占时静默漂到 5175，导致代理/同源判定失真（AI-2 隔离约定 P0）。
-  server: { host: '127.0.0.1', port: 5174, strictPort: true, proxy: { '/api': 'http://127.0.0.1:8081' } },
+  server: { host: '127.0.0.1', port: 5174, strictPort: true, proxy: { '/api': PROXY_TARGET } },
 })
 

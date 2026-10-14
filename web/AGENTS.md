@@ -24,7 +24,7 @@ npx tsx web/test/run-all.ts         # 全量用例，2026-10-14 基线 535/535
 浏览器级判据在 `tools/verify/`（AI-1 的领地，AI-2 只跑不改），必须**串行**跑，
 并指向同源实例：`LEGADO_BASE_URL=http://127.0.0.1:1299 node tools/verify/<gate>.mjs`。
 
-> **2026-10-14 更正环境**：`docs/dual-ai/README.md` 里那三棵树（`qingyue-ai1` / `qingyue-ai2` / 主仓）在本机已经合成一棵 —— `git worktree list` 只剩 `E:/Projects/legado-server [main]`，AI-2 直接在 `main` 上以 `ai2:` 前缀提交。所以上面那条 1299 现在的意思是**在主仓起一个隔离实例**（`LEGADO_HOME` 指到一个临时目录，别用主仓 `data/` 那份真库），不再是"ai2 工作树里的实例"。端口那套（8081 / 5174）随两棵树一起失去落点，要用就在主仓自选空闲端口。
+> **2026-10-14 更正环境**：`docs/dual-ai/README.md` 里那三棵树（`qingyue-ai1` / `qingyue-ai2` / 主仓）在本机已经合成一棵 —— `git worktree list` 只剩主仓这一条（分支 `main`），AI-2 直接在 `main` 上以 `ai2:` 前缀提交。所以上面那条 1299 现在的意思是**在主仓起一个隔离实例**（`LEGADO_HOME` 指到一个临时目录，别用主仓 `data/` 那份真库），不再是"ai2 工作树里的实例"。端口那套（8081 / 5174）随两棵树一起失去落点，要用就在主仓自选空闲端口。
 
 **实测过的坑（2026-10-11）**：`vite` dev server 代理到别的端口这条路，**所有写请求都会 403**。
 `Guard.kt` 的 `isSameOriginIdentity` 把 Origin 的主机**和端口**都与服务自身绑定身份比：

@@ -95,6 +95,6 @@
 
 ## 7. 改动边界
 
-三个 git 工作树共享一份历史：`main`（合流目标）、`ai1/backend`、`ai2/frontend`。
+2026-10-14 实测：本机只剩一棵工作树（`git worktree list` 只剩主仓那一条，分支 `main`），两个 AI 都在 `main` 上按各自前缀提交；`ai1/backend` / `ai2/frontend` 只剩远端分支。
 **谁改什么、遇到具体情况照哪一行做，只在 [`docs/dual-ai/README.md`](dual-ai/README.md) 里**——本文件不复述规则，
 复述就是下一次"同一个真相写两处"。工作树与分支的对应关系见 [`docs/dual-ai/README.md`](dual-ai/README.md)。
