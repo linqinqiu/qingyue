@@ -20,7 +20,7 @@ git rebase origin/main 2>&1 | tail -2 && git status --short | head
 ## 2. 我的运行环境（2026-10-14 按现状重核）
 
 ```sh
-cd /e/Projects/legado-server
+cd /e/legado/legado-server
 npm --prefix web run check            # tsc -b，只覆盖 web/src —— 必须干净
 npm --prefix web run check:test       # 把 web/test 也核上（tsconfig.test.json，include 带 test）
 npx tsx web/test/run-all.ts           # 全量判据，2026-10-14 基线 535/535、65 份文件自动扫
