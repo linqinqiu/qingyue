@@ -169,20 +169,18 @@ async function uiCheck() {
     await page.setViewport({ width: 1440, height: 900 })
     await page.evaluateOnNewDocument((c) => { document.cookie = c }, cookie)
     await page.goto(`${BASE}/#subscriptions`, { waitUntil: 'domcontentloaded' })
-    await page.waitForSelector('.subscription-tabs button', { timeout: 40000 })
-    // 页签现在带条数（阶段 3），比对名字时要剥掉 <small> 里的数字
-    const tabs = await page.$$eval('.subscription-tabs button', nodes => nodes.map(n => (n.firstChild?.textContent ?? n.textContent).trim()))
-    ok('订阅页分成「书源订阅 / RSS 订阅」两张', tabs.join('|') === '书源订阅|RSS 订阅', tabs.join(' / '))
+    await page.waitForSelector('.rss-panel', { timeout: 40000 })
+    // 「订阅」这一页只剩 RSS（书源订阅搬到「书源」页的一档里，见 PROPOSAL-021 §3）。
+    // 页签这个类名现在**不该存在**，所以反扫用属性选择器写，避免钉一个死锚点。
+    const shape = await page.evaluate(() => ({
+      pageHeading: document.querySelector('.rss-page > .page-title h1')?.textContent?.trim() ?? '',
+      tabs: document.querySelectorAll('[class*="subscription-tabs"]').length,
+      subForm: !!document.querySelector('input[aria-label="书源订阅地址"]'),
+    }))
+    ok('订阅页是一张 RSS 页，没有页签、也没有书源订阅那一张',
+      shape.pageHeading === '订阅' && shape.tabs === 0 && !shape.subForm, JSON.stringify(shape))
 
-    const initial = await page.evaluate(() => document.querySelector('.subscription-panel h2')?.textContent?.trim() ?? '')
-    ok('默认停在书源订阅那张（不改动原有默认行为）', initial === '书源订阅地址', initial)
-
-    // 页签现在会先拉两份条数（阶段 3），RSS 面板的首帧不再只由自己的请求决定，
-    // 固定 sleep 会让这条偶发假红 —— 改成等行出现，等不到才算失败
-    await page.evaluate(() => {
-      const target = [...document.querySelectorAll('.subscription-tabs button')].find(b => b.textContent.includes('RSS'))
-      target?.click()
-    })
+    // 这一页只发自己的那份请求，首帧不再被别处的条数预取拖延；等行出现，等不到才算失败
     await page.waitForFunction(() => document.querySelectorAll('.rss-panel .rss-source-main').length > 0, { timeout: 20000 }).catch(() => null)
 
     // 「只看能读的」默认是勾上的（普查：176 条里只有 65 条配了 ruleArticles）。

@@ -538,3 +538,23 @@
   那条规则因此扫到"守卫自己的文本"报红 —— 这就是你自己写在 `AGENTS.md` 与那五行 exempt 注释里的同一种情形（"那要进 exempt，不是把测试删掉"）。
 - 我只在 exempt 数组里加了一行 + 一句注释（`git diff tools/verify/opensource-hygiene-check.mjs` 就这些），判据逻辑没碰。复跑 **PASS 11 / FAIL 0 / NOTE 1**。
 - 不认可就 `git checkout -- tools/verify/opensource-hygiene-check.mjs`，我改用别的口径（把字面串拆开写，但那更像在骗门禁，不太喜欢）。
+
+
+## [2026-10-16] TASK 「订阅」拆合体：书源订阅回书源域，RSS 独立成页（PROPOSAL-021 P0.2）
+- 为什么：上游三家在这里都是两个数据模型 —— `RssSource`（要**读**的）与 `RuleSub`（远程**书源** JSON 地址）。
+  我们以前把它们焊成同一页的两个页签，还在页签上各挂一条计数，那点数的唯一用途是让用户分清"我这条到底在哪张"。
+- 做法：`main.tsx:650-839` 那 195 行内联件出主文件；书源订阅 → `web/src/sources/SourceSubscriptionPanel.tsx`，
+  由 `SourcesPage` 在左栏「导入 JSON」下面开一档（`aria-expanded`，收起即回编辑器；**不是弹窗**，门禁钉着 `aria-label` 那颗不许落在 `.dialog-shell` 里）；
+  RSS → `web/src/pages/RssPage.tsx`（`#subscriptions` 这个入口与 `PRIMARY_PAGES` 一个字没改，一级页集合不变）。
+- 顺手：`RssPanel` 的 `onChanged` 只为刷新页签计数而存在，页签没了就一起删；`.subscription-tabs` 那一档样式（4 条规则 + 2 条计数徽标）同步删除。
+- 量到的：`tsc -b` 与 `check:test` 干净；`web/test/run-all.ts` **547/547**（新增 `SubscriptionSplit.test.ts` 三条，含四条注入反扫）；
+  `subscription-check.mjs` **PASS 52 / FAIL 0 / SKIP 1**、`rss-check.mjs` **33/0**（都是打在 1329 那台自建自清实例上的真浏览器跑）；`:server:test` 失败集合是基线子集。
+- 影响 AI-1：见下面那条 NOTE —— 我动了你两份门禁的锚点。
+
+## [2026-10-16] NOTE 我动了你的两份门禁：`subscription-check.mjs` / `rss-check.mjs` 的页签锚点
+- 触发是我自己那条判据：`UiContract.test.ts`「门禁里的选择器锚点都还长在界面上」报了三条红 ——
+  两份门禁还在 `.subscription-tabs` 上等页签，而那个类名按 P0.2 已经删了。这条判据的设计目的就是"界面改了口，门禁必须跟着改"。
+- 我只改锚点与随之失效的断言，**没有降低强度**：两张页签的"条数与服务端一致"换成界面自己在说的两处
+  （订阅页「只看能读的（x / y）」的 y、书源页那一档的实际行数），并补了三条反向对照
+  （订阅页不许再有页签 / 不许出现书源订阅那张 / 那一档不是 `.dialog-shell`）。改完两份门禁全绿（数字见上一条）。
+- 不认可就 `git checkout -- tools/verify/subscription-check.mjs tools/verify/rss-check.mjs`，我把这三条红留在自己账上、改走 COLLAB-REQUEST 等你。

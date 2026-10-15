@@ -1,6 +1,6 @@
 import { FormEvent, MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { api, BookDetails, BookGroup, BookshelfItem, Chapter, SearchResult, SearchStreamEvent, SourceRecord, SourceSubscription, SourceSummary } from './lib/api'
+import { api, BookDetails, BookGroup, BookshelfItem, Chapter, SearchResult, SearchStreamEvent, SourceRecord, SourceSummary } from './lib/api'
 import { Icon } from './icons'
 import { useEscapeClose } from './lib/useEscapeClose'
 import { ContextMenuLayer, showContextMenu } from './components/ContextMenu'
@@ -29,11 +29,9 @@ import { SourceShareModal } from './sources/SourceShareModal'
 import { ReplaceRulesModal } from './components/ReplaceRulesModal'
 import { PageDialog } from './components/PageDialog'
 import { ExplorePage } from './pages/ExplorePage'
-import { RssPanel } from './pages/RssPanel'
-import { Notice } from './components/Notice'
-import { EmptyGuide } from './shelf/EmptyGuide'
+import { RssPage } from './pages/RssPage'
+import { SourceSubscriptionPanel } from './sources/SourceSubscriptionPanel'
 import { Select } from './components/Select'
-import { describeSyncError } from './lib/syncErrors'
 import { sourcePickerOptions } from './sources/sourceOrder'
 import { BackupPage } from './pages/BackupPage'
 import { OfflineCacheModal } from './components/OfflineCacheModal'
@@ -643,201 +641,6 @@ function BookDetailModal({
   )
 }
 
-
-
-
-
-function SubscriptionPanel({ onSourcesChange, onChanged, onNavigate }: {
-  onSourcesChange: () => void
-  onChanged: () => void
-  onNavigate: (page: Page) => void
-}) {
-  const [items, setItems] = useState<SourceSubscription[]>([])
-  const [url, setUrl] = useState('')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState<number | 'all' | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const load = useCallback(async () => {
-    try { setItems(await api.subscriptions()) }
-    catch (error) { setNotice(error instanceof Error ? error.message : '无法载入订阅') }
-  }, [])
-  useEffect(() => { void load() }, [load])
-
-  const add = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!url.trim()) return
-    setBusy('all')
-    try {
-      await api.saveSubscription(url.trim())
-      setUrl('')
-      setNotice('订阅已保存，等下一次自动同步或点「立即同步」')
-      await load()
-      onChanged()
-    } catch (error) { setNotice(error instanceof Error ? error.message : '保存订阅失败') }
-    finally { setBusy(null) }
-  }
-  const update = async (id: number) => {
-    setBusy(id)
-    setNotice('')
-    try {
-      const result = await api.updateSubscription(id)
-      setNotice(`同步完成：新增 ${result.imported || 0}，更新 ${result.updated || 0}，跳过 ${result.skipped || 0}`)
-      onSourcesChange()
-      await load()
-    } catch (error) { setNotice(error instanceof Error ? error.message : '同步失败') }
-    finally { setBusy(null) }
-  }
-  const updateAll = async () => {
-    setBusy('all')
-    setNotice('')
-    try {
-      const result = await api.updateSubscriptions()
-      setNotice(result.failed
-        ? `全部同步完成：成功 ${result.updated}，失败 ${result.failed}（原因看每条订阅下面那行）`
-        : `全部同步完成：成功 ${result.updated}`)
-      onSourcesChange()
-      await load()
-    } catch (error) { setNotice(error instanceof Error ? error.message : '同步失败') }
-    finally { setBusy(null) }
-  }
-  const toggle = async (item: SourceSubscription) => {
-    setBusy(item.id)
-    try { await api.saveSubscription(item.url, !item.enabled); await load() }
-    catch (error) { setNotice(error instanceof Error ? error.message : '更新失败') }
-    finally { setBusy(null) }
-  }
-  const remove = async (item: SourceSubscription) => {
-    if (!confirm(`删除订阅“${item.url}”？已导入的书源会保留。`)) return
-    setBusy(item.id)
-    try { await api.removeSubscription(item.id); await load(); onChanged() }
-    catch (error) { setNotice(error instanceof Error ? error.message : '删除失败') }
-    finally { setBusy(null) }
-  }
-
-  const focusInput = () => {
-    inputRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    inputRef.current?.focus()
-  }
-
-  return (
-    <section className="subscription-panel">
-      <header>
-        <div>
-          <h2>书源订阅地址</h2>
-          <p>放的是<b>返回书源 JSON 的直链</b>（Legado「书源管理 · 订阅」里那种链接），不是网页地址。每 6 小时自动同步一次，同一地址的书源会整体覆盖更新。</p>
-        </div>
-        <button className="subtle-button" onClick={() => void updateAll()} disabled={busy !== null || items.length === 0}>
-          {busy === 'all' ? '同步中…' : '全部同步'}
-        </button>
-      </header>
-      <form onSubmit={add}>
-        <input ref={inputRef} value={url} onChange={event => setUrl(event.target.value)} placeholder="https://example.com/sources.json" inputMode="url" aria-label="书源订阅地址" />
-        <button className="primary-button" disabled={busy !== null}>添加订阅</button>
-      </form>
-      <Notice text={notice} />
-      <div className="subscription-list">
-        {items.length === 0 && !notice && (
-          <EmptyGuide
-            icon="globe"
-            title="还没有订阅地址"
-            body={<>填一个能直接打开书源 JSON 的地址即可开始同步；只想临时加几个源，也可以到「书源」页粘贴导入。要找「订阅」页那些 RSS 源，请切到旁边的 <b>RSS 订阅</b> 页签。</>}
-            actions={[
-              { label: '填一个订阅地址', onClick: focusInput, primary: true, icon: 'plus' },
-              { label: '去书源页粘贴导入', onClick: () => onNavigate('sources'), icon: 'importFile' },
-            ]}
-          />
-        )}
-        {items.map(item => {
-          const failure = item.lastError ? describeSyncError(item.lastError) : null
-          return (
-            <article key={item.id} className={item.enabled ? '' : 'sub-off'}>
-              <div className="sub-main">
-                <strong title={item.url}>{item.url}</strong>
-                {failure ? (
-                  <>
-                    <small className="sub-error">
-                      <b>{`同步失败：${failure.headline}`}</b>
-                      {failure.hint && <span>{` ${failure.hint}`}</span>}
-                      {item.lastAttemptAt && <em>{` 最近尝试 ${new Date(item.lastAttemptAt).toLocaleString()}`}</em>}
-                    </small>
-                    <details className="sub-raw"><summary>原始报错</summary><code>{item.lastError}</code></details>
-                  </>
-                ) : (
-                  <small>{item.lastSuccessAt
-                    ? `最近同步 ${new Date(item.lastSuccessAt).toLocaleString()} · 处理 ${item.lastImported} 个书源`
-                    : '尚未同步；点「立即同步」马上拉一次'}</small>
-                )}
-                {!item.enabled && <small className="sub-muted">已停用：自动同步会跳过这一条</small>}
-              </div>
-              <div className="subscription-actions">
-                <button className="subtle-button" onClick={() => void toggle(item)} disabled={busy !== null}>{item.enabled ? '已启用' : '已停用'}</button>
-                <button
-                  className="subtle-button"
-                  title={item.enabled ? undefined : '停用中的订阅也可以手动试一次'}
-                  onClick={() => void update(item.id)}
-                  disabled={busy !== null}
-                >
-                  {busy === item.id ? '同步中…' : '立即同步'}
-                </button>
-                <button className="shelf-remove" aria-label="删除订阅" onClick={() => void remove(item)} disabled={busy !== null}><Icon name="close" /></button>
-              </div>
-            </article>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-/**
- * 「订阅」页。上游在这里其实是两个完全不同的东西，界面上必须先分开：
- * - 书源订阅：远程 JSON 地址，同步进来的是**书源**（上游 `RuleSub` / `sourceSub.json`）
- * - RSS 订阅：要**读**的订阅源（上游 `RssSource` / `rssSources.json`，手机「订阅」页那一栏）
- *
- * 页签上带条数：这张页最容易出现的状态是"看着像空的"，
- * 数字能立刻区分"这一类我一条都没有"和"数据在另一张页签里"。
- */
-function SubscriptionPage({ onSourcesChange, onNavigate, onOpenBackup }: { onSourcesChange: () => void; onNavigate: (page: Page) => void; onOpenBackup: () => void }) {
-  const [tab, setTab] = useState<'sources' | 'rss'>('sources')
-  const [counts, setCounts] = useState<{ sources: number | null; rss: number | null }>({ sources: null, rss: null })
-  const [refreshKey, setRefreshKey] = useState(0)
-  const refresh = useCallback(() => setRefreshKey(value => value + 1), [])
-
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([
-      api.subscriptions().then(list => list.length).catch(() => null),
-      api.rssSources().then(list => list.length).catch(() => null),
-    ]).then(([sources, rss]) => {
-      if (!cancelled) setCounts({ sources, rss })
-    })
-    return () => { cancelled = true }
-  }, [refreshKey])
-
-  return (
-    <main className="subscription-page">
-      <header className="page-title">
-        <div>
-          <h1>订阅</h1>
-          <p>「书源订阅」同步远程书源列表；「RSS 订阅」是「订阅」页那些源，导入备份包后会出现在那里。</p>
-        </div>
-      </header>
-      <nav className="subscription-tabs" aria-label="订阅类型">
-        <button type="button" className={tab === 'sources' ? 'active' : ''} onClick={() => setTab('sources')}>
-          书源订阅{counts.sources !== null && <small>{counts.sources}</small>}
-        </button>
-        <button type="button" className={tab === 'rss' ? 'active' : ''} onClick={() => setTab('rss')}>
-          RSS 订阅{counts.rss !== null && <small>{counts.rss}</small>}
-        </button>
-      </nav>
-      {tab === 'sources'
-        ? <SubscriptionPanel onSourcesChange={onSourcesChange} onChanged={refresh} onNavigate={onNavigate} />
-        : <RssPanel onChanged={refresh} onOpenBackup={onOpenBackup} />}
-    </main>
-  )
-}
-
 function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: SourceSummary | null; onSelect: (source: SourceSummary | null) => void; onSourcesChange: (sources: SourceSummary[]) => void }) {
   const [sources, setSources] = useState<SourceSummary[]>([])
   const [query, setQuery] = useState('')
@@ -845,6 +648,8 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
   const [groupFilter, setGroupFilter] = useState('')
   const [notice, setNotice] = useState('')
   const [importing, setImporting] = useState(false)
+  /** 「订阅地址」这一档开合：书源订阅的产物是书源，所以它长在书源页里，不在「订阅」页 */
+  const [subsOpen, setSubsOpen] = useState(false)
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showHealthModal, setShowHealthModal] = useState(false)
@@ -1269,6 +1074,26 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
           />
         </label>
 
+        {/* 书源订阅与「新建」「导入」并列：三条都是把书源弄进这台服务的入口 */}
+        <button
+          type="button"
+          className={`subtle-button source-subscribe-btn ${subsOpen ? 'active-batch-btn' : ''}`}
+          aria-expanded={subsOpen}
+          title="订阅一个「返回书源 JSON 的直链」：每 6 小时自动同步一次，同一地址的书源整体覆盖更新。与顶栏「订阅」那一页的 RSS 源不是一回事。"
+          onClick={() => {
+            const opening = !subsOpen
+            setSubsOpen(opening)
+            // 窄屏是单列：这一档开在左栏下面，不滚一下就没有任何"打开了"的反馈。
+            // 'nearest' 只在它真在视野外时才滚，宽屏两列时不会把编辑器顶走。
+            if (opening) window.setTimeout(() => {
+              document.querySelector('.sources-content .subscription-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+            }, 0)
+          }}
+        >
+          <Icon name="globe" />
+          <span>{subsOpen ? '收起订阅地址' : '订阅地址'}</span>
+        </button>
+
         {notice && <p className="sidebar-notice">{notice}</p>}
 
         <nav ref={sourceListRef} className={`source-list ${isBatchMode ? '' : 'source-list-sortable'}`} aria-label="书源列表">
@@ -1367,6 +1192,9 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
             )}
           </div>
         </header>
+        {subsOpen && (
+          <SourceSubscriptionPanel onSourcesChange={() => void load()} onClose={() => setSubsOpen(false)} />
+        )}
         <SourceEditor
           selected={selected}
           creating={creating}
@@ -3564,7 +3392,7 @@ function App() {
       {page === 'sources' ? (
         <SourcesPage selected={selected} onSelect={setSelected} onSourcesChange={setSources} />
       ) : page === 'subscriptions' ? (
-        <SubscriptionPage onSourcesChange={refreshSources} onNavigate={navigate} onOpenBackup={() => setPageDialog('backup')} />
+        <RssPage onOpenBackup={() => setPageDialog('backup')} />
       ) : page === 'settings' ? (
         <SettingsPage sections={settingsSections} />
       ) : page === 'shelf' ? (

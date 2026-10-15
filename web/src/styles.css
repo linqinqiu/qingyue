@@ -436,6 +436,9 @@ svg { width: 18px; height: 18px; flex: none; }
 .import-button { margin: 0 16px 16px; min-height: 36px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px dashed color-mix(in srgb, var(--accent) 44%, var(--line)); border-radius: 5px; color: var(--accent); font-size: 13px; cursor: pointer; }
 .import-button:hover { background: var(--accent-soft); }
 .import-button input { display: none; }
+/* 「订阅地址」这颗开关键与上面那颗「导入 JSON」同宽同高，两条都在 280px 的左栏里 */
+.source-subscribe-btn { margin: 0 16px 16px; min-height: 36px; }
+.source-subscribe-btn svg { width: 15px; height: 15px; }
 .sidebar-notice { margin: 0 16px 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .source-list-label { display: flex; justify-content: space-between; padding: 10px 20px; color: var(--muted); border-top: 1px solid var(--line); font-size: 12px; }
 .source-list { display: grid; overflow-y: auto; overflow-x: hidden; align-content: start; min-width: 0; }
@@ -484,8 +487,7 @@ svg { width: 18px; height: 18px; flex: none; }
 .subscription-panel { margin-bottom: 22px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 /* W4：订阅页原来是一条 920px 居中窄列（1440 屏两侧死白 43%）。收到与书库同一档几何
    （min(1240px) 居中 + 同一条页边距），既把死白压下来，也和书库、书架一条线。 */
-.subscription-page { width: min(1240px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: clamp(26px, 4vw, 56px) clamp(18px, 4vw, 44px); }
-.subscription-page .subscription-panel { margin-top: 28px; }
+.rss-page { width: min(1240px, 100%); min-height: calc(100vh - 68px); margin: 0 auto; padding: clamp(26px, 4vw, 56px) clamp(18px, 4vw, 44px); }
 .subscription-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .subscription-panel h2 { margin-top: 4px; font-family: Georgia, "Noto Serif SC", serif; font-size: 20px; font-weight: 600; }
 .subscription-panel p { margin-top: 7px; color: var(--muted); font-size: 13px; }
@@ -1410,7 +1412,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   .workspace-scroll { gap: 18px; padding: 18px; }
   .source-editor { min-height: 380px; }
   .subscription-panel { margin: 0 0 16px; padding: 16px; }
-  .subscription-page { min-height: calc(100vh - 58px); padding: 28px 18px; }
+  .rss-page { min-height: calc(100vh - 58px); padding: 28px 18px; }
   .subscription-panel > header, .subscription-panel form, .subscription-list article { align-items: stretch; flex-direction: column; }
   .subscription-actions { justify-content: flex-end; }
   .source-editor > header, .desk-header, .book-preview > header { align-items: stretch; flex-direction: column; }
@@ -4598,7 +4600,7 @@ input[type=range] { min-height: 24px; }
 .source-summary dt { font-size: var(--t-sm); }
 
 /* —— 页面骨架：单栏页共用同一套宽度/边距/节奏 —— */
-.library-page, .shelf-page, .explore-page, .subscription-page, .backup-page {
+.library-page, .shelf-page, .explore-page, .rss-page, .backup-page {
   width: min(var(--page-max), 100%);
   margin-inline: auto;
   padding-inline: var(--gutter);
@@ -4611,12 +4613,12 @@ input[type=range] { min-height: 24px; }
  * 页头上方的留白：书库是**冻结页**（PROPOSAL-018 §1），保持基线值不动；其余页收到 36px。
  * 原来 56px 会把首行内容推到 y=118（帧栅格第 5 格 = 100px），而 §3.2 的目标是"第一行内容起始 ≤96px"。
  */
-.shelf-page, .explore-page, .subscription-page, .backup-page { padding-block-start: var(--page-pad-top); }
+.shelf-page, .explore-page, .rss-page, .backup-page { padding-block-start: var(--page-pad-top); }
 
 /* —— 页面切换：内容轻微上浮淡入，给"换了一页"一点手感。
    书库（.library-page）是冻结基准、阅读器有自己的转场，都不参与。 —— */
 @keyframes page-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.shelf-page, .explore-page, .subscription-page, .backup-page,
+.shelf-page, .explore-page, .rss-page, .backup-page,
 .settings-page, .about-page, .changelog-page, .rules-page-container, .sources-page {
   animation: page-enter .26s cubic-bezier(.16, 1, .3, 1);
 }
@@ -5062,11 +5064,6 @@ input[type=range] { min-height: 24px; }
   .source-form-tabs { padding: 0 10px; }
 }
 
-/* —— 订阅页：书源订阅 / RSS 订阅两张 —— */
-.subscription-tabs { display: flex; align-items: center; gap: var(--s-5); margin-top: var(--s-4); border-bottom: 1px solid var(--line); }
-.subscription-tabs button { position: relative; min-height: 39px; padding: 0 2px; color: var(--muted); background: transparent; font-size: var(--t-md); }
-.subscription-tabs button.active { color: var(--accent-ink); font-weight: 650; }
-.subscription-tabs button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--accent); content: ''; }
 .rss-panel { margin-top: var(--s-5); }
 .rss-filter { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-4); }
 .rss-filter input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-1); padding: 9px 11px; background: var(--surface-muted); color: var(--ink); outline: none; }
@@ -5210,15 +5207,6 @@ input[type=range] { min-height: 24px; }
   .search-mode-list .search-card-intro { -webkit-line-clamp: 3; }
 }
 
-/* ============================================================
-   阶段 3 · 订阅页可用性与空态引导
-   ① 页签带条数（区分"这类我一条都没有"和"数据在另一张页签"）
-   ② 空态给可点的去处，不再只写一段"去某某页"的文字
-   ③ 报错一行结论 + 可展开原始文案
-   ④ 站内下拉控件，替换与全站不同形的原生 select
-   ============================================================ */
-.subscription-tabs button small { margin-left: 6px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--surface-muted); color: var(--muted); font-size: var(--t-xs); font-weight: 500; }
-.subscription-tabs button.active small { background: var(--accent-soft); color: var(--accent-ink); }
 
 /* 复选统一到一档（W3）：16px、一个强调色令牌 `--accent-solid`。以前 14/15/16px 混用、
    `--accent` 与 `--accent-solid` 混用，还有几处完全没声明（吃 UA 默认 ~13px）；更麻烦的是有些勾

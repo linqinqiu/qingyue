@@ -8,12 +8,12 @@ import { EmptyGuide } from '../shelf/EmptyGuide'
 import { Select } from '../components/Select'
 
 /**
- * 「订阅」页的 RSS 半边：手机 Legado「订阅」页那一栏（`rssSources.json`）。
+ * 「订阅」页的主体：手机 Legado「订阅」页那一栏（`rssSources.json`），即要**读**的 RSS 源。
  *
- * 与同页另一张「书源订阅」不是一回事：那张是**书源 JSON 的远程地址**（上游 `RuleSub`），
- * 这张是**要读的 RSS 源**（上游 `RssSource`）。列表内容来自备份导入，也可能一条都没有。
+ * 书源订阅（远程书源 JSON 直链，上游 `RuleSub`）不在这张页里 —— 它的产物是书源，
+ * 在「书源」页的「订阅地址」档（`sources/SourceSubscriptionPanel.tsx`）。
  */
-export function RssPanel({ onChanged, onOpenBackup }: { onChanged: () => void; onOpenBackup: () => void }) {
+export function RssPanel({ onOpenBackup }: { onOpenBackup: () => void }) {
   const [sources, setSources] = useState<RssSourceSummary[]>([])
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState('')
@@ -82,7 +82,7 @@ export function RssPanel({ onChanged, onOpenBackup }: { onChanged: () => void; o
   const remove = async (item: RssSourceSummary) => {
     if (!confirm(`删除订阅源“${item.name}”？`)) return
     setBusy(item.sourceUrl)
-    try { await api.removeRssSource(item.sourceUrl); await load(); onChanged() }
+    try { await api.removeRssSource(item.sourceUrl); await load() }
     catch (error) { setNotice(error instanceof Error ? error.message : '删除失败') }
     finally { setBusy('') }
   }
@@ -112,7 +112,6 @@ export function RssPanel({ onChanged, onOpenBackup }: { onChanged: () => void; o
       setImportText('')
       setImporting(false)
       await load()
-      onChanged()
     } catch (error) { setNotice(error instanceof Error ? error.message : '导入失败') }
     finally { setBusy('') }
   }

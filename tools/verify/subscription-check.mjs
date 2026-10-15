@@ -2,7 +2,8 @@
  * 阶段 3 交付前自检：订阅页可用性 + 站内下拉控件（打真服务，验证部署后的界面）。
  *
  * 断的是"界面在说什么、能不能点"，不是代码写了什么：
- * ① 两张页签都带条数，且数字与服务端一致（"看着像空的"必须能一眼分辨）；
+ * ① 「订阅」这一页只有 RSS，书源订阅在「书源」页里开出的一档（不是弹窗）—— 两边的数字都要与服务端一致
+ *    （"看着像空的"必须能一眼分辨）；
  * ② 同步失败落在一行结论 + 可展开的原始报错，英文异常不再糊满页面；
  * ③ 空态的去处是可点按钮，不是"去某某页"的文字指引；
  * ④ 原生 select 在这五张页面上全部消失，分组筛选能看到计数、能选、能筛；
@@ -178,32 +179,56 @@ try {
     // 冷启动到第一屏要等多久取决于这台机器此刻多忙（同一台机器实测 3~36 秒不等）。
     // 只 sleep 固定 1.4 秒的话，负载高的那一次会把"应用还在载入"读成"这一类数据是空的"，
     // 于是假红一条"本机有真订阅时不显示空态"。先等外壳出现，再给内容一点时间。
-    await page.waitForSelector('.page-title h1, .subscription-tabs', { timeout: 60000 }).catch(() => null)
+    await page.waitForSelector('.page-title h1', { timeout: 60000 }).catch(() => null)
     await sleep(1400)
   }
 
+  // ——— ① 「订阅」这一页：只剩 RSS，书源订阅不在这里 ———
   await goto('#subscriptions')
-  await page.waitForSelector('.subscription-tabs button', { timeout: 20000 })
-  // 两个数字来自两次请求，等它们都落地再读；否则负载下会读到 null 而假红
-  await page.waitForFunction(() => document.querySelectorAll('.subscription-tabs button small').length === 2, { timeout: 20000 })
-    .catch(() => null)
-
-  const tabState = async () => page.evaluate(() => {
-    const tabs = [...document.querySelectorAll('.subscription-tabs button')].map(button => ({
-      label: button.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-      count: button.querySelector('small')?.textContent?.trim() ?? null,
-      active: button.classList.contains('active'),
-    }))
-    return { tabs, nativeSelects: document.querySelectorAll('select').length }
-  })
-
-  let state = await tabState()
+  await page.waitForSelector('.rss-panel .rss-source-main', { timeout: 40000 })
   const expectSubs = subsBefore.length + 1
   const expectRss = rssBefore.length + 2
-  ok('两张页签都带条数', state.tabs.every(tab => tab.count !== null), JSON.stringify(state.tabs.map(tab => tab.count)))
-  ok('书源订阅条数与服务端一致', state.tabs[0]?.count === String(expectSubs), `界面 ${state.tabs[0]?.count} / 服务端 ${expectSubs}`)
-  ok('RSS 订阅条数与服务端一致', state.tabs[1]?.count === String(expectRss), `界面 ${state.tabs[1]?.count} / 服务端 ${expectRss}`)
-  ok('订阅页没有原生 select', state.nativeSelects === 0, `${state.nativeSelects} 个`)
+  const rssPageState = await page.evaluate(() => ({
+    pageHeading: document.querySelector('.rss-page > .page-title h1')?.textContent?.trim() ?? '',
+    // 反向对照用属性选择器写：`.subscription-tabs` 这个类名现在**不该存在**，
+    // 写成 `.x` 会被 UiContract 那条"门禁锚点必须还长在界面上"判成悬空锚点。
+    tabs: document.querySelectorAll('[class*="subscription-tabs"]').length,
+    // 书源订阅那张的唯一形状：那条带无障碍名字的地址输入框
+    subForm: !!document.querySelector('input[aria-label="书源订阅地址"]'),
+    nativeSelects: document.querySelectorAll('select').length,
+    readableLabel: document.querySelector('.rss-readable-toggle')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+  }))
+  ok('「订阅」页的页头写着「订阅」，且不再有页签',
+    rssPageState.pageHeading === '订阅' && rssPageState.tabs === 0,
+    `页头=${rssPageState.pageHeading} 页签=${rssPageState.tabs}`)
+  ok('这一页里没有书源订阅那一张（两件事已分家）', !rssPageState.subForm, `书源订阅输入框在不在=${rssPageState.subForm}`)
+  ok('订阅页没有原生 select', rssPageState.nativeSelects === 0, `${rssPageState.nativeSelects} 个`)
+  const rssListedTotal = Number(/（\d+ \/ (\d+)）/.exec(rssPageState.readableLabel)?.[1] ?? -1)
+  ok('订阅页报的总数与服务端一致（「只看能读的（x / y）」里的 y）',
+    rssListedTotal === expectRss, `界面「${rssPageState.readableLabel}」/ 服务端 ${expectRss}`)
+
+  // ——— 书源订阅那一档：从「书源」页里开出来 ———
+  await goto('#sources')
+  await page.waitForSelector('.source-subscribe-btn', { timeout: 40000 })
+  const paneOpened = await page.evaluate(() => {
+    if (document.querySelector('input[aria-label="书源订阅地址"]')) return 'already'
+    const button = document.querySelector('.source-subscribe-btn')
+    button?.click()
+    return button ? 'clicked' : 'missing'
+  })
+  await page.waitForSelector('input[aria-label="书源订阅地址"]', { timeout: 20000 })
+  const paneState = await page.evaluate(() => ({
+    expanded: document.querySelector('.source-subscribe-btn')?.getAttribute('aria-expanded') ?? null,
+    // 它是页面流里的一档，不是浮在正文上的弹窗
+    inDialog: !!document.querySelector('.dialog-shell input[aria-label="书源订阅地址"]'),
+    heading: document.querySelector('.subscription-panel h2')?.textContent?.trim() ?? '',
+    rows: document.querySelectorAll('.subscription-list article').length,
+  }))
+  ok('书源页里那颗「订阅地址」点得开，展开态写在 aria-expanded 上',
+    paneOpened !== 'missing' && paneState.expanded === 'true', `${paneOpened} / aria-expanded=${paneState.expanded}`)
+  ok('书源订阅那一档不是弹窗（没有 .dialog-shell 罩在正文上）', !paneState.inDialog, `inDialog=${paneState.inDialog}`)
+  ok('展开的确实是书源订阅那张', paneState.heading === '书源订阅地址', paneState.heading)
+  ok('书源订阅的行数与服务端一致', paneState.rows === expectSubs, `界面 ${paneState.rows} 行 / 服务端 ${expectSubs} 条`)
 
   // ② 失败行：一行结论 + 可展开原文
   const failureRow = await page.evaluate(() => {
@@ -266,12 +291,9 @@ try {
     ok('本机已有订阅时空态不挡路', !sourcesEmpty.guide, `rows=${sourcesEmpty.rows} guide=${sourcesEmpty.guide}`)
   }
 
-  // 切到 RSS 页签（等行渲染出来再断，固定 sleep 在负载下会假红）
-  await page.evaluate(() => {
-    const button = [...document.querySelectorAll('.subscription-tabs button')].find(node => node.textContent?.includes('RSS'))
-    button?.click()
-  })
-  await page.waitForSelector('.rss-panel .rss-source-main', { timeout: 20000 }).catch(() => null)
+  // RSS 那一张现在是自己的一页（`#subscriptions`），不再靠点页切过去
+  await goto('#subscriptions')
+  await page.waitForSelector('.rss-panel .rss-source-main', { timeout: 20000 })
 
   const rssState = await page.evaluate(() => ({
     filterSelect: !!document.querySelector('.rss-filter .ui-select'),
@@ -422,7 +444,14 @@ try {
   ok('用户原有数据没被动过',
     (await listRss()).length === rssBefore.length && (await listSubs()).length === subsBefore.length,
     `RSS ${(await listRss()).length}/${rssBefore.length}，订阅 ${(await listSubs()).length}/${subsBefore.length}`)
-  await goto('#subscriptions')
+  // 书源订阅那一档在「书源」页里，收尾的空态要回那一页看
+  await goto('#sources')
+  await page.waitForSelector('.source-subscribe-btn', { timeout: 40000 })
+  await page.evaluate(() => {
+    if (document.querySelector('input[aria-label="书源订阅地址"]')) return
+    document.querySelector('.source-subscribe-btn')?.click()
+  })
+  await page.waitForSelector('.subscription-panel h2', { timeout: 20000 })
   const afterCleanup = await page.evaluate(() => ({
     guide: !!document.querySelector('.subscription-list .panel-empty'),
     buttons: [...document.querySelectorAll('.panel-empty-actions button')].map(node => node.textContent?.trim()),
@@ -433,12 +462,9 @@ try {
     ok('本机有真订阅时不显示空态', !afterCleanup.guide, `guide=${afterCleanup.guide}`)
   }
   // RSS 那张的空态才是用户说"什么都没有"时看到的那一屏，必须单独断
-  await page.evaluate(() => {
-    const button = [...document.querySelectorAll('.subscription-tabs button')].find(node => node.textContent?.includes('RSS'))
-    button?.click()
-  })
+  await goto('#subscriptions')
   await sleep(1400)
-  // RSS 列表是切页签后才去取的，负载下 1.4 秒可能还在飞 —— 等到"有行"或"明确空态"再读，
+  // RSS 列表是进这一页后才去取的，负载下 1.4 秒可能还在飞 —— 等到"有行"或"明确空态"再读，
   // 而不是把"还没到"当成"一条都没有"。
   await page.waitForFunction(() => document.querySelectorAll('.subscription-list article').length > 0
     || !!document.querySelector('.subscription-list .panel-empty'), { timeout: 30000, polling: 400 }).catch(() => null)
