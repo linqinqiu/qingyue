@@ -118,11 +118,36 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         }
     }
 
+    /**
+     * 列表规则取值失败时，把**上游自己写的那句原因**接进报错。JSON 接口普遍带 `msg` / `message` 一类字段：
+     * 实测 `https://m.lrts.me/ajax/searchBook`（本机 115 个音频源之一）匿名搜索回
+     * `{"apiStatus":485,"msg":"你好，需要登录才能继续使用此功能"}`，而我们原来只报
+     * `Missing property in path $['books']` —— 界面上这两种都是"无结果"，「这个源要登录」与
+     * 「站点真的没内容」分不开。接上这句之后，体检按「登录」二字归进 `needs_login` 那一档。
+     * HTML 不摘：整页标签塞进报错只会把有用的那句挤掉。
+     */
+    private fun upstreamReason(error: Throwable, body: String): String {
+        val reason = "${error.javaClass.simpleName}：${(error.message ?: "列表规则取值失败").replace(Regex("\\s+"), " ").trim().take(120)}"
+        val hint = if (!body.trimStart().startsWith("{")) "" else runCatching {
+            val root = body.objectValue()
+            listOf("msg", "message", "error", "errmsg", "info", "detail", "reason")
+                .firstNotNullOfOrNull { key -> root.string(key)?.takeIf { it.isNotBlank() && it.any(Char::isLetter) } }
+                .orEmpty().replace(Regex("\\s+"), " ").trim().take(120)
+        }.getOrDefault("")
+        return if (hint.isEmpty()) reason else "$reason｜上游那句话：「$hint」"
+    }
+
     /** 把 `ruleSearch` / `ruleExplore` 这类「列表规则 + 字段规则」解析成书籍条目。 */
     private fun bookItems(body: String, rule: JsonObject, sourceUrl: String, sourceType: Int): List<SearchResult> {
         val listRule = rule.string("bookList") ?: throw RuleExecutionException("缺少 bookList 规则")
         // 与 chapters() 一致：`<js>…</js>` 形式的列表规则要先过沙箱预处理，直接丢给 Jsoup/json-path 会解析失败
-        val items = if (isJsRule(listRule)) jsListNodes(NodeValue.document(body), listRule, body, sourceUrl) else nodes(body, listRule)
+        val items = try {
+            if (isJsRule(listRule)) jsListNodes(NodeValue.document(body), listRule, body, sourceUrl) else nodes(body, listRule)
+        } catch (error: RuleExecutionException) {
+            throw error
+        } catch (error: Exception) {
+            throw RuleExecutionException(upstreamReason(error, body))
+        }
         return items.mapNotNull { item ->
             val url = item.value(rule.string("bookUrl"), jsSandbox, body, sourceUrl)?.absolute(sourceUrl) ?: return@mapNotNull null
             val result = SearchResult(

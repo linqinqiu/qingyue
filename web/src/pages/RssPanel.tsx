@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type ExploreTab, type RssArticle, type RssSourceSummary } from '../lib/api'
 import { Icon } from '../icons'
 import { useEscapeClose } from '../lib/useEscapeClose'
-import { sanitizeImageUrl } from '../sources/sourceImport'
 import { Notice } from '../components/Notice'
 import { EmptyGuide } from '../shelf/EmptyGuide'
 import { Select } from '../components/Select'
 import { exploreLabel } from '../lib/exploreLabel'
+import { rssImageSrc } from '../lib/rssImage'
 
 /**
  * 「订阅」页的主体：手机 Legado「订阅」页那一栏（`rssSources.json`），即要**读**的 RSS 源。
@@ -319,8 +319,8 @@ function RssArticles({ source, onBack, onOpenArticle, article }: {
         <div className="rss-article-list">
           {articles.map((item, index) => (
             <button type="button" key={`${item.link || item.title}::${index}`} className="rss-article" onClick={() => onOpenArticle(item)}>
-              {sanitizeImageUrl(item.image)
-                ? <img className="rss-article-image" src={sanitizeImageUrl(item.image)!} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }} />
+              {rssImageSrc(item.image, item.link)
+                ? <img className="rss-article-image" src={rssImageSrc(item.image, item.link)!} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }} />
                 : null}
               <span className="rss-article-body">
                 <strong>{item.title}</strong>
@@ -386,7 +386,7 @@ function RssReader({ source, article, onClose }: { source: RssSourceSummary; art
           </div>
           <button type="button" className="overlay-close" onClick={onClose} aria-label="关闭文章"><Icon name="close" /></button>
         </header>
-        {article.image && sanitizeImageUrl(article.image) && <img className="rss-reader-image" src={sanitizeImageUrl(article.image)!} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }} />}
+        {rssImageSrc(article.image, article.link || source.sourceUrl) && <img className="rss-reader-image" src={rssImageSrc(article.image, article.link || source.sourceUrl)!} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none' }} />}
         {state === 'loading' && <p className="explore-message">正在取正文…</p>}
         {state === 'ready' && content.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
         {state === 'failed' && (

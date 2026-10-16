@@ -2,8 +2,8 @@
 
 生成方式：**逐文件读全文**，不是扫文件名、不是只读热点。2026-10-11 那轮读的是拆分前的树，之后 0.7.0
 把阅读器重做了一遍；本文件在 2026-10-14 按 `main` 上的现状重对了一遍数字：
-`web/src` 95 份共 28,694 行（其中 `styles.css` 5,841 行）、`web/test` 全部判据文件，
-另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（37 份 14,732 行）。
+`web/src` 96 份共 28,716 行（其中 `styles.css` 5,841 行）、`web/test` 全部判据文件，
+另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（37 份 14,757 行）。
 每条职责后面给的 `文件名:行号` 都是读到那一行时写下的；行号会随改动漂，核对命令：
 
 ```bash
@@ -38,7 +38,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | 书源管理 | `main.tsx` `SourcesPage` | `SourceEditorPanel.tsx`、`SourceHealthModal.tsx`、`sourceHealthRun.ts`、`sourceInspector.ts`、`bookSourceFields.ts`、`SourceSubscriptionPanel.tsx` | `SourcePicker.test.ts`、`SourceGrouping.test.ts`、`SourceHealthRun.test.ts`、`source-import.test.ts`、`SubscriptionSplit.test.ts`；门禁 `source-picker-check.mjs`、`source-editor-check.mjs`、`source-health-check.mjs` | 长任务在组件外（`sourceHealthRun.ts`）；关窗 ≠ 取消；书源订阅是书源的一条来源，挂在 `SourcesPage` 开出的一档里 |
 | 登录与内置浏览器 | `SourceLoginModal.tsx`、`SourceWebViewModal.tsx`、`SourceShareModal.tsx` | `api.ts:411-441` 的 loginUi / cookie / 外部登录 | 门禁 `source-login-check.mjs`、`external-login-check.mjs`、`webview-login-probe.mjs` | iframe 严禁 `allow-same-origin`；子资源必须 GET+POST 都注册 |
 | 发现 | `ExplorePage.tsx` | `exploreGroups.ts`、`exploreLabel.ts`、`Select.tsx` | `ExploreGroupFilter.test.ts`、`ExploreLabel.test.ts`；门禁 `explore-detail-check.mjs` | 「空」有两种原因（要登录 / 真的没内容），必须分开报；分栏名是书源自己写的，装饰字形先洗掉再上屏 |
-| 订阅 / RSS | `RssPage.tsx`、`RssPanel.tsx` | `syncErrors.ts`、`Notice.tsx`、`EmptyGuide.tsx` | `SubscriptionSplit.test.ts`、`SubscriptionGuidance.test.ts`；门禁 `subscription-check.mjs`、`rss-check.mjs` | 三态：还没到 / 取失败 / 确实没有；`hasListRule` 决定"能读的"那一档。书源订阅不在这页 —— 它在这一表的「书源管理」那一行 |
+| 订阅 / RSS | `RssPage.tsx`、`RssPanel.tsx` | `syncErrors.ts`、`rssImage.ts`、`Notice.tsx`、`EmptyGuide.tsx` | `SubscriptionSplit.test.ts`、`SubscriptionGuidance.test.ts`、`RssImage.test.ts`；门禁 `subscription-check.mjs`、`rss-check.mjs` | 三态：还没到 / 取失败 / 确实没有；`hasListRule` 决定"能读的"那一档。书源订阅不在这页 —— 它在这一表的「书源管理」那一行 |
 | 替换净化规则 | `ReplaceRulesModal.tsx` | `api.ts:601-617` | `ReplaceRulesModal.test.ts`、`intro-text.test.ts` | 组件被 `renderToStaticMarkup` 渲染必须 `import React` |
 | 备份 | `BackupPage.tsx`、`backupPreferences.ts` | `api.ts:591-600` | `backup-page.test.ts`、`BackupPreferences.test.ts`；门禁 `backup-upload-check.mjs`、`backup-kept-check.mjs` | 只装个性化条目的包也是合法备份 |
 | 本地书与目录规则 | `TocRulesModal.tsx` | `api.ts:528-567`、`readerSettings.ts:338 parseTocRuleKey` | `LocalBookImport.test.ts`、`TocRuleSettings.test.ts`；门禁 `toc-rule-check.mjs`、`local-image-check.mjs` | 「能不能手动选」与「是否参与自动」是两个旗标 |
@@ -62,6 +62,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | `searchFilters.ts` | 268 | 结果分组后的清洗、打分、排序、筛选 + 流式合并 | `pickBlurb`(`:11`)、`formatIntro`(`:29`)、`cleanTitle`(`:65`)、`calculateRelevanceScore`(`:95`)、`sortSearchGroups`(`:158`)、`mergeStreamedResults`(`:251`)、`PROGRESS_FLUSH_MS`(`:263`) | 两个都没有简介时返回空串让那一栏**整栏不渲染**（`:5-9`）；`formatIntro` 不剥任意 `<…>`，简介里的 `3<5` 会被吃字（`:25-27`）；`smart`/`sources` 两档都走打分缓存，否则筛选框每敲一键全量重排（`:179`）；同源同址才算重复，跨源同一本要都留着（`:237-242`） |
 | `exploreGroups.ts` | 25 | 发现页分组统计与筛选 | `UNGROUPED`(`:4`)、`sourceGroups`(`:10`)、`filterByGroup`(`:21`) | 分组只按 `trim()` 后判空 —— 否则 `'  '` 会冒出一个看不见名字的分组（`:6-9`） |
 | `exploreLabel.ts` | 38 | 分栏名的装饰字形清洗 + 重名编号（发现页与 RSS 共用） | `KEEP`(`:11`)、`EDGE`(`:12`)、`exploreLabel`(`:14`)、`labelExploreTabs`(`:27`) | 依据是量出来的：本机 5,574 个源的静态分栏名去重后 7,321 个，其中 **1,550 个带 emoji 与花饰**（`💮 穿越文`、`~»最近更新«~`、`【完结】`），直接上屏就是一排方框。**只改显示** —— 地址、选中判定、请求都按原样，不动书源数据（那是别人写的规则文本）。清洗后什么都不剩的退回原文（宁可难看也不给一个空按钮）；成对括号与词中间的 `·` 是内容不是花饰，「首页（不要删这个）」得整句留着 |
+| `rssImage.ts` | 22 | RSS 条目配图的取法：外域一律让服务端代取，站内相对地址原样交给浏览器 | `rssImageSrc`(`:13`) | `<img>` 直连外域带不上自定义头，而这一页还显式写了 `no-referrer` —— 防盗链站回 403，`onError` 把图整张藏起来，症状是"这条没图"。服务端那一路（`/api/book/image`）补 Referer、按落地域名带 Cookie（0.7.4 起），还过 SSRF 与 SVG 两道闸门。反向对照盯着 `RssPanel.tsx` 不许再把原文地址写进 `src` |
 | `shelfLayout.ts` | 115 | 书架布局/排序偏好读写 | `decodeLayout`(`:29`)、`readShelfLayout`(`:56`)、`readShelfSort`(`:98`) | 网格档不照抄上游"2~6 列"，浏览器窗口 320~3440 太宽，改 `auto-fill`（`:3-7`）；已废弃的密度档仍要能读（`:33-36`）；搜索页布局与书架布局**各存各的**（`:76-83`） |
 | `shelfOrder.ts` | 48 | 拖动的三段算术 | `compareCustomSort`(`:11`)、`dropIndexAt`(`:27`)、`moveWithin`(`:40`) | `NULL = 没拖过` 的语义在两处都出现；`moveWithin` 原地不动时**返回同一个数组**，调用方靠引用相等挡掉无意义写库（`:39`） |
 | `dragSort.ts` | 121 | 长按拖动排序的现场（pointer + rAF + 边缘自动滚） | `useDragSort`(`:18`)、`onClickCapture`(`:114`) | `HOLD_MS=250`/`MOVE_SLOP=9`/`EDGE_SCROLL=56`（`:5-9`）；只按筛选后那一列回传顺序；拖完必须吞掉随之而来的 click（`:66-68`） |
@@ -336,7 +337,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
   全部改成新布局，`CodeMapFresh` 顺带升级成递归枚举 + 目录前缀反扫（写错目录也红，反扫验过）。
   合并冲突 8 处，其中 4 处正是那批裸 `\r` 行断裂：移动后的文件带着旧写法回来，解法是"取新路径 + 去掉裸 `\r`"，两条信息都没丢。
 
-## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，37 份 14,732 行，已按职责拆成 12 个子包）
+## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，37 份 14,757 行，已按职责拆成 12 个子包）
 
 > **领地声明**：`server/` 归 AI-1。0.7.0~0.7.3 这几轮**一行代码都没动**；0.7.4 动了四条代取书源资源的链路
 > （`http/ProxyHeaders.kt`、`cache/CoverCache.kt`、`http/Routes.kt` 的媒体流与封面、`rules/RuleRunner.kt` 的媒体地址嗅探），
@@ -350,7 +351,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | `http/ProxyHeaders.kt` | 33 | 代取书源资源（封面 / 正文配图 / 音视频流）该带哪些请求头，**一处定死** | 浏览器的 `<img>` / `<audio>` / `<video>` 带不上自定义头，这三条路全靠服务端代取。Cookie 按**每一跳的落地域名**现取（同一个 `Database.getCookieForUrl`，与文本链路同源），Referer 走完重定向链。以前三条代理路一条都不带 Cookie ⇒ 「书源登录成功、目录正文读得出、图和音频流还是 403」。判据 `ProxyHeadersTest.kt`（端到端演不了：SSRF 闸门拒回环地址，本地假上游连不上） |
 | `Routes.kt` | 2,354 | 全部 HTTP/WS 端点；`route("/api")` 下再分 `/sources/{id}`、`/tts`、`/rss`、`/res`、`/replace-rules`、`/external-login`、`/browser` | 前端 `api.ts` 的端点表逐条对得上；`/api/rss/tabs`、`DELETE /api/rss/sources` 实测 200/204 且 `?q=` 过滤生效（§4.2 第 2 条说的是那句错注释，不是功能） |
 | `data/Database.kt` | 2,302 | SQLite（WAL）：`source`、`book_shelf`、`book_group`、`reading_progress`、`book_toc_cache`、`book_content_cache`、`cover_cache`、`source_subscription`、`rss_source`、`source_login_state`、`cookie`、`replace_rule`、`log_db`/`log_entry` | `listSearchSourceRecords`(`:408-:409`) 对空表取 `takeIf { it.isNotEmpty() }` ⇒ **空 = 不限制**，这就是前端 `searchStore.ts:268` 那道闸门的由来；体检那条不在这张表上按 id 逐个查（`source/SourceHealth.kt` 的 `probe` 收的是 `(id, name, rawJson, …)`，记录由调用侧一次取回） |
-| `RuleRunner.kt` | 1,493 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文；`content()` 末尾还会**嗅一次正文**（`sniffMediaUrl`：整段就一行、以 http(s) 开头且后缀是音视频格式时把它当媒体地址回传）——社区里 `bookSourceType` 填错的音视频源据此能播 |
+| `RuleRunner.kt` | 1,518 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文；`content()` 末尾还会**嗅一次正文**（`sniffMediaUrl`：整段就一行、以 http(s) 开头且后缀是音视频格式时把它当媒体地址回传）——社区里 `bookSourceType` 填错的音视频源据此能播 |
 | `JsSandbox.kt` | 840 | Rhino 沙箱 | 顶级 `return` 要包装、`JavaImporter` 必须是空替身（AGENTS 那两条），否则整批书源报错 |
 | `WebViewProxy.kt` | 815 | 内置登录浏览器的整站反代 + 一次性令牌 + `Set-Cookie` 吸收 | `SourceWebViewModal` 的 iframe 能不开 `allow-same-origin` 全靠这一侧 |
 | `Models.kt` | 839 | 全部 `@Serializable` 请求/响应体 | `Map<String, Any>` 在这侧会直接 500，所以响应体都是具名 data class；`SourceHealthCheckItem` 在 `model/Models.kt:673`、`statusCategory` 在 `:680` |

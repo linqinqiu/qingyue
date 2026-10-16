@@ -7,14 +7,14 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-16 22:05 |
-| 我现在在做 | 拿真数据量「登录过的源到底用没用上」：这一轮把**代取书源资源的三条路**（封面 / 正文配图 / 音视频流）补齐了 Cookie 与 Referer，并让 `bookSourceType` 填错的音视频源也能播 —— 发 **0.7.4**（越界动了 `server/**`，见下面 `NOTE` 那条，附回滚命令） |
-| 下一件事 | ① 搜索出 0 条时把「这个源要登录」与「站点真的没内容」分开：实测 `https://m.lrts.me/`（懒人听书，音频源）匿名只回 `{"apiStatus":485,"msg":"你好，需要登录才能继续使用此功能"}`，而这条被 JSONPath 报错吃成了 `Missing property in path $['books']` —— 上游那句话没进界面，也没进 `SourceHealth` 的 `needs_login` 判据（它按 `message.contains("登录")` 分档）。② `RssPanel` 的条目配图是浏览器直连外域（`referrerPolicy="no-referrer"`），防盗链站 403 就自己 `display:none`，没走 `/api/book/image` 那条代理。③ 本机语料 5,574 份里 **2,105 份规则带 `@js:` / `<js>`**，而 `SourceCodec.kt` 的 `isJs = mainJs 非空` 实测 **0 份命中** ⇒ 书源页那颗「JS 书源」统计与筛选恒为 0。④ 发现页分页语义仍等 `renderUrl()` 认 `<页1,页2,…>`；RSS 的 `articleStyle` / 已读 / 收藏（P1） |
+| 更新时间 | 2026-10-16 22:35 |
+| 我现在在做 | 第二轮"量登录与媒体"收口：发 **0.7.5** —— ① 列表规则失败时把**上游自己写的那句原因**接进报错（实测懒人听书匿名搜索回「你好，需要登录才能继续使用此功能」，我们原来只报 `Missing property in path $['books']`），体检由此从"猜"变成"照着归档"；② 「订阅」页条目配图改走服务端代取（补 Referer + Cookie）。两条都越界/落点在 `server/**` 与本侧各一半，明细见下面两条 |
+| 下一件事 | ① `SourceCodec.kt` 的 `isJs = mainJs 非空`：本机 5,574 份里 **mainJs 非空 0 份**，而**任一规则带 `@js:` / `js:` / `<js>` 的有 2,105 份（37.8%）** ⇒ 书源页那颗「JS 书源」统计与筛选恒为 0。要么放宽判定 + 一次性回填 `source.is_js`，要么把这个数字从界面上拿掉（放宽会与 `SourceDebugger` 那句"字段由 mainJs 自己组装"打架，得先分成两个旗标）。② RSS 的 `articleStyle` / 已读 / 收藏（P1）③ 发现页分页语义仍等 `renderUrl()` 认 `<页1,页2,…>` |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
-| 待发版 | 否（已发 **0.7.4**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.4/legado-server-0.7.4-all.jar`（zip sha256 `5271083799B42875…`）；`dist/qingyue-0.7.3*` 与 `build/libs` 的 0.7.3 产物已清 |
+| 待发版 | 否（已发 **0.7.5**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.5/legado-server-0.7.5-all.jar`（zip sha256 `BE93AC646B3CE8FE…`）；0.7.4 的包与 `build/libs` 的旧 jar 已清，`dist/` 下只剩这一份 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
-| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.4/legado-server-0.7.4-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data` ⇒ 报的也是 0.7.4，不再是 `dev`）。1299 那个隔离库里现导了 **6 份真源**（1 音频 / 2 漫画 / 2 视频 / 1 音频登录站），只为跑 `media-reader-check` 这类数据依赖的门禁，不动真库。本机现在**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/qingyue-0.7.3/`、`dist/desktop/`、0.7.0 的两个 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
+| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.5/legado-server-0.7.5-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data` ⇒ 报的也是 0.7.5，不再是 `dev`）。1299 那个隔离库里现导了 **6 份真书源**（1 音频 / 2 漫画 / 2 视频 / 1 音频登录站）+ **8 份真 RSS 源**（只为跑 `media-reader-check` / RSS 配图这类数据依赖的门禁与探针，不动真库）。本机现在**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/qingyue-0.7.3/`、`dist/qingyue-0.7.4/`、`dist/desktop/`、0.7.0 的两个 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
 
 ## [2026-10-11] TASK 任务 A —— 前端代码地图
 - 内容：新增 `docs/code-map-frontend.md`（模块清单 / 阅读器文件表 / 关键链路表）。每条引用都回扫过源码，
@@ -621,3 +621,26 @@
   记在这儿：发版前"跑齐套件"必须排在 CHANGELOG 落笔之后。
 - 文档：`docs/code-map-frontend.md` §6 服务端 36 份 14,650 行 → **37 份 14,732 行**，行数列与 20 处 A 式指针按磁盘重钉；
   §6 那句「本轮一行代码都没动」现在是假话，已改成"0.7.4 动了哪四条路 + 指向本条"。
+
+## [2026-10-16] NOTE 列表规则失败时把上游那句原因带出来（这一轮又动了 `server/`）
+- 现象：`https://m.lrts.me/ajax/searchBook`（本机 115 个音频源之一，配了 loginUrl）匿名搜索回
+  `{"apiStatus":485,"data":{},"msg":"你好，需要登录才能继续使用此功能"}`，而它的 `bookList` 是 `$..list[*]||$.books[*]`，
+  我们报给界面与体检的只剩 `PathNotFoundException：Missing property in path $['books']`。
+- 后果不只是难看：`SourceHealth.classify` 要 `message.contains("登录")` 才归 `needs_login`，这句话一丢，
+  那一档就只能靠"配了 loginUrl 且零结果"去猜（`SourceHealth.kt` 里那条兜底分支）。
+- 做法：`RuleRunner.bookItems()` 把列表取值包进 try，非 `RuleExecutionException` 的失败一律经 `upstreamReason()` 重写：
+  原异常名 + 路径错误（截 120 字）+「上游那句话：「…」」。只从 **JSON 对象**的 `msg/message/error/errmsg/info/detail/reason` 取，
+  取不到就不编造；HTML 一律不摘（整页标签会把有用那句挤掉，`describe()` 之后还要截 220 字）。
+- 判据：`UpstreamReasonTest.kt` 三条（登录墙那句要出现 / HTML 不摘 / 没有那个人话字段就不许多说话）。
+- 服务端只改了 `rules/RuleRunner.kt`（+25 行）与那份新测试。不认可就 `git revert` 本轮那条 `ai2:` 提交。
+
+## [2026-10-16] RELEASE 0.7.5 —— 「没结果」要说清是哪种没结果，RSS 配图走代取
+- 两条用户可见：① 上面 NOTE 那条（「这个源要登录」与「站点真的没内容」分得开了）；
+  ② 「订阅」页条目配图改由服务端代取（`web/src/lib/rssImage.ts`）—— 这一页的 `<img>` 本来就写 `no-referrer`，
+  防盗链站回 403 时 `onError` 把图整张藏起来，症状是"这条没图"。站内相对地址不绕路，协议相对补成 https。
+- 实测（1299 隔离库导 8 份真 RSS 源，只读取自真库）：「葫芦侠」12 张条目图 **12/12 走 `/api/book/image`、12/12 真画出来**
+  （`naturalWidth > 0`），0 张被藏，无 JS 异常；截图 `_probe/qy-test/shots/rss-image-proxy.png`。
+- 判据：`web/test/RssImage.test.ts` 六条（含"那一页不许再把外域地址直接写进 src"的结构判据与反扫）。
+- 门禁：`run-all` **565/565**；`:server:test` 329 例只红 1 条（`E2EScenariosTest` scenario 2，在基线 47 条之内）；
+  `version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61、`rss-check` 33/0。
+- 发版链照 0.7.4：先停两台再打包（EPERM 那条），zip sha256 `BE93AC646B3CE8FE…`，`dist/` 下只留 0.7.5 一份。
