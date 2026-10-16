@@ -40,7 +40,8 @@ import { ShortcutHelp } from './reader/ShortcutHelp'
 import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, PRIMARY_PAGES, shortcutFor } from './reader/shortcuts'
 import { SourceHealthModal } from './sources/SourceHealthModal'
 import { TocRulesModal } from './components/TocRulesModal'
-import { SettingsPage, type SettingsSection } from './pages/SettingsPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { buildSettingsSections } from './settings/settingsSections'
 import { useHealthRun } from './sources/sourceHealthRun'
 import { SourceEditor } from './sources/SourceEditorPanel'
 import { SourceGroupModal } from './sources/SourceGroupModal'
@@ -3025,7 +3026,6 @@ function App() {
       return null
     }
   })
-  const [showReplaceRules, setShowReplaceRules] = useState(false)
   const [pageDialog, setPageDialog] = useState<PageDialogKind | null>(dialogFromHash())
   const [showOfflineCache, setShowOfflineCache] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
@@ -3288,88 +3288,6 @@ function App() {
     void api.sources().then(setSources).catch(() => undefined)
   }
 
-  /**
-   * 「设置」这一页的内容（用户 2026-10-03：「在我的里面新加一个设置，把一些 txt 目录规则、备份、
-   * 替换净化之类的放进去」）。每行只做一件事：说清它管什么，然后打开**原来那一份**实现。
-   * 这里不建第二套编辑器 —— 两处都能改，迟早两处不一样。
-   */
-  const settingsSections: SettingsSection[] = [
-    {
-      title: '规则',
-      rows: [
-        {
-          title: '替换净化规则',
-          hint: '正文里按正则删除广告与杂乱内容。',
-          action: '打开规则',
-          onClick: () => setShowReplaceRules(true),
-        },
-      ],
-    },
-    {
-      title: '界面',
-      rows: [{
-        title: '皮肤与配色',
-        hint: '晓白 / 护眼 / 夜读三档，外加自定义 CSS。',
-        action: '打开自定义',
-        onClick: () => setShowCustomize(true),
-      }],
-    },
-    {
-      title: '阅读',
-      rows: [
-        {
-          title: '快捷键',
-          hint: '阅读器与全局的按键表。',
-          action: '看按键表',
-          onClick: () => setShowShortcuts(true),
-        },
-        {
-          title: '离线缓存',
-          hint: '已下载到这台电脑浏览器里的章节。',
-          action: '管理离线缓存',
-          onClick: () => setShowOfflineCache(true),
-        },
-      ],
-    },
-    {
-      title: '本地书',
-      rows: [{
-        title: 'TXT 分章规则',
-        hint: '下一本导入的 TXT 按哪条切目录，以及哪几条参与「自动」打分。',
-        action: '打开规则表',
-        onClick: () => setTocRulesSignal(value => value + 1),
-      }],
-    },
-    {
-      title: '数据与诊断',
-      rows: [
-        {
-          title: '备份包',
-          hint: '导入手机备份包，或把本机的书源 / 书架 / 规则导出成一份。',
-          action: '打开备份',
-          onClick: () => setPageDialog('backup'),
-        },
-        {
-          title: '运行日志',
-          hint: '这台服务写了什么：级别、失败原因、错误计数。',
-          action: '看日志',
-          onClick: () => setShowLogs(true),
-        },
-      ],
-    },
-    {
-      title: '服务',
-      rows: [
-        {
-          title: '服务端口',
-          hint: '青阅跑在哪个端口；改完重启青阅后生效。',
-          action: '改端口',
-          onClick: () => setShowServerPort(true),
-        },
-      ],
-    },
-  ]
-
   return (
     <div className={`app-shell ${skinClasses}`}>
       <SkinStyle settings={settings} />
@@ -3394,7 +3312,16 @@ function App() {
       ) : page === 'subscriptions' ? (
         <RssPage onOpenBackup={() => setPageDialog('backup')} />
       ) : page === 'settings' ? (
-        <SettingsPage sections={settingsSections} />
+        <SettingsPage sections={buildSettingsSections({
+          openShortcuts: () => setShowShortcuts(true),
+          openOfflineCache: () => setShowOfflineCache(true),
+          openCustomize: () => setShowCustomize(true),
+          openReplaceRules: () => setPageDialog('rules'),
+          openTocRules: () => setTocRulesSignal(value => value + 1),
+          openBackup: () => setPageDialog('backup'),
+          openLogs: () => setShowLogs(true),
+          openServerPort: () => setShowServerPort(true),
+        })} />
       ) : page === 'shelf' ? (
         <ShelfPage
           sources={sources}
@@ -3425,8 +3352,8 @@ function App() {
         />
       )}
       <ReplaceRulesModal
-        isOpen={showReplaceRules || pageDialog === 'rules'}
-        onClose={() => { setShowReplaceRules(false); if (pageDialog === 'rules') setPageDialog(null) }}
+        isOpen={pageDialog === 'rules'}
+        onClose={() => setPageDialog(null)}
       />
       {pageDialog && pageDialog !== 'rules' && (
         <PageDialog title={PAGE_DIALOG_TITLES[pageDialog]} onClose={() => setPageDialog(null)}>

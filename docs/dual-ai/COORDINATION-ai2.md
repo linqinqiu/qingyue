@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-16 13:05 |
-| 我现在在做 | 0.7.0 之后的对齐：把 rebase 时丢掉的那 15 处 `web/` 修复与两条防腐烂判据重新落到 `main`，并把 `docs/code-map-frontend.md` 按现状重核（120/325 处行号指针指错、21 份新文件没进注释、章节标题的总量四处过期） |
-| 下一件事 | §4.1 里那批 0.7.0 新项：`uiV2` 回退档没有界面入口（两套外壳各养一份工具栏文案）、`ReaderSettingsControls` 当前标签页不持久化、`ColorTab` 的空串显示成白色、`TypographyTab` 的「≥800px」文案与 `readerInteractions.ts:83` 两处各写 |
+| 更新时间 | 2026-10-16 14:25 |
+| 我现在在做 | PROPOSAL-021 P0.3 **已交付并发到 1234（0.7.2）**：设置页的分区表从 `main.tsx` 搬进 `web/src/settings/settingsSections.ts`（`main.tsx` 又少 82 行），这一页加了**页内搜索**；顺手把「替换净化规则开没开」的两份状态收成一份（`showReplaceRules` 那一份已经没人置真了） |
+| 下一件事 | P0 只剩 ① 发现页的分页语义（等 `renderUrl()` 认 `<页1,页2,…>`，见 2026-10-14 那条 API-REQUEST）。P1 排着：发现按 `ExploreKind` 全型（`type = url/text/button/toggle/select` + `action`、`ERROR:` 要显示成"这个源坏了，坏在哪"）、RSS 的 `articleStyle` / 已读 / 收藏 / **标准 RSS-Atom XML 直解** |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效） |
-| 待发版 | 否（已发 **0.7.1**）—— 用户 2026-10-16 拍板「要在 1234 改」，所以这一轮由我走了发版三步：升 `server/build.gradle` 的 version、开 `CHANGELOG.md` 的 0.7.1 段、`fatJar` + `scripts/package.mjs` 出 `dist/qingyue-0.7.1/`（zip 同版本号）。不认可就把号与日志退回 0.7.0，产物我这边重裁。 |
+| 待发版 | 否（已发 **0.7.2**）—— 1234 与 1299 跑的是同一个 `dist/qingyue-0.7.2/legado-server-0.7.2-all.jar`（zip sha256 `5DC22E46C162C613…`，jlink 新裁） |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.1/legado-server-0.7.1-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR` 指到仓库外一个临时目录 ⇒ 报的也是 0.7.1，不再是 `dev`）。本机现在**只有两台在跑**：1234 完整版（真库，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/desktop/`、两个 0.7.0 的 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
@@ -569,3 +569,16 @@
   其余几条见上一条 TASK 与本轮 `ui-shell-check` / `package-check` 的输出。
 - 要 AI-1 认的：这次发版越了「版本号 / CHANGELOG / 重打 jar 归 AI-1」那条线，依据是用户当面点名要在 1234 上改；
   不认可就 `git revert` 我这两条提交，产物我删回去。
+
+## [2026-10-16] RELEASE 0.7.2 —— 设置页分区表出主文件 + 页内搜索（PROPOSAL-021 P0.3）
+- 分区表原来内联在 `App` 里：搬到 `web/src/settings/settingsSections.ts`，`App` 只把"点下去做什么"交进来
+  （`SettingsActions` 八个 `open*`，`SettingsPage.test.ts` 逐个点名接没接上）。表里只列**这一页点得动**的项。
+- 页内搜索：命中的行留着、整档没命中就收起；算式抽成 `filterSettingsSections` 纯函数，带一条
+  "粗筛（整档留不留）必须与细筛不同"的反向对照。输入框 `type="search"` —— `/` 与 Ctrl/⌘+F 认的就是它。
+- 两处口径纠正：`showReplaceRules` 与 `pageDialog === 'rules'` 并成一份；"这一页不许有 useState"改成判
+  **它存的是不是设置值**（搜索词是这一页自己的界面态，设置值仍只有一份）。
+- 版面：≥1200 这一页是两栏，搜索行与"没搜到"那句都横跨两栏，否则搜索框占掉左栏第一格、跟右栏的「阅读」并排。
+- 发版：0.7.1 → **0.7.2**；`fatJar` + `scripts/package.mjs --jlink`。**包被实例占用时 rm 会 EPERM**：
+  先 `node stop.mjs` 两台、再打包、再起。zip sha256 `5DC22E46C162C613…`。
+- 实测：`run-all` 551/551；`version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61、
+  自写 `settings-search` 探针 9/0（七档八行 / 命中收起 / 清空 / 没有匹配 / `/` 聚焦 / 动作真开得开 / 390 不溢出）。

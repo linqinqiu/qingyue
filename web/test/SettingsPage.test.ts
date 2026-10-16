@@ -5,6 +5,7 @@ import path from 'node:path'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { SettingsPage, type SettingsSection } from '../src/pages/SettingsPage'
+import { filterSettingsSections } from '../src/settings/settingsSections'
 
 /**
  * 「设置」页存在的意义是"分类"：用户 2026-10-03 让它收纳 txt 目录规则 / 备份 / 替换净化，
@@ -34,11 +35,16 @@ test('静态渲染：分组、一行一句说明、一个动作', () => {
   assert.doesNotMatch(html, /就近：/, '不该再出现"就近入口"那句解释')
 })
 
-test('这一页只是路由：它自己不含任何编辑器实现', () => {
+test('这一页只是路由：不读写数据，也不持有设置的值', () => {
   const page = read('../src/pages/SettingsPage.tsx')
   // 出现这些就说明有人把第二套实现搬进来了（两处都能改 → 迟早两处不一样）
   assert.doesNotMatch(page, /localStorage|fetch\(|api\./, '设置页不该自己读写数据')
-  assert.doesNotMatch(page, /useState/, '它没有自己的状态：状态仍在原来那一处')
+  assert.doesNotMatch(page, /saveReaderSettings|onSettingsChange|settings\./, '它不持有设置的值：值仍存在原来那一处')
+  // 它确实有一份 useState，装的只能是搜索框里的字（界面态，不是任何设置项）
+  assert.equal((page.match(/useState\(/g) ?? []).length, 1, '这一页只该有一份自己的界面态，多一处就要问它存的是谁的设置')
+  assert.match(page, /const \[query, setQuery\] = useState\(''\)/, '那份状态是搜索词')
+  // 搜索框必须是 `type="search"`：`/` 与 Ctrl/⌘+F 找"这一页的搜索框"认的就是它
+  assert.match(page, /type="search"/, '不是 type=search，`/` 快捷键在这一页就是哑的')
 })
 
 test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页 —— 收放改了，功能一条没少', () => {
@@ -58,34 +64,98 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   const app = read('../src/main.tsx')
   for (const page of ['rules', 'backup']) {
     assert.ok(!new RegExp(`\\{ page: '${page}'`).test(table), `${page} 不该占顶栏`)
-    // 规则走 ReplaceRulesModal（showReplaceRules），备份 / 更新日志 / 关于走 PageDialog
-    const wired = page === 'rules'
-      ? app.includes('setShowReplaceRules(true)') && app.includes("pageDialog === 'rules'")
-      : app.includes(`setPageDialog('${page}')`)
-    assert.ok(wired, `${page} 的悬浮层没接线`)
+    // 规则 / 备份 都走 PageDialog 那一个口子（0.6.27 起是悬浮层，不占顶栏也不占路由）
+    assert.ok(app.includes(`setPageDialog('${page}')`), `${page} 的悬浮层没接线`)
   }
+  assert.doesNotMatch(app, /showReplaceRules/,
+    '「规则开没开」只有 pageDialog 一个出处；再留一份布尔旗标就是两处状态互相顶（设置页改走 pageDialog 后它已无人置真）')
   assert.ok(table.includes("'settings'"), '设置必须留在一级表里')
 
-  // 收进设置页的两项，各自要有一行、并且真的导航过去（这一页只做路由，不建第二套实现）
+  // 分区表只有**一份出处**：`settings/settingsSections.ts`（P0.3 从 main.tsx 搬出来）。
   const main = read('../src/main.tsx')
-  const block = /const settingsSections: SettingsSection\[\] = \[[\s\S]*?\r?\n  \]\r?\n/.exec(main)?.[0] ?? ''
-  assert.ok(block.length > 400, '要真的取到 settingsSections 那一段（取空串下面几条对什么都成立）')
-  assert.match(block, /setShowOfflineCache\(true\)/, '离线缓存仍是设置页的一行')
-  assert.match(block, /setShowLogs\(true\)/, '运行日志仍是设置页的一行')
-  assert.match(block, /setTocRulesSignal\(value => value \+ 1\)/, '分章规则那行要真的能开弹窗')
-  // 2026-10-09 书源回到顶栏，设置页不再留书源那行（同一个目的地只留一条路）
-  assert.doesNotMatch(block, /navigate\('sources'\)/, '书源回了顶栏，设置页不该再留第二条路')
-  // 0.6.27 起规则 / 备份 两行改为开悬浮层：行还在，动作从整页导航换成弹层
-  assert.match(block, /setShowReplaceRules\(true\)/, '替换净化规则要在设置页有一行（开悬浮层）')
-  assert.match(block, /setPageDialog\('backup'\)/, '备份包要在设置页有一行（开悬浮层）')
+  // 判两件事：表里声明了哪些动作，以及 main.tsx 是不是把每一个都接到了原来那一份实现上。
+  const sectionsFile = read('../src/settings/settingsSections.ts')
+  assert.doesNotMatch(main, /const settingsSections: SettingsSection\[\] = \[/,
+    '分区表又内联回 App 组件了 —— 一张要给人读的清单不该长在三千多行那个文件中间')
+  const declared = [...sectionsFile.matchAll(/^ {2}(open[A-Z]\w*): \(\) => void$/gm)].map(m => m[1])
+  assert.ok(declared.length >= 8, `只从 SettingsActions 认出 ${declared.length} 个动作，这条正则瞎了`)
+  const wiredBlock = /buildSettingsSections\(\{([\s\S]*?)\}\)\}/.exec(main)?.[1] ?? ''
+  assert.ok(wiredBlock.length > 120, '取不到 main.tsx 里 buildSettingsSections 那一段（取空串的话下面的断言对什么都成立）')
+  for (const name of declared) {
+    assert.match(wiredBlock, new RegExp(`^\\s+${name}: \\(\\) =>`, 'm'), `${name} 在 main.tsx 里没接上动作`)
+  }
+  // 接的都是原来那一份实现，不是第二套：逐个点名
+  for (const call of ['setShowShortcuts(true)', 'setShowOfflineCache(true)', 'setShowCustomize(true)',
+    "setPageDialog('rules')", 'setTocRulesSignal(value => value + 1)', "setPageDialog('backup')",
+    'setShowLogs(true)', 'setShowServerPort(true)']) {
+    assert.ok(wiredBlock.includes(call), `设置页的动作没接到 ${call}（悬浮层/弹窗那一份）`)
+  }
+  const sectionsBody = /export function buildSettingsSections[\s\S]*$/m.exec(sectionsFile)?.[0] ?? ''
+  assert.ok(sectionsBody.length > 800, '要真的取到分区表那一段（取空串下面几条对什么都成立）')
+  assert.match(sectionsBody, /离线缓存/, '离线缓存仍是设置页的一行')
+  assert.match(sectionsBody, /运行日志/, '运行日志仍是设置页的一行')
+  // 2026-10-09 书源回到顶栏：同一个目的地只留一条路
+  assert.doesNotMatch(sectionsBody, /navigate\('sources'\)/, '书源回了顶栏，设置页不该再留第二条路')
 })
 
 test('路由与"去书架开弹窗"的信号接上了', () => {
   const main = read('../src/main.tsx')
   assert.match(main, /location\.hash === '#settings' \? 'settings'/)
-  assert.match(main, /page === 'settings' \? \(\s*<SettingsPage sections=\{settingsSections\}/)
+  assert.match(main, /page === 'settings' \? \(\s*<SettingsPage sections=\{buildSettingsSections\(\{/)
   assert.match(main, /tocRulesSignal=\{tocRulesSignal\}/)
   assert.match(main, /if \(tocRulesSignal > 0\) setShowTocRules\(true\)/,
     '第一次挂载（0）不弹：刷新页面就跳出弹窗是凭空多出来的行为')
   assert.match(read('../src/styles.css'), /\.settings-page \{/)
+})
+
+/** 喂给筛选算式的夹具：两档四行，标题与说明里各留一个只有那一行才有的词。 */
+const searchFixture = [
+  {
+    title: '阅读',
+    rows: [
+      { title: '快捷键', hint: '阅读器与全局的按键表。', action: '看按键表', onClick: () => undefined },
+      { title: '离线缓存', hint: '下载到这台电脑浏览器里的正文。', action: '管理离线缓存', onClick: () => undefined },
+    ],
+  },
+  {
+    title: '服务',
+    rows: [
+      { title: '服务端口', hint: '青阅跑在哪个端口。', action: '改端口', onClick: () => undefined },
+      { title: '运行日志', hint: '这台服务写了什么：级别、失败原因。', action: '看日志', onClick: () => undefined },
+    ],
+  },
+]
+
+test('页内搜索的算式：命中的行留着、整档空了就收起、空查询原样给回', () => {
+  assert.equal(filterSettingsSections(searchFixture, ''), searchFixture, '空查询要原样返回同一份，不复制出新数组')
+  assert.deepEqual(filterSettingsSections(searchFixture, '   ').map(s => s.title), ['阅读', '服务'], '只有空白等于没搜')
+  const one = filterSettingsSections(searchFixture, '端口')
+  assert.deepEqual(one.map(s => s.title), ['服务'], '只有那一档还在')
+  assert.deepEqual(one[0].rows.map(r => r.title), ['服务端口'], '只留命中那一行，同档其余的不许跟着出来')
+  assert.deepEqual(filterSettingsSections(searchFixture, '按键表').flatMap(s => s.rows.map(r => r.title)), ['快捷键'],
+    '说明里的词也搜得到 —— 用户记的是"管什么的"，不是分区名')
+  assert.equal(filterSettingsSections(searchFixture, 'PORT').length, 0, '大小写不敏感：确实没有就说没有')
+})
+
+test('反向对照：把算式换成"整档留不留"这种粗筛，必须被逮住', () => {
+  const coarse = (sections: SettingsSection[], query: string) => {
+    const needle = query.trim().toLowerCase()
+    if (needle === '') return sections
+    // 常见写坏的一版：按档标题匹配，于是搜"端口"把整档四行都吐出来
+    return sections.filter(section => `${section.title} ${section.rows.map(r => r.title).join(' ')}`.toLowerCase().includes(needle))
+  }
+  const strict = filterSettingsSections(searchFixture, '端口')
+  const loose = coarse(searchFixture, '端口')
+  assert.ok(loose[0].rows.length > strict[0].rows.length,
+    `粗筛与细筛结果一样时，上面那条"只留命中那一行"就是空判：${JSON.stringify(loose.map(s => s.rows.length))}`)
+})
+
+test('搜索框画在界面上，且"没搜到"只在真搜过时才说', () => {
+  const html = renderToStaticMarkup(React.createElement(SettingsPage, { sections: searchFixture }))
+  assert.match(html, /<input type="search"[^>]*aria-label="搜设置项"/, '输入框要有可访问名字，读屏里不能是一句光秃秃的"编辑框"')
+  assert.match(html, /<h2>阅读<\/h2>[\s\S]*快捷键[\s\S]*<h2>服务<\/h2>[\s\S]*服务端口/, '两档四行都画得出')
+  assert.doesNotMatch(html, /没有匹配/, '没搜过不许说"没有匹配"—— 空列表被说成搜不到是另一回事')
+  // 「没有匹配」那一支由 searching 把关：少了这个条件，sections 为空时界面会凭空说"没有匹配「」"
+  assert.match(read('../src/pages/SettingsPage.tsx'), /\{searching && shown\.length === 0 \?/,
+    '空态那一支必须同时要求"真的输入过"')
 })

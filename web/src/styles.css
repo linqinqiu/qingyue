@@ -5485,6 +5485,13 @@ input[type="checkbox"] {
 .about-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
 /* —— 「设置」页：一行一件事，右侧一个动作。它不重复实现编辑器，只负责分类与跳转 —— */
 .settings-page { max-width: 960px; min-height: calc(100vh - 68px); margin: 0 auto; padding: 36px 32px 64px; }
+/* 页内搜索：分区一多，"我知道有这个东西但不知道在哪一档"就得能搜。
+   输入框与订阅页那两处同档（surface-muted 底 + --r-1 圆角），不再写第四种形状。
+   ≥1200 这一页是两栏，搜索行必须横跨两栏 —— 不然它会占掉左栏第一格，
+   和右栏的「阅读」并排，看着像搜索框是某一档的内容。 */
+.settings-search-row { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-4); grid-column: 1 / -1; }
+.settings-search { flex: 1 1 auto; min-width: 0; max-width: 460px; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface-muted); color: var(--ink); font-size: var(--t-sm); outline: none; }
+.settings-no-match { margin-top: var(--s-4); color: var(--muted); font-size: var(--t-md); grid-column: 1 / -1; }
 .settings-section { margin-top: 30px; }
 .settings-section h2 { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; }
 .settings-rows { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--line); overflow: hidden; }
