@@ -65,11 +65,18 @@ test('文档在，且 §2/§6 的逐文件表解析得到行', () => {
     `解析到的「文件 | 行数」行太少（${rows.length}）—— 要么文档被截断，要么这条正则瞎了`)
 })
 
-test('每一行的「行数」都等于磁盘上的实际行数', () => {
+/**
+ * 行数列核对：两种写法都要落到磁盘行数上。
+ * ① §2/§6 表格的「文件 | 行数」列（`ROW`）；
+ * ② §6 末尾「其余」那一行里挤在括号中的 `X.kt`(NNN) —— 它不在任何一列里，
+ *   原来没人核，实测 15 项里 9 项已经悄悄过期。
+ * 抽成纯函数是为了能喂假文本做反向对照。
+ */
+function auditLineCounts(text: string): { checked: number; wrong: string[]; missing: string[]; parenChecked: number } {
   const wrong: string[] = []
   const missing: string[] = []
   let checked = 0
-  for (const line of doc.split(/\r?\n/)) {
+  for (const line of text.split(/\r?\n/)) {
     const hit = ROW.exec(line)
     if (!hit) continue
     const [, name, statedText] = hit
@@ -79,9 +86,34 @@ test('每一行的「行数」都等于磁盘上的实际行数', () => {
     const actual = lineCount(path.join(ROOT, relative))
     if (actual !== Number(statedText.replace(/,/g, ''))) wrong.push(`${name}（${relative}）：文档写 ${statedText} 行，磁盘 ${actual} 行`)
   }
+  let parenChecked = 0
+  for (const hit of text.matchAll(/`([\w.-]+\.(?:tsx?|css|kt))`\((\d{1,5})\)/g)) {
+    const relative = resolve(hit[1])
+    if (!relative) { missing.push(hit[1]); continue }
+    parenChecked += 1
+    const actual = lineCount(path.join(ROOT, relative))
+    if (actual !== Number(hit[2])) wrong.push(`${hit[1]}（${relative}）：文档写 ${hit[2]} 行，磁盘 ${actual} 行`)
+  }
+  return { checked, wrong, missing, parenChecked }
+}
+
+test('每一行的「行数」都等于磁盘上的实际行数', () => {
+  const { checked, wrong, missing, parenChecked } = auditLineCounts(doc)
   assert.deepEqual(missing, [], `文档里点了不存在的路径（悬空引用比不引用更坏）：${missing.join('、')}`)
   assert.deepEqual(wrong, [], `源码改过而文档没跟着改：\n  ${wrong.join('\n  ')}`)
   assert.ok(checked >= 60, `实际核对到的行数太少（${checked}），这条判据没在做事`)
+  assert.ok(parenChecked >= 10, `只核到 ${parenChecked} 处 \`X.kt\`(NNN) 式括号行数 —— 解析没对上，这条在演空戏`)
+})
+
+test('反向对照：括号式行数写错必须被逮住', () => {
+  const known = SERVER_SRC.get('BuildInfo.kt')
+  assert.ok(known, '找不到 BuildInfo.kt，反扫无从构造')
+  const actual = lineCount(path.join(ROOT, known!))
+  const fake = `| 其余 | — | \`BuildInfo.kt\`(${actual})、` + '`JsGuard.kt`' + `(${actual + 1}) |\n`
+  const { wrong, parenChecked } = auditLineCounts(fake)
+  assert.equal(parenChecked, 2, `反扫只核到 ${parenChecked} 处，正则没匹配上`)
+  assert.equal(wrong.length, 1, `写错的括号行数没被逮住：${wrong.join(' / ')}`)
+  assert.match(wrong[0], /JsGuard\.kt/, `逮住的不是那一条：${wrong[0]}`)
 })
 
 test('web/src 里每一份源文件都被这份文档覆盖（不许漏文件）', () => {

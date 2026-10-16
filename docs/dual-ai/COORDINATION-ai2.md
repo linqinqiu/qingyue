@@ -7,14 +7,14 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-16 15:20 |
-| 我现在在做 | P0.3 之后转成"拿真数据量界面"：第一轮量出**发现页分栏名直接上书源原文**（5,574 源的静态栏目名去重 7,321 个，1,550 个带 emoji 与花饰），已修并发 **0.7.3**（清洗 + 重名编号收进 `web/src/lib/exploreLabel.ts`，发现页与 RSS 栏目共用） |
-| 下一件事 | 继续拿真数据量：书库落地页那张「书架」卡在 0 本书时还写着「接着上次没读完的地方读」；RSS 的 `articleStyle` / 已读 / 收藏 / 标准 XML 直解（P1）；发现页分页语义仍等 `renderUrl()` 认 `<页1,页2,…>` |
-| 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效） |
-| 待发版 | 否（已发 **0.7.3**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.3/legado-server-0.7.3-all.jar`（zip sha256 `C86822CDA274F457…`） |
+| 更新时间 | 2026-10-16 22:05 |
+| 我现在在做 | 拿真数据量「登录过的源到底用没用上」：这一轮把**代取书源资源的三条路**（封面 / 正文配图 / 音视频流）补齐了 Cookie 与 Referer，并让 `bookSourceType` 填错的音视频源也能播 —— 发 **0.7.4**（越界动了 `server/**`，见下面 `NOTE` 那条，附回滚命令） |
+| 下一件事 | ① 搜索出 0 条时把「这个源要登录」与「站点真的没内容」分开：实测 `https://m.lrts.me/`（懒人听书，音频源）匿名只回 `{"apiStatus":485,"msg":"你好，需要登录才能继续使用此功能"}`，而这条被 JSONPath 报错吃成了 `Missing property in path $['books']` —— 上游那句话没进界面，也没进 `SourceHealth` 的 `needs_login` 判据（它按 `message.contains("登录")` 分档）。② `RssPanel` 的条目配图是浏览器直连外域（`referrerPolicy="no-referrer"`），防盗链站 403 就自己 `display:none`，没走 `/api/book/image` 那条代理。③ 本机语料 5,574 份里 **2,105 份规则带 `@js:` / `<js>`**，而 `SourceCodec.kt` 的 `isJs = mainJs 非空` 实测 **0 份命中** ⇒ 书源页那颗「JS 书源」统计与筛选恒为 0。④ 发现页分页语义仍等 `renderUrl()` 认 `<页1,页2,…>`；RSS 的 `articleStyle` / 已读 / 收藏（P1） |
+| 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
+| 待发版 | 否（已发 **0.7.4**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.4/legado-server-0.7.4-all.jar`（zip sha256 `5271083799B42875…`）；`dist/qingyue-0.7.3*` 与 `build/libs` 的 0.7.3 产物已清 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
-| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.1/legado-server-0.7.1-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR` 指到仓库外一个临时目录 ⇒ 报的也是 0.7.1，不再是 `dev`）。本机现在**只有两台在跑**：1234 完整版（真库，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/desktop/`、两个 0.7.0 的 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
+| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.4/legado-server-0.7.4-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data` ⇒ 报的也是 0.7.4，不再是 `dev`）。1299 那个隔离库里现导了 **6 份真源**（1 音频 / 2 漫画 / 2 视频 / 1 音频登录站），只为跑 `media-reader-check` 这类数据依赖的门禁，不动真库。本机现在**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/qingyue-0.7.3/`、`dist/desktop/`、0.7.0 的两个 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
 
 ## [2026-10-11] TASK 任务 A —— 前端代码地图
 - 内容：新增 `docs/code-map-frontend.md`（模块清单 / 阅读器文件表 / 关键链路表）。每条引用都回扫过源码，
@@ -594,3 +594,30 @@
 - 判据：`web/test/ExploreLabel.test.ts` 五条（含"编号按清洗后的名字"这条反向对照，以及"页面还在画原文就红"）。
 - 实测：`run-all` **557/557**；真浏览器在 1234 上验清洗后 `最近更新 | 玄幻 | 重生 | 都市 | …`、
   换栏取到 30 本、无 JS 异常；`version-check` 17/0、`package-check` 10/10。发 **0.7.3**。
+
+## [2026-10-16] NOTE 代取书源资源的三条路补齐 Cookie / Referer —— 越界动了 `server/**`
+- 用户当面点名「继续研究，优化 cookie 登录，完善图源、音频、视频源的使用」。这条只能在服务端修：
+  浏览器的 `<img>` / `<audio>` / `<video>` 带不上自定义头，全靠服务端代取。
+- 实测到的失效：Cookie 原来只在文本链路（`RuleRunner.fetchUrl`）与内置浏览器（`WebViewProxy.send`）发，
+  三条代取路（`CoverCache.download`、`Routes.fetchMediaStream`、`/covers/proxy` 与 `/book/image`）**一条都不带**
+  ⇒ 症状正是「书源登录成功、目录正文都读得出、图和音频流还是 403」。
+- 改了 5 个文件：新增 `http/ProxyHeaders.kt`（UA / Referer / Range / Cookie 一处定死，Cookie 按**每一跳落地域名**现取）；
+  `CoverCache` 构造加 `cookieFor`（`fetcher` 留在最后一位，否则 5 处测试的尾随 lambda 绑错参数）并拒 SVG 封面；
+  `Routes` 媒体流带 Cookie、加书架的封面带该书源 Referer、`/covers/{key}` 把历史 SVG 降级成 octet-stream；
+  `RuleRunner.content()` 末尾加 `sniffMediaUrl`（整段就一行 http(s) 且后缀是音视频格式 → 当媒体地址回传）。
+- 判据：`ProxyHeadersTest.kt` 四条、`MediaUrlSniffTest.kt` 三条、`CoverCacheTest.kt` 加一条 SVG 拒收。
+  端到端演不了（SSRF 闸门拒回环地址，本地假上游连不上），这条限制写在测试注释里。
+- 不认可就回滚：`git revert` 本轮那条 `ai2:` 提交（`server/**` 5 份 + 3 份测试），1234 我拿 0.7.3 的包重打退回。
+
+## [2026-10-16] RELEASE 0.7.4 —— 登录过的源，图与音视频这才真取得到
+- 0.7.3 → **0.7.4**：上一条 NOTE 那两组服务端改动 + `ReaderScreen` 认服务端嗅出的媒体地址（`bookSourceType` 填错的也能播）。
+- 发版链：`web run build` → `:server:fatJar` → `scripts/package.mjs --jlink` → 重启 1234 与 1299。
+  **包被实例占用时 `rm` 会 EPERM**：这次先 `node stop.mjs` 停两台再打，一次过。zip sha256 `5271083799B42875…`。
+- 门禁：`run-all` **558/558**（`CodeMapFresh` 加两条：`X.kt`(NNN) 这种写在括号里的行数也核磁盘，带反向对照）；
+  `version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61；
+  `:server:test` 326 用例只红 1 条（`E2EScenariosTest` scenario 2），失败集合是基线 47 条的子集 ⇒ 无回归。
+- 逮到一条**上一版就带着的红**：0.7.3 的 CHANGELOG 里我把要删的装饰字形原样贴了出来，被自己的
+  `CopyStyle`「随包的更新日志里不出现装饰字形」判红 —— 那轮套件是在落笔写日志**之前**跑的。已改成文字描述。
+  记在这儿：发版前"跑齐套件"必须排在 CHANGELOG 落笔之后。
+- 文档：`docs/code-map-frontend.md` §6 服务端 36 份 14,650 行 → **37 份 14,732 行**，行数列与 20 处 A 式指针按磁盘重钉；
+  §6 那句「本轮一行代码都没动」现在是假话，已改成"0.7.4 动了哪四条路 + 指向本条"。

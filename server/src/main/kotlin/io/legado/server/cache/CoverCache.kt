@@ -17,23 +17,46 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 import io.legado.server.data.Database
 import io.legado.server.http.NetworkSecurity
+import io.legado.server.http.proxyRequestHeaders
 
 data class CachedCover(val key: String, val contentType: String)
 
-class CoverCache(private val directory: Path, private val fetcher: ((String) -> Pair<String, ByteArray>)? = null) {
+/**
+ * @param cookieFor 这台机器上某个地址该带的 Cookie（按注册域取，与文本链路同一个 `Database.getCookieForUrl`）。
+ *
+ * 为什么必须有它：浏览器自己发 `<img>` / `<audio>` / `<video>` 时**带不上自定义请求头**，
+ * 所以这些资源一律由服务端代取。以前代取只补了 Referer，不补 Cookie，
+ * 于是"书源登录成功、目录正文都读得出，图和音频流一打开还是 403" —— 登录白做。
+ * 每一跳都按**那一跳的落地地址**重新取：跳去别的域名时不能把原域的凭据捎过去。
+ */
+class CoverCache(
+    private val directory: Path,
+    private val cookieFor: (String) -> String? = { null },
+    /** 只有测试注入（生产为 null）；**必须留在最后一个参数位** —— 测试用的是尾随 lambda，
+     *  换到前面就会把 `{ "image/png" to bytes }` 绑给 `cookieFor`，五个既有用例一起编译不过。 */
+    private val fetcher: ((String) -> Pair<String, ByteArray>)? = null,
+) {
     private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build()
 
     init { Files.createDirectories(directory) }
 
-    fun cache(url: String): CachedCover {
+    /**
+     * 书架那条路用的封面抓取。`referer` 传这本书的**书源地址**：
+     * 搜索页与发现页走 `/covers/proxy` 早就带 Referer 了，书架这条不带，
+     * 于是同一张封面在搜索结果里出得来、加进书架就变灰块（防盗链站按来源判）。
+     */
+    fun cache(url: String, referer: String? = null): CachedCover {
         val key = sha256(url)
         val stored = directory.resolve(key)
         if (Files.exists(stored)) return CachedCover(key, "image/*")
-        val (contentType, body) = fetcher?.invoke(url) ?: download(url)
-        require(contentType.lowercase().startsWith("image/")) { "封面不是图片" }
+        val (contentType, body) = fetcher?.invoke(url) ?: download(url, referer)
+        val type = contentType.substringBefore(';').trim().lowercase()
+        require(type.startsWith("image/")) { "封面不是图片" }
+        // 与正文配图同一条规矩：同源 SVG 里可以带脚本，存下来再同源发出去就是给自己开个执行面。
+        require(type != "image/svg+xml") { "封面不许是 SVG" }
         require(body.size <= MAX_BYTES) { "封面超过 5 MiB 限制" }
         writeAtomic(key, body)
-        return CachedCover(key, contentType.substringBefore(';'))
+        return CachedCover(key, type)
     }
 
     fun getIfCached(url: String): CachedCover? {
@@ -111,9 +134,8 @@ class CoverCache(private val directory: Path, private val fetcher: ((String) -> 
     private fun download(url: String, referer: String? = null): Pair<String, ByteArray> {
         var uri = URI(url); validate(uri)
         repeat(4) {
-            val builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(20)).header("User-Agent", "LegadoServer/0.1").GET()
-            // 重定向后不再补发 Referer：跳去别的域名时把原站地址带出去等于泄露来源。
-            referer?.let { builder.header("Referer", it) }
+            val builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(20)).GET()
+            proxyRequestHeaders(uri, referer, cookieFor).forEach { (name, value) -> builder.header(name, value) }
             val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
             if (response.statusCode() in 300..399) {
                 response.body().close()

@@ -2,8 +2,8 @@
 
 生成方式：**逐文件读全文**，不是扫文件名、不是只读热点。2026-10-11 那轮读的是拆分前的树，之后 0.7.0
 把阅读器重做了一遍；本文件在 2026-10-14 按 `main` 上的现状重对了一遍数字：
-`web/src` 95 份共 28,692 行（其中 `styles.css` 5,841 行）、`web/test` 全部判据文件，
-另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（36 份 14,650 行）。
+`web/src` 95 份共 28,694 行（其中 `styles.css` 5,841 行）、`web/test` 全部判据文件，
+另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（37 份 14,732 行）。
 每条职责后面给的 `文件名:行号` 都是读到那一行时写下的；行号会随改动漂，核对命令：
 
 ```bash
@@ -123,17 +123,17 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | `RssPage.tsx` | 24 | 「订阅」这一页的骨架：页头 + `RssPanel`，除此之外不装别的 | `RssPage`(`:12`) | 这一页只有 RSS（要**读**的源）。书源订阅以前与它同页两个页签，各挂一条计数，就为分清"我这一条到底在哪张"——现在两件事按数据模型分家，计数徽标与页签样式一起删了 |
 | `syncErrors.ts` / `Notice.tsx` / `EmptyGuide.tsx` | 89/27/36 | 报错翻译 + 一行反馈 + 可点的空态 | `describeSyncError`、`looksLikeFailure`(`:78`)、`Notice`(`:10`) | Notice 只在 `looksLikeFailure` 时才转人话并把原文收进 `<details>`(`:13-24`)，`headline === raw` 时不重复画；空态的去处一律是按钮(`:21`)，不是一句"暂无数据" |
 
-### 2.5 阅读器（`ReaderScreen.tsx` 2,939 行：算术全在 §2.1 的纯函数里，这里只做 DOM 与编排）
+### 2.5 阅读器（`ReaderScreen.tsx` 2,941 行：算术全在 §2.1 的纯函数里，这里只做 DOM 与编排）
 
 | 块 | 关键件（file:line） | 读出来的坑 / 不变量 |
 | :--- | :--- | :--- |
-| 正文加载与缓存命中 | `preloadedContentRef`(`:454`)、`applyContent`(`:1456`)、`useLayoutEffect`(`:1383` 起)、`syncCacheStatus`(`:548`)、`handleCacheRange`(`:1313`)、`handleSyncToLocal`(`:1342`)、`handleCancelCache`(`:1380`) | 用 `useLayoutEffect` 而不是 `useEffect`：预载（下一章常常已经在手）命中时正文在**绘制之前**就换好了，否则每章都先闪一帧骨架屏。预载 Map 超 12 章丢最旧。缓存数取"服务端与 IndexedDB 的并集较大值"(`:635`)，两边各自落后是常态。 |
-| 续接窗口（滚动流） | `flowTail`(`:264`)、`pendingKeepRef`(`:266`)、`flowAdvanceRef`(`:268`)、`flowKey`(`:270`)、`flowHead`(`:288`)、`pendingPrependRef`(`:292`)、`prependPreviousChapter`(`:1790`) | `content` 与 `loadedChapterUrl` 成对描述"屏幕上挂的是哪一章"，靠这对不变量判过渡（`isStaleContent`(`:636`)），所以切章时**刻意不清** `content`(`:306`)—— 那个目的已由 `ttsParagraphs`(`:791`) 承担，视觉侧跟着清就是"章节之间白闪"。回翻接上一章必须带"落在末尾"的定位，且必须等排版完成。 |
-| 分页几何 | `pageIndex`(`:376`)、`pageCount`(`:377`)、`pageFillers`(`:379`)、`columnWidth`(`:380`)、`stride`(`:381`)、`measurePagination`(`:1601`)、`pageAlignedRef`(`:300`)、`measuredStartsRef`(`:297`)、`goNextPage`(`:1770`)、`goPrevPage`(`:1812`) | 每章栏数**不能**用 `getBoundingClientRect().width`：跨栏的 section 只报两栏宽，首行缩进会把一栏数成两栏 —— 必须 `Range.getClientRects()` 按 stride 分桶。挪窗口的闸门读的是量出来的起始栏(`:446`)，不对齐就不挪，否则"同一栏读两遍"。`setPageFillers` 只在数组真变了才换引用，防自激重量。**测量 effect 的依赖里必须含 `flowHead/flowTail/pageFillers`** —— 内容变宽而视口没变时 ResizeObserver 一次都不回调，多出来的列会被 `overflow:hidden` 裁在视口外（AGENTS 那条「分页/测量」）。 |
-| 切章与定位 | `changeChapter`(`:1208`)、`targetInitialPageRef`(`:459`)、`handleSwitchSource`(`:1390`) | 卷头 `isVolume` 无正文地址，要沿方向跳到最近的真实章；越界给「已是第一章/最后一章」而不是静默。`'auto'` 必须落成"分页模式回到第 1 页"，否则从目录跳一章只有三页的书会停在旧页码上。触底滚轮跨章带 1.2s 冷却，且窗口里已挂着下一章时不再翻章。**换源（`:1321`）这轮补上了停朗读与清窗口**：原来只 `clear()` 预载，旧书的续接章节会挂在新 `currentBook` 下面，而朗读管线因 chunks 变空直接 `return` —— 悬浮条停在播放态却不出声。 |
-| TTS 联动 | `playTtsChunk`(`:933`)、`getInitialTtsChunkIndex`(`:1017`)、`toggleTts`(`:1083`)、`stopAllEngines`(`:866`)、`stopTts`(`:871`) | 只在 `mode !== 'continue'` 时 `stopAllEngines`：连播跨章不能中断管线。5 分片前瞻 + 距章末 5 句内预载下一章。开启朗读时以**视口内第一个完整可见段落**为起始分片（`:922` 返回 title chunk 时是 `-1` 口径，与 `TtsPlayerBar` 同一份）。段落点击选播严格守卫 `if (!ttsActive) return`。 |
-| 手势与点击分区 | `runTapAction`(`:2171`)、`readingRect`(`:2206`)、`onPointerUp`(`:2252`)、`onWheelPaginate`(`:2312`) | 只认 `event.button === 0`：右键关掉上下文菜单之后页面已经跟着翻页了（用户 2026-10-04 的事故）。点击分区按正文矩形算而不是整窗，固定目录时侧栏那一段不算。滚轮的 `deltaMode` 三种口径必须换算，否则触控板翻不动。 |
-| 进度上报 | `persist`(`:839`) | 滚动 effect 1.2s 节流 + 页面隐藏时 + 卸载 + 切章 + 返回书架各写一次；离线时写进队列，`online` 后静默 flush（`offlineStorage.ts:457`）。 |
+| 正文加载与缓存命中 | `preloadedContentRef`(`:454`)、`applyContent`(`:1458`)、`useLayoutEffect`(`:1383` 起)、`syncCacheStatus`(`:548`)、`handleCacheRange`(`:1315`)、`handleSyncToLocal`(`:1344`)、`handleCancelCache`(`:1382`) | 用 `useLayoutEffect` 而不是 `useEffect`：预载（下一章常常已经在手）命中时正文在**绘制之前**就换好了，否则每章都先闪一帧骨架屏。预载 Map 超 12 章丢最旧。缓存数取"服务端与 IndexedDB 的并集较大值"(`:635`)，两边各自落后是常态。 |
+| 续接窗口（滚动流） | `flowTail`(`:264`)、`pendingKeepRef`(`:266`)、`flowAdvanceRef`(`:268`)、`flowKey`(`:270`)、`flowHead`(`:288`)、`pendingPrependRef`(`:292`)、`prependPreviousChapter`(`:1792`) | `content` 与 `loadedChapterUrl` 成对描述"屏幕上挂的是哪一章"，靠这对不变量判过渡（`isStaleContent`(`:636`)），所以切章时**刻意不清** `content`(`:306`)—— 那个目的已由 `ttsParagraphs`(`:791`) 承担，视觉侧跟着清就是"章节之间白闪"。回翻接上一章必须带"落在末尾"的定位，且必须等排版完成。 |
+| 分页几何 | `pageIndex`(`:376`)、`pageCount`(`:377`)、`pageFillers`(`:379`)、`columnWidth`(`:380`)、`stride`(`:381`)、`measurePagination`(`:1603`)、`pageAlignedRef`(`:300`)、`measuredStartsRef`(`:297`)、`goNextPage`(`:1772`)、`goPrevPage`(`:1814`) | 每章栏数**不能**用 `getBoundingClientRect().width`：跨栏的 section 只报两栏宽，首行缩进会把一栏数成两栏 —— 必须 `Range.getClientRects()` 按 stride 分桶。挪窗口的闸门读的是量出来的起始栏(`:446`)，不对齐就不挪，否则"同一栏读两遍"。`setPageFillers` 只在数组真变了才换引用，防自激重量。**测量 effect 的依赖里必须含 `flowHead/flowTail/pageFillers`** —— 内容变宽而视口没变时 ResizeObserver 一次都不回调，多出来的列会被 `overflow:hidden` 裁在视口外（AGENTS 那条「分页/测量」）。 |
+| 切章与定位 | `changeChapter`(`:1210`)、`targetInitialPageRef`(`:459`)、`handleSwitchSource`(`:1392`) | 卷头 `isVolume` 无正文地址，要沿方向跳到最近的真实章；越界给「已是第一章/最后一章」而不是静默。`'auto'` 必须落成"分页模式回到第 1 页"，否则从目录跳一章只有三页的书会停在旧页码上。触底滚轮跨章带 1.2s 冷却，且窗口里已挂着下一章时不再翻章。**换源（`:1321`）这轮补上了停朗读与清窗口**：原来只 `clear()` 预载，旧书的续接章节会挂在新 `currentBook` 下面，而朗读管线因 chunks 变空直接 `return` —— 悬浮条停在播放态却不出声。 |
+| TTS 联动 | `playTtsChunk`(`:935`)、`getInitialTtsChunkIndex`(`:1019`)、`toggleTts`(`:1085`)、`stopAllEngines`(`:868`)、`stopTts`(`:873`) | 只在 `mode !== 'continue'` 时 `stopAllEngines`：连播跨章不能中断管线。5 分片前瞻 + 距章末 5 句内预载下一章。开启朗读时以**视口内第一个完整可见段落**为起始分片（`:922` 返回 title chunk 时是 `-1` 口径，与 `TtsPlayerBar` 同一份）。段落点击选播严格守卫 `if (!ttsActive) return`。 |
+| 手势与点击分区 | `runTapAction`(`:2173`)、`readingRect`(`:2208`)、`onPointerUp`(`:2254`)、`onWheelPaginate`(`:2314`) | 只认 `event.button === 0`：右键关掉上下文菜单之后页面已经跟着翻页了（用户 2026-10-04 的事故）。点击分区按正文矩形算而不是整窗，固定目录时侧栏那一段不算。滚轮的 `deltaMode` 三种口径必须换算，否则触控板翻不动。 |
+| 进度上报 | `persist`(`:841`) | 滚动 effect 1.2s 节流 + 页面隐藏时 + 卸载 + 切章 + 返回书架各写一次；离线时写进队列，`online` 后静默 flush（`offlineStorage.ts:457`）。 |
 | 目录列表 | `VirtualChapterList`(`:110`)、窗口与居中定位引 `virtualSlice.ts` | 行 key 必须 `index-url` 拼（服务端不去重同 url）；`TOC_ROW_HEIGHT` 与样式表 `--row-h-list` 必须相等。程序化点一条不在窗口里的行是**对的**（它本来就不在 DOM 里），门禁要先滚再点。 |
 
 ### 2.6 阅读器外壳与设置面板（0.7.0 那一轮：MD3 上线为默认 + 三标签「界面」+ 笔记）
@@ -203,13 +203,13 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 > 它会逐条核"那一行确实写着这个符号"。只写行号不写符号的散文指针没人管，所以这一节先前有两条指错了也没红。
 
 1. **多书源流式搜索**：`main.tsx:1425 runSearch`（范围闸门 + 记历史）→ `lib/searchStore.ts:261 startSearch` → 同文件的空表闸门 → `lib/api.ts:670 streamSearch`（WebSocket）→ `searchFilters.ts:251 mergeStreamedResults` 判重（判重表 `searchStore.ts:190 seenResults` 跨封包常驻）→ `searchStore.ts:247 flushProgress` 250ms 攒批 → `searchStore.ts:519 useSearchStore`（`useSyncExternalStore` 出口）→ `main.tsx:1403 LibraryPage` 三档排序（`searchFilters.ts:158 sortSearchGroups`）。
-2. **开一本书**：`ShelfPage`/`LibraryPage` → `main.tsx:3179 openReader` →（目录失败**不伪造章节**）→ `ReaderScreen.tsx:1456 applyContent`（在 `useLayoutEffect` 里先命中预载 `ReaderScreen.tsx:454 preloadedContentRef`，否则走 `lib/api.ts:462 content`）→ 排版（分页与滚动两条分支都在 `ReaderScreen.tsx` 的 return 里）→ `ReaderScreen.tsx:839 persist` 写进度。
+2. **开一本书**：`ShelfPage`/`LibraryPage` → `main.tsx:3179 openReader` →（目录失败**不伪造章节**）→ `ReaderScreen.tsx:1458 applyContent`（在 `useLayoutEffect` 里先命中预载 `ReaderScreen.tsx:454 preloadedContentRef`，否则走 `lib/api.ts:462 content`）→ 排版（分页与滚动两条分支都在 `ReaderScreen.tsx` 的 return 里）→ `ReaderScreen.tsx:841 persist` 写进度。
 3. **正文取不到时的离线回落**：`api.content` 失败 → `offlineStorage` 按 `['loc_book', bookUrl]` 查 IndexedDB → 命中就照常渲染。**副作用**：门禁里 `request.abort()` 会被这条兜住，界面看着正常而其实在读缓存（AGENTS「探针」那条）。
-4. **朗读**：`ReaderScreen.tsx:1083 toggleTts` → `ttsEngine.ts:161 HttpAudioTtsEngine`（或 `ttsEngine.ts:44 WebSpeechEngine`）→ `readerSettings.ts:362 ttsSessionKey` 定会话身份 → `api.ts` 的 `/api/tts/stream` + SSE 进度通道 → `ttsEngine.ts:101 startWatchdog` 心跳、单句相对时钟与 600ms 尾静音都在同一个类里 → `TtsPlayerBar` 显示 → 段落高亮由 `ReaderScreen.tsx` 的 `currentChunkIndex` 驱动。
+4. **朗读**：`ReaderScreen.tsx:1085 toggleTts` → `ttsEngine.ts:161 HttpAudioTtsEngine`（或 `ttsEngine.ts:44 WebSpeechEngine`）→ `readerSettings.ts:362 ttsSessionKey` 定会话身份 → `api.ts` 的 `/api/tts/stream` + SSE 进度通道 → `ttsEngine.ts:101 startWatchdog` 心跳、单句相对时钟与 600ms 尾静音都在同一个类里 → `TtsPlayerBar` 显示 → 段落高亮由 `ReaderScreen.tsx` 的 `currentChunkIndex` 驱动。
 5. **书源登录五路**：`SourceLoginModal.tsx:203 handleAction` →（表单）`api.ts:427 saveSourceLoginInfo` + `api.ts:432 executeSourceLoginAction`；（内置浏览器）`SourceWebViewModal` → `WebViewProxy` 服务端反代并吸收 `Set-Cookie`；（真浏览器）`api.ts:441 externalLoginStart` → `ExternalBrowserLogin.kt`；（粘贴）`api.ts:429 saveSourceCookie` → `Routes.kt` 的 `/login-cookie`；（书签）目标站点自己 POST 同一个端点，Origin 由 `allowCookieSyncOrigin` 判。
 6. **整库体检**：`SourceHealthModal.tsx:140 AUTO_CHECK_LIMIT` 决定要不要自动开跑 → `sourceHealthRun.ts:93 startHealthRun` 分批 → `api.ts:369 healthCheckSources` → 服务端 `source/SourceHealth.kt` 的 `probe` 在**发请求之前**把"没配搜索"定档 → `sourceGrouping.ts:70 autoTagBatches` 过程中打标签 → `main.tsx` 的批量端点落库（`SourcesPage` 那一段）。
 7. **备份**：`BackupPage.tsx:36 reportImportSummary` ← `api.ts:622 importBackupFile` ← `BackupImporter.kt`（纯内存按需读 zip + 炸弹上限）→ `KEPT_SECTIONS` 那批个性化条目走 `backupPreferences.ts:49 mapReadStyle` / `backupPreferences.ts:121 mapTtsEngine`。
-8. **换源**：阅读器「换源」→ `SourceSwitchModal.tsx:42 matchBestChapter`（流式找同名 + 三级定位）→ `ReaderScreen.tsx:1390 handleSwitchSource`（这轮起会停朗读、清续接窗口、换容器 key）→ `api.ts:558 switchBookshelfSource` 落库 → `sourceInspector.ts:384 inspectAllSourcesConcurrently` 给出"这个源到底能不能读"的分数。
+8. **换源**：阅读器「换源」→ `SourceSwitchModal.tsx:42 matchBestChapter`（流式找同名 + 三级定位）→ `ReaderScreen.tsx:1392 handleSwitchSource`（这轮起会停朗读、清续接窗口、换容器 key）→ `api.ts:558 switchBookshelfSource` 落库 → `sourceInspector.ts:384 inspectAllSourcesConcurrently` 给出"这个源到底能不能读"的分数。
 
 ## 4. 读后记 · 只记录、没动的（每条都要能追溯到一次真实的事实）
 
@@ -219,7 +219,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | :--- | :--- | :--- | :--- |
 | P1 | `searchStore.ts:428 chooseSource` | 全程不判 `openGroupGen`（对比 `openGroup` 的 `:405`/`:412`/`:420`），而 `startSearch` 在 `:297-299` 已把 `openBook/choices` 清空 | 新一轮搜索发出后，上一次换源的响应晚到，会把**上一轮的 `openBook` 写回来** —— 阅读器重新打开旧书，没有任何报错 |
 | P2 | `sourceInspector.ts:269-294` | 后段正文**取失败**就 `vipHit = true` 并把 0 塞进长度数组（随后拉低均值）；另 `:269` 在早章请求抛错被吞后仍把 `totalSampleChecked` 记 1，而 `:346` 的 `validChaptersCount` 按"读成功且 ≥200 字"计 —— 同一个"检查过"两套口径 | 结论写「疑似 VIP 截断」，而事实是"没读到"：从没发生过付费判定 |
-| P2 | `ReaderScreen.tsx:1208 changeChapter` | 依赖里只有 `currentBook.chapters.length`，函数体读 `chapters[nextIndex]`；`:838 playTtsChunk` 体内调 `changeChapter`（`:851` 附近）却不在它的依赖里 | 闭包陈旧风险，正常路径看不出来；要改得连判据一起，单独一轮 |
+| P2 | `ReaderScreen.tsx:1210 changeChapter` | 依赖里只有 `currentBook.chapters.length`，函数体读 `chapters[nextIndex]`；`:838 playTtsChunk` 体内调 `changeChapter`（`:851` 附近）却不在它的依赖里 | 闭包陈旧风险，正常路径看不出来；要改得连判据一起，单独一轮 |
 | P2 | `ReaderScreen.tsx:504`/`:505` | 两个 `useEscapeClose` 都没传 `blockedBy`（`useEscapeClose.ts:12` 支持），且 `:505` 的闭包引用 `:682` 才声明的 `setLightboxSrc`，靠"渲染期不调用"躲过 TDZ | 一次 Esc 同时关掉图片预览与离线朗读确认层；顺序一改就炸 |
 | P2 | §2.9 那几行的**裸行号**（单页大区 / 媒体查询 / 浮层一档 / 死样式清单） | `CodeMapFresh` 对不带符号的裸行号只核"还在不在文件范围内"，核不了内容，所以样式表长回去之后这一段一直没人重扫：实测 `.overlay-backdrop` 现在在 `:5618`，文档写 `:5597`（差 21），`--row-h-list` 那一段本轮已按内容改正。「订阅」拆页那一轮又删掉 14 行（`:488`、`:5065-5069`、`:5213-5221`），未改的几条从此再多偏 1–15 行 | 照着文档的数字去翻样式表会翻到别处；只有带符号的指针（A/B 式）真的被门禁盯着，裸行号全靠人 |
 | P2 | `main.tsx` 重复实现 | 启停两份（模块级 `flipSource`(`:120`) 与书源页批量段那组处理函数）、删除两份且**端点不同**（`batchSources('delete')` vs `api.remove`）、Esc 两份（`BookDetailModal` 自挂 keydown vs `useEscapeClose`） | 两份必然漂；换源/删源的行为在不同入口下不完全一致 |
@@ -336,18 +336,21 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
   全部改成新布局，`CodeMapFresh` 顺带升级成递归枚举 + 目录前缀反扫（写错目录也红，反扫验过）。
   合并冲突 8 处，其中 4 处正是那批裸 `\r` 行断裂：移动后的文件带着旧写法回来，解法是"取新路径 + 去掉裸 `\r`"，两条信息都没丢。
 
-## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，36 份 14,650 行，已按职责拆成 12 个子包）
+## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，37 份 14,732 行，已按职责拆成 12 个子包）
 
-> **领地声明**：`server/` 归 AI-1，本轮**一行代码都没动**。这一节的作用是：让前端知道每一侧的对面是什么形状，
-> 以及把我能用命令复现的事实交出去（见 §4.2 与 `docs/dual-ai/COORDINATION-ai2.md`）。
+> **领地声明**：`server/` 归 AI-1。0.7.0~0.7.3 这几轮**一行代码都没动**；0.7.4 动了四条代取书源资源的链路
+> （`http/ProxyHeaders.kt`、`cache/CoverCache.kt`、`http/Routes.kt` 的媒体流与封面、`rules/RuleRunner.kt` 的媒体地址嗅探），
+> 理由与回滚命令记在 `docs/dual-ai/COORDINATION-ai2.md`。这一节的作用是：让前端知道每一侧的对面是什么形状，
+> 以及把我能用命令复现的事实交出去（见 §4.2 与同一份协作账）。
 > 读法与前端不同：两份并行读码 + 我只逐条**实测**了我准备发表的那部分（curl / grep / 读文件），
 > 没实测到的不写在这里 —— 所以这一节是"照录 + 口径"，不是服务端注释的替代品。
 
 | 文件 | 行 | 它管什么 | 与前端对得上之处 |
 | :--- | ---: | :--- | :--- |
-| `Routes.kt` | 2,351 | 全部 HTTP/WS 端点；`route("/api")` 下再分 `/sources/{id}`、`/tts`、`/rss`、`/res`、`/replace-rules`、`/external-login`、`/browser` | 前端 `api.ts` 的端点表逐条对得上；`/api/rss/tabs`、`DELETE /api/rss/sources` 实测 200/204 且 `?q=` 过滤生效（§4.2 第 2 条说的是那句错注释，不是功能） |
+| `http/ProxyHeaders.kt` | 33 | 代取书源资源（封面 / 正文配图 / 音视频流）该带哪些请求头，**一处定死** | 浏览器的 `<img>` / `<audio>` / `<video>` 带不上自定义头，这三条路全靠服务端代取。Cookie 按**每一跳的落地域名**现取（同一个 `Database.getCookieForUrl`，与文本链路同源），Referer 走完重定向链。以前三条代理路一条都不带 Cookie ⇒ 「书源登录成功、目录正文读得出、图和音频流还是 403」。判据 `ProxyHeadersTest.kt`（端到端演不了：SSRF 闸门拒回环地址，本地假上游连不上） |
+| `Routes.kt` | 2,354 | 全部 HTTP/WS 端点；`route("/api")` 下再分 `/sources/{id}`、`/tts`、`/rss`、`/res`、`/replace-rules`、`/external-login`、`/browser` | 前端 `api.ts` 的端点表逐条对得上；`/api/rss/tabs`、`DELETE /api/rss/sources` 实测 200/204 且 `?q=` 过滤生效（§4.2 第 2 条说的是那句错注释，不是功能） |
 | `data/Database.kt` | 2,302 | SQLite（WAL）：`source`、`book_shelf`、`book_group`、`reading_progress`、`book_toc_cache`、`book_content_cache`、`cover_cache`、`source_subscription`、`rss_source`、`source_login_state`、`cookie`、`replace_rule`、`log_db`/`log_entry` | `listSearchSourceRecords`(`:408-:409`) 对空表取 `takeIf { it.isNotEmpty() }` ⇒ **空 = 不限制**，这就是前端 `searchStore.ts:268` 那道闸门的由来；体检那条不在这张表上按 id 逐个查（`source/SourceHealth.kt` 的 `probe` 收的是 `(id, name, rawJson, …)`，记录由调用侧一次取回） |
-| `RuleRunner.kt` | 1,469 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文 |
+| `RuleRunner.kt` | 1,493 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文；`content()` 末尾还会**嗅一次正文**（`sniffMediaUrl`：整段就一行、以 http(s) 开头且后缀是音视频格式时把它当媒体地址回传）——社区里 `bookSourceType` 填错的音视频源据此能播 |
 | `JsSandbox.kt` | 840 | Rhino 沙箱 | 顶级 `return` 要包装、`JavaImporter` 必须是空替身（AGENTS 那两条），否则整批书源报错 |
 | `WebViewProxy.kt` | 815 | 内置登录浏览器的整站反代 + 一次性令牌 + `Set-Cookie` 吸收 | `SourceWebViewModal` 的 iframe 能不开 `allow-same-origin` 全靠这一侧 |
 | `Models.kt` | 839 | 全部 `@Serializable` 请求/响应体 | `Map<String, Any>` 在这侧会直接 500，所以响应体都是具名 data class；`SourceHealthCheckItem` 在 `model/Models.kt:673`、`statusCategory` 在 `:680` |
@@ -361,7 +364,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | `SourceDebugger.kt` | 170 | 分阶段调试的 SSE 事件（阶段名字面串在 `:41`/`:60`/`:87`/`:113`/`:139`） | 与 `SourceDebugModal.tsx:13` 的 `STAGES` 是两处各写一份（§4.2 第 5 条） |
 | `ExternalBrowserLogin.kt` | 224 | 真浏览器登录（拉起、抓取、状态） | `SourceLoginModal` 的 external 分段与 2.5s 轮询对着它 |
 | `DesktopLauncher.kt` / `StaticWeb.kt` / `AppConfig.kt` / `ServerConfig.kt` | 247/71/59/49 | 桌面封装、静态资源托管、配置与默认端口 | `ServerPortModal` 只写 `port.txt` 并如实说"重启后生效" |
-| 其余 | — | `LogService.kt`(226)、`RuleValue.kt`(446)、`RuleSplit.kt`(222)、`ContentProcessor.kt`(182)、`CoverCache.kt`(177)、`LooseJson.kt`(169)、`SourceCodec.kt`(144)、`UpdateCheck.kt`(97)、`NetworkSecurity.kt`(82)、`SubscriptionService.kt`(119)、`BookCacheService.kt`(178)、`ContentPipeline.kt`(37)、`JsGuard.kt`(39)、`BuildInfo.kt`(18)、`Application.kt`(149) | `normalizeSourceId`（`SourceCodec.kt`）与前端 `bookSourceFields`/`SourceEditorPanel.tsx:31 declaredSourceId` 同口径：主键是剥掉 `#`/`##` 注解的域名 |
+| 其余 | — | `LogService.kt`(227)、`RuleValue.kt`(446)、`RuleSplit.kt`(222)、`ContentProcessor.kt`(184)、`CoverCache.kt`(201)、`LooseJson.kt`(169)、`SourceCodec.kt`(145)、`UpdateCheck.kt`(140)、`NetworkSecurity.kt`(82)、`SubscriptionService.kt`(124)、`BookCacheService.kt`(184)、`ContentPipeline.kt`(37)、`JsGuard.kt`(40)、`BuildInfo.kt`(18)、`Application.kt`(162) | `normalizeSourceId`（`SourceCodec.kt`）与前端 `bookSourceFields`/`SourceEditorPanel.tsx:31 declaredSourceId` 同口径：主键是剥掉 `#`/`##` 注解的域名 |
 
 **一条读码纪律记在这里**：这一节的每个数字都来自 `wc -l`/`grep`/`curl`，不是从记忆或上一轮摘要里抄的。
 本轮就撞过一次：某份中间结论写着「RSS `/tabs` 与 `DELETE /sources` 恒 400」，实测是 200/204 且筛选生效 ——

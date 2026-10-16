@@ -793,7 +793,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 优先用服务端给的 `mediaUrl`；离线缓存没有它，但音频源的 `content` 本身就是那串地址，故兜底。
   const sourceType = currentBook.details.sourceType ?? 0
   const mediaSrc = useMemo(() => {
-    if (!isMediaType(sourceType)) return null
+    // 服务端嗅出来的地址优先认：社区书源里 `bookSourceType` 填错的一大把（写着 0 文本、正文却是 m3u8），
+    // 只按声明类型放行的话，这些源永远排成一段文字。自己兜底嗅那条只在离线缓存没有 mediaUrl 时用。
+    if (!mediaUrl && !isMediaType(sourceType)) return null
     // 优先用服务端给的 mediaUrl；离线缓存没有它，但音频源的 content 本身就是那串地址，故兜底。
     const raw = mediaUrl ? mediaUrl : (() => {
       const trimmed = content.trim()

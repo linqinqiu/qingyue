@@ -79,7 +79,7 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     val runner = RuleRunner(database = database)
     // coverCache 要在 bookCache 之前建：离线缓存漫画章节时顺带把图抓进同一个磁盘缓存，
     // 否则离线打开漫画只有 `![图片](url)` 占位、图全裂。
-    val coverCache = CoverCache(config.coverCacheDirectory)
+    val coverCache = CoverCache(config.coverCacheDirectory, cookieFor = { database.getCookieForUrl(it) })
     val bookCache = BookCacheService(database, runner, coverCache) { message -> log.info(message) }
     val edgeTts = EdgeTtsService()
     val ttsSessions = TtsSessionService(edgeTts)

@@ -1232,7 +1232,7 @@ fun Route.apiRoutes(
             bookCache.enqueue(CachedBookRequest(request.sourceId, request.bookUrl, request.tocUrl))
             if (immediateCover == null && (!request.coverUrl.isNullOrBlank() || !request.alternateSources.isNullOrEmpty())) {
                 application.launch(Dispatchers.IO) {
-                    val cached = tryCacheCover(coverCache, request.coverUrl, request.alternateSources)
+                    val cached = tryCacheCover(coverCache, request.coverUrl, request.alternateSources, referer = request.sourceId)
                     if (cached != null) {
                         database.updateBookshelfCover(request.sourceId, request.bookUrl, cached.key, cached.contentType)
                     }
@@ -1593,7 +1593,7 @@ fun Route.apiRoutes(
             val book = request.book
             if (request.oldSourceId.isBlank() || request.oldBookUrl.isBlank() || book.sourceId.isBlank() || book.bookUrl.isBlank() || book.name.isBlank() || book.tocUrl.isBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "书架数据无效")); return@post }
             val altList = (request.alternateSources ?: emptyList()) + (book.alternateSources ?: emptyList())
-            val cover = tryCacheCover(coverCache, book.coverUrl, altList)
+            val cover = tryCacheCover(coverCache, book.coverUrl, altList, referer = book.sourceId)
             bookCache.cancel(request.oldSourceId, request.oldBookUrl)
             val (item, orphan) = database.switchBookshelf(request.oldSourceId, request.oldBookUrl, book, cover, request.alternateSources)
             orphan?.let(coverCache::delete)
@@ -1667,7 +1667,11 @@ fun Route.apiRoutes(
         get("/covers/{key}") {
             val key = call.parameters["key"] ?: return@get call.respond(HttpStatusCode.NotFound)
             val file = coverCache.file(key) ?: return@get call.respond(HttpStatusCode.NotFound)
-            val type = database.coverContentType(key)?.let(ContentType::parse) ?: ContentType.Application.OctetStream
+            // 只把 SVG 这一种降级：同源发 SVG 等于给自己开一个脚本执行面。
+            // `CoverCache.cache()` 现在也拒收它，这条管的是已经躺在盘上的历史文件。
+            val stored = database.coverContentType(key)?.lowercase()?.substringBefore(';')
+            val type = if (stored == "image/svg+xml") ContentType.Application.OctetStream
+            else stored?.let { ContentType.parse(it) } ?: ContentType.Application.OctetStream
             call.response.cacheControl(CacheControl.MaxAge(maxAgeSeconds = 7 * 24 * 60 * 60, visibility = CacheControl.Visibility.Private))
             call.respond(LocalFileContent(file.toFile(), type))
         }
@@ -1677,7 +1681,9 @@ fun Route.apiRoutes(
          * （用户 2026-10-09：手机端 00小说网封面全显示、青阅的却不行）。本路由按需在服务端抓取、
          * 校验、落盘缓存，浏览器只加载同源地址；7 天内再命中直接出盘。
          * 闸门全是现成的（`CoverCache.cacheContentImage`）：SSRF 校验（只许公网 http/https）、
-         * 只收图片类型且拒 SVG（同源 SVG 可带脚本）、5 MiB 上限、gzip 解码、重定向不带 Referer。
+         * 只收图片类型且拒 SVG（同源 SVG 可带脚本）、5 MiB 上限、gzip 解码；Referer 带着原页地址走完整个
+         * 重定向链（图站常是"主域 → 图片 CDN"两跳，中途收掉会把能出图的站打回 403），
+         * Cookie 则按每一跳的落地域名现取 —— 见 `proxyRequestHeaders`。
          */
         get("/covers/proxy") {
             val url = call.request.queryParameters["url"].orEmpty()
@@ -1769,8 +1775,8 @@ fun Route.apiRoutes(
         }
         /**
          * 媒体流式代理（音频/视频/EPUB 直链）：浏览器原生 `<audio>/<video>` 无法自定义请求头，
-         * 带不上 Referer，遇到防盗链源就 403 播不了；且需要 Range 支持才能拖动进度、才能被浏览器接受为可播放媒体。
-         * 这里由服务端代取并流式回传：注入 Referer、原样转发/回传 Range。媒体文件可能很大，
+         * 带不上 Referer 也带不上 Cookie，遇到防盗链或要登录的源就 403 播不了；且需要 Range 支持才能拖动进度、才能被浏览器接受为可播放媒体。
+         * 这里由服务端代取并流式回传：注入 Referer 与该域已登录的 Cookie、原样转发/回传 Range。媒体文件可能很大，
          * 不落盘缓存（与 5MiB 上限的封面缓存不同），只在传输途中于内存里中转。
          */
         get("/book/media") {
@@ -1783,7 +1789,7 @@ fun Route.apiRoutes(
             val range = call.request.headers["Range"]
             withContext(Dispatchers.IO) {
                 try {
-                    val media = fetchMediaStream(url, referer, range)
+                    val media = fetchMediaStream(url, referer, range) { database.getCookieForUrl(it) }
                     val status = when {
                         range != null && media.statusCode == 206 -> HttpStatusCode.PartialContent
                         else -> HttpStatusCode.OK
@@ -2106,15 +2112,16 @@ internal fun tryFindCachedCover(coverCache: CoverCache, primaryUrl: String?, alt
     return null
 }
 
-internal fun tryCacheCover(coverCache: CoverCache, primaryUrl: String?, alternateSources: List<SearchResult>?): CachedCover? {
+internal fun tryCacheCover(coverCache: CoverCache, primaryUrl: String?, alternateSources: List<SearchResult>?, referer: String?): CachedCover? {
     val candidates = buildList {
         primaryUrl?.takeIf { it.isNotBlank() }?.let { add(it) }
         alternateSources?.forEach { s ->
             s.coverUrl?.takeIf { it.isNotBlank() && it !in this }?.let { add(it) }
         }
     }
+    val page = referer?.takeIf { it.startsWith("http", ignoreCase = true) }
     for (url in candidates) {
-        val cached = runCatching { coverCache.cache(url) }.getOrNull()
+        val cached = runCatching { coverCache.cache(url, page) }.getOrNull()
         if (cached != null) return cached
     }
     return null
@@ -2255,16 +2262,12 @@ private data class FetchedMedia(
  * 代取一段媒体并原样回传。支持 Range 透传（浏览器拖动进度条），不支持 Range 的上游回 200 时我们也回 200 全量流（退化成不能拖动，但仍能播放）。
  * 重定向最多 4 跳，跨域跳转后不再带 Referer。
  */
-private fun fetchMediaStream(url: String, referer: String?, range: String?): FetchedMedia {
+private fun fetchMediaStream(url: String, referer: String?, range: String?, cookieFor: (String) -> String? = { null }): FetchedMedia {
     var uri = URI(url)
     NetworkSecurity.resolveAndValidateSafeHttpTarget(uri, "媒体")
     repeat(4) {
-        val builder = java.net.http.HttpRequest.newBuilder(uri)
-            .timeout(java.time.Duration.ofSeconds(30))
-            .header("User-Agent", "LegadoServer/0.1")
-            .GET()
-        referer?.let { builder.header("Referer", it) }
-        range?.let { builder.header("Range", it) }
+        val builder = java.net.http.HttpRequest.newBuilder(uri).timeout(java.time.Duration.ofSeconds(30)).GET()
+        proxyRequestHeaders(uri, referer, cookieFor, range).forEach { (name, value) -> builder.header(name, value) }
         val resp = mediaFetchClient.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofInputStream())
         val status = resp.statusCode()
         if (status in 300..399) {

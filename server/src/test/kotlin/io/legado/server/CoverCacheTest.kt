@@ -27,6 +27,15 @@ class CoverCacheTest {
         try { CoverCache(directory) { "text/html" to byteArrayOf(1) }.cache("https://example.com/not-image") } finally { Files.deleteIfExists(directory) }
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun `rejects an svg cover because same-origin svg can carry script`() {
+        val directory = Files.createTempDirectory("legado-cover-cache")
+        try {
+            CoverCache(directory) { "image/svg+xml" to "<svg><script>alert(1)</script></svg>".toByteArray() }
+                .cache("https://example.com/evil.svg", referer = "https://book.example")
+        } finally { Files.deleteIfExists(directory) }
+    }
+
     @Test
     fun `tryCacheCover falls back to alternate sources when primary cover fails`() {
         val directory = Files.createTempDirectory("legado-cover-cache")
@@ -39,7 +48,7 @@ class CoverCacheTest {
                 SearchResult("s1", "书名", "作者", "https://s1/book", "https://example.com/broken.jpg"),
                 SearchResult("s2", "书名", "作者", "https://s2/book", "https://example.com/valid.jpg")
             )
-            val result = tryCacheCover(cache, "https://example.com/primary-broken.jpg", alts)
+            val result = tryCacheCover(cache, "https://example.com/primary-broken.jpg", alts, referer = "https://book.example")
             assertTrue(result != null)
             assertEquals("image/jpeg", result!!.contentType)
             assertTrue(cache.file(result.key) != null)
@@ -57,7 +66,7 @@ class CoverCacheTest {
             val alts = listOf(
                 SearchResult("s1", "书名", "作者", "https://s1/book", "https://example.com/broken.jpg")
             )
-            val result = tryCacheCover(cache, null, alts)
+            val result = tryCacheCover(cache, null, alts, referer = null)
             assertTrue(result == null)
         } finally {
             Files.deleteIfExists(directory)

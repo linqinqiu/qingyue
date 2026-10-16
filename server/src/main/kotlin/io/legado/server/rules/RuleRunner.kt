@@ -718,7 +718,11 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                     title = ContentProcessor.processTitle(title, replaceRules, jsSandbox, bookName)
                 }
             }
-            ChapterContent(title, text)
+            // 音频 / 视频源的正文常常**就是那条直链**（`ruleContent` 取回 `https://…/1.m4a`）。
+            // 上游是 App 侧自己嗅的，我们以前只认 `yp_url` 那一个约定，于是没写 yp_url 的那批
+            // 音频 / 视频源把地址当一段文字排出来，播放器根本不出来（本机库里音频 115、视频 15、文件 60 个源）。
+            val sniffed = sniffMediaUrl(text)
+            if (sniffed != null) ChapterContent(title, sniffed, sniffed) else ChapterContent(title, text)
         }
     }
 
@@ -730,6 +734,24 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
         val body = fetchUrl(url, mergedOptions, null, sourceUrl, database)
         return NodeValue.document(body).also { it.seedVariables(vars) } to body
+    }
+
+    /**
+     * 整段正文就是一条媒体直链时，这一章的"正文"是那个地址，不是那行字。
+     *
+     * 判得保守：必须去掉首尾空白后**只剩一行**、以 http(s) 开头、路径落在 [MEDIA_URL_SUFFIXES] 里。
+     * 带空格的、`地址,{"headers":…}` 那种带选项形态的一律不当媒体（后者交给 `splitUrlOptions`，
+     * 从我们这儿嗅出去会留下半截 JSON）；多行或夹着文字的也不当 —— 「本章完 https://…」这类
+     * 正常正文被误判成播放器，比播放器出不来更糟。
+     */
+    private fun sniffMediaUrl(text: String): String? {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() || trimmed.length > 600 || '\n' in trimmed) return null
+        if (' ' in trimmed || trimmed.contains(",{")) return null
+        if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) return null
+        val path = runCatching { URI(trimmed).path }.getOrNull()?.lowercase().orEmpty()
+        if (path.isEmpty()) return null
+        return if (MEDIA_URL_SUFFIXES.any { path.endsWith(it) }) trimmed else null
     }
 
     fun parseLoginUi(sourceJson: String): List<SourceLoginUiItem> {
@@ -1366,6 +1388,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         const val MAX_RULE_DATA_KEYS = 4096
         /** Java HttpClient 的受限请求头（设了会抛 IllegalArgumentException，见 request()）。 */
         val RESTRICTED_HEADERS = setOf("connection", "content-length", "expect", "host", "upgrade")
+        /** 正文整段是直链时按这些后缀认媒体（音频 / 视频 / 播流）。`.m3u8` 与 `.ts` 是 HLS，`.m4a` 是音频站最常见的形态。 */
+        val MEDIA_URL_SUFFIXES = setOf(".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac", ".mp4", ".m3u8", ".ts", ".webm", ".mkv", ".mov", ".flv", ".avi")
         val URL_VARIABLE_PATTERN = Regex("\\{\\{(.+?)}}")
 
         // 下方几个正则原来在每次调用处现编译：cleanContent 走每章正文（离线缓存整本 = 上万次），
