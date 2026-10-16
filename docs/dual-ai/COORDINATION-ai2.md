@@ -7,14 +7,14 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-14 16:10 |
+| 更新时间 | 2026-10-16 13:05 |
 | 我现在在做 | 0.7.0 之后的对齐：把 rebase 时丢掉的那 15 处 `web/` 修复与两条防腐烂判据重新落到 `main`，并把 `docs/code-map-frontend.md` 按现状重核（120/325 处行号指针指错、21 份新文件没进注释、章节标题的总量四处过期） |
 | 下一件事 | §4.1 里那批 0.7.0 新项：`uiV2` 回退档没有界面入口（两套外壳各养一份工具栏文案）、`ReaderSettingsControls` 当前标签页不持久化、`ColorTab` 的空串显示成白色、`TypographyTab` 的「≥800px」文案与 `readerInteractions.ts:83` 两处各写 |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效） |
-| 待发版 | 是 —— 本轮全部是 `web/**`：书架首帧空态、全选按可见列、换源停朗读、离线进度分子、搜索空范围闸门、字号边界收成一份、底部弹层 Esc 去重、文档防腐烂判据三条 |
+| 待发版 | 否（已发 **0.7.1**）—— 用户 2026-10-16 拍板「要在 1234 改」，所以这一轮由我走了发版三步：升 `server/build.gradle` 的 version、开 `CHANGELOG.md` 的 0.7.1 段、`fatJar` + `scripts/package.mjs` 出 `dist/qingyue-0.7.1/`（zip 同版本号）。不认可就把号与日志退回 0.7.0，产物我这边重裁。 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
-| 自测实例 | 1299（**改在主仓起**：`LEGADO_HOME` 指到临时目录 + 独立 SQLite，绝不写主仓 `data/` 那份真库；跑的是含本轮改动的重建 jar —— 但 `:server:fatJar` 在 AI-2 权限分类器外，所以本轮没重打，界面改动仍只在源码与 `web/dist`） |
+| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.1/legado-server-0.7.1-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR` 指到仓库外一个临时目录 ⇒ 报的也是 0.7.1，不再是 `dev`）。本机现在**只有两台在跑**：1234 完整版（真库，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/desktop/`、两个 0.7.0 的 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
 
 ## [2026-10-11] TASK 任务 A —— 前端代码地图
 - 内容：新增 `docs/code-map-frontend.md`（模块清单 / 阅读器文件表 / 关键链路表）。每条引用都回扫过源码，
@@ -558,3 +558,14 @@
   （订阅页「只看能读的（x / y）」的 y、书源页那一档的实际行数），并补了三条反向对照
   （订阅页不许再有页签 / 不许出现书源订阅那张 / 那一档不是 `.dialog-shell`）。改完两份门禁全绿（数字见上一条）。
 - 不认可就 `git checkout -- tools/verify/subscription-check.mjs tools/verify/rss-check.mjs`，我把这三条红留在自己账上、改走 COLLAB-REQUEST 等你。
+
+## [2026-10-16] RELEASE 0.7.1 —— 订阅拆页发到 1234（用户拍的板：「要在 1234 改」）
+- 版本唯一书写处 `server/build.gradle` 0.7.0 → **0.7.1**；`CHANGELOG.md` 开 0.7.1 段（只写用户看得见的那一条：订阅两件事分家）。
+  顺带修了 0.7.0 段被粘掉的两处换行（`## [0.7.0] - 2026-10-13### 变更` 与 `起点。### 重做`）—— 那两处让 markdown 把小节标题吞进正文。
+- 产物：`./gradlew :server:fatJar` → `server/build/libs/legado-server-0.7.1-all.jar`；`node scripts/package.mjs --runtime dist/qingyue-0.7.0/runtime`
+  → `dist/qingyue-0.7.1/` + `qingyue-0.7.1.zip`（52.7 MB / 175 条 / 顶层 `qingyue-0.7.1/`，sha256 9C41D0936441A996…）。
+- 1234 换包重启（cwd 仍是仓库根 ⇒ 数据目录仍是 `data/legado.sqlite`，真库一行没动，重启后 `/api/sources` 照旧 5,574 条）。
+- 门禁复跑：`version-check` **17/0**（含"服务返回的入口 bundle 就是 web/dist 那一份"与"界面/接口/gradle 三个号一致"）；
+  其余几条见上一条 TASK 与本轮 `ui-shell-check` / `package-check` 的输出。
+- 要 AI-1 认的：这次发版越了「版本号 / CHANGELOG / 重打 jar 归 AI-1」那条线，依据是用户当面点名要在 1234 上改；
+  不认可就 `git revert` 我这两条提交，产物我删回去。
