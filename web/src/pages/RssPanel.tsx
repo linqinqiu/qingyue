@@ -6,6 +6,7 @@ import { sanitizeImageUrl } from '../sources/sourceImport'
 import { Notice } from '../components/Notice'
 import { EmptyGuide } from '../shelf/EmptyGuide'
 import { Select } from '../components/Select'
+import { exploreLabel } from '../lib/exploreLabel'
 
 /**
  * 「订阅」页的主体：手机 Legado「订阅」页那一栏（`rssSources.json`），即要**读**的 RSS 源。
@@ -125,7 +126,7 @@ export function RssPanel({ onOpenBackup }: { onOpenBackup: () => void }) {
       <header>
         <div>
           <h2>RSS 订阅源</h2>
-          <p>备份包里的 <code>rssSources.json</code> 会直接恢复到这张列表，点开即读，不依赖任何外部服务。</p>
+          <p>备份包里的 <code>rssSources.json</code> 会直接恢复到这张列表；条目是现取上游站点的，源站挂了会在这一行直说取不到。</p>
         </div>
         <button type="button" className="subtle-button" onClick={() => (importing ? setImporting(false) : openImport())}>{importing ? '收起' : '粘贴 JSON 添加'}</button>
       </header>
@@ -173,7 +174,7 @@ export function RssPanel({ onOpenBackup }: { onOpenBackup: () => void }) {
           <EmptyGuide
             icon="rss"
             title="还没有 RSS 订阅源"
-            body={<>这张列表对应 Legado「订阅」页那一栏（备份包里的 <code>rssSources.json</code>）。导入后全部恢复到本地，读的时候不依赖任何外部服务。</>}
+            body={<>这张列表对应 Legado「订阅」页那一栏（备份包里的 <code>rssSources.json</code>）。源存在本机，条目要现取上游站点。</>}
             actions={[
               { label: '粘贴 RSS JSON 添加', onClick: openImport, primary: true, icon: 'plus' },
               { label: '去导入备份包', onClick: () => onOpenBackup(), icon: 'importFile' },
@@ -308,7 +309,7 @@ function RssArticles({ source, onBack, onOpenArticle, article }: {
       {tabs.length > 1 && (
         <nav className="explore-tabs" aria-label="RSS 栏目">
           {tabs.map(item => (
-            <button type="button" key={`${item.title}::${item.url}`} className={tab?.url === item.url ? 'explore-tab active' : 'explore-tab'} onClick={() => setTab(item)}>{item.title}</button>
+            <button type="button" key={`${item.title}::${item.url}`} className={tab?.url === item.url ? 'explore-tab active' : 'explore-tab'} onClick={() => setTab(item)}>{exploreLabel(item.title)}</button>
           ))}
         </nav>
       )}

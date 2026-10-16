@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-16 14:25 |
-| 我现在在做 | PROPOSAL-021 P0.3 **已交付并发到 1234（0.7.2）**：设置页的分区表从 `main.tsx` 搬进 `web/src/settings/settingsSections.ts`（`main.tsx` 又少 82 行），这一页加了**页内搜索**；顺手把「替换净化规则开没开」的两份状态收成一份（`showReplaceRules` 那一份已经没人置真了） |
-| 下一件事 | P0 只剩 ① 发现页的分页语义（等 `renderUrl()` 认 `<页1,页2,…>`，见 2026-10-14 那条 API-REQUEST）。P1 排着：发现按 `ExploreKind` 全型（`type = url/text/button/toggle/select` + `action`、`ERROR:` 要显示成"这个源坏了，坏在哪"）、RSS 的 `articleStyle` / 已读 / 收藏 / **标准 RSS-Atom XML 直解** |
+| 更新时间 | 2026-10-16 15:20 |
+| 我现在在做 | P0.3 之后转成"拿真数据量界面"：第一轮量出**发现页分栏名直接上书源原文**（5,574 源的静态栏目名去重 7,321 个，1,550 个带 emoji 与花饰），已修并发 **0.7.3**（清洗 + 重名编号收进 `web/src/lib/exploreLabel.ts`，发现页与 RSS 栏目共用） |
+| 下一件事 | 继续拿真数据量：书库落地页那张「书架」卡在 0 本书时还写着「接着上次没读完的地方读」；RSS 的 `articleStyle` / 已读 / 收藏 / 标准 XML 直解（P1）；发现页分页语义仍等 `renderUrl()` 认 `<页1,页2,…>` |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效） |
-| 待发版 | 否（已发 **0.7.2**）—— 1234 与 1299 跑的是同一个 `dist/qingyue-0.7.2/legado-server-0.7.2-all.jar`（zip sha256 `5DC22E46C162C613…`，jlink 新裁） |
+| 待发版 | 否（已发 **0.7.3**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.3/legado-server-0.7.3-all.jar`（zip sha256 `C86822CDA274F457…`） |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.1/legado-server-0.7.1-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR` 指到仓库外一个临时目录 ⇒ 报的也是 0.7.1，不再是 `dev`）。本机现在**只有两台在跑**：1234 完整版（真库，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/desktop/`、两个 0.7.0 的 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
@@ -582,3 +582,15 @@
   先 `node stop.mjs` 两台、再打包、再起。zip sha256 `5DC22E46C162C613…`。
 - 实测：`run-all` 551/551；`version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61、
   自写 `settings-search` 探针 9/0（七档八行 / 命中收起 / 清空 / 没有匹配 / `/` 聚焦 / 动作真开得开 / 390 不溢出）。
+
+## [2026-10-16] TASK 分栏名的装饰字形：量出来的，不是猜的
+- 拿真库（1234，5,574 源）逐页量了一遍，发现页那一排分栏按钮上屏的是书源原文：
+  `~»最近更新«~`、`💮 穿越文`、`【完结】` —— 语料里静态栏目名去重 7,321 个，**1,550 个带 emoji 与花饰**，
+  在界面上是一串方框。全站界面本来不出现装饰字形，这一页漏了。
+- 做法：`web/src/lib/exploreLabel.ts` —— 只改显示（地址、选中判定、请求按原样，不动别人的规则文本）；
+  清洗后什么都不剩的退回原文（宁可难看也不给一个空按钮）；成对括号与词中间的 `·` 算内容不算花饰。
+  重名编号改成**按清洗后的名字**算（`完结` 与 `【完结】` 清洗后同名，必须一起编号）。RSS 栏目共用同一份。
+- 顺手：`RssPanel` 那句「点开即读，不依赖任何外部服务」改成实话（列表在本机，条目现取上游，取不到会直说）。
+- 判据：`web/test/ExploreLabel.test.ts` 五条（含"编号按清洗后的名字"这条反向对照，以及"页面还在画原文就红"）。
+- 实测：`run-all` **557/557**；真浏览器在 1234 上验清洗后 `最近更新 | 玄幻 | 重生 | 都市 | …`、
+  换栏取到 30 本、无 JS 异常；`version-check` 17/0、`package-check` 10/10。发 **0.7.3**。

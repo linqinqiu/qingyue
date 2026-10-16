@@ -3,6 +3,7 @@ import { api, type ExploreTab, type SearchResult, type SourceSummary } from '../
 import { Icon } from '../icons'
 import { Select } from '../components/Select'
 import { filterByGroup, sourceGroups, UNGROUPED } from '../lib/exploreGroups'
+import { labelExploreTabs } from '../lib/exploreLabel'
 import { sanitizeImageUrl } from '../sources/sourceImport'
 import { DeferredCover } from '../shelf/Cover'
 
@@ -36,19 +37,9 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
     const list = filterByGroup(sources, next)
     if (!list.some(item => item.id === sourceId)) setSourceId(list[0]?.id ?? '')
   }
-  // 聚合书源常挂 40+ 个分栏，而且大量重名（每个分类都叫「推荐」「完结」）。
-  // 重名的补上序号，否则点了之后根本看不出当前选的是哪一个。
-  const labelledTabs = useMemo(() => {
-    const totals = new Map<string, number>()
-    for (const item of tabs) totals.set(item.title, (totals.get(item.title) ?? 0) + 1)
-    const seen = new Map<string, number>()
-    return tabs.map(item => {
-      if ((totals.get(item.title) ?? 0) < 2) return { ...item, label: item.title }
-      const nth = (seen.get(item.title) ?? 0) + 1
-      seen.set(item.title, nth)
-      return { ...item, label: `${item.title} ·${nth}` }
-    })
-  }, [tabs])
+  // 分栏名清洗（去 emoji 与花饰）与重名编号都在 `lib/exploreLabel.ts`，判据在 `ExploreLabel.test.ts`
+  const labelledTabs = useMemo(() => labelExploreTabs(tabs), [tabs])
+  const activeLabel = labelledTabs.find(item => item.url === tab?.url)?.label ?? '发现'
 
   useEffect(() => {
     void api.exploreSources().then(list => {
@@ -245,7 +236,7 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
 
       {books.length > 0 && (
         <section className="explore-results">
-          <header><h2>{tab?.title ?? '发现'}</h2></header>
+          <header><h2>{activeLabel}</h2></header>
           <div className="explore-grid">
             {books.map((book, index) => (
               <button type="button" key={`${book.sourceId}::${book.bookUrl}::${index}`} className="explore-card" onClick={() => void open(book)}>
