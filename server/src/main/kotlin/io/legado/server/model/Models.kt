@@ -193,6 +193,13 @@ data class SourceCredentialStatus(
     val has: Boolean,
 )
 
+/** 「重取这一张」的成功回执：新落盘的键与类型。前端拿到后把图片地址上的代次换掉，浏览器才会真去重新请求。 */
+@Serializable
+data class RefreshedImage(
+    val key: String,
+    val contentType: String,
+)
+
 @Serializable
 data class ExternalLoginStatus(
     /** 我们拉起来的那个真浏览器还在不在。 */

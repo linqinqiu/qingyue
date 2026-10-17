@@ -2154,8 +2154,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 
 /* 正文配图：不跟着段落首行缩进，不撑破版心；取不到图时整块收起，不留空洞 */
 .reader-paragraph-image { margin: 1.2em 0; text-align: center; text-indent: 0; }
-.reader-paragraph-image[hidden] { display: none; }
 .reader-paragraph-image img { max-width: 100%; height: auto; border-radius: 4px; }
+/* 正文配图取失败时的那一行：说清失败了、为什么，并给一条「重取这一张」的出路。
+   以前这张图被整块藏掉，"取失败"与"这一页本来没图"在界面上是同一个样子。 */
+.reader-image-failed { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 1.2em 0; text-indent: 0; color: var(--ink-dim); font-size: var(--t-s); text-align: center; }
 /* 正文配图点击放大：挡片是 `.overlay-backdrop.is-viewer`（那一档只改底色与光标），
    图上那颗关闭键 40×40 是它自己的一档 —— 深色画布上的可点面积要更大，见文末浮层判据的白名单。 */
 .overlay-backdrop.is-viewer img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5); cursor: default; }

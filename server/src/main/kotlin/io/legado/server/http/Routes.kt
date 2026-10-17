@@ -57,6 +57,7 @@ import io.legado.server.model.GlobalCookieEntry
 import io.legado.server.model.GlobalCookieListResponse
 import io.legado.server.model.LocalBookImportItem
 import io.legado.server.model.LocalBookImportResponse
+import io.legado.server.model.RefreshedImage
 import io.legado.server.model.ReplaceRule
 import io.legado.server.model.ReplaceRulePreviewRequest
 import io.legado.server.model.ReplaceRulePreviewResponse
@@ -1764,6 +1765,37 @@ fun Route.apiRoutes(
                 // 级别是警告不是错误：一张图取不到，阅读器会退化成占位图，不算事故。
                 Unit.logNetwork(
                     "正文图片代理失败",
+                    mapOf(
+                        "host" to (runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "未知"),
+                        "原因" to (error.message ?: error.javaClass.simpleName),
+                        "url" to url.take(120),
+                    ),
+                )
+                call.respond(HttpStatusCode.BadGateway, ApiError("image_failed", error.message ?: "图片抓取失败"))
+            }
+        }
+        /**
+         * 「重取这一张」：绕开服务端盘上那份，重新向上游走一次并原子覆盖。
+         *
+         * 为什么要有这条：站点用**同一个 URL** 换图（改了封面、把占位图换成真图、图被重新上传）时，
+         * 我们那份按 `sha256(url)` 落盘的副本**永不过期**，界面上没有任何动作能救 —— 用户只能看着那张错的图。
+         * 光删盘还不够：浏览器那两份副本（这条 GET 给的 7 天 `max-age`，以及 SW 里 `legado-covers` 那条
+         * SWR 30 天）会先拿旧的，所以前端在地址上带一个代次参数绕开它们（`web/src/reader/readerImage.ts`）。
+         * 写操作，照例过同源闸门。
+         */
+        post("/book/image/refresh") {
+            if (!call.requireSameOriginWrite()) return@post
+            val url = call.request.queryParameters["url"].orEmpty()
+            if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_image", "图片地址无效")); return@post
+            }
+            val referer = call.request.queryParameters["page"]?.takeIf { it.startsWith("http", ignoreCase = true) }
+            try {
+                val cached = coverCache.refetchContentImage(url, referer)
+                call.respond(RefreshedImage(cached.key, cached.contentType))
+            } catch (error: Exception) {
+                Unit.logNetwork(
+                    "重取正文图片失败",
                     mapOf(
                         "host" to (runCatching { java.net.URI(url.trim()).host }.getOrNull() ?: "未知"),
                         "原因" to (error.message ?: error.javaClass.simpleName),

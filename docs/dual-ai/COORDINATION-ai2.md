@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-17 13:45 |
-| 我现在在做 | 用户口径「按照优先级逐一处理」⇒ 逐条落地 PROPOSAL-022/023：**P0.1 已发 0.7.6**（`renderUrl` 认 `<页1,页2,…>` 逗号段；A/B 实测同一栏目 0.7.5 回 502「URL 格式无效或包含未解析变量」、0.7.6 回 200 · 30 本）。正在做 P0.2 图片「重取这一张」 |
+| 更新时间 | 2026-10-17 15:00 |
+| 我现在在做 | 「按照优先级逐一处理」第二条已发 **0.7.7**：图片「重取这一张」（服务端绕开盘上那份重取 + 前端带代次绕开浏览器副本 + 取失败那一行不再整块藏掉）。下一条是 PROPOSAL-023 的 C 档（恒 0 的「JS 书源」数字） |
 | 下一件事 | ① **P0.2 图片重取**（三层缓存现状见 PROPOSAL-022 §2）② **新量到一条规则缺陷**：`极速漫画` 的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 在 CSS 方言里被当备选切分 ⇒ `SelectorParseException`（逗号段已经展开对了才露出来）③ P1 分页静态判定 ④ PROPOSAL-023 的 C 档（恒 0 的「JS 书源」数字 + 两处分组兜底误用）⑤ RSS `articleStyle` / 已读 / 收藏（P1） |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
-| 待发版 | 否（已发 **0.7.6**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.6/legado-server-0.7.6-all.jar`（zip sha256 `0F93F149182D8EB4…`）；0.7.5 的包与 `build/libs` 旧 jar 已清 |
+| 待发版 | 否（已发 **0.7.7**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.7/legado-server-0.7.7-all.jar`（zip sha256 `FECDCB633675B0FD…`）；0.7.6 的包与 `build/libs` 旧 jar 已清 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.6/legado-server-0.7.6-all.jar`，`LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data`）。隔离库里现有 7 份真书源（音频/漫画/视频 + 三份用逗号段翻页的活源）与 8 份真 RSS 源，只为跑数据依赖的门禁与探针。A/B 时短暂把 1299 换成 0.7.5 的 jar 演过"旧版红"，演完已换回 0.7.6。本机仍**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版 |
@@ -691,3 +691,25 @@
   `极速漫画` 逗号段展开正确、卡在既有规则缺陷 `SelectorParseException：'.banner_detail_form&&class.mh-list tag.li'`
   —— `&&` 在 CSS 方言里被当备选切分掉了，与根 AGENTS 那条"方言优先"是同族，已进状态板「下一件事」。
 - 文档：`docs/code-map-frontend.md` §6 服务端 37 份 **14,781** 行；PROPOSAL-022 的 P0.1 落地，P0.2 与 P1 待做。
+
+## [2026-10-17] NOTE 图片「重取这一张」：新增一条写接口（这一轮又动了 `server/`，附回滚）
+- 优先级第二条（PROPOSAL-022 P0.2）。缺的是"出路"：站点用**同一个 URL** 换图时，那份按 `sha256(地址)` 落盘的副本**永不过期**，界面上没有任何动作能救。
+- 三层缓存都量过，只动一层会白做：盘上那份由 `refetchContentImage` **先取成功再原子覆盖**（不是"先删再取" —— 站点这次也可能不给，删了连能看的那张都没了）；HTTP 那份是这条 GET 给的 7 天 `max-age`；SW 那份 `legado-covers` 是 SWR 30 天且**不含** `/api/book/image` —— 所以前端带代次 `&v=` 绕开浏览器两份副本，而代次**不进落盘键**。
+- 新接口 `POST /api/book/image/refresh?url=&page=`（`Routes.kt`，过同源闸门；回包 `model/RefreshedImage`）。
+- 实测（1299，葫芦侠那张 11,558 字节的条目图）：重取回 200 且盘上 mtime 变新、同一地址仍只有一份；跨站 `Origin: http://evil.example` → 403、非法地址 → 400。（`无 Origin 放行`是 `Guard` 的既有设计 —— 我第一版探针把它当违规，是期望写错，不是产品坏。）
+- 判据：`CoverCacheTest` 三条（覆盖后字节变了且仍只有一份 / 取失败时旧字节原样留着 / 重取也拒 SVG）。
+- 改了 `cache/CoverCache.kt`、`http/Routes.kt`、`model/Models.kt`、`CoverCacheTest.kt`。不认可就 `git revert` 本轮那条提交。
+- **另外改了 `tools/verify/local-image-check.mjs` 一条判据**（AI-1 领地）：它原来钉"裂图整块收起"（`hidden === 1 && count === 2`），这一版把实现换成"一句结论 + 一颗重取按钮"之后它红在实现上而不是产品上。
+- 改后的断言更强：画出来 1 / 占位 1 / **破图框 0** / 失败行 1 / 重取按钮 1，意图（不留破图框、成功的不误收）一个字没松；要退回：`git checkout HEAD~1 -- tools/verify/local-image-check.mjs`。
+
+## [2026-10-17] RELEASE 0.7.7 —— 取失败的图不再被整块藏掉，并给一条「重取这一张」
+- 界面前半：阅读器里某张图取不到时，以前 `onError` 给整个 `<figure>` 挂 `hidden` —— "这张没取到"与
+  "这一页本来没图"是同一个样子（与 RSS 那条「还没到 / 取失败 / 确实没有是三件事」同族）。现在留一行
+  「这张图没取到 · 重取这一张」，原因显示出来，点一下走上面 NOTE 那条接口。
+- 地址算法收成一份 `web/src/reader/readerImage.ts`：渲染、预热、重取三处必须算出同一个 `src`，
+  否则预热取回来的那张渲染层用不上。判据 `web/test/ReaderImage.test.ts` 四条（含"老写法必须被逮住"的反扫）。
+- 门禁：`run-all` **570/570**；`:server:test` 338 例只红 1 条（`E2EScenariosTest` scenario 2），
+  失败集合是基线 47 条的子集 ⇒ 零回归；`version-check` / `package-check` / `ui-shell-check` / `local-image-check` 见本轮输出。
+- 顺带：`doc-codemap-refresh.mjs` 现在也重写 `X.kt`(NNN) 那种括号式行数 —— 0.7.4 加的那条判据这轮第一次抓到漂移
+  （`CoverCache.kt` 文档写 201、磁盘 214）。比对基线记得先 `tr -d '\r'`（基线文件是 CRLF）。
+- 发版链照旧：先停两台再打包（EPERM 那条），zip sha256 `FECDCB633675B0FD…`，`dist/` 下只留 0.7.7 一份。

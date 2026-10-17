@@ -217,6 +217,12 @@ export type SourceCredentialStatus = {
   has: boolean
 }
 
+/** 「重取这一张」的回包：新落盘的键与类型。界面不显示它，但拿到才算真重取成功。 */
+export type RefreshedImage = {
+  key: string
+  contentType: string
+}
+
 /** 真浏览器登录的状态回包。 */
 export type ExternalLoginStatus = {
   /** 我们拉起来的那个浏览器还在不在。 */
@@ -607,7 +613,13 @@ export const api = {
     if (referer) params.set('referer', referer)
     return `/api/covers/proxy?${params.toString()}`
   },
-  bookImage: (url: string, page?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`,
+  /**
+   * 正文配图/条目配图的代取地址。`version` 是"这张被重取过几次"的代次：只改浏览器侧的缓存键，
+   * 服务端那份仍按原图地址落盘（见 `web/src/reader/readerImage.ts`）。
+   */
+  bookImage: (url: string, page?: string, version?: string) => `/api/book/image?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}${version ? `&v=${encodeURIComponent(version)}` : ''}`,
+  /** 让服务端绕开盘上那份、重新向上游走一次并原子覆盖。取不到会 502 + 原因，界面把那句话显示给用户。 */
+  refreshBookImage: (url: string, page?: string) => request<RefreshedImage>(`/api/book/image/refresh?url=${encodeURIComponent(url)}${page ? `&page=${encodeURIComponent(page)}` : ''}`, { method: 'POST' }),
   /**
    * 媒体流式代理（音频/视频/文件直链）：浏览器 `<audio>/<video>` 带不上 Referer，防盗链源直接 403 播不了；
    * 服务端代取并流式回传、注入本章地址当 Referer、原样转发 Range。非 http(s)（已同源的）原样返回。

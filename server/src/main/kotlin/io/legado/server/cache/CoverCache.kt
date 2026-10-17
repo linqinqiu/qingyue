@@ -96,6 +96,19 @@ class CoverCache(
         val key = sha256(url)
         val stored = directory.resolve(key)
         if (Files.exists(stored)) return CachedCover(key, sniffContentType(stored))
+        return fetchAndStore(url, referer, key)
+    }
+
+    /**
+     * 「重取这一张」：绕开盘上那份重新取一次。顺序是**先取成功再原子覆盖**，不是"先删再取" ——
+     * 站点这一次也可能不给，删了就把用户手上那张还能凑合看的图也弄没了。
+     * 浏览器那两份副本（HTTP 7 天 `max-age` 与 SW 的 `legado-covers`）由取图地址上的代次参数绕开，
+     * 见 `web/src/reader/readerImage.ts`。
+     */
+    fun refetchContentImage(url: String, referer: String?): CachedCover = fetchAndStore(url, referer, sha256(url))
+
+    private fun fetchAndStore(url: String, referer: String?, key: String): CachedCover {
+        val stored = directory.resolve(key)
         // `fetcher` 只在测试里注入（生产为 null）；正文图片也走它，单元测试才能不联网地钉住"图被缓存了"。
         val (rawType, body) = fetcher?.invoke(url) ?: download(url, referer)
         val type = rawType.substringBefore(';').trim().lowercase()

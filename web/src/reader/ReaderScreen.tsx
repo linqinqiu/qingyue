@@ -8,6 +8,7 @@ import { ContextMenuItem, showContextMenu } from '../components/ContextMenu'
 import { Icon } from '../icons'
 import { useEscapeClose } from '../lib/useEscapeClose'
 import { calculatePaginationLayout, contentImageUrl, findFirstFullyVisibleParagraphIndex, isAtBottomBoundary, isAtTopBoundary, isInteractiveReaderTarget, isSameSiteAsset, isTapGesture, paginateWheelStep, swipeDirection, TOC_ROW_HEIGHT, ViewportBounds } from './readerInteractions'
+import { readerImageSrc } from './readerImage'
 import { TapAction, zoneAt } from './tapZones'
 import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
@@ -51,7 +52,7 @@ import {
  * 趁用户在看首屏时把后续图片取回落盘缓存（代理命中 7 天有效），
  * 滚动/翻页下去就不必每张都等服务端联网一次。漫画章节正文就是一张张图，
  * 这一项直接决定翻页顺不顺。
- * 只预热外域图（站内资产本就在本地）；失败静默 —— 渲染层 `<img>` 会自己退化成占位图。
+ * 只预热外域图（站内资产本就在本地）；失败静默 —— 渲染层那一张会自己退化成「这张图没取到 + 重取这一张」。
  */
 function warmContentImages(text: string, page: string | undefined) {
   if (!text) return
@@ -60,7 +61,8 @@ function warmContentImages(text: string, page: string | undefined) {
     if (!image || isSameSiteAsset(image)) continue
     const img = new Image()
     img.decoding = 'async'
-    img.src = api.bookImage(image, page)
+    // 与渲染层同一个地址算法（generation 都是 0），否则预热取回来的那张用不上。
+    img.src = readerImageSrc(image, page)
   }
 }
 
@@ -623,6 +625,32 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const tocList = useMemo(() => (tocReverse ? filteredChapters.slice().reverse() : filteredChapters), [filteredChapters, tocReverse])
   // 正文配图点击放大（借鉴 Legado「点击预览图片」）：position:fixed 遮罩，点任意处关闭。
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  /**
+   * 正文配图（漫画就是一页页图）的两件事，键都是**原图地址**：
+   * `imageGeneration` 是"这一张被重取过几次"，只用来改浏览器侧的缓存键；
+   * `failedImages` 是"哪几张取失败了、为什么"。
+   * 以前取失败的那张被 `setAttribute('hidden')` 整块藏掉 —— 于是"这张没取到"与"这一页本来没图"
+   * 在界面上是同一个样子（与 RSS 那条「还没到 / 取失败 / 确实没有是三件事」同一个病），
+   * 而站点用同一个 URL 换过图时，服务端那份按 `sha256(地址)` 落盘的副本永不过期，用户没有任何出路。
+   */
+  const [imageGeneration, setImageGeneration] = useState<Record<string, number>>({})
+  const [failedImages, setFailedImages] = useState<Record<string, string>>({})
+
+  /** 让服务端绕开盘上那份重取一次，成功后换代次（浏览器那份 7 天副本就此作废）。 */
+  const refetchChapterImage = async (image: string, referer: string | undefined) => {
+    try {
+      await api.refreshBookImage(image, referer)
+      setImageGeneration(current => ({ ...current, [image]: (current[image] ?? 0) + 1 }))
+      setFailedImages(current => {
+        const next = { ...current }
+        delete next[image]
+        return next
+      })
+    } catch (error) {
+      // 站点这次也可能不给：把原因留在这一行，让用户知道"又试了一次，还是不行，是因为什么"。
+      setFailedImages(current => ({ ...current, [image]: error instanceof Error ? error.message : '重取失败' }))
+    }
+  }
 
   // 拖动进度条时的临时读数：松手/键盘抬起才真正切章，避免拖一格发一次正文请求。
   const [scrubIndex, setScrubIndex] = useState<number | null>(null)
@@ -1165,7 +1193,17 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       // 本地 EPUB 的插图本来就是站内地址，再过一道图片代理是错的（那一层只收 http(s)）
       // Referer 用**这一段属于哪一章**：续接进来的下一章的图，不能拿锚点章的地址当来源
       const referer = (owner ?? chapter)?.url
-      const src = isSameSiteAsset(image) ? image : api.bookImage(image, referer)
+      const src = readerImageSrc(image, referer, imageGeneration[image] ?? 0)
+      const failure = failedImages[image]
+      if (failure) {
+        // 取失败不当成"没有图"藏起来：这一行说清失败了、为什么，并给一条出路。
+        return (
+          <p key={index} className="reader-image-failed">
+            <span>{failure}</span>
+            <button type="button" className="link-button" onClick={event => { event.stopPropagation(); void refetchChapterImage(image, referer) }}>重取这一张</button>
+          </p>
+        )
+      }
       return (
         <figure key={index} className="reader-paragraph-image">
           <img
@@ -1177,7 +1215,10 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             tabIndex={0}
             style={{ cursor: 'zoom-in' }}
             onClick={event => { event.stopPropagation(); setLightboxSrc(src) }}
-            onError={event => { event.currentTarget.closest('figure')?.setAttribute('hidden', '') }}
+            onError={event => {
+              event.currentTarget.hidden = true
+              setFailedImages(current => (current[image] ? current : { ...current, [image]: '这张图没取到' }))
+            }}
           />
         </figure>
       )

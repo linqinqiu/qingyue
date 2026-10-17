@@ -162,18 +162,24 @@ try {
         count: images.length,
         loaded: images.filter(img => img.complete && img.naturalWidth > 0).length,
         local: images.filter(img => (img.currentSrc || img.src).includes('/api/books/local/asset')).length,
-        hidden: [...document.querySelectorAll('.reader-paragraph-image[hidden]')].length,
+        // 0.7.7 起取失败的那张不再"整块收起"：它换成一行结论 + 一颗「重取这一张」。
+        // 判据跟着换成钉这个 —— 意图没变（不许留破图框、成功的那张不许被误收），变的是实现。
+        failedRows: [...document.querySelectorAll('.reader-image-failed')].length,
+        retryButtons: [...document.querySelectorAll('.reader-image-failed button')]
+          .filter(button => button.textContent.includes('重取')).length,
+        brokenFrames: images.filter(img => img.complete && img.naturalWidth === 0).length,
         page: location.hash,
       }
     })
     check('④浏览器里图真的解码出来了（naturalWidth > 0，不是"标签在但图裂"）',
       painted.count >= 1 && painted.loaded >= 1 && painted.local >= 1,
-      `占位 ${painted.count} · 解码成功 ${painted.loaded} · 站内资源 ${painted.local} · 因失败被隐藏 ${painted.hidden} · hash=${painted.page}`)
-    // 取不到的那张（这里是 svg，路由按设计 404）应当整块收起，不留一个破图框；
-    // 取到的那张不许被误收 —— 所以期望是"恰好收掉一张"，不是"一张都没收"。
-    check('④裂图整块收起，且只收起真取不到的那张',
-      painted.hidden === 1 && painted.count === 2 && painted.loaded === 1,
-      `占位 ${painted.count} · 解码成功 ${painted.loaded} · 收起 ${painted.hidden}`)
+      `占位 ${painted.count} · 解码成功 ${painted.loaded} · 站内资源 ${painted.local} · 失败行 ${painted.failedRows} · hash=${painted.page}`)
+    // 取不到的那张（这里是 svg，路由按设计 404）不留破图框，换成一行"没取到 + 重取这一张"；
+    // 取到的那张不许被误收 —— 所以期望是"恰好一行结论、恰好一颗按钮、恰好一张画出来"。
+    check('④裂图换成一句结论和一条出路，且只换真取不到的那张',
+      painted.count === 1 && painted.loaded === 1 && painted.brokenFrames === 0
+        && painted.failedRows === 1 && painted.retryButtons === 1,
+      `画出来 ${painted.loaded} / 占位 ${painted.count} · 破图框 ${painted.brokenFrames} · 失败行 ${painted.failedRows} · 重取按钮 ${painted.retryButtons}`)
     check('④阅读器没有 JS 异常', errors.length === 0, errors.slice(0, 2).join(' | '))
     fs.mkdirSync(SHOTS, { recursive: true })
     await page.screenshot({ path: path.join(SHOTS, `local-image-${STAMP}.png`) })
