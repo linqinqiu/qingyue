@@ -7,9 +7,9 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-16 22:35 |
-| 我现在在做 | 第二轮"量登录与媒体"收口：发 **0.7.5** —— ① 列表规则失败时把**上游自己写的那句原因**接进报错（实测懒人听书匿名搜索回「你好，需要登录才能继续使用此功能」，我们原来只报 `Missing property in path $['books']`），体检由此从"猜"变成"照着归档"；② 「订阅」页条目配图改走服务端代取（补 Referer + Cookie）。两条都越界/落点在 `server/**` 与本侧各一半，明细见下面两条 |
-| 下一件事 | ① `SourceCodec.kt` 的 `isJs = mainJs 非空`：本机 5,574 份里 **mainJs 非空 0 份**，而**任一规则带 `@js:` / `js:` / `<js>` 的有 2,105 份（37.8%）** ⇒ 书源页那颗「JS 书源」统计与筛选恒为 0。要么放宽判定 + 一次性回填 `source.is_js`，要么把这个数字从界面上拿掉（放宽会与 `SourceDebugger` 那句"字段由 mainJs 自己组装"打架，得先分成两个旗标）。② RSS 的 `articleStyle` / 已读 / 收藏（P1）③ 发现页分页语义仍等 `renderUrl()` 认 `<页1,页2,…>` |
+| 更新时间 | 2026-10-17 08:10 |
+| 我现在在做 | **规划阶段**（用户 2026-10-17「规划阶段持续进行」⇒ 只研究、只落方案，不动产品代码）：上游 MD3 刷到 `07ff3a1`（46 条提交 / 161 文件），把里面真戳到青阅缺口的两条写成 **PROPOSAL-022**（发现页 `<a,b,c>` 翻页表达式 + 图片"重取这一张"）；研究记录在 `E:\legado\docs\15-上游增量研究-2026-10-17.md` |
+| 下一件事 | 等 PROPOSAL-022 §5 四条拍板（两条谁先、"版本位"要不要覆盖封面、静态分页判定放服务端还是前端、不支持翻页的栏目怎么交代）。已量完待动的另两条：① `SourceCodec.kt` 的 `isJs = mainJs 非空` —— 本机 5,574 份里 **mainJs 非空 0 份**，任一规则带 `@js:`/`js:`/`<js>` 的 **2,105 份（37.8%）** ⇒ 书源页「JS 书源」统计与筛选恒为 0，放宽要与 `SourceDebugger` 那句"字段由 mainJs 自己组装"拆成两个旗标 + 一次性回填 `source.is_js`；② RSS 的 `articleStyle` / 已读 / 收藏（P1） |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
 | 待发版 | 否（已发 **0.7.5**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.5/legado-server-0.7.5-all.jar`（zip sha256 `BE93AC646B3CE8FE…`）；0.7.4 的包与 `build/libs` 的旧 jar 已清，`dist/` 下只剩这一份 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
@@ -644,3 +644,16 @@
 - 门禁：`run-all` **565/565**；`:server:test` 329 例只红 1 条（`E2EScenariosTest` scenario 2，在基线 47 条之内）；
   `version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61、`rss-check` 33/0。
 - 发版链照 0.7.4：先停两台再打包（EPERM 那条），zip sha256 `BE93AC646B3CE8FE…`，`dist/` 下只留 0.7.5 一份。
+
+## [2026-10-17] TASK 上游刷到 07ff3a1，落成 PROPOSAL-022（规划轮，产品代码一行没动）
+- 用户口径两条：「获取资源更新研究GitHub」→「规划阶段持续进行」。所以这一轮只有采集、量数、写方案。
+- 采集：`refs/md3/full` 同步到 `07ff3a1`（167 文件进仓），精选 `source/` 65 份里 3 份变了。
+  外网现状与 `refs/SOURCES.md` 旧记录**相反**：github.com 直连不通（超时 / `curl 56 Connection reset`）、
+  必须走本机代理；api.github.com 直连可达但匿名 60/小时且本机出口 IP 已打满。已改成实测的样子。
+- 量的数：静态栏目地址 25,290 条里 **2,644 条带 `<a,b,c>` 逗号段**，这类**第 1 页就 502**
+  （实测饭饭小说 `URL 格式无效或包含未解析变量: /dsyq/<,index_1.html>`），另有 4,368 条不含翻页写法却挂着「下一页」。
+  第一版报 2,698 是**被 JS 型 exploreUrl 污染的**（`for(var i=0;i<bangdans.length;i++)` 长得像逗号段），
+  加两道闸门重量过 —— 这条教训连同复现命令写进了 PROPOSAL-022 §0.1。
+- 图片那一条三层都量了：盘上 `sha256(url)` 永不过期且无作废入口、HTTP 7 天 `max-age`、
+  SW `legado-covers` SWR 30 天但不含 `/api/book/image` ⇒ 光删盘不够，要"换代次"才绕得开浏览器那份副本。
+- 四条待拍板在 `docs/proposals/PROPOSAL-022-explore-paging-and-image-invalidation.md` §5。**本轮没动 `server/**` 一行。**
