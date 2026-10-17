@@ -7,9 +7,9 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-17 15:05 |
-| 我现在在做 | 「按照优先级逐一处理」第三条已发 **0.7.8**：书源页拿掉那颗永远为 0 的「JS 书源」，两处分组兜底改成只说「未分组」（PROPOSAL-023 C 档）。下一条按优先级是 PROPOSAL-022 的 P1（分页静态判定），另外新量到一条 `&&` 在 CSS 方言里被当备选切分的规则缺陷待查 |
-| 下一件事 | ① **P0.2 图片重取**（三层缓存现状见 PROPOSAL-022 §2）② **新量到一条规则缺陷**：`极速漫画` 的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 在 CSS 方言里被当备选切分 ⇒ `SelectorParseException`（逗号段已经展开对了才露出来）③ P1 分页静态判定 ④ PROPOSAL-023 的 C 档（恒 0 的「JS 书源」数字 + 两处分组兜底误用）⑤ RSS `articleStyle` / 已读 / 收藏（P1） |
+| 更新时间 | 2026-10-17 15:40 |
+| 我现在在做 | 「按照优先级逐一处理」**四条全部发完**：0.7.6 逗号段翻页 · 0.7.7 图片重取 · 0.7.8 拿掉恒 0 的「JS 书源」· 0.7.9 分页静态判定。本机仍只有 1234（完整版）与 1299（测试版）两台 |
+| 下一件事 | ① **新量到一条规则缺陷**：极速漫画的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 被当备选切分 ⇒ `SelectorParseException`（逗号段修好后才露出来）—— 要先读上游 `AnalyzeByJSoup` 对 `&&` 的语义再动，别猜。② PROPOSAL-023 的 A 档（加"规则含 JS 方言"列 + 回填 5,574 行）等拍板。③ RSS `articleStyle` / 已读 / 收藏（P1） |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
 | 待发版 | 否（已发 **0.7.7**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.7/legado-server-0.7.7-all.jar`（zip sha256 `FECDCB633675B0FD…`）；0.7.6 的包与 `build/libs` 旧 jar 已清 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
@@ -727,3 +727,23 @@
 - 门禁：`run-all` **574/574**；`version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61；
   真库那台（1234）浏览器量到统计带 = 书源 5574 / 已启用 5574 / 支持登录 / 分组，**没有**「JS 书源」，无 JS 异常。
 - 本轮只动 `web/**`（+ 版本号与日志）。zip sha256 `3DF4BC75909B281A…`，`dist/` 下仍只有一份。
+
+## [2026-10-17] NOTE 新增 `rules/PagingRule.kt`：这一栏吃不吃页码，只看写法不执行代码（又动了 `server/`）
+- 优先级第四条（PROPOSAL-022 P1）。语义照上游 `AnalyzeUrl.supportsPageSelection` 读，实现自写（MD3 是 GPL-3.0）。
+- 认三种写法：`{{…}}` 里出现**自由变量** `page`；`<js>` / `@js:` 脚本里出现自由变量 `page`；剩下的 `<…>` 段带逗号。"自由"是重点 —— `{{book.page}}`（属性）、被形参或 `var` 遮蔽的、字符串里的都不算，所以用 Rhino 的 AST（`Name` + `definingScope == null` + 父节点不是属性）而不是正则。
+- **绝不执行书源代码**：`PagingDetectionTest` 专门有一条喂 `@js: throw new Error('must not execute'); page`，它必须照样返回 true —— 返回 false 就说明我们真去跑了别人的脚本。
+- 接法：`ExploreTab` 多带 `supportsPaging`（`model/Models.kt`，默认 true），`parseExploreTabs` 逐条算；发现页与 RSS 的「下一页 / 加载更多」只在它为 false 时收掉按钮，`loadMore` 里再拦一道。值在哪：本机 25,290 条静态栏目地址里 **4,368 条（17%）** 不含任何翻页写法，以前每一击都是白发一次请求。
+- 真数据核对（1299，12 份源 / 530 条栏目）：判"不吃页码"的 8 条全是番茄那类 `offset=0` / `page_index=0` **写死**的地址（点了就是重取同一屏），而带页码变量的那条 `推荐` 判 true —— 旗标在分辨，不是恒真。
+- 改了 `rules/PagingRule.kt`（新）、`model/Models.kt`、`rules/RuleRunner.kt` 两处构造 + 新测试。
+- 顺带改了 `RuleRunnerTest.kt` 一条老用例的期望值：原来写 `ExploreTab("榜单", "/rank")`，那个 `supportsPaging=true` 是**构造默认值给的**、不是判出来的（`/rank` 里没有页码，真实答案是 false）；现在期望写显式值，老用例顺手把新行为说明了。不认可就 `git revert` 本轮那条提交。
+
+## [2026-10-17] RELEASE 0.7.9 —— 不吃页码的栏目不再挂「加载更多」
+- 「按照优先级逐一处理」四条全部落地：**0.7.6** 逗号段翻页（2,644 条栏目从"连请求都发不出去"变成能出书）·
+  **0.7.7** 图片「重取这一张」+ 取失败不再整块藏掉 · **0.7.8** 拿掉那颗永远为 0 的「JS 书源」· **0.7.9** 分页静态判定。
+- 门禁：`run-all` **577/577**（新增 `PagingGate.test.ts` 三条：旗标从服务端带到界面只有一份判据、
+  发现页与 RSS 各自收按钮 + 反扫）；`PagingDetectionTest` 五条；`:server:test` 343 例只红 1 条
+  （`E2EScenariosTest` scenario 2，在基线 47 条之内）⇒ 零回归；`version-check` 17/0、`package-check` 10/10、
+  `explore-detail-check` 10/0、`ui-shell-check` 61/61。
+- 写判据时又被自己的"数条数"绊了一次：先断「恰好两处 `splitSourceGroups(...)`」，实测 6 处（另 4 处本来就写对了）——
+  判据要写成**"每一处都必须…"**，不是"数几条"。这条与前一条 `SourceStats` 的教训同一个形状。
+- zip sha256 见本轮包体；`dist/` 下仍只有一份。下一档按规程是 **0.8.0**（三段号满 10 进位）。

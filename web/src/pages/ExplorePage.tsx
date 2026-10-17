@@ -133,7 +133,7 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
 
   // 发现页支持 {{page}} 翻页：下一页按 bookUrl 去重后追加；返回空或整页都是重复即判定到底。
   const loadMore = async () => {
-    if (!sourceId || !tab || loadingMore || !hasMore) return
+    if (!sourceId || !tab || loadingMore || !hasMore || tab.supportsPaging === false) return
     setLoadingMore(true)
     const next = page + 1
     const controller = new AbortController()
@@ -251,7 +251,8 @@ export function ExplorePage({ onOpen }: ExplorePageProps) {
               </button>
             ))}
           </div>
-          {hasMore && (
+          {/* 这一栏吃不吃页码由服务端按规则写法判（`supportsPaging`）：不吃就不挂这颗永远白发一次请求的按钮。 */}
+          {tab?.supportsPaging !== false && hasMore && (
             <div className="explore-more-row">
               <button type="button" className="ghost-button" disabled={loadingMore} onClick={() => void loadMore()}>
                 {loadingMore ? '加载中…' : '加载更多'}

@@ -839,11 +839,13 @@ class RuleRunnerTest {
             }
         }
 
+        // `supportsPaging` 写显式值而不是靠构造默认值：`/rank`、`/other`、`/shelf` 三个地址里
+        // 都没有 `{{page}}`、没有自由变量 `page`、也没有 `<a,b>` 逗号段 ⇒ 这一栏不吃页码（0.7.9 起界面不再挂「加载更多」）。
         assertEquals(
-            listOf(ExploreTab("榜单", "/rank"), ExploreTab("其他", "/other")),
+            listOf(ExploreTab("榜单", "/rank", supportsPaging = false), ExploreTab("其他", "/other", supportsPaging = false)),
             runner.exploreTabs(plain),
         )
-        assertEquals(listOf(ExploreTab("书架", "/shelf")), runner.exploreTabs(js))
+        assertEquals(listOf(ExploreTab("书架", "/shelf", supportsPaging = false)), runner.exploreTabs(js))
 
         val books = runner.explore(js, "/shelf")
         assertEquals("书架书", books.single().name)

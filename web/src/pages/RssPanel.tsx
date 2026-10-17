@@ -331,7 +331,8 @@ function RssArticles({ source, onBack, onOpenArticle, article }: {
           ))}
         </div>
       )}
-      {hasMore && articles.length > 0 && status === 'ready' && (
+      {/* 「下一页」只在服务端判定这一栏吃页码时出现（与发现页同一条判据，见 `PagingRule.kt`） */}
+      {hasMore && articles.length > 0 && status === 'ready' && tab?.supportsPaging !== false && (
         <div className="explore-more-row">
           <button type="button" className="ghost-button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '加载中…' : '下一页'}</button>
         </div>

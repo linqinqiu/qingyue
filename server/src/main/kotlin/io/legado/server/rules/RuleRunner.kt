@@ -232,7 +232,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val source = sourceJson.objectValue()
         val sourceUrl = source.string("sourceUrl") ?: throw RuleExecutionException("RSS 源缺少 sourceUrl")
         val raw = source.string("sortUrl")?.trim().orEmpty()
-        if (raw.isEmpty()) return listOf(ExploreTab(source.string("sourceName")?.trim()?.takeIf { it.isNotEmpty() } ?: sourceUrl, sourceUrl))
+        if (raw.isEmpty()) return listOf(ExploreTab(source.string("sourceName")?.trim()?.takeIf { it.isNotEmpty() } ?: sourceUrl, sourceUrl, supportsPaging(sourceUrl)))
         return jsSandbox.withSourceContext(sourceContext(source, sourceUrl)) {
             val text = if (isJsRule(raw)) evalRuleJs(raw, mapOf("baseUrl" to sourceUrl, "sourceId" to sourceUrl, "key" to "", "page" to 1))
                 ?: return@withSourceContext emptyList() else raw
@@ -316,7 +316,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                     val tab = element as? JsonObject ?: return@mapNotNull null
                     val title = (tab.string("title") ?: tab.string("name"))?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
                     val url = (tab.string("url") ?: tab.string("bookSourceUrl"))?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                    ExploreTab(title, url)
+                    ExploreTab(title, url, supportsPaging(url))
                 }
             }
         }
@@ -326,7 +326,7 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         trimmed.split(Regex("&&|&#|\n+")).mapNotNull { entry ->
             val title = entry.substringBefore("::").trim()
             val url = entry.substringAfter("::", "").trim()
-            if (title.isEmpty() || url.isEmpty()) null else ExploreTab(title, url)
+            if (title.isEmpty() || url.isEmpty()) null else ExploreTab(title, url, supportsPaging(url))
         }.toList()
     }
 

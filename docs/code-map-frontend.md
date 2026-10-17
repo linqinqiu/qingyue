@@ -2,8 +2,8 @@
 
 生成方式：**逐文件读全文**，不是扫文件名、不是只读热点。2026-10-11 那轮读的是拆分前的树，之后 0.7.0
 把阅读器重做了一遍；本文件在 2026-10-14 按 `main` 上的现状重对了一遍数字：
-`web/src` 97 份共 28,790 行（其中 `styles.css` 5,843 行）、`web/test` 全部判据文件，
-另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（37 份 14,833 行）。
+`web/src` 97 份共 28,792 行（其中 `styles.css` 5,843 行）、`web/test` 全部判据文件，
+另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（38 份 14,902 行）。
 每条职责后面给的 `文件名:行号` 都是读到那一行时写下的；行号会随改动漂，核对命令：
 
 ```bash
@@ -119,8 +119,8 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | :--- | ---: | :--- | :--- | :--- |
 | `ReplaceRulesModal.tsx` | 720 | 替换净化规则的双入口弹窗：列表 + 筛选 + 编辑 + 导入导出 + 实时试算 | `loadRules`(`:44`)、`filteredRules`(`:70`)、`handleToggle`(`:94`)、`toggleAllRules`(`:105`)、`handleSaveRule`(`:129`)、`handleImport`(`:153`)、`handleExport`(`:178`)、`handleRunTest`(`:190`)、`openAddModal`(`:211`)、`useEscapeClose`(`:234`) | `:232` 把一条 React 纪律写在代码里：这个 hook **必须**在 `:241` 的 `if (!isOpen) return null` 之前无条件调用，挪到早退之后就是"关→开"时 hook 数量变化（React #300）；因此 `:235` 还得在回调里自判 `isOpen`。批量启停的作用域是**当前筛选可见集**而不是全表(`:104`/`:106`)。空 scope 视为"也对本书生效"(`:77`)，所以「本书专用」页签里混着全局规则是设计而非 bug。早退不清 state(`:241`)，关掉再开仍保留筛选词与正在编辑的那条。新建默认 `isRegex:true / scopeContent:true / scopeTitle:false / timeoutMillisecond:3000`(`:217-224`)，3000 与服务端沙箱超时同值。导出的是**未筛选全表**(`:179`) |
 | `TocRulesModal.tsx` | 285 | TXT 分章规则清单：下一本默认按哪条切 + 哪几条参与"自动"打分 + 自建规则增删改 | `pickable`(`:50`)、`rows`(`:51`)、`toggle`(`:52`)、`saveDraft`(`:68`)、`removeRule`(`:92`) | 口径在 `:44-48` 定死并且不许回退：**手动可选只看 `!broken`(`:50`)，`enable` 只决定自动候选池**。两者曾经共用一个旗标，于是随包 26 条里 12 条在界面上根本不存在（用户 2026-10-03「txt目录规则没有做好」）。`:126` 给未启用的项在 label 后补「（不参与自动）」而不是隐藏它。`rows` 排除 `builtIn` 与 `auto`(`:51`)，所以 `:173` 那句「内置逐行匹配」兜底文案走不到（§4）。删除以服务端 `result.removed` 为准(`:97`)，不靠前端猜 removable；「恢复随包」只在 `rules.overridden` 时出现(`:262`) |
-| `RssPanel.tsx` | 402 | 订阅页 RSS 半边：源列表 → 栏目 → 文章 → 正文浮层 | `onlyReadable`(`:30`)、`loaded`(`:42`)、`load`(`:45`)、`RssArticles`(`:221`)、`RssReader`(`:348`) | `loaded` 在 `finally` 置位，空态 gated 在 `sources.length === 0 && loaded && !notice`(`:173`) —— 负载下先闪一张"还没有订阅源"曾经是最刺眼的假话（本机有 178 条）。默认只列有 `ruleArticles` 的源(`:30`)，且**不删数据**。`:52` 注释说"搜索交服务端"而 `:46` 调的是不带 `q` 的 `api.rssSources()`，实际过滤发生在客户端 —— 防抖只是重取全表（§4）。`loadMore` 一次失败就 `setHasMore(false)`(`:290`)，「下一页」永久收起，与 ExplorePage 那条"失败留着可重试"的口径相反（§4） |
-| `ExplorePage.tsx` | 269 | 发现页：选源 → 分栏 → 书籍网格 + `{{page}}` 翻页 | `sourcesFailed`(`:19`)、`status`(`:24`)、`labelledTabs`(`:41`)、`loadMore`(`:135`) | 「没取到」与「取到但为空」分开写(`:18`、`:199`、`:206`)。发现栏为空有**两种**原因：非 http 地址直说无法判断(`:108`)，http 则先查凭据再给「需要登录 / 站点没内容」(`:112`)。翻页失败**不**收起按钮，只留一句可重试(`:160`)。分栏 45s、书籍 25s 超时并 `controller.abort()`(`:68`/`:94`) |
+| `RssPanel.tsx` | 403 | 订阅页 RSS 半边：源列表 → 栏目 → 文章 → 正文浮层 | `onlyReadable`(`:30`)、`loaded`(`:42`)、`load`(`:45`)、`RssArticles`(`:221`)、`RssReader`(`:349`) | `loaded` 在 `finally` 置位，空态 gated 在 `sources.length === 0 && loaded && !notice`(`:173`) —— 负载下先闪一张"还没有订阅源"曾经是最刺眼的假话（本机有 178 条）。默认只列有 `ruleArticles` 的源(`:30`)，且**不删数据**。`:52` 注释说"搜索交服务端"而 `:46` 调的是不带 `q` 的 `api.rssSources()`，实际过滤发生在客户端 —— 防抖只是重取全表（§4）。`loadMore` 一次失败就 `setHasMore(false)`(`:290`)，「下一页」永久收起，与 ExplorePage 那条"失败留着可重试"的口径相反（§4） |
+| `ExplorePage.tsx` | 270 | 发现页：选源 → 分栏 → 书籍网格 + `{{page}}` 翻页 | `sourcesFailed`(`:19`)、`status`(`:24`)、`labelledTabs`(`:41`)、`loadMore`(`:135`) | 「没取到」与「取到但为空」分开写(`:18`、`:199`、`:206`)。发现栏为空有**两种**原因：非 http 地址直说无法判断(`:108`)，http 则先查凭据再给「需要登录 / 站点没内容」(`:112`)。翻页失败**不**收起按钮，只留一句可重试(`:160`)。分栏 45s、书籍 25s 超时并 `controller.abort()`(`:68`/`:94`) |
 | `BackupPage.tsx` | 229 | 备份页：选 zip 即恢复 + 报告"承接了哪些、原样收下了哪些" | `RESTORED_SECTIONS`(`:19`)、`KEPT_SECTIONS`(`:28`)、`reportImportSummary`(`:36`)、`applyKept`(`:100`) | 全零才说"没有可导入内容"并附跳过项(`:42`)；`cookiesNote` 单独一句、不混进失败桶(`:52`)；`errors` 必须露出来(`:57`)。`keptFailed` 是独立旗标(`:68`)，空态卡只在 `kept.length > 0` 才画(`:207`)，取失败给"再取一次"(`:201`)。备份密码不是前置条件：默认折叠(`:155`)，只有包内**确有**加密凭据才自动展开(`:91`)。TXT 分章规则走服务端接口(`:101`)，不写本地设置 |
 | `RssPage.tsx` | 24 | 「订阅」这一页的骨架：页头 + `RssPanel`，除此之外不装别的 | `RssPage`(`:12`) | 这一页只有 RSS（要**读**的源）。书源订阅以前与它同页两个页签，各挂一条计数，就为分清"我这一条到底在哪张"——现在两件事按数据模型分家，计数徽标与页签样式一起删了 |
 | `syncErrors.ts` / `Notice.tsx` / `EmptyGuide.tsx` | 89/27/36 | 报错翻译 + 一行反馈 + 可点的空态 | `describeSyncError`、`looksLikeFailure`(`:78`)、`Notice`(`:10`) | Notice 只在 `looksLikeFailure` 时才转人话并把原文收进 `<details>`(`:13-24`)，`headline === raw` 时不重复画；空态的去处一律是按钮(`:21`)，不是一句"暂无数据" |
@@ -338,7 +338,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
   全部改成新布局，`CodeMapFresh` 顺带升级成递归枚举 + 目录前缀反扫（写错目录也红，反扫验过）。
   合并冲突 8 处，其中 4 处正是那批裸 `\r` 行断裂：移动后的文件带着旧写法回来，解法是"取新路径 + 去掉裸 `\r`"，两条信息都没丢。
 
-## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，37 份 14,833 行，已按职责拆成 12 个子包）
+## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，38 份 14,902 行，已按职责拆成 12 个子包）
 
 > **领地声明**：`server/` 归 AI-1。0.7.0~0.7.3 这几轮**一行代码都没动**；0.7.4 动了四条代取书源资源的链路
 > （`http/ProxyHeaders.kt`、`cache/CoverCache.kt`、`http/Routes.kt` 的媒体流与封面、`rules/RuleRunner.kt` 的媒体地址嗅探），
@@ -350,6 +350,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | 文件 | 行 | 它管什么 | 与前端对得上之处 |
 | :--- | ---: | :--- | :--- |
 | `http/ProxyHeaders.kt` | 33 | 代取书源资源（封面 / 正文配图 / 音视频流）该带哪些请求头，**一处定死** | 浏览器的 `<img>` / `<audio>` / `<video>` 带不上自定义头，这三条路全靠服务端代取。Cookie 按**每一跳的落地域名**现取（同一个 `Database.getCookieForUrl`，与文本链路同源），Referer 走完重定向链。以前三条代理路一条都不带 Cookie ⇒ 「书源登录成功、目录正文读得出、图和音频流还是 403」。判据 `ProxyHeadersTest.kt`（端到端演不了：SSRF 闸门拒回环地址，本地假上游连不上） |
+| `rules/PagingRule.kt` | 69 | 「这一栏到底吃不吃页码」——**只看规则怎么写，绝不执行它**：`supportsPaging`(`:32`)、`referencesPage`(`:50`) | 认三种写法：`{{…}}` 里出现自由变量 `page`、`<js>` / `@js:` 脚本里出现自由变量 `page`、剩下的 `<…>` 段带逗号（配合 `RuleRunner` 的 `selectPageSegments`）。"自由"是重点：`{{book.page}}`（属性）、被形参或 `var` 遮蔽的、字符串里的都不算 —— 用 Rhino 的 AST 判而不是正则，就是为了把这四种正确排除。界面据此决定挂不挂「下一页」：本机 25,290 条静态栏目地址里 **4,368 条（17%）** 不含任何翻页写法，以前每一击都是白发一次请求。判据 `PagingDetectionTest.kt`（含"喂一段会抛的脚本也必须照样判得出来"那条，用来证明我们没执行别人的代码） |
 | `Routes.kt` | 2,386 | 全部 HTTP/WS 端点；`route("/api")` 下再分 `/sources/{id}`、`/tts`、`/rss`、`/res`、`/replace-rules`、`/external-login`、`/browser` | 前端 `api.ts` 的端点表逐条对得上；`/api/rss/tabs`、`DELETE /api/rss/sources` 实测 200/204 且 `?q=` 过滤生效（§4.2 第 2 条说的是那句错注释，不是功能） |
 | `data/Database.kt` | 2,302 | SQLite（WAL）：`source`、`book_shelf`、`book_group`、`reading_progress`、`book_toc_cache`、`book_content_cache`、`cover_cache`、`source_subscription`、`rss_source`、`source_login_state`、`cookie`、`replace_rule`、`log_db`/`log_entry` | `listSearchSourceRecords`(`:408-:409`) 对空表取 `takeIf { it.isNotEmpty() }` ⇒ **空 = 不限制**，这就是前端 `searchStore.ts:268` 那道闸门的由来；体检那条不在这张表上按 id 逐个查（`source/SourceHealth.kt` 的 `probe` 收的是 `(id, name, rawJson, …)`，记录由调用侧一次取回） |
 | `RuleRunner.kt` | 1,542 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文；`content()` 末尾还会**嗅一次正文**（`sniffMediaUrl`：整段就一行、以 http(s) 开头且后缀是音视频格式时把它当媒体地址回传）——社区里 `bookSourceType` 填错的音视频源据此能播 |
