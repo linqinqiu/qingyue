@@ -9,7 +9,7 @@
 | :--- | :--- |
 | 更新时间 | 2026-10-17 08:10 |
 | 我现在在做 | **规划阶段**（用户 2026-10-17「规划阶段持续进行」⇒ 只研究、只落方案，不动产品代码）：上游 MD3 刷到 `07ff3a1`（46 条提交 / 161 文件），把里面真戳到青阅缺口的两条写成 **PROPOSAL-022**（发现页 `<a,b,c>` 翻页表达式 + 图片"重取这一张"）；研究记录在 `E:\legado\docs\15-上游增量研究-2026-10-17.md` |
-| 下一件事 | 等 PROPOSAL-022 §5 四条拍板（两条谁先、"版本位"要不要覆盖封面、静态分页判定放服务端还是前端、不支持翻页的栏目怎么交代）。已量完待动的另两条：① `SourceCodec.kt` 的 `isJs = mainJs 非空` —— 本机 5,574 份里 **mainJs 非空 0 份**，任一规则带 `@js:`/`js:`/`<js>` 的 **2,105 份（37.8%）** ⇒ 书源页「JS 书源」统计与筛选恒为 0，放宽要与 `SourceDebugger` 那句"字段由 mainJs 自己组装"拆成两个旗标 + 一次性回填 `source.is_js`；② RSS 的 `articleStyle` / 已读 / 收藏（P1） |
+| 下一件事 | 等 PROPOSAL-022 §5 与 **PROPOSAL-023** §4 拍板。PROPOSAL-023 是「JS 书源」那颗统计：本机 5,574 份里 **`mainJs` 连键都没有（0 份）**、上游全仓 `mainJs` **0 命中**，而**规则级 JS 有 2,105 份（37.8%）** ⇒ 界面上那行恒 0 的数字在说谎；另有两处把「JS 书源」当**分组兜底**用的误用（旗标修对也还是错的）。**同时纠正我上一版状态板的两句话**：①「统计与**筛选**恒为 0」—— 书源页从来没有按 JS 筛的入口，只有分组档；②「放宽 `isJs` 会与 `SourceDebugger` 那句打架」—— `SourceDebugger.kt:54` 与 `SourceEditorPanel.tsx:235` 都自己现读 `mainJs`，不引这一列，这个顾虑不成立。RSS 的 `articleStyle` / 已读 / 收藏（P1）继续排后 |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
 | 待发版 | 否（已发 **0.7.5**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.5/legado-server-0.7.5-all.jar`（zip sha256 `BE93AC646B3CE8FE…`）；0.7.4 的包与 `build/libs` 的旧 jar 已清，`dist/` 下只剩这一份 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
@@ -657,3 +657,15 @@
 - 图片那一条三层都量了：盘上 `sha256(url)` 永不过期且无作废入口、HTTP 7 天 `max-age`、
   SW `legado-covers` SWR 30 天但不含 `/api/book/image` ⇒ 光删盘不够，要"换代次"才绕得开浏览器那份副本。
 - 四条待拍板在 `docs/proposals/PROPOSAL-022-explore-paging-and-image-invalidation.md` §5。**本轮没动 `server/**` 一行。**
+
+## [2026-10-17] TASK 「JS 书源」量的是一颗真实世界里不存在的字段 —— 落 PROPOSAL-023（规划轮）
+- 四条实测：本机 5,574 份里 `mainJs` **连键都没有**（0 份）；上游 `refs/md3/full` 全仓 `mainJs` **0 命中**
+  （`BookSource.kt` 那 27 个 `var` 里没有它）；**规则级 JS 2,105 份（37.8%）**；`JsSourceRunner` 四个派发点对本机
+  永不触发，但 4 份测试在喂合成源 ⇒ 不删能力，只把界面上那个恒 0 还说谎的数字拿掉（推荐 C 档）。
+- 两处**误用与旗标对错无关**：`main.tsx` 的 `1126`/`1158` 把「JS 书源」当**分组兜底**用，那个槽说的是"属于哪一组"。
+- 纠正我自己上一版状态板两句话：① 书源页**从来没有**"按 JS 筛"的入口（只有分组档），"统计与筛选恒为 0"后半句是错的；
+  ② `SourceDebugger.kt:54` 与 `SourceEditorPanel.tsx:235` 都自己现读 `mainJs`、不引这一列 ⇒ "放宽 `isJs` 会与
+  逐字段追溯那句打架"这个顾虑不成立。
+- 另存一处**别人写错的存证**（没动，等拍板）：`docs/实现说明.md:926` 说上游 `BookSource.kt` 27 项里含 `mainJs` ——
+  项数对、字段清单不对。回填成本顺带量了：读 27 MB + 逐份扫全部字符串本机 **0.64 秒** ⇒ 加列不是阻碍，是取舍。
+- 三条待拍板在 §4。本轮 `server/**` 与 `web/src/**` 一行没动，`run-all` 565/565。
