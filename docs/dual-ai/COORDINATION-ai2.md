@@ -7,14 +7,14 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-17 08:10 |
-| 我现在在做 | **规划阶段**（用户 2026-10-17「规划阶段持续进行」⇒ 只研究、只落方案，不动产品代码）：上游 MD3 刷到 `07ff3a1`（46 条提交 / 161 文件），把里面真戳到青阅缺口的两条写成 **PROPOSAL-022**（发现页 `<a,b,c>` 翻页表达式 + 图片"重取这一张"）；研究记录在 `E:\legado\docs\15-上游增量研究-2026-10-17.md` |
-| 下一件事 | 等 PROPOSAL-022 §5 与 **PROPOSAL-023** §4 拍板。PROPOSAL-023 是「JS 书源」那颗统计：本机 5,574 份里 **`mainJs` 连键都没有（0 份）**、上游全仓 `mainJs` **0 命中**，而**规则级 JS 有 2,105 份（37.8%）** ⇒ 界面上那行恒 0 的数字在说谎；另有两处把「JS 书源」当**分组兜底**用的误用（旗标修对也还是错的）。**同时纠正我上一版状态板的两句话**：①「统计与**筛选**恒为 0」—— 书源页从来没有按 JS 筛的入口，只有分组档；②「放宽 `isJs` 会与 `SourceDebugger` 那句打架」—— `SourceDebugger.kt:54` 与 `SourceEditorPanel.tsx:235` 都自己现读 `mainJs`，不引这一列，这个顾虑不成立。RSS 的 `articleStyle` / 已读 / 收藏（P1）继续排后 |
+| 更新时间 | 2026-10-17 13:45 |
+| 我现在在做 | 用户口径「按照优先级逐一处理」⇒ 逐条落地 PROPOSAL-022/023：**P0.1 已发 0.7.6**（`renderUrl` 认 `<页1,页2,…>` 逗号段；A/B 实测同一栏目 0.7.5 回 502「URL 格式无效或包含未解析变量」、0.7.6 回 200 · 30 本）。正在做 P0.2 图片「重取这一张」 |
+| 下一件事 | ① **P0.2 图片重取**（三层缓存现状见 PROPOSAL-022 §2）② **新量到一条规则缺陷**：`极速漫画` 的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 在 CSS 方言里被当备选切分 ⇒ `SelectorParseException`（逗号段已经展开对了才露出来）③ P1 分页静态判定 ④ PROPOSAL-023 的 C 档（恒 0 的「JS 书源」数字 + 两处分组兜底误用）⑤ RSS `articleStyle` / 已读 / 收藏（P1） |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
-| 待发版 | 否（已发 **0.7.5**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.5/legado-server-0.7.5-all.jar`（zip sha256 `BE93AC646B3CE8FE…`）；0.7.4 的包与 `build/libs` 的旧 jar 已清，`dist/` 下只剩这一份 |
+| 待发版 | 否（已发 **0.7.6**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.6/legado-server-0.7.6-all.jar`（zip sha256 `0F93F149182D8EB4…`）；0.7.5 的包与 `build/libs` 旧 jar 已清 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
-| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.5/legado-server-0.7.5-all.jar`，只换 `LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data` ⇒ 报的也是 0.7.5，不再是 `dev`）。1299 那个隔离库里现导了 **6 份真书源**（1 音频 / 2 漫画 / 2 视频 / 1 音频登录站）+ **8 份真 RSS 源**（只为跑 `media-reader-check` / RSS 配图这类数据依赖的门禁与探针，不动真库）。本机现在**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版。已收掉的：`_probe/qingyue-ref/ref-static.mjs` 那个改写 Origin 的静态代理（它会把写请求打进真库）、1329 那个临时端口、`dist/qingyue-0.7.0/`、`dist/qingyue-0.7.3/`、`dist/qingyue-0.7.4/`、`dist/desktop/`、0.7.0 的两个 zip、`build/libs` 里的旧 all.jar（`version-check` 点名要清的那条） |
+| 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.6/legado-server-0.7.6-all.jar`，`LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data`）。隔离库里现有 7 份真书源（音频/漫画/视频 + 三份用逗号段翻页的活源）与 8 份真 RSS 源，只为跑数据依赖的门禁与探针。A/B 时短暂把 1299 换成 0.7.5 的 jar 演过"旧版红"，演完已换回 0.7.6。本机仍**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版 |
 
 ## [2026-10-11] TASK 任务 A —— 前端代码地图
 - 内容：新增 `docs/code-map-frontend.md`（模块清单 / 阅读器文件表 / 关键链路表）。每条引用都回扫过源码，
@@ -669,3 +669,25 @@
 - 另存一处**别人写错的存证**（没动，等拍板）：`docs/实现说明.md:926` 说上游 `BookSource.kt` 27 项里含 `mainJs` ——
   项数对、字段清单不对。回填成本顺带量了：读 27 MB + 逐份扫全部字符串本机 **0.64 秒** ⇒ 加列不是阻碍，是取舍。
 - 三条待拍板在 §4。本轮 `server/**` 与 `web/src/**` 一行没动，`run-all` 565/565。
+
+## [2026-10-17] NOTE renderUrl 补 `<页1,页2,…>` 逗号段（这一轮又动了 `server/`，附回滚）
+- 用户口径「按照优先级逐一处理」⇒ 先做 PROPOSAL-022 的 P0.1。
+- 症状是当场 A/B 出来的（同一份源、同一个栏目、同一台机器）：梦书中文 `/xuanhuanxiaoshuo/<,1-{{page}}.html>`
+  在 0.7.5 回 `502 URL 格式无效或包含未解析变量: /xuanhuanxiaoshuo/<,1-1.html>`，0.7.6 回 `200 · 30 本`。
+  本机 25,290 条静态栏目地址里 **2,644 条（10.5%）** 用这个写法，另有 50 份源的 `searchUrl` 用它。
+- 语义照上游读、不抄代码：在 `{{…}}` 求值**之后**，`<(.*?)>` 段内按逗号切，第 N 页取第 N−1 条、**超出取最后一条**、
+  按"≤空格"裁边、整段替换；**只在调用方真给了页码时做** —— `page` 改成可空，POST 体那条 `renderUrl(body…)`
+  不传页码，等于顺手护住书源 JS 里 `get()` 的 body 不被误展开。`search()` 显式传 `page = 1`。
+- 判据：`PagingSegmentTest.kt` 六条（空首段 / 第 N 段 / 超出取末条 / 裁空白 / `<key>` 与 `{{page}}` 反向对照 / 搜索也带页码）。
+- 只改 `rules/RuleRunner.kt` 与那份新测试。不认可就 `git revert` 本轮那条 `ai2:` 提交。
+
+## [2026-10-17] RELEASE 0.7.6 —— 逗号段翻页上线，那一类"取不到"的发现栏目能出书了
+- 0.7.5 → **0.7.6**：只含上面 NOTE 那一条服务端改动。zip sha256 `0F93F149182D8EB4…`，`dist/` 下只留这一份。
+- 门禁：`run-all` 565/565；`:server:test` 335 例只红 1 条（`E2EScenariosTest` scenario 2），失败集合是基线 47 条的子集 ⇒ 零回归；
+  `version-check` 17/0、`package-check` 10/10、`explore-detail-check` 10/0、`ui-shell-check` 61/61。
+- 顺带量到**那份基线已经很旧**：47 条里 46 条本机早就不红了。比对要先 `tr -d '\r'` —— 基线文件是 CRLF，
+  直接 `comm` 会把"在基线里"的那条报成新增红（我这次就先踩了一次假阳性）。
+- 另两条活源旁证（不是这一条的尾巴，是**下一条**）：`饭饭小说` 现在轮到站点自己回 403（浏览器 UA 直连也 403）；
+  `极速漫画` 逗号段展开正确、卡在既有规则缺陷 `SelectorParseException：'.banner_detail_form&&class.mh-list tag.li'`
+  —— `&&` 在 CSS 方言里被当备选切分掉了，与根 AGENTS 那条"方言优先"是同族，已进状态板「下一件事」。
+- 文档：`docs/code-map-frontend.md` §6 服务端 37 份 **14,781** 行；PROPOSAL-022 的 P0.1 落地，P0.2 与 P1 待做。

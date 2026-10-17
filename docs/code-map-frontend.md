@@ -3,7 +3,7 @@
 生成方式：**逐文件读全文**，不是扫文件名、不是只读热点。2026-10-11 那轮读的是拆分前的树，之后 0.7.0
 把阅读器重做了一遍；本文件在 2026-10-14 按 `main` 上的现状重对了一遍数字：
 `web/src` 96 份共 28,716 行（其中 `styles.css` 5,841 行）、`web/test` 全部判据文件，
-另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（37 份 14,757 行）。
+另外把 `server/src/main/kotlin/io/legado/server` 那一侧也读了一遍照录在 §6（37 份 14,781 行）。
 每条职责后面给的 `文件名:行号` 都是读到那一行时写下的；行号会随改动漂，核对命令：
 
 ```bash
@@ -337,7 +337,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
   全部改成新布局，`CodeMapFresh` 顺带升级成递归枚举 + 目录前缀反扫（写错目录也红，反扫验过）。
   合并冲突 8 处，其中 4 处正是那批裸 `\r` 行断裂：移动后的文件带着旧写法回来，解法是"取新路径 + 去掉裸 `\r`"，两条信息都没丢。
 
-## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，37 份 14,757 行，已按职责拆成 12 个子包）
+## 6. 服务端读照（`server/src/main/kotlin/io/legado/server`，37 份 14,781 行，已按职责拆成 12 个子包）
 
 > **领地声明**：`server/` 归 AI-1。0.7.0~0.7.3 这几轮**一行代码都没动**；0.7.4 动了四条代取书源资源的链路
 > （`http/ProxyHeaders.kt`、`cache/CoverCache.kt`、`http/Routes.kt` 的媒体流与封面、`rules/RuleRunner.kt` 的媒体地址嗅探），
@@ -351,7 +351,7 @@ npx tsx web/test/CodeMapFresh.test.ts    # 钉"文档写的行数 == 磁盘行�
 | `http/ProxyHeaders.kt` | 33 | 代取书源资源（封面 / 正文配图 / 音视频流）该带哪些请求头，**一处定死** | 浏览器的 `<img>` / `<audio>` / `<video>` 带不上自定义头，这三条路全靠服务端代取。Cookie 按**每一跳的落地域名**现取（同一个 `Database.getCookieForUrl`，与文本链路同源），Referer 走完重定向链。以前三条代理路一条都不带 Cookie ⇒ 「书源登录成功、目录正文读得出、图和音频流还是 403」。判据 `ProxyHeadersTest.kt`（端到端演不了：SSRF 闸门拒回环地址，本地假上游连不上） |
 | `Routes.kt` | 2,354 | 全部 HTTP/WS 端点；`route("/api")` 下再分 `/sources/{id}`、`/tts`、`/rss`、`/res`、`/replace-rules`、`/external-login`、`/browser` | 前端 `api.ts` 的端点表逐条对得上；`/api/rss/tabs`、`DELETE /api/rss/sources` 实测 200/204 且 `?q=` 过滤生效（§4.2 第 2 条说的是那句错注释，不是功能） |
 | `data/Database.kt` | 2,302 | SQLite（WAL）：`source`、`book_shelf`、`book_group`、`reading_progress`、`book_toc_cache`、`book_content_cache`、`cover_cache`、`source_subscription`、`rss_source`、`source_login_state`、`cookie`、`replace_rule`、`log_db`/`log_entry` | `listSearchSourceRecords`(`:408-:409`) 对空表取 `takeIf { it.isNotEmpty() }` ⇒ **空 = 不限制**，这就是前端 `searchStore.ts:268` 那道闸门的由来；体检那条不在这张表上按 id 逐个查（`source/SourceHealth.kt` 的 `probe` 收的是 `(id, name, rawJson, …)`，记录由调用侧一次取回） |
-| `RuleRunner.kt` | 1,518 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文；`content()` 末尾还会**嗅一次正文**（`sniffMediaUrl`：整段就一行、以 http(s) 开头且后缀是音视频格式时把它当媒体地址回传）——社区里 `bookSourceType` 填错的音视频源据此能播 |
+| `RuleRunner.kt` | 1,542 | 书源规则执行（Jsoup + JsonPath + `@js:` 替换） | 体检分档、搜索、目录、正文都走它；替换净化在 `content()` 与离线落库前各执行一次，所以朗读天生拿到清洗后的正文；`content()` 末尾还会**嗅一次正文**（`sniffMediaUrl`：整段就一行、以 http(s) 开头且后缀是音视频格式时把它当媒体地址回传）——社区里 `bookSourceType` 填错的音视频源据此能播 |
 | `JsSandbox.kt` | 840 | Rhino 沙箱 | 顶级 `return` 要包装、`JavaImporter` 必须是空替身（AGENTS 那两条），否则整批书源报错 |
 | `WebViewProxy.kt` | 815 | 内置登录浏览器的整站反代 + 一次性令牌 + `Set-Cookie` 吸收 | `SourceWebViewModal` 的 iframe 能不开 `allow-same-origin` 全靠这一侧 |
 | `Models.kt` | 839 | 全部 `@Serializable` 请求/响应体 | `Map<String, Any>` 在这侧会直接 500，所以响应体都是具名 data class；`SourceHealthCheckItem` 在 `model/Models.kt:673`、`statusCategory` 在 `:680` |

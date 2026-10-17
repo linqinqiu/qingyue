@@ -111,7 +111,9 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             }
             val (urlTemplate, options) = splitUrlOptions(searchUrl)
             val mergedOptions = mergeOptions(parseSourceHeaders(source), options)
-            val rendered = renderUrl(urlTemplate, keyword, sourceUrl).absolute(sourceUrl)
+            // 搜索永远只取第一页，但**页码要显式给**：`<a,b,c>` 那一段没有页码就不展开（本机 50 份源的
+            // searchUrl 用这个写法），实测语料里另有 2,644 条栏目地址用它，不给页码等于留一串尖括号在网址里。
+            val rendered = renderUrl(urlTemplate, keyword, sourceUrl, page = 1).absolute(sourceUrl)
             val body = fetchUrl(rendered, mergedOptions, keyword, sourceUrl, database)
             val rule = source.objectValue("ruleSearch") ?: throw RuleExecutionException("该书源未配置 ruleSearch")
             bookItems(body, rule, sourceUrl, source.sourceType())
@@ -1262,11 +1264,16 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         }
     }
 
-    private fun renderUrl(template: String, keyword: String, sourceUrl: String, page: Int = 1): String {
+    /**
+     * 把书源地址里的占位写法换成真实值。`page` **只在调用方真给了页码时才传**：
+     * `<页1,页2,…>` 这种翻页段要"有页码"才该被展开（上游 `AnalyzeUrl` 也是 `page?.let { … }`），
+     * 详情/目录那几条没有页码，留着原样才是它的语义。
+     */
+    private fun renderUrl(template: String, keyword: String, sourceUrl: String, page: Int? = null): String {
         val literals = template
             .replace("{{key}}", URLEncoder.encode(keyword, Charsets.UTF_8))
             .replace("{{keyword}}", URLEncoder.encode(keyword, Charsets.UTF_8))
-            .replace("{{page}}", page.toString())
+            .replace("{{page}}", (page ?: 1).toString())
             .replace("<key>", URLEncoder.encode(keyword, Charsets.UTF_8))
             .replace("{{source.key}}", URLEncoder.encode(keyword, Charsets.UTF_8))
             .replace("{{source.bookSourceUrl}}", sourceUrl)
@@ -1275,13 +1282,13 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         // `{{url=source.getKey();cookie.removeCookie(url)}}`）。只认固定字面量的话整串会被当成网址，
         // 这类书源就永远搜不到东西。求值失败的占位符原样保留，免得把网址悄悄改坏。
         val context = jsSandbox.threadContext.get()
-        return URL_VARIABLE_PATTERN.replace(literals) { match ->
+        val evaluated = URL_VARIABLE_PATTERN.replace(literals) { match ->
             context?.lastError = null
             val value = runCatching {
                 jsSandbox.eval(match.groupValues[1], mapOf(
                     "key" to keyword,
                     "keyword" to keyword,
-                    "page" to page,
+                    "page" to (page ?: 1),
                     "baseUrl" to sourceUrl,
                     "sourceId" to sourceUrl,
                 ))
@@ -1292,7 +1299,22 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
                 else -> trimJsNumberFraction(value.trim())
             }
         }
+        return if (page == null) evaluated else selectPageSegments(evaluated, page)
     }
+
+    /**
+     * Legado 的 `<页1,页2,…>` 翻页段：段内按逗号切，第 N 页取第 N−1 条、**超出条数取最后一条**，
+     * 两端按"≤ 空格"裁掉，整段（含尖括号）替换。必须放在 `{{…}}` 求值**之后** ——
+     * 社区最常见的写法 `<,index_{{page}}.html>` 是把页码同时写进两处的。
+     *
+     * 为什么值得做：本机 25,290 条静态栏目地址里有 **2,644 条**用这个写法，以前尖括号原样留在网址里，
+     * 过不了 URI 解析 —— 那一栏**第 1 页就 502**（实测饭饭小说 `都市言情::/dsyq/<,index_{{page}}.html>`）。
+     */
+    private fun selectPageSegments(url: String, page: Int): String =
+        PAGE_SEGMENT_PATTERN.replace(url) { match ->
+            val options = match.groupValues[1].split(",")
+            (options.getOrNull(page - 1) ?: options.last()).trim { it <= ' ' }
+        }
 
     /** Rhino 里所有数字都是 double，`{{(page-1)*20}}` 会求值成 `0.0`；网址里必须是 `0`。 */
     private fun trimJsNumberFraction(text: String): String =
@@ -1416,6 +1438,8 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         /** 正文整段是直链时按这些后缀认媒体（音频 / 视频 / 播流）。`.m3u8` 与 `.ts` 是 HLS，`.m4a` 是音频站最常见的形态。 */
         val MEDIA_URL_SUFFIXES = setOf(".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac", ".mp4", ".m3u8", ".ts", ".webm", ".mkv", ".mov", ".flv", ".avi")
         val URL_VARIABLE_PATTERN = Regex("\\{\\{(.+?)}}")
+        /** `<…>` 翻页段（非贪婪，一段一段来）：见 `selectPageSegments`。 */
+        val PAGE_SEGMENT_PATTERN = Regex("<(.*?)>")
 
         // 下方几个正则原来在每次调用处现编译：cleanContent 走每章正文（离线缓存整本 = 上万次），
         // 其余的走每个字段取值。语义不变，只是提到类级只编译一次。
