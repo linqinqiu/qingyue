@@ -266,7 +266,6 @@ function SourceChoiceList({
             : ''
           const tags = [
             summary?.group?.trim() || '',
-            summary && summary.isJsSource ? 'JS 书源' : '',
             summary && summary.hasLogin ? '已配登录' : '',
             summary && !summary.enabled ? '已停用' : '',
           ].filter(Boolean)
@@ -798,10 +797,15 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
     setSources(current => current.map(item => ({ ...item, sortOrder: null })))
     void api.clearSourceOrder().catch(() => { setNotice('自定义顺序没能清掉，刷新后会回到原样'); void load() })
   }
+  /**
+   * 统计带。「JS 书源」那一档量的是 `mainJs` 非空 —— 本机 5,574 份里 **0 份**带这个键，
+   * 上游 `BookSource` 也根本没有这个字段（`refs/md3/full` 全仓 0 命中），所以它永远是 0，
+   * 而"永远为 0 的统计"暗示的是"你的库里没有 JS 源"—— 真相是有 2,105 份（37.8%）在用 JS 规则。
+   * 拿掉它；要真给一个 JS 数字得先有"规则含 JS 方言"这一列（PROPOSAL-023 的 A 档）。
+   */
   const sourceStats = useMemo(() => ({
     total: sources.length,
     enabled: sources.filter(s => s.enabled).length,
-    js: sources.filter(s => s.isJsSource).length,
     login: sources.filter(s => s.hasLogin).length,
     groups: allGroups.length,
   }), [sources, allGroups])
@@ -1123,7 +1127,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                       {!source.enabled && <span className="source-disabled-badge">已停用</span>}
                       {source.hasLogin && <span className="source-login-badge" title="支持登录鉴权">登录</span>}
                     </div>
-                    <small>{splitSourceGroups(source.group).join(' · ') || (source.isJsSource ? 'JS 书源' : '未分组')}</small>
+                    <small>{splitSourceGroups(source.group).join(' · ') || '未分组'}</small>
                   </div>
                 </div>
               )
@@ -1155,7 +1159,7 @@ function SourcesPage({ selected, onSelect, onSourcesChange }: { selected: Source
                   {!source.enabled && <span className="source-disabled-badge">已停用</span>}
                   {source.hasLogin && <span className="source-login-badge" title="支持登录鉴权">登录</span>}
                 </div>
-                <small>{splitSourceGroups(source.group).join(' · ') || (source.isJsSource ? 'JS 书源' : '未分组')}</small>
+                <small>{splitSourceGroups(source.group).join(' · ') || '未分组'}</small>
                 <span
                   className={`source-enable-switch${source.enabled ? ' is-on' : ''}`}
                   role="switch"

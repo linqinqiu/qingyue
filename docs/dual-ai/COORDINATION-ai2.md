@@ -7,8 +7,8 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-17 15:00 |
-| 我现在在做 | 「按照优先级逐一处理」第二条已发 **0.7.7**：图片「重取这一张」（服务端绕开盘上那份重取 + 前端带代次绕开浏览器副本 + 取失败那一行不再整块藏掉）。下一条是 PROPOSAL-023 的 C 档（恒 0 的「JS 书源」数字） |
+| 更新时间 | 2026-10-17 15:05 |
+| 我现在在做 | 「按照优先级逐一处理」第三条已发 **0.7.8**：书源页拿掉那颗永远为 0 的「JS 书源」，两处分组兜底改成只说「未分组」（PROPOSAL-023 C 档）。下一条按优先级是 PROPOSAL-022 的 P1（分页静态判定），另外新量到一条 `&&` 在 CSS 方言里被当备选切分的规则缺陷待查 |
 | 下一件事 | ① **P0.2 图片重取**（三层缓存现状见 PROPOSAL-022 §2）② **新量到一条规则缺陷**：`极速漫画` 的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 在 CSS 方言里被当备选切分 ⇒ `SelectorParseException`（逗号段已经展开对了才露出来）③ P1 分页静态判定 ④ PROPOSAL-023 的 C 档（恒 0 的「JS 书源」数字 + 两处分组兜底误用）⑤ RSS `articleStyle` / 已读 / 收藏（P1） |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
 | 待发版 | 否（已发 **0.7.7**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.7/legado-server-0.7.7-all.jar`（zip sha256 `FECDCB633675B0FD…`）；0.7.6 的包与 `build/libs` 旧 jar 已清 |
@@ -713,3 +713,17 @@
 - 顺带：`doc-codemap-refresh.mjs` 现在也重写 `X.kt`(NNN) 那种括号式行数 —— 0.7.4 加的那条判据这轮第一次抓到漂移
   （`CoverCache.kt` 文档写 201、磁盘 214）。比对基线记得先 `tr -d '\r'`（基线文件是 CRLF）。
 - 发版链照旧：先停两台再打包（EPERM 那条），zip sha256 `FECDCB633675B0FD…`，`dist/` 下只留 0.7.7 一份。
+
+## [2026-10-17] RELEASE 0.7.8 —— 书源页不再显示那颗永远为 0 的「JS 书源」
+- PROPOSAL-023 的 C 档。四条实测：本机 5,574 份里 `mainJs` **连键都没有**（0 份）· 上游 `refs/md3/full` 全仓 `mainJs` **0 命中**
+  （`BookSource.kt` 那 27 个 `var` 里没有它）· **规则含 JS 方言的有 2,105 份（37.8%）** ⇒ "JS 书源 0"读起来是"你没有 JS 源"，与真相相反。
+- 改的：统计带去掉 `js` 那一档（`main.tsx` 的 `sourceStats` 与 `SourceEditorPanel` 的 summary 类型同步）；卡片标签里那颗「JS 书源」摘掉；
+  两处分组兜底 `splitSourceGroups(group).join() || (isJsSource ? 'JS 书源' : '未分组')` 改成只说「未分组」。
+  `isJsSource` 与 `mainJs` 那条线**留在服务端** —— `JsSourceRunner` 有 4 份测试覆盖，是显式支持的写法，只是真实语料里没有输入。
+- 判据 `web/test/SourceStats.test.ts` 四条：统计带字段集合显式断言（防"顺手加回一个恒 0 档"）、三份文件里不许再出现「JS 书源」
+  （只扫非注释行，注释里要留着解释）、每一处 `splitSourceGroups(...) ||` 都必须说「未分组」+ 反扫。
+  写这条时抓到我自己两处错：先断"恰好两处"，实测有 6 行含 `splitSourceGroups(source.group)`（另 4 行本来就写对了）；
+  又把 `const tags = splitSourceGroups(...)` 误算进来 —— 加上 `||` 约束才对齐。判据要的是"每一处"，不是"数几条"。
+- 门禁：`run-all` **574/574**；`version-check` 17/0、`package-check` 10/10、`ui-shell-check` 61/61；
+  真库那台（1234）浏览器量到统计带 = 书源 5574 / 已启用 5574 / 支持登录 / 分组，**没有**「JS 书源」，无 JS 异常。
+- 本轮只动 `web/**`（+ 版本号与日志）。zip sha256 `3DF4BC75909B281A…`，`dist/` 下仍只有一份。

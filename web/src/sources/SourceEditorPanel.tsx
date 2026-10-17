@@ -144,7 +144,7 @@ export const SourceEditor: React.FC<{
   selected: SourceSummary | null
   /** 新建模式：左侧列表不选中任何书源，编辑器填一份空模板，保存时才落库。 */
   creating: boolean
-  summary?: { total: number; enabled: number; js: number; login: number; groups: number }
+  summary?: { total: number; enabled: number; login: number; groups: number }
   onSaved: () => void
   onCreateCancel: () => void
   onCreated: (source: SourceSummary) => void
@@ -264,7 +264,6 @@ export const SourceEditor: React.FC<{
         <dl className="source-summary">
           <div><dt>书源</dt><dd>{summary.total}</dd></div>
           <div><dt>已启用</dt><dd>{summary.enabled}</dd></div>
-          <div><dt>JS 书源</dt><dd>{summary.js}</dd></div>
           <div><dt>支持登录</dt><dd>{summary.login}</dd></div>
           <div><dt>分组</dt><dd>{summary.groups}</dd></div>
         </dl>
