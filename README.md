@@ -200,6 +200,7 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 | 整体架构与模块边界 | [`docs/architecture.md`](docs/architecture.md) |
 | 部署（jar / Docker / Compose / 桌面程序） | [`docs/deploy.md`](docs/deploy.md) |
 | 前端每个文件做什么、跨文件链路、读后记里的问题清单 | [`docs/code-map-frontend.md`](docs/code-map-frontend.md) |
+| 让 AI 或脚本接进来（管书源、批量整理、走登录） | [`docs/AI-AGENT.md`](docs/AI-AGENT.md) · 机器可读的那份是 `GET /api/catalog` |
 | 贡献规则、双 AI 协作与合流 | [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`docs/dual-ai/README.md`](docs/dual-ai/README.md) |
 | 历史推演与踩坑归档 | [`docs/sessions/`](docs/sessions/) |
 

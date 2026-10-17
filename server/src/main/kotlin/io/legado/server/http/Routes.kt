@@ -195,6 +195,15 @@ fun Route.apiRoutes(
     val externalLogin = ExternalBrowserLogin(database, localBooksDirectory.resolveSibling("external-browser-profile"))
     val debugger = SourceDebugger(runner)
     route("/api") {
+        /**
+         * 端点目录：给外部程序（脚本、AI 客户端）当机器可读的契约用。
+         * 内容随包在 `resources/agent-api.json`，这里只把 `version` 盖成当前构建号；
+         * 它与 `Routes.kt` 由 `web/test/ApiCatalog.test.ts` 双向核对 —— 手抄的清单一定会在
+         * "加完接口的那天"过期，所以这条判据替人记着。
+         */
+        get("/catalog") {
+            call.respondText(RouteCatalog.serve(BuildInfo.version), ContentType.Application.Json)
+        }
         // 服务自身 + 改端口。端口只写安装根的 `port.txt`，**重启后生效** —— 正在跑的这个进程改不了。
         get("/server") {
             call.respond(ServerInfo(host = currentHost, port = currentPort))

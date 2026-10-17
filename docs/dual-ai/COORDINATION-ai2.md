@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-17 15:40 |
-| 我现在在做 | 「按照优先级逐一处理」**四条全部发完**：0.7.6 逗号段翻页 · 0.7.7 图片重取 · 0.7.8 拿掉恒 0 的「JS 书源」· 0.7.9 分页静态判定。本机仍只有 1234（完整版）与 1299（测试版）两台 |
+| 更新时间 | 2026-10-17 19:10 |
+| 我现在在做 | 发 **0.8.0**：AI 接入面 —— `GET /api/catalog`（46 条机器可读契约，含每条的回包形状；随包 `agent-api.json`，version/count 响应时盖）+ `docs/AI-AGENT.md`（门在哪、改一本书源的推荐动线、逐条打真接口量出来的那几处改口） |
 | 下一件事 | ① **新量到一条规则缺陷**：极速漫画的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 被当备选切分 ⇒ `SelectorParseException`（逗号段修好后才露出来）—— 要先读上游 `AnalyzeByJSoup` 对 `&&` 的语义再动，别猜。② PROPOSAL-023 的 A 档（加"规则含 JS 方言"列 + 回填 5,574 行）等拍板。③ RSS `articleStyle` / 已读 / 收藏（P1） |
 | 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
-| 待发版 | 否（已发 **0.7.7**）—— 1234 与 1299 同一个 `dist/qingyue-0.7.7/legado-server-0.7.7-all.jar`（zip sha256 `FECDCB633675B0FD…`）；0.7.6 的包与 `build/libs` 旧 jar 已清 |
+| 待发版 | 否（已发 **0.8.0**）—— 1234 与 1299 同一个 `dist/qingyue-0.8.0/legado-server-0.8.0-all.jar`；`dist/` 下只留这一份 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.6/legado-server-0.7.6-all.jar`，`LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data`）。隔离库里现有 7 份真书源（音频/漫画/视频 + 三份用逗号段翻页的活源）与 8 份真 RSS 源，只为跑数据依赖的门禁与探针。A/B 时短暂把 1299 换成 0.7.5 的 jar 演过"旧版红"，演完已换回 0.7.6。本机仍**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版 |
@@ -747,3 +747,31 @@
 - 写判据时又被自己的"数条数"绊了一次：先断「恰好两处 `splitSourceGroups(...)`」，实测 6 处（另 4 处本来就写对了）——
   判据要写成**"每一处都必须…"**，不是"数几条"。这条与前一条 `SourceStats` 的教训同一个形状。
 - zip sha256 见本轮包体；`dist/` 下仍只有一份。下一档按规程是 **0.8.0**（三段号满 10 进位）。
+
+## [2026-10-17] NOTE 新增 `GET /api/catalog` 端点目录（又动了 `server/`，附回滚）
+- 用户口径：「在里面加入 ai 能接入 api，这个 ai 能管理书源，新建书源，编辑书源，等所有功能」。
+- 先量一件事：**能力本来就有，缺的是契约。`requireSameOriginWrite` 对不带 `Origin` 的请求放行**（`Guard.kt`:38），
+  所以本机脚本 / AI 今天就能读写那 130 条端点（判据的解析器认全了之后实测的数）—— 缺的是"这里有什么、体长什么样、回什么、门在哪"。
+- 为什么不反射路由树：Ktor 3.4 没把 `getRoutingRoot` 暴露成公开扩展（编译期就取不到），而树上也只有方法与路径，给不出"这条做什么、回什么"。
+- 做法：随包 `resources/agent-api.json` 46 条 = 代码里书源管理那一面（`/api/sources…` / `/api/cookies` / `/api/explore…`）**43 条全量**
+  + 搜索 + 流式搜索 + 目录自己。`RouteCatalog.serve()` 响应时盖 `version`（当前构建号）与 `count`（现数）。
+- 逐条打真接口量出来的三处改口（第一版是我按想象写的，全被打回）：`GET /api/sources/{id}` 回的是**信封**
+  `{id,json,version,updatedAt}`，书源本体在 `json` 那个字符串里；`health-check` 是**阻塞式**跑完才回，没有进度 SSE；
+  导入的 `overwrite` 字段服务端**根本不看**（永远按 id upsert）。另外 `POST /search`、`/explore`、`/validate` 都过同源写门。
+- 两条注册形式原先在判据眼里**不存在**：`browser/res` 的五种方法是 `for (verb in listOf(...)) { method(verb) }` 一次注册出来的，
+  `webSocket("/search/stream")` 也不是 HTTP 路由 —— 解析器现在认这两种，目录也跟着补上了。
+- 改了 `http/RouteCatalog.kt`（新）、`http/Routes.kt` 一条路由、`resources/agent-api.json`（新）+ `RouteCatalogTest`。不认可就 `git revert` 本轮那条提交。
+
+## [2026-10-17] RELEASE 0.8.0 —— AI 接入面：`GET /api/catalog` + `docs/AI-AGENT.md`
+- 三段号进位（0.7.9 → 0.8.0，按"满 10 进一次级"）。内容就是上面 NOTE 那一条 + 前端一份判据。
+- 判据这次盯四样而不是两样：目录里不许有幻影、代码里的书源端点不许漏、`write` 要和处理器自己那几行的门一致、
+  每条必须写回包形状（少了这一栏，接入方拿到 200 还是得猜顶层键 —— `/api/sources/{id}` 就猜错过一次）。
+  外加目录里的 `version` 与 `server/build.gradle` 同号（随包那份只是给人翻仓库看的，运行时由服务端盖）。
+- 门禁：`run-all` **580/580**、`npm --prefix web run check` 干净；`:server:test` 全量 344 条里 1 条失败且失败集 ⊆ 基线
+  （`E2EScenariosTest scenario 2`，基线内旧账）—— 那是补回包形状之前跑的，补完单独重跑 `RouteCatalogTest` 1/1 绿；
+  `version-check` 17、`package-check` 10、`ui-shell-check` 61 都在**最终那份包**上跑，目录在 1234 与 1299 实测 200、`count` 46。
+- **没有加鉴权**，安全口径一个字没动：本服务不设身份，绑定地址就是唯一的门。这件事在 CHANGELOG、
+  `docs/AI-AGENT.md`、目录里的 `howToConnect.auth` 三处都写明，含"把 `LEGADO_HOST` 改成 `0.0.0.0`
+  等于把整个库的写权限交给局域网"。唯一反过来的例外写在同一段：WebSocket 把"没有 Origin"当作跨站拒掉。
+- 同一诉求剩下的面：阅读 / 离线缓存 / 备份 / 朗读这 84 条还没进目录。加进去只需在 `agent-api.json` 补条目
+  并把前缀放进判据的 mustList —— 判据已经会盯着一致性，不用新写一套。

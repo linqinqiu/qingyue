@@ -35,7 +35,7 @@ jacocoTestReport {
 
 
 group = 'io.legado'
-version = '0.7.9'
+version = '0.8.0'
 
 base {
     // plain jar 与发行版统一叫 legado-server：Docker 构建层 `jar uf …/lib/legado-server-*.jar`
