@@ -25,7 +25,7 @@
 {
   "service": "青阅",
   "version": "0.8.0",          // 当前真正在跑的构建号，由服务端在响应时盖上
-  "scope": "书源管理这一面：…",
+  "scope": "全量：代码里注册的每一条端点都在这里，按 group 归面",
   "howToConnect": { "baseUrl": "…", "auth": "…", "errors": "…", "response": "…" },
   "workflow": [ "…" ],
   "endpoints": [
@@ -37,12 +37,23 @@
 }
 ```
 
-每条四个必填面：怎么调（`method` + `path` + `query` / `body`）、要不要过写门（`write`）、这条做什么
-（`purpose`）、**回包长什么样**（`response`）。最后一栏是 0.8.0 补的：只说怎么调，接入方拿到 200 还是得猜顶层键。
+每条五个必填面：怎么调（`method` + `path` + `query` / `body`）、要不要过写门（`write`）、这条做什么
+（`purpose`）、**回包长什么样**（`response`）、归哪一面（`group`）。`response` 那栏是 0.8.0 补的：只说怎么调，
+接入方拿到 200 还是得猜顶层键。
 
-`scope` 覆盖书源管理这一面 —— 代码里所有 `/api/sources…`、`/api/cookies`、`/api/explore…` 端点（43 条）**一条不漏**，
-外加搜索、流式搜索与目录自己，共 46 条。不在目录里的端点仍然能用，只是没有这份说明 —— 要扩到别的面
-（阅读、缓存、备份、朗读…）就在 `agent-api.json` 里加条目，并把路径前缀放进判据的 mustList，判据会盯着它与代码一致。
+`response` 里列的是那个模型的**全部字段**，不是"每次都会出现的键"：服务端编码时不写默认值，
+所以可空字段（`stackTrace`、`mediaUrl`、`author` 这一类）在没内容时**整个键都不出现**。按「可能缺」去读。
+（这一条是拿真接口打出来的：目录给 `GET /api/logs` 列了 `stackTrace`，实际回包里那一项没有这个键。）
+
+`scope` 现在是**全量** —— `Routes.kt` 里注册的每一条都在这份目录里，共 130 条，按面分成：
+目录 / 书源 / 发现页 / 搜索 / 登录与凭据 / 内置浏览器 / 阅读 / 书架 / 离线缓存 / 分章规则 / 净化规则 /
+图片与媒体 / 进度与笔记 / 朗读 / RSS / 书源订阅 / 备份 / 系统。判据的要求是「目录条数 == 代码里的条数」，
+所以新加一条端点而忘了写进契约，当天就会红 —— 以前只盯 `/api/sources…` 前缀，别的面漏了没人知道。
+
+`write` 这一栏要说准：它是"这条处理器**调没调**同源写门"，不是"这台客户端会不会被挡"。
+`Guard.kt` 对 `GET` / `HEAD` 这类安全方法**直接放行**，所以 `GET /api/bookshelf/cached-chapters` 写着
+`write=true` 却不会挡本机脚本；真正会挡 403 的是 POST / PUT / DELETE / PATCH 那几条。
+还有一类反过来的：`WS /api/search/stream` 没带 `Origin` 就当跨站拒掉。
 
 有一类端点靠解析器容易被漏掉，这里点名：`/api/sources/{id}/browser/res` 的五种方法是
 `for (verb in listOf(HttpMethod.Get, …)) { method(verb) { … } }` 一次注册出来的，不是五条 `get("…")`；

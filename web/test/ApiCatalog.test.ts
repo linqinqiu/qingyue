@@ -86,7 +86,7 @@ function pathAt(stack: { seg: string; indent: number }[], indent: number, seg: s
 }
 
 /** 目录与代码对得上吗：返回"哪几条对不上"，空数组就是没问题。抽成纯函数是为了能喂假数据反扫。 */
-function auditCatalog(routes: { method: string; path: string; write: boolean }[], catalog: { endpoints?: { method: string; path: string; write: boolean; purpose?: string; response?: string }[] }) {
+function auditCatalog(routes: { method: string; path: string; write: boolean }[], catalog: { endpoints?: { method: string; path: string; write: boolean; purpose?: string; response?: string; group?: string }[] }) {
   const problems: string[] = []
   const byKey = new Map(routes.map(r => [`${r.method} ${r.path}`, r]))
   const listed = new Set((catalog.endpoints ?? []).map(e => `${e.method} ${e.path}`))
@@ -98,25 +98,29 @@ function auditCatalog(routes: { method: string; path: string; write: boolean }[]
     if (!entry.purpose || entry.purpose.trim().length < 8) problems.push(`${key} 缺一句说得清的用途`)
     // 接入方拿到 200 之后要看懂回包。少了这一栏，它只能去猜顶层键（`/api/sources/{id}` 那条就猜到过对象，实际是信封）。
     if (!entry.response || entry.response.trim().length < 8) problems.push(`${key} 没写回包长什么样`)
+    // 130 条平铺着没人翻得动，分组是这份目录能被按面找用的前提。
+    if (!entry.group || entry.group.trim().length < 2) problems.push(`${key} 没归到任何一个面（缺 group）`)
   }
+  // **全量**要求：代码里注册的每一条都必须在目录里。以前只盯 `/api/sources…` 那几面前缀，
+  // 后果是加在别的面上的端点（阅读、书架、朗读……）永远不会被这条判据看见，目录又变成半份地图。
   for (const route of routes) {
     const key = `${route.method} ${route.path}`
-    const mustList = route.path.startsWith('/api/sources') || route.path.startsWith('/api/cookies') || route.path.startsWith('/api/explore')
-    if (mustList && !listed.has(key)) problems.push(`代码里有、目录里漏了：${key}`)
+    if (!listed.has(key)) problems.push(`代码里有、目录里漏了：${key}`)
   }
   return problems
 }
 
-test('目录里每一条都真存在，代码里的书源端点一条不漏', () => {
+test('目录里每一条都真存在，代码里的端点一条不漏', () => {
   const routes = parseRoutes(fs.readFileSync(ROUTES, 'utf8'))
   assert.ok(routes.length >= 120, `只从 Routes.kt 解析到 ${routes.length} 条端点，解析方式没对上，这条判据在演空戏`)
   const catalog = JSON.parse(fs.readFileSync(CATALOG, 'utf8'))
-  assert.ok(Array.isArray(catalog.endpoints) && catalog.endpoints.length >= 40,
-    `目录只有 ${catalog.endpoints?.length ?? 0} 条，书源管理这一面不可能这么少`)
+  assert.ok(Array.isArray(catalog.endpoints) && catalog.endpoints.length === routes.length,
+    `目录有 ${catalog.endpoints?.length ?? 0} 条，代码里注册了 ${routes.length} 条 —— 这两个数必须相等，全量覆盖是这份契约的全部意义`)
   assert.deepEqual(auditCatalog(routes, catalog), [], '端点目录与代码对不上')
   const keys = catalog.endpoints.map((e: { method: string; path: string }) => `${e.method} ${e.path}`)
-  for (const must of ['POST /api/search', 'PUT /api/sources/{id}', 'POST /api/sources/import', 'GET /api/sources/{id}/debug',
-    'GET /api/sources/{id}/browser/res', 'WS /api/search/stream']) {
+  for (const must of ['POST /api/search', 'PUT /api/sources/{id}', 'GET /api/sources/{id}/debug',
+    'GET /api/sources/{id}/browser/res', 'WS /api/search/stream', 'POST /api/books/content',
+    'GET /api/bookshelf', 'POST /api/tts/speak', 'GET /api/replace-rules', 'POST /api/backup/import']) {
     assert.ok(keys.includes(must), `AI 要接进来必须能看见 ${must}`)
   }
   // 随包那份 JSON 里的 version 只是给人翻仓库时看的（运行时由 RouteCatalog 盖成当前构建号），
@@ -126,31 +130,39 @@ test('目录里每一条都真存在，代码里的书源端点一条不漏', ()
   assert.equal(catalog.version, gradle![1], `目录里写的版本是 ${catalog.version}，构建却是 ${gradle![1]}`)
 })
 
-test('反向对照：假端点、漏掉的端点、write 说谎、回包没写都必须被逮住', () => {
+test('反向对照：假端点、漏端点、write 说谎、缺回包或缺分组都必须被逮住', () => {
   const routes = [
     { method: 'GET', path: '/api/sources', write: false },
     { method: 'PUT', path: '/api/sources/{id}', write: true },
+    { method: 'GET', path: '/api/bookshelf', write: false },
   ]
-  const fake = { endpoints: [{ method: 'GET', path: '/api/ghost', write: false, purpose: '代码里根本没有这一条，必须被逮住', response: '{whatever}' }] }
+  const fake = { endpoints: [{ method: 'GET', path: '/api/ghost', write: false, purpose: '代码里根本没有这一条，必须被逮住', response: '{whatever}', group: '书源' }] }
   const problems = auditCatalog(routes, fake)
   assert.ok(problems.some(p => p.includes('/api/ghost')), '幻影端点没被逮住')
   assert.ok(problems.some(p => p.includes('PUT /api/sources/{id}')), '代码里有、目录漏了却没报')
+  // 全量要求新加的那一半：不在书源前缀里的端点（书架）漏了也得报
+  assert.ok(problems.some(p => p.includes('GET /api/bookshelf')), '非书源面的端点漏了却没报，全量覆盖没生效')
   // write 说谎：GET 却标成要同源写门（或反过来），必须报
   const lying = { endpoints: [
-    { method: 'GET', path: '/api/sources', write: true, purpose: '书源列表（投影，不载完整规则 JSON）', response: '[{id,name,url}]' },
-    { method: 'PUT', path: '/api/sources/{id}', write: true, purpose: '新建或覆盖一份书源，带 version 防并发改写', response: '{id,json,version,updatedAt}' },
+    { method: 'GET', path: '/api/sources', write: true, purpose: '书源列表（投影，不载完整规则 JSON）', response: '[{id,name,url}]', group: '书源' },
+    { method: 'PUT', path: '/api/sources/{id}', write: true, purpose: '新建或覆盖一份书源，带 version 防并发改写', response: '{id,json,version}', group: '书源' },
+    { method: 'GET', path: '/api/bookshelf', write: false, purpose: '书架清单（按最后阅读时间倒序）', response: '[{sourceId,bookUrl,name}]', group: '书架' },
   ] }
   assert.ok(auditCatalog(routes, lying).some(p => p.includes('write 与代码不符')), 'write 说谎没被逮住')
-  // 只说"怎么调"不说"回什么"：接入方会连 200 都读不懂，必须报
+  // 只说"怎么调"不说"回什么"或不说归哪一面：接入方会读不懂、也找不到，必须报
   const noResponse = { endpoints: [
-    { method: 'GET', path: '/api/sources', write: false, purpose: '书源列表（投影，不载完整规则 JSON）' },
-    { method: 'PUT', path: '/api/sources/{id}', write: true, purpose: '新建或覆盖一份书源', response: '  ' },
+    { method: 'GET', path: '/api/sources', write: false, purpose: '书源列表（投影，不载完整规则 JSON）', group: '书源' },
+    { method: 'PUT', path: '/api/sources/{id}', write: true, purpose: '新建或覆盖一份书源', response: '  ', group: '书源' },
+    { method: 'GET', path: '/api/bookshelf', write: false, purpose: '书架清单（按最后阅读时间倒序）', response: '[{sourceId,bookUrl,name}]' },
   ] }
-  assert.equal(auditCatalog(routes, noResponse).filter(p => p.includes('回包')).length, 2, '缺回包形状没被逮住（含只有空格的情况）')
-  // 同一条判据在正确输入上不许出声
+  const silent = auditCatalog(routes, noResponse)
+  assert.equal(silent.filter(p => p.includes('回包')).length, 2, '缺回包形状没被逮住（含只有空格的情况）')
+  assert.ok(silent.some(p => p.includes('group')), '缺分组没被逮住')
+  // 同一条判据在正确输入上不许出声（write 与上面那三条的门一致）
   const good = { endpoints: [
-    { method: 'GET', path: '/api/sources', write: false, purpose: '书源列表（投影，不载完整规则 JSON）', response: '[{id,name,url,group,enabled,isJsSource,hasLogin,updatedAt,version}]' },
-    { method: 'PUT', path: '/api/sources/{id}', write: true, purpose: '新建或覆盖一份书源，带 version 防并发改写', response: '{id,json,version,updatedAt}' },
+    { method: 'GET', path: '/api/sources', write: false, purpose: '书源列表（投影，不载完整规则 JSON）', response: '[{id,name,url,version}]', group: '书源' },
+    { method: 'PUT', path: '/api/sources/{id}', write: true, purpose: '新建或覆盖一份书源，带 version 防并发改写', response: '{id,json,version,updatedAt}', group: '书源' },
+    { method: 'GET', path: '/api/bookshelf', write: false, purpose: '书架清单（按最后阅读时间倒序）', response: '[{sourceId,bookUrl,name}]', group: '书架' },
   ] }
   assert.deepEqual(auditCatalog(routes, good), [], '干净输入被判红了，判据本身有问题')
 })
