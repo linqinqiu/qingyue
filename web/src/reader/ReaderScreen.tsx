@@ -1,7 +1,7 @@
-// `VirtualChapterList` 在 `web/test/VirtualChapterList.test.ts` 里被 `renderToStaticMarkup` 静态渲染，
-// 那条链路走 classic JSX（`React.createElement`），只有 Vite 构建才走 automatic runtime。
-// 少这一行时页面与构建都正常，只有用例抛 `React is not defined`（AGENTS §5 的同形坑第三次：
-// PageBar/Notice 一回、ShortcutHelp+useEscapeClose 一回、TapZoneEditor 一回，这是第四回）。
+// React 默认导入是正文要的：`React.ReactNode` / `React.TransitionEvent` / `React.WheelEvent`
+// 这些类型引用挂在它身上。（AGENTS §5 那个 classic JSX 的同形坑：`VirtualChapterList` 被
+// `renderToStaticMarkup` 静态渲染才需要默认 React 在作用域里 —— 那件组件已拆进
+// `VirtualChapterList.tsx`，那条理由与它的默认导入一起搬过去了。）
 import React, { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, BookDetails, BookNote, Chapter, ReadingProgress, SearchResult, TocRuleOption } from '../lib/api'
 import { ContextMenuItem, showContextMenu } from '../components/ContextMenu'
@@ -30,13 +30,13 @@ import { ReaderMenuAction } from './readerMenu'
 import { IDENTITY_CONVERTER, loadScriptConverter, type ScriptConverter } from './scriptConvert'
 import { coverDirection, pageTurnAnim, planNextPage, planPrevPage } from './pageTurn'
 import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pageProgress, pageWindowShift, resolveMeasuredPage, sectionAtPage, sectionProgress } from './readerFlow'
-import { computeCenterScrollOffset, computeVirtualWindow } from './virtualSlice'
 import { SourceSwitchModal } from '../sources/SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from '../lib/searchFilters'
 import { toast } from '../components/Toast'
 import { processChapterForTts, TtsChapterData } from './ttsTextProcessor'
 import { ITtsEngine, WebSpeechEngine, HttpAudioTtsEngine, TtsPlayState, TtsSpeakMode, isPlayInterruptedError } from './ttsEngine'
 import { TtsSettingsModal, SleepTimerOption } from './TtsSettingsModal'
+import { VirtualChapterList } from './VirtualChapterList'
 import { TtsPlayerBar } from './TtsPlayerBar'
 import { resetTtsBarPosition } from './ttsBarPosition'
 import { isTypingTarget, normalizeKey, READER_SHORTCUTS, shortcutFor } from './shortcuts'
@@ -95,140 +95,6 @@ function splitParagraphs(content: string): string[] {
   }
   return result
 }
-
-export interface VirtualChapterListProps {
-  chapters: Chapter[]
-  activeChapterIndex: number
-  cachedUrlsSet?: Set<string>
-  onSelect: (index: number) => void
-  itemHeight?: number
-  overscan?: number
-  className?: string
-  autoScrollKey?: string | number
-  /** 章名的显示变换（简繁转换）。缺省是恒等 —— 不传就一个字都不动。 */
-  convertTitle?: (title: string) => string
-}
-
-export function VirtualChapterList({
-  chapters,
-  activeChapterIndex,
-  cachedUrlsSet,
-  onSelect,
-  itemHeight = TOC_ROW_HEIGHT,
-  overscan = 8,
-  className = '',
-  autoScrollKey,
-  convertTitle = IDENTITY_CONVERTER,
-}: VirtualChapterListProps) {
-  const containerRef = useRef<HTMLElement | null>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [containerHeight, setContainerHeight] = useState(600)
-
-  useLayoutEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    setContainerHeight(el.clientHeight || 600)
-
-    const observer = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        if (entry.contentRect.height > 0) {
-          setContainerHeight(entry.contentRect.height)
-        }
-      }
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
-  const scrollToActive = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const el = containerRef.current
-    if (!el) return
-    const targetIndex = chapters.findIndex(c => c.index === activeChapterIndex)
-    if (targetIndex < 0) return
-
-    const finalScroll = computeCenterScrollOffset(targetIndex, itemHeight, el.clientHeight, chapters.length)
-
-    if (Math.abs(el.scrollTop - finalScroll) > 1) {
-      el.scrollTo({ top: finalScroll, behavior })
-    }
-  }, [activeChapterIndex, chapters, itemHeight])
-
-  useEffect(() => {
-    const timer = window.requestAnimationFrame(() => {
-      scrollToActive('auto')
-    })
-    return () => window.cancelAnimationFrame(timer)
-  }, [scrollToActive, autoScrollKey])
-
-  const handleScroll = useCallback((event: React.UIEvent<HTMLElement>) => {
-    setScrollTop(event.currentTarget.scrollTop)
-  }, [])
-
-  const count = chapters.length
-  const slice = computeVirtualWindow({
-    totalCount: count,
-    itemHeight,
-    scrollTop,
-    viewportHeight: containerHeight,
-    overscan,
-  })
-  const { startIndex, endIndex } = slice
-  const topSpacer = slice.offsetY
-  const bottomSpacer = slice.bottomSpacer
-
-  const visibleChapters = useMemo(() => {
-    const items: Array<{ chapter: Chapter; index: number }> = []
-    for (let i = startIndex; i < endIndex; i++) {
-      if (chapters[i]) {
-        items.push({ chapter: chapters[i], index: i })
-      }
-    }
-    return items
-  }, [chapters, startIndex, endIndex])
-
-  return (
-    <nav
-      ref={containerRef}
-      className={`reader-chapters ${className}`}
-      aria-label="章节目录"
-      onScroll={handleScroll}
-    >
-      {topSpacer > 0 && <div style={{ height: topSpacer }} aria-hidden="true" />}
-      {visibleChapters.map(({ chapter }) => {
-        if (chapter.isVolume) {
-          return (
-            <div
-              key={`vol-${chapter.index}`}
-              style={{ height: itemHeight }}
-              className="reader-chapter-volume"
-            >
-              {convertTitle(chapter.title)}
-            </div>
-          )
-        }
-        const isCached = cachedUrlsSet ? cachedUrlsSet.has(chapter.url) : false
-        // url 不能单独当 key：服务端 `RuleRunner.kt` 的 `chapters()`（HTTP 规则与 JS 书源两条实现）
-        // 都不按地址去重，上下篇共用一页、"本章完"重复条目都会给出同 url 两行 —— 撞 key 只 warning，门禁看不见
-        return (
-          <button
-            key={`${chapter.index}-${chapter.url}`}
-            style={{ height: itemHeight }}
-            className={`reader-chapter-item ${chapter.index === activeChapterIndex ? 'current' : ''} ${isCached ? 'cached' : ''}`}
-            onClick={() => onSelect(chapter.index)}
-            title={`${convertTitle(chapter.title)}${isCached ? '（已离线缓存）' : ''}`}
-          >
-            <i />
-            <span className="reader-chapter-title">{convertTitle(chapter.title)}</span>
-            {isCached && <span className="chapter-cached-badge" title="已离线缓存" />}
-          </button>
-        )
-      })}
-      {bottomSpacer > 0 && <div style={{ height: bottomSpacer }} aria-hidden="true" />}
-      {count === 0 && <p className="reader-status" style={{ padding: '24px 0' }}>无匹配章节</p>}
-    </nav>
-  )
-}
-
 export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange, onClose }: ReaderScreenProps) {
   const [currentBook, setCurrentBook] = useState<OpenBook>(openBook)
   /**
