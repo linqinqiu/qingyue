@@ -23,6 +23,11 @@ import { TtsSettingsModal } from '../src/reader/TtsSettingsModal'
  */
 
 const readerSource = readFileSync(fileURLToPath(new URL('../src/reader/ReaderScreen.tsx', import.meta.url)), 'utf8')
+// 0.8.2 结构重排：朗读集群（状态 + 9 个回调 + 2 个 effect）抽进了 useReaderTts.ts。
+// 判"阅读器这一面"时读两份拼起来的整体 —— 不是放水：只读一处会漏掉另一处，
+// 而拼起来之后任何一侧长回旧写法都会被下面的 match/doesNotMatch 逮住。
+const readerTtsSource = readFileSync(fileURLToPath(new URL('../src/reader/useReaderTts.ts', import.meta.url)), 'utf8')
+const readerSurface = readerSource + '\n' + readerTtsSource
 
 /** 取某个 `const 名字 = ...` 声明到它自己的依赖数组收尾（`\n  }, [`）为止。 */
 function sourceOf(fnName: string, expectContains: string): string {
@@ -114,7 +119,7 @@ test('朗读引擎与 ttsEngine.ts 用的是同一套会话判据（两套名字
 
 test('朗读引擎 - 播放中换设置必须停旧起新，暂停中则让下一分片自己换会话', () => {
   assert.match(
-    readerSource,
+    readerSurface,
     /const ttsVoiceKey = ttsSessionKey\(settings\)[\s\S]{0,700}if \(!ttsActive \|\| ttsPlayState !== 'playing'\) return[\s\S]{0,160}playTtsChunkRef\.current\(currentChunkIndex, 'replace'\)/,
     '换引擎时没有"停掉旧引擎 + 用新引擎重读当前分片"这条路，重音就还会回来',
   )
@@ -171,13 +176,13 @@ test('章节过渡 - 预载命中要在绘制前换好正文，朗读管线只�
     '正文加载 effect 必须是 useLayoutEffect：passive effect 会让浏览器先画一帧骨架屏',
   )
   assert.match(
-    readerSource,
+    readerSurface,
     // 第一个参数（章名）后来会过一层简繁转换的 `convert(...)`，所以这里只钉"喂进去的是 ttsParagraphs"
     /processChapterForTts\([^\n]*ttsParagraphs/,
     '朗读必须吃 ttsParagraphs（过渡期间为空），否则会一路读进上一章剩下的段落 —— 这是当年"切章就清 content"的真实理由',
   )
   assert.match(
-    readerSource,
+    readerSurface,
     /const ttsParagraphs = useMemo\(\(\) => \(isCurrentChapterLoaded \? paragraphs : \[\]\)/,
     'ttsParagraphs 的判据必须是"当前章已到位"，不能退回到看 content 有没有',
   )

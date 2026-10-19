@@ -33,7 +33,7 @@ import { flowAdvance, holdScroll, pageAlignmentPads, pageAlignmentStarts, pagePr
 import { SourceSwitchModal } from '../sources/SourceSwitchModal'
 import { cleanAuthor, cleanTitle } from '../lib/searchFilters'
 import { toast } from '../components/Toast'
-import { processChapterForTts, TtsChapterData } from './ttsTextProcessor'
+import { useReaderTts } from './useReaderTts'
 import { ITtsEngine, WebSpeechEngine, HttpAudioTtsEngine, TtsPlayState, TtsSpeakMode, isPlayInterruptedError } from './ttsEngine'
 import { TtsSettingsModal, SleepTimerOption } from './TtsSettingsModal'
 import { VirtualChapterList } from './VirtualChapterList'
@@ -49,7 +49,6 @@ import {
   downloadChaptersToOffline,
   getOfflineChaptersSet,
 } from '../lib/offlineStorage'
-
 
 type ReaderScreenProps = {
   openBook: OpenBook
@@ -161,12 +160,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   })
   const [boundaryMessage, setBoundaryMessage] = useState('')
   const [inShelf, setInShelf] = useState(true)
-  const [ttsActive, setTtsActive] = useState(false)
-  const [ttsPlayState, setTtsPlayState] = useState<TtsPlayState>('idle')
-  const [currentChunkIndex, setCurrentChunkIndex] = useState(0)
-  const [sleepTimer, setSleepTimer] = useState<SleepTimerOption>('off')
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
-  const [showTtsSettings, setShowTtsSettings] = useState(false)
   const [showSourceSwitch, setShowSourceSwitch] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   useEffect(() => {
@@ -193,9 +187,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [drawerFooterOpen, setDrawerFooterOpen] = useState(false)
   const [customRangeStart, setCustomRangeStart] = useState(1)
   const [customRangeEnd, setCustomRangeEnd] = useState(50)
-  const [offlineTtsConfirmOpen, setOfflineTtsConfirmOpen] = useState(false)
   // 这两层都只认点击、不认 Esc —— 统一补上 Esc 关闭（PROPOSAL-018 W6 的"遮罩与关闭键必须走统一那一套"）
-  useEscapeClose(() => setOfflineTtsConfirmOpen(false))
   useEscapeClose(() => setLightboxSrc(null))
 
   const [cacheStatus, setCacheStatus] = useState<{ state: string; cached: number; total: number; error?: string }>({
@@ -279,9 +271,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const currentRef = useRef<{ chapter: Chapter; position: number } | null>(null)
   const timerRef = useRef<number | null>(null)
   const restoredRef = useRef(false)
-  const autoPlayNextChapterRef = useRef(false)
-  const webSpeechEngineRef = useRef<WebSpeechEngine | null>(null)
-  const httpAudioEngineRef = useRef<HttpAudioTtsEngine | null>(null)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
   const preloadedContentRef = useRef(new Map<string, string>())
   const preloadingRef = useRef(new Set<string>())
@@ -294,9 +283,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 滚轮增量累计量（像素）与"没在滚了就清零"的定时器：见 readerInteractions.paginateWheelStep
   const wheelAccumRef = useRef(0)
   const wheelIdleRef = useRef<number | null>(null)
-  // Ref to the latest playTtsChunk so that async onEnd callbacks always invoke the freshest version,
-  // avoiding stale closure issues when cross-chapter auto-play triggers after chapter content reloads.
-  const playTtsChunkRef = useRef<(idx: number, mode?: TtsSpeakMode) => void>(() => undefined)
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
@@ -646,7 +632,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     return out
   }
   // 朗读管线只认"当前这一章已经到位"的正文，过渡期间给空数组，避免读进上一章剩下的段落。
-  const ttsParagraphs = useMemo(() => (isCurrentChapterLoaded ? paragraphs : []), [isCurrentChapterLoaded, paragraphs])
   // 非文本章节（音频/视频/文件）：这一章的"正文"其实是一个媒体地址，不能当段落排出来。
   // 优先用服务端给的 `mediaUrl`；离线缓存没有它，但音频源的 `content` 本身就是那串地址，故兜底。
   const sourceType = currentBook.details.sourceType ?? 0
@@ -702,55 +687,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     void api.saveProgress(currentBook.details.sourceId, currentBook.bookUrl, current.chapter.url, current.chapter.index, clampScrollPosition(current.position)).catch(() => undefined)
   }, [currentBook.bookUrl, currentBook.details.sourceId])
 
-  const ttsData: TtsChapterData = useMemo(() => {
-    return processChapterForTts(convert(chapter?.title || ''), ttsParagraphs, settings.ttsFilterSymbols)
-  }, [chapter?.title, ttsParagraphs, settings.ttsFilterSymbols, convert])
-
-  const currentChunk = ttsData.chunks[currentChunkIndex] ?? null
-  const activeParagraphIndex = currentChunk ? currentChunk.paragraphIndex : -1
-  const activeSentenceText = currentChunk?.text || ''
-
-  const getTtsEngine = useCallback((type: TtsEngineType): ITtsEngine => {
-    if (type === 'webSpeech') {
-      if (!webSpeechEngineRef.current) {
-        webSpeechEngineRef.current = new WebSpeechEngine()
-      }
-      return webSpeechEngineRef.current
-    }
-    if (!httpAudioEngineRef.current) {
-      httpAudioEngineRef.current = new HttpAudioTtsEngine()
-    }
-    return httpAudioEngineRef.current
-  }, [])
-
-  const stopAllEngines = useCallback(() => {
-    webSpeechEngineRef.current?.stop()
-    httpAudioEngineRef.current?.stop()
-  }, [])
-
-  const stopTts = useCallback(() => {
-    stopAllEngines()
-    setTtsPlayState('idle')
-    setTtsActive(false)
-  }, [stopAllEngines])
-
-  // 切到音频/视频/文件章节（`mediaSrc` 非空）时把朗读停掉：那一章的"正文"是媒体地址，朗读没有意义。
-  useEffect(() => {
-    if (mediaSrc) stopTts()
-  }, [mediaSrc, stopTts])
-
-  const pauseTts = useCallback(() => {
-    const engine = getTtsEngine(settings.ttsEngine)
-    engine.pause()
-    setTtsPlayState('paused')
-  }, [getTtsEngine, settings.ttsEngine])
-
-  const resumeTts = useCallback(() => {
-    const engine = getTtsEngine(settings.ttsEngine)
-    engine.resume()
-    setTtsPlayState('playing')
-  }, [getTtsEngine, settings.ttsEngine])
-
   const preloadNextChapter = useCallback((index: number) => {
     let j = index + 1
     while (j < currentBook.chapters.length && (currentBook.chapters[j].isVolume || !currentBook.chapters[j].url)) j++
@@ -790,73 +726,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       .finally(() => preloadingRef.current.delete(prev.url))
   }, [currentBook.bookUrl, currentBook.chapters, currentBook.details.sourceId])
 
-  const playTtsChunk = useCallback((idx: number, mode: TtsSpeakMode = 'replace') => {
-    if (!ttsData.chunks || ttsData.chunks.length === 0) return
-    if (idx < 0) idx = 0
-    if (idx >= ttsData.chunks.length) {
-      // Reached end of current chapter
-      if (sleepTimer === 'chapter') {
-        toast.info('已读完本章，睡眠定时已触发')
-        stopTts()
-        return
-      }
-      if (settings.ttsAutoNextChapter && chapterIndex < currentBook.chapters.length - 1) {
-        persist()
-        autoPlayNextChapterRef.current = true
-        changeChapter(chapterIndex + 1)
-        return
-      }
-      stopTts()
-      return
-    }
-
-    setCurrentChunkIndex(idx)
-    setTtsPlayState('playing')
-
-    const chunk = ttsData.chunks[idx]
-    const engine = getTtsEngine(settings.ttsEngine)
-
-    // 切换引擎或重新开始时必须先停掉所有旧引擎，避免重音
-    // mode='continue' 是同一引擎连续播放，不需要停；其他情况都要先停
-    if (mode !== 'continue') {
-      stopAllEngines()
-    }
-
-    engine.speak(
-      chunk.text,
-      settings,
-      () => {
-        const nextIdx = idx + 1
-        playTtsChunkRef.current(nextIdx, 'continue')
-      },
-      (err) => {
-        if (isPlayInterruptedError(err)) return
-        toast.warning(err.message || '朗读中断')
-        setTtsPlayState('paused')
-      },
-      mode,
-      { chunkId: `${chapterIndex}:${chunk.globalIndex}`, chapterIndex, paragraphIndex: chunk.paragraphIndex },
-    )
-    if (settings.ttsEngine !== 'webSpeech') {
-      const httpEngine = engine as HttpAudioTtsEngine
-      for (let lookahead = 1; lookahead <= 5; lookahead++) {
-        const nextIdx = idx + lookahead
-        if (nextIdx < ttsData.chunks.length) {
-          const nextChunk = ttsData.chunks[nextIdx]
-          void httpEngine.prefetch(
-            nextChunk.text,
-            settings,
-            { chunkId: `${chapterIndex}:${nextChunk.globalIndex}`, chapterIndex, paragraphIndex: nextChunk.paragraphIndex },
-          )
-        }
-      }
-    }
-    if (settings.ttsAutoNextChapter && idx >= ttsData.chunks.length - 5) {
-      preloadNextChapter(chapterIndex)
-    }
-  }, [ttsData, sleepTimer, settings, chapterIndex, currentBook.chapters.length, persist, stopTts, getTtsEngine, preloadNextChapter])
-
-  playTtsChunkRef.current = playTtsChunk
+  // 切章的 ref：useReaderTts 里的 playTtsChunk 要跨章续播，而 changeChapter 又要 stopTts —— 环用 ref 打破
+  // （与 playTtsChunkRef 同一手法：异步回调永远读到最新那份）。
+  const changeChapterRef = useRef<(rawIndex: number) => void>(() => undefined)
+  const tts = useReaderTts({
+    chapter, chapterIndex, chapterCount: currentBook.chapters.length,
+    paragraphs, isCurrentChapterLoaded, convert, mediaSrc, content, viewportRef,
+    settings, persist, preloadNextChapter, changeChapterRef,
+  })
+  const {
+    ttsActive, setTtsActive, ttsPlayState, setTtsPlayState, currentChunkIndex, setCurrentChunkIndex,
+    sleepTimer, setSleepTimer, showTtsSettings, setShowTtsSettings,
+    offlineTtsConfirmOpen, setOfflineTtsConfirmOpen,
+    ttsParagraphs, ttsData, currentChunk, activeParagraphIndex, activeSentenceText,
+    getTtsEngine, stopAllEngines, stopTts, pauseTts, resumeTts, playTtsChunk, playTtsChunkRef,
+    getInitialTtsChunkIndex, toggleTts, handlePrevChunk, handleNextChunk,
+    handlePrevChapterTts, handleNextChapterTts, autoPlayNextChapterRef,
+  } = tts
 
   // 「朗读引擎在使用中切换会重音，都启动」（用户 2026-09-30）。
   // 换引擎/音色/语速时旧引擎不会自己停：WebSpeech 的 utterance.onEnd 与 HttpAudio 的分片 onEnd
@@ -864,101 +750,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 把两套引擎一起停掉，再用新设置重读当前分片（'replace' 分支内部会 resetSession 并清掉旧音色的预取队列）。
   // 暂停态刻意不动：resume 只续播现有音频，真正出声的是下一分片的 speak()，
   // 而 HttpAudioTtsEngine.speak 检测到 settings key 变了会自己 resetSession（ttsEngine.ts speak 开头）。
-  const ttsVoiceKey = ttsSessionKey(settings)
-  const prevTtsVoiceKeyRef = useRef(ttsVoiceKey)
-  useEffect(() => {
-    const previous = prevTtsVoiceKeyRef.current
-    prevTtsVoiceKeyRef.current = ttsVoiceKey
-    if (previous === ttsVoiceKey) return
-    if (!ttsActive || ttsPlayState !== 'playing') return
-    playTtsChunkRef.current(currentChunkIndex, 'replace')
-  }, [currentChunkIndex, ttsActive, ttsPlayState, ttsVoiceKey])
-
-  const getInitialTtsChunkIndex = useCallback((): number => {
-    if (!ttsData.chunks || ttsData.chunks.length === 0) return 0
-
-    let viewportBounds: ViewportBounds
-    if (settings.pageMode === 'paginate') {
-      const vEl = viewportRef.current
-      if (vEl) {
-        const r = vEl.getBoundingClientRect()
-        viewportBounds = { top: r.top, bottom: r.bottom, left: r.left, right: r.right }
-      } else {
-        viewportBounds = { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth }
-      }
-    } else {
-      // In scroll mode, header bar is fixed at 56px height (top boundary)
-      const topBarHeight = 56
-      viewportBounds = { top: topBarHeight, bottom: window.innerHeight, left: 0, right: window.innerWidth }
-    }
-
-    // 1. Check if chapter title <h1> is fully visible on the current screen
-    const h1El = document.querySelector(
-      settings.pageMode === 'paginate'
-        ? '.reader-paginated-column-body h1'
-        : '.reading-content h1'
-    ) as HTMLElement | null
-
-    if (h1El) {
-      const h1Rect = h1El.getBoundingClientRect()
-      const isH1FullyVisible =
-        h1Rect.top >= viewportBounds.top - 2 &&
-        h1Rect.bottom <= viewportBounds.bottom + 2 &&
-        h1Rect.left >= viewportBounds.left - 2 &&
-        h1Rect.right <= viewportBounds.right + 2
-      if (isH1FullyVisible) {
-        const titleChunk = ttsData.chunks.find(c => c.paragraphIndex === -1)
-        if (titleChunk) return titleChunk.globalIndex
-      }
-    }
-
-    // 2. Query all paragraph elements with data-paragraph-index
-    //    滚动模式要限定在**锚点那一章**里：连续流里续接进来的下一章也带 data-paragraph-index，
-    //    从 0 重新编号，全局查会挑到别的章（朗读起始句与高亮跟读都会错段）。
-    const paragraphEls = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        settings.pageMode === 'paginate'
-          ? '.reader-paginated-column-body .reader-page-chapter:first-of-type [data-paragraph-index]'
-          : '.reading-content .reader-flow-chapter:first-of-type [data-paragraph-index]'
-      )
-    )
-
-    if (paragraphEls.length === 0) return 0
-
-    const paragraphItems = paragraphEls.map(el => {
-      const pIdx = parseInt(el.getAttribute('data-paragraph-index') || '0', 10)
-      const r = el.getBoundingClientRect()
-      return {
-        index: pIdx,
-        rect: { top: r.top, bottom: r.bottom, left: r.left, right: r.right },
-      }
-    })
-
-    const targetPIndex = findFirstFullyVisibleParagraphIndex(paragraphItems, viewportBounds)
-
-    const targetChunk = ttsData.chunks.find(c => c.paragraphIndex === targetPIndex)
-    return targetChunk ? targetChunk.globalIndex : 0
-  }, [ttsData.chunks, settings.pageMode])
-
-  const toggleTts = useCallback(() => {
-    // 音频/视频/文件章节的"正文"是媒体地址，朗读没有意义（念一串 URL 只会干扰）—— 直接不响应。
-    if (mediaSrc) return
-    if (!ttsActive) {
-      if (typeof navigator !== 'undefined' && !navigator.onLine && settings.ttsEngine !== 'webSpeech') {
-        setOfflineTtsConfirmOpen(true)
-        return
-      }
-      setTtsActive(true)
-      const startIdx = getInitialTtsChunkIndex()
-      playTtsChunk(startIdx)
-    } else if (ttsPlayState === 'playing') {
-      pauseTts()
-    } else if (ttsPlayState === 'paused') {
-      resumeTts()
-    } else {
-      playTtsChunk(currentChunkIndex)
-    }
-  }, [mediaSrc, ttsActive, ttsPlayState, playTtsChunk, currentChunkIndex, pauseTts, resumeTts, getInitialTtsChunkIndex, settings.ttsEngine])
 
   const handleParagraphClick = useCallback((pIdx: number) => {
     // Only jump to paragraph if TTS is already active; don't auto-start reading on arbitrary clicks
@@ -968,32 +759,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       playTtsChunk(targetChunk.globalIndex)
     }
   }, [ttsData.chunks, ttsActive, playTtsChunk])
-
-  const handlePrevChunk = useCallback(() => {
-    const prevIdx = Math.max(0, currentChunkIndex - 1)
-    playTtsChunk(prevIdx)
-  }, [currentChunkIndex, playTtsChunk])
-
-  const handleNextChunk = useCallback(() => {
-    const nextIdx = Math.min(ttsData.chunks.length - 1, currentChunkIndex + 1)
-    playTtsChunk(nextIdx)
-  }, [currentChunkIndex, ttsData.chunks.length, playTtsChunk])
-
-  const handlePrevChapterTts = useCallback(() => {
-    if (chapterIndex > 0) {
-      persist()
-      autoPlayNextChapterRef.current = true
-      changeChapter(chapterIndex - 1)
-    }
-  }, [chapterIndex, persist])
-
-  const handleNextChapterTts = useCallback(() => {
-    if (chapterIndex < currentBook.chapters.length - 1) {
-      persist()
-      autoPlayNextChapterRef.current = true
-      changeChapter(chapterIndex + 1)
-    }
-  }, [chapterIndex, currentBook.chapters.length, persist])
 
   const renderParagraphContent = (rawLine: string, pIndex: number, ownerIndex = chapterIndex) => {
     // 有笔记就先画高亮。一段里「笔记高亮」与「朗读到哪句」叠着画不出来，笔记优先。
@@ -1128,6 +893,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     pendingPrependRef.current = null
     if (!keepContainer) setFlowKey(currentBook.chapters[nextIndex]?.url ?? `jump-${nextIndex}`)
   }, [chapterIndex, currentBook.chapters.length, persist, settings.pageMode, settings.ttsEngine, showBoundaryNotice, stopTts, stopAllEngines])
+  // 把最新那份 changeChapter 交给朗读 hook（它要用 ref 打破循环依赖）。
+  changeChapterRef.current = changeChapter
 
   // 滚动模式的"滚到底再往下推一下就进下一章"。判据必须是"已经触底 + 继续向下滚"，
   // 只按位置阈值会在正常阅读途中翻章；1.2 秒冷却挡住一次惯性滚动连跳多章。
