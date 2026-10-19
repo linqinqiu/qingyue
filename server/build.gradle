@@ -65,6 +65,18 @@ application {
     mainClass = 'io.legado.server.ApplicationKt'
 }
 
+// 普通 jar（installDist / 发行版用它）也要带版本号：BuildInfo 读的是
+// Package.implementationVersion，没有它 /healthz 和启动日志就永远显示 "dev"。
+tasks.named('jar', Jar) {
+    manifest {
+        attributes(
+            'Main-Class': 'io.legado.server.ApplicationKt',
+            'Implementation-Title': 'Legado Server',
+            'Implementation-Version': project.version
+        )
+    }
+}
+
 tasks.register('fatJar', Jar) {
     archiveBaseName.set('legado-server')
     archiveClassifier.set('all')
