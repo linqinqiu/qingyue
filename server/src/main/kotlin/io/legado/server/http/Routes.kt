@@ -47,6 +47,16 @@ import io.legado.server.cache.CoverCache
 import io.legado.server.content.ContentProcessor
 import io.legado.server.data.Database
 import io.legado.server.data.VersionConflict
+import io.legado.server.ai.AgentConnection
+import io.legado.server.ai.AgentProfileStore
+import io.legado.server.ai.agentChat
+import io.legado.server.ai.agentComprehend
+import io.legado.server.ai.agentCreateConnection
+import io.legado.server.ai.agentCreateSource
+import io.legado.server.ai.agentDeleteConnection
+import io.legado.server.ai.agentListConnections
+import io.legado.server.ai.agentManifest
+import io.legado.server.ai.agentValidateSource
 import io.legado.server.localbook.LocalBookParser
 import io.legado.server.localbook.TocRules
 import io.legado.server.model.BatchSourceRequest
@@ -181,9 +191,13 @@ fun Route.apiRoutes(
     localBooksDirectory: Path = Path.of(".data/local_books"),
     /** 安装根：界面里改端口时把 `port.txt` 写在这里。 */
     homeDirectory: Path = Path.of("."),
-    /** 这次运行实际绑的地址与端口（`/api/server` 报给界面）。 */
+    // 这次运行实际绑的地址与端口（`/api/server` 报给界面）。
     currentHost: String = "127.0.0.1",
     currentPort: Int = 8080,
+    // AI 自定义接入面所需的可选连接句柄；基础框架不强制启用：仅在 -Dai.debug 下 AgentModule.install 返回非 null 时才有值。
+    agentConnection: AgentConnection? = null,
+    // 「自定义接入」持久层（连接描述存取）；传 null 时各处理器内部自行回退到 AgentProfileStore 默认实现。
+    profileStore: AgentProfileStore? = null,
 ) {
     val webView = WebViewProxy(database)
     // 备份包里没有原生归宿的个性化条目，原样收在数据目录下的一个文件夹里（见 BackupStore 的取舍说明）。
@@ -2047,6 +2061,51 @@ fun Route.apiRoutes(
                     call.application.log.warn("TTS get speak failed: {}", e.message)
                     call.respond(HttpStatusCode.InternalServerError, ApiError("tts_failed", e.message ?: "语音合成失败"))
                 }
+            }
+        }
+
+        // ===== AI 自定义接入面 `/api/agent/*` =====
+        // 这一组是「用户自定义接入」的承载面：基础框架只立下稳固钩子，真正接哪种模型、
+        // 连哪个地址完全交给用户在 `agent-profiles.json` 里配、或运行时 POST 注册。框架默认只带本地 stub。
+        route("agent") {
+            get("manifest") {
+                // 只读清单，不写库，无需同源写门。
+                // manifest 的 enabled 由真实档案里是否存在外部连接决定（非仅 -Dai.debug 的占位句柄）。
+                call.agentManifest(homeDirectory, profileStore, agentConnection)
+            }
+            get("connections") {
+                // 只读列出当前连接，不写库，无需同源写门。
+                call.agentListConnections(homeDirectory, profileStore)
+            }
+            post("connections") {
+                // 写：登记/更新一个外部连接（落盘 agent-profiles.json），需同源写门防 CSRF。
+                if (!call.requireSameOriginWrite()) return@post
+                call.agentCreateConnection(homeDirectory, profileStore)
+            }
+            delete("connections/{id}") {
+                // 写：删除一个用户连接，需同源写门防 CSRF。
+                if (!call.requireSameOriginWrite()) return@delete
+                val id = call.parameters["id"] ?: ""
+                call.agentDeleteConnection(id, homeDirectory, profileStore)
+            }
+            post("sources") {
+                // 写：新建/覆盖书源（落库），需同源写门防 CSRF。
+                if (!call.requireSameOriginWrite()) return@post
+                call.agentCreateSource(database)
+            }
+            post("sources/validate") {
+                // 只读探针：仅校验书源合法性，不落库，无需同源写门。
+                call.agentValidateSource()
+            }
+            post("comprehend") {
+                // 只读：文章阅读理解（本地抽取 or 外部模型）。直接委派给网关 AgentConnection，
+                // 由网关决定走外部模型还是回退本地，不在此另写一份逻辑。不落库，无需同源写门。
+                call.agentComprehend(agentConnection)
+            }
+            post("chat") {
+                // 只读：自由对话（多轮），把 messages 数组直接交给外部模型，缺连接/失败回退本地说明。
+                // 不落库，无需同源写门。
+                call.agentChat(agentConnection)
             }
         }
     }

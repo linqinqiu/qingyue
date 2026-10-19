@@ -19,6 +19,7 @@ import { AboutPage } from './pages/AboutPage'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
+import { AiConnectionsModal } from './components/AiConnectionsModal'
 import { cleanAuthor, cleanTitle, defaultSearchFilters, filterSearchGroups, formatIntro, isExactMatch, pickBlurb, SearchFilters, SearchGroup, SortMode } from './lib/searchFilters'
 import { bookTypeMeta, commonBookType } from './shelf/bookType'
 import { groupSearchResults, loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
@@ -3038,6 +3039,7 @@ function App() {
   const [showCustomize, setShowCustomize] = useState(false)
   /** 「设置 → 服务端口」：改的是安装根的 port.txt，重启青阅后生效。 */
   const [showServerPort, setShowServerPort] = useState(false)
+  const [showAiConnections, setShowAiConnections] = useState(false)
   /**
    * 「设置 → TXT 分章规则」点下去的意图。规则弹窗连同它那颗「按这条导入本地书」都住在
    * 书架里（导书的动作在那边），所以这里只发一个"去开一下"的信号，不复制一份弹窗。
@@ -3325,6 +3327,7 @@ function App() {
           openBackup: () => setPageDialog('backup'),
           openLogs: () => setShowLogs(true),
           openServerPort: () => setShowServerPort(true),
+          openAiConnections: () => setShowAiConnections(true),
         })} />
       ) : page === 'shelf' ? (
         <ShelfPage
@@ -3386,6 +3389,9 @@ function App() {
       )}
       {showServerPort && (
         <ServerPortModal onClose={() => setShowServerPort(false)} />
+      )}
+      {showAiConnections && (
+        <AiConnectionsModal onClose={() => setShowAiConnections(false)} />
       )}
     </div>
   )

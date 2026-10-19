@@ -21,6 +21,7 @@ export type SettingsActions = {
   openBackup: () => void
   openLogs: () => void
   openServerPort: () => void
+  openAiConnections: () => void
 }
 
 export function buildSettingsSections(actions: SettingsActions): SettingsSection[] {
@@ -94,6 +95,15 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
         hint: '青阅跑在哪个端口；改完要重启青阅才生效。',
         action: '改端口',
         onClick: actions.openServerPort,
+      }],
+    },
+    {
+      title: 'AI 接入',
+      rows: [{
+        title: '自定义接入',
+        hint: '挂一个 openai-compatible 模型当「网关」，或只用内置本地抽取：登记/删除连接、文章理解、书源校验。',
+        action: '打开',
+        onClick: actions.openAiConnections,
       }],
     },
   ]

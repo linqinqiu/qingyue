@@ -26,6 +26,8 @@ import io.legado.server.ops.LogService
 import io.legado.server.ops.logSystem
 import io.legado.server.rules.RuleRunner
 import io.legado.server.subscription.SubscriptionService
+import io.legado.server.ai.AgentModule
+import io.legado.server.ai.AgentProfileStore
 import io.legado.server.tts.EdgeTtsService
 import io.legado.server.tts.TtsSessionService
 import io.legado.server.model.ApiError
@@ -83,6 +85,16 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     val bookCache = BookCacheService(database, runner, coverCache) { message -> log.info(message) }
     val edgeTts = EdgeTtsService()
     val ttsSessions = TtsSessionService(edgeTts)
+
+    // 内部 AI 连接（网关）句柄：无条件构造，让 `/api/agent/*` 始终能委派阅读理解/外部模型。
+    // 它不注册任何路由、不开端口（路由仍由 Routes.kt 字面登记，ApiCatalog 门禁数量不变）；
+    // `-Dai.debug` 下只是额外跑一次自检演示，不改变生产运行面。
+    val agentConnection = AgentModule.connect(
+        database, runner, coverCache, subscriptions,
+        homeDirectory = config.homeDirectory,
+    )
+    // 仅调试：额外自检（不会污染真实库）。生产环境返回 null，不影响任何对外行为。
+    AgentModule.install(agentConnection)
     environment.monitor.subscribe(ApplicationStopping) { 
         logSystem("服务器正在停止")
         subscriptions.stop(); bookCache.stop(); ttsSessions.close(); database.close() 
@@ -147,9 +159,12 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     }
     routing {
         get("/healthz") { call.respond(HealthStatus(title = BuildInfo.title, version = BuildInfo.version, status = "ok")) }
+        // 自定义接入的持久层：随安装根目录，存于 agent-profiles.json（与 port.txt 同级）。
+        val profileStore = AgentProfileStore
         apiRoutes(
             database, runner, coverCache, subscriptions, bookCache, edgeTts, ttsSessions,
             config.localBooksDirectory, config.homeDirectory, config.host, config.port,
+            agentConnection, profileStore,
         )
         // 注册在 staticWeb 之前：根路由是 `staticResources("/")`，先摆 /next 才不必去猜路由树的优先级
         staticNext(config.nextDirectory)

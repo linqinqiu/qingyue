@@ -197,6 +197,7 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 | 整体架构与模块边界 | [`docs/architecture.md`](docs/architecture.md) |
 | 部署（jar / Docker / Compose / 桌面程序） | [`docs/deploy.md`](docs/deploy.md) |
 | 让 AI 或脚本接进来（管书源、批量整理、走登录） | [`docs/AI-AGENT.md`](docs/AI-AGENT.md) · 机器可读的那份是 `GET /api/catalog` |
+| 自定义接入面 `/api/agent/*`（外接模型、书源新建/校验、阅读理解） | [`AGENTS.md`](./AGENTS.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
 
 

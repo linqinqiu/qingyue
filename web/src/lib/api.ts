@@ -677,6 +677,22 @@ export const api = {
     }
     return response.blob()
   },
+  // ===== 自定义 AI 接入（/api/agent/*）=====
+  // 同源写门由服务端把关，浏览器自动带 Origin，这里不注入任何令牌。
+  agentManifest: () => request<{ enabled: boolean; builtinConnections: string[] }>('/api/agent/manifest'),
+  listAgentConnections: () => request<AgentConnection[]>('/api/agent/connections'),
+  registerAgentConnection: (req: AgentConnectionInput) =>
+    request<AgentConnection>('/api/agent/connections', { method: 'POST', body: JSON.stringify(req) }),
+  deleteAgentConnection: (id: string) =>
+    request<{ ok: boolean; removed: string }>(`/api/agent/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  validateAgentSource: (json: string) =>
+    request<{ valid: boolean; errors: string[]; warnings: string[] }>('/api/agent/sources/validate', { method: 'POST', body: JSON.stringify({ json }) }),
+  createAgentSource: (json: string, version?: number) =>
+    request<{ id: string; version: number; updatedAt: string }>('/api/agent/sources', { method: 'POST', body: JSON.stringify({ json, version }) }),
+  agentComprehend: (req: { text: string; question?: string; summarySentences?: number; topKeywords?: number }) =>
+    request<AgentComprehendResult>('/api/agent/comprehend', { method: 'POST', body: JSON.stringify(req) }),
+  agentChat: (messages: AgentChatMessage[]) =>
+    request<AgentChatResult>('/api/agent/chat', { method: 'POST', body: JSON.stringify({ messages }) }),
 }
 
 export function streamSearch(keyword: string, sourceIds: string[] | undefined, onEvent: (event: SearchStreamEvent) => void, onError: (message: string) => void, onClose: () => void): WebSocket {
@@ -693,4 +709,41 @@ export function streamSearch(keyword: string, sourceIds: string[] | undefined, o
   socket.addEventListener('error', () => { if (!reported) { reported = true; onError('搜索连接中断，请重试') } })
   socket.addEventListener('close', () => { if (!reported) onClose() })
   return socket
+}
+
+// ===== 自定义 AI 接入的类型 =====
+export type AgentConnection = {
+  id: string
+  name: string
+  kind: string
+  builtin: boolean
+  model: string | null
+  baseUrl: string | null
+}
+
+export type AgentConnectionInput = {
+  id?: string
+  name: string
+  kind: string
+  baseUrl: string
+  apiKey?: string
+  model: string
+}
+
+export type AgentComprehendResult = {
+  engine: string
+  summary: string
+  keywords: string[]
+  answer: string
+  sentencesCount: number
+  fallback?: boolean
+}
+
+export type AgentChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+export type AgentChatResult = {
+  engine: string
+  content: string
+  fallback?: boolean
+  error?: string
 }
