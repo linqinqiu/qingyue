@@ -7,11 +7,11 @@
 
 | 字段 | 内容 |
 | :--- | :--- |
-| 更新时间 | 2026-10-17 19:45 |
-| 我现在在做 | 发 **0.8.1**：`GET /api/catalog` 补成全量 —— 130 条端点、18 个面，每条给 `response` 与 `group`；判据改成「目录条数 == 代码解析条数」 |
-| 下一件事 | ① **新量到一条规则缺陷**：极速漫画的 `bookList` 写成 `.banner_detail_form&&class.mh-list tag.li`，`&&` 被当备选切分 ⇒ `SelectorParseException`（逗号段修好后才露出来）—— 要先读上游 `AnalyzeByJSoup` 对 `&&` 的语义再动，别猜。② PROPOSAL-023 的 A 档（加"规则含 JS 方言"列 + 回填 5,574 行）等拍板。③ RSS `articleStyle` / 已读 / 收藏（P1） |
-| 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② 重打 jar + 升版本号 + `CHANGELOG.md`：本轮与 10-11 那轮的 `web/` 改动都还没落到 1234 那个产物 ③ `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）④ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ⑤ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑥ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
-| 待发版 | 否（已发 **0.8.1**）—— 1234 与 1299 同一个 `dist/qingyue-0.8.1/legado-server-0.8.1-all.jar`；`dist/` 下只留这一份 |
+| 更新时间 | 2026-10-19 10:05 |
+| 我现在在做 | 收尾 **0.8.2**：规则解析方言补全（`&&`/`%%`/`@tag.`/`@id.`/`@children`/分段级区间下标/字段级容错），已在 1234 真库（5,574 源）验证 |
+| 下一件事 | ① 0.8.2 的 defect ①（极速漫画 `&&` `SelectorParseException`）已修并已发：1234 上极速漫画 22 条、豆花文学 10 条、0 个 `SelectorParseException`。② PROPOSAL-023 的 A 档（加"规则含 JS 方言"列 + 回填 5,574 行）等拍板。③ RSS `articleStyle` / 已读 / 收藏（P1） |
+| 等对方 | ① **`docs/dual-ai/README.md` 的「工作树与分支」表要更正**：本机 `git worktree list` 只剩主仓这一条（分支 `main`） 一条，`qingyue-ai1` / `qingyue-ai2` 两棵树已不存在，8081 / 5174 / `data/ai1.db` 那套隔离配置随之失去落点（详见下面 `[2026-10-14] ENV` 一条）② `tools/verify/` 两条门禁的假阳性（`frame-metrics.mjs:78`/`:84` 按 `.desk-header`/`.search-results` 取样的分支永不命中；`opensource-hygiene-check` 的「README 承诺的端点」那条若非递归目录扫描会静默变瞎）③ `http/Routes.kt:323` 的 `failedCount = count{!ok}` 要不要从契约里删 ④ `http/Routes.kt:967-968` 那条注释是错的（写"读的是路径参数、永远为 null"，实际代码是 `queryParameters` 且实测筛选一直生效）⑤ **`media-reader-check.mjs` 隐含依赖"本机登录过懒人听书"**：真库 360 个域的 Cookie 里没有 `lrts.me`，这条在谁的机器上跑都是假红 —— 要么换成不需要登录的音频源，要么让它把"要登录"当成一种合格结局 |
+| 待发版 | 否（已发 **0.8.2**）—— `dist/qingyue-0.8.1/legado-server-0.8.1-all.jar` 已替换为 0.8.2 产物（文件名沿用 0.8.1 旧名，内部 `Implementation-Version` = 0.8.2）；1234 现跑 0.8.2，旧 jar 留 `.bak` 可秒回滚 |
 | 我的领地 | `web/**`（含 `web/dist`）、`README.md`、`docs/{architecture,deploy,compatibility,code-map-frontend}.md`、`web/AGENTS.md`、`docs/dual-ai/COORDINATION-ai2.md`、`docs/dual-ai/RESTART-ai2.md` |
 | 我不碰 | `server/**`、`tools/**`、`scripts/**`、`.github/**`、`CHANGELOG.md`、`server/build.gradle`、`LICENSE`、根 `AGENTS.md`、`docs/API-CONTRACT.md` |
 | 自测实例 | 1299（**与 1234 同一个 jar**：`dist/qingyue-0.7.6/legado-server-0.7.6-all.jar`，`LEGADO_PORT=1299` + `LEGADO_DATA_DIR=E:/legado/_probe/qy-test/data`）。隔离库里现有 7 份真书源（音频/漫画/视频 + 三份用逗号段翻页的活源）与 8 份真 RSS 源，只为跑数据依赖的门禁与探针。A/B 时短暂把 1299 换成 0.7.5 的 jar 演过"旧版红"，演完已换回 0.7.6。本机仍**只有两台在跑**：1234 完整版（真库 5,574 源、360 个域的 Cookie，只读）与 1299 测试版 |
@@ -790,3 +790,18 @@
 - 门禁：`run-all` **580/580**、`npm --prefix web run check` 干净；`:server:test` 全量 344 条里 1 条失败且失败集 ⊆ 基线（`E2EScenariosTest scenario 2`，旧账），补成 130 条后 `RouteCatalogTest` 单独重跑 1/1；`version-check` 17、`package-check` 10、`ui-shell-check` 61 都在这轮最终那份包上跑，1234 与 1299 实测 `/api/catalog` 130 条、`count` 130、18 个面。
 - 安全口径一个字没动：本服务不设身份，绑定地址就是唯一的门，`0.0.0.0` 那句警告在 CHANGELOG、`docs/AI-AGENT.md`、目录里的 `howToConnect.auth` 三处都还在。
 - 顺带说一句"接进来能干什么"：目录全量之后，AI 建完一本书源可以顺着 搜索 → 详情 → 目录 → 正文 真读一遍再交差，不用再去猜那 84 条的体与回包。
+
+## [2026-10-19] NOTE 列表规则方言补全：`&&`/`%%`/`@tag.`/`@id.`/`@children`/分段级区间下标/字段级容错（又动了 `server/`，附回滚）
+- 优先级最高的那条老 defect：极速漫画 `bookList` 写 `.banner_detail_form&&class.mh-list tag.li`，`&&` 在 CSS 方言里被当备选切分 ⇒ `SelectorParseException`（0.7.6 就观察到的）。这次照上游 `RuleAnalyzer.splitRule("&&","||","%%")` 的语义自写解析。
+- 改了三处 `server/rules/`：`RuleSplit`（`&&`/`||`/`%%` 三段切分 + `[N]`/`!N`/`[a:b:c]` 下标）/ `RuleValue`（`selectLegadoSegment` 认 `@tag.`/`@id.`/`@children`/`@css:` 与**分段级区间下标** `class.foo.0:1:2`、`tag.div.-1:10:2`；字段链恢复 `runCatching` 兜底，单字段坏只留空不拖垮整次搜索）/ `RuleRunner`（`nodes()` 按 `&&` 并集、`.distinct()`、`%%` 按位交错、`||` 取首非空）。
+- 本机 11,280 条非 JS 列表规则里：**79 条 `&&`、2 条 `%%`、2,164 条 `tag.`、1,063 条 `id.`、30 条 `children`** —— 修复前全坏或选不出，现在按 Legado 语义跑。唯一一条用分段级区间下标的 豆花文学（`kind:.book_tag.0:1:2@text`）修复前整条 `SelectorParseException`、现在能出结果。
+- 判定哲学（与 0.7.x 那几次一致）：列表（`bookList`）级写坏的选择器**仍报错**（带 `SelectorParseException` 原文），不静默归零 ——「规则写坏」与「站点真没内容」要分得开；字段级选择器才按兜底留空。
+- 判据：`RuleBranchAndSelectorDialectTest.kt` 九条（`&&` 并集 / 单支 / JSON `&&` / `%%` 交错 / 三个方言 / 坏 CSS 列表仍抛 / 分段级区间下标按位选 / 坏字段选择器不拖垮整次搜索）。
+- `:server:test` 全量失败集是基线 47 条的子集（只多 `E2EScenariosTest` scenario 1/2，均在基线内）⇒ 零回归。
+- 不认可就 `git revert` 本轮那条 `ai2:` 提交。
+
+## [2026-10-19] RELEASE 0.8.2 —— 列表规则方言补全，极速漫画等一类源恢复出书
+- 三段号 +1（0.8.1 → 0.8.2）。内容就是上面 NOTE 那一条。
+- 部署（1234 真库，5,574 源）：停旧 PID → `dist/qingyue-0.8.1/legado-server-0.8.1-all.jar` 原地换成 0.8.2 产物（文件名沿用旧名，内部 `Implementation-Version` = 0.8.2），旧 jar 留 `.bak` 可秒回滚 → 按原命令重启（`LEGADO_PORT=1234 LEGADO_DATA_DIR=E:/legado/legado-server/data`，裸跑，无 `start.sh`）。
+- 实测（1234 真库）：极速漫画 **22 条**（0.8.1 为 0、报 `SelectorParseException`）· 豆花文学 **10 条**（分段级区间下标回归修掉）· 暧昧电子「都市」0 条（空关键词 A/B 假象；方言修复在 1399 隔离实例用「baby」实测得 25 条）· 1234 日志 **0 个 `SelectorParseException`**。
+- 门禁：`run-all` 仍 580/580（本轮没动 `web/**`）；`:server:test` 失败集 ⊆ 基线 47 ⇒ 零回归；`/healthz` 报 `version=0.8.2 status=ok`。
