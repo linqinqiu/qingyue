@@ -159,7 +159,7 @@ server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
     ServerConfig.kt · AppConfig.kt   环境变量到默认值
     StaticWeb.kt            界面静态资源挂载（同端口的 `/` 与 `/next`）
     BuildInfo.kt · DesktopLauncher.kt  版本清单 · 桌面壳（探端口、开浏览器、托盘退出）
-    http/                   Guard.kt 写操作同源闸门 · NetworkSecurity.kt · Routes.kt REST 与 WebSocket
+    http/                   Guard.kt 写操作同源闸门 · NetworkSecurity.kt · Routes.kt 装配点 + 按面拆组的 <组>Routes.kt（REST 与 WebSocket）
     rules/                  RuleRunner.kt 规则执行（Rhino + Jsoup + JsonPath + XPath）· JsSandbox.kt · JsGuard.kt · RuleSplit.kt · RuleValue.kt
     data/                   Database.kt SQLite 数据层与连接生命周期
     source/                 SourceCodec.kt 书源编解码 · SourceHealth.kt 体检分档 · SourceDebugger.kt 分阶段调试 · WebViewProxy.kt 整站反代 · ExternalBrowserLogin.kt

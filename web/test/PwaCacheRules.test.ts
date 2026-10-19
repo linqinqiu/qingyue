@@ -12,10 +12,13 @@ import path from 'node:path'
  */
 
 const CONFIG = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'vite.config.ts'), 'utf8')
-const ROUTES = fs.readFileSync(
-  path.resolve(import.meta.dirname, '..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http', 'Routes.kt'),
-  'utf8',
-)
+// 0.8.2 结构重排：书源/书架等组端点拆进了同目录的 <组>Routes.kt，
+// 这条判据要看"缓存规则指向的路由真存在"，读的是整个路由面（装配点 + 全部组文件）。
+const HTTP_DIR = path.resolve(import.meta.dirname, '..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http')
+const ROUTES = fs.readdirSync(HTTP_DIR)
+  .filter(f => f === 'Routes.kt' || (f.endsWith('Routes.kt') && f.endsWith('.kt')))
+  .map(f => fs.readFileSync(path.join(HTTP_DIR, f), 'utf8'))
+  .join('\n')
 const workboxRaw = CONFIG.slice(CONFIG.indexOf('workbox: {'), CONFIG.indexOf('injectManifest'))
 /**
  * 只留代码行。注释里出现 `^\/api\/` 是给人看的（"别写成这样"），

@@ -12,9 +12,23 @@ import path from 'node:path'
  * 判据因此是**双向**的：目录里不许有代码中没有的端点，代码里的书源端点也不许从目录里漏掉。
  */
 const ROOT = path.resolve(import.meta.dirname, '../..')
-const ROUTES = path.join(ROOT, 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http', 'Routes.kt')
+const HTTP_DIR = path.join(ROOT, 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http')
 const CATALOG = path.join(ROOT, 'server', 'src', 'main', 'resources', 'agent-api.json')
 const DOC = path.join(ROOT, 'docs', 'AI-AGENT.md')
+
+/**
+ * 0.8.2 结构重排：`Routes.kt` 拆成了装配点 + 13 个 `<组>Routes.kt`。
+ * 判据跟着扫本目录的全部路由文件——各文件都视作挂在 `route("/api")` 之下：
+ * 装配点里 `route("/api") {` 的那一行在所有文件中**不许出现**（它只在 `Routes.kt`），
+ * 于是每个文件的解析栈天然从 `/api` 起算，路径拼装与拆前逐字等价。
+ * `ApiRoutesHttpTest` 起的是真服务器，它才是不漂的最终锚——文件怎么拆都骗得过解析器、骗不过 404。
+ */
+function routeFiles(): string[] {
+  return fs.readdirSync(HTTP_DIR)
+    .filter(f => (f === 'Routes.kt' || f.endsWith('Routes.kt')) && f.endsWith('.kt'))
+    .sort()
+    .map(f => path.join(HTTP_DIR, f))
+}
 
 /**
  * 从 `route("…")` 的嵌套里把端点表还原出来（与运行时那份是同一棵树，只是不用反射）。
@@ -110,9 +124,25 @@ function auditCatalog(routes: { method: string; path: string; write: boolean }[]
   return problems
 }
 
+/** 逐文件解析后合并。组文件（装配点之外的那些）没有 `route("/api") {` 这一行，
+ *  解析栈从空起会丢掉 `/api` 前缀，所以给每个文件垫一条同缩进的合成锚行 ——
+ *  装配点自己那条真锚在 `while (top.indent >= indent) pop` 之下会顶掉合成锚，不会重复。
+ *  去重口径与单文件时代逐字一致：同一 `方法 + 路径` 以**后**出现的为准。 */
+function parseAllRoutes(): { method: string; path: string; write: boolean }[] {
+  const found: { method: string; path: string; write: boolean }[] = []
+  for (const file of routeFiles()) {
+    const text = fs.readFileSync(file, 'utf8')
+    const seeded = text.includes('route("/api") {') ? text : `    route("/api") {\n${text}\n    }\n`
+    found.push(...parseRoutes(seeded))
+  }
+  const unique = new Map<string, { method: string; path: string; write: boolean }>()
+  found.forEach(entry => unique.set(`${entry.method} ${entry.path}`, entry))
+  return [...unique.values()]
+}
+
 test('目录里每一条都真存在，代码里的端点一条不漏', () => {
-  const routes = parseRoutes(fs.readFileSync(ROUTES, 'utf8'))
-  assert.ok(routes.length >= 120, `只从 Routes.kt 解析到 ${routes.length} 条端点，解析方式没对上，这条判据在演空戏`)
+  const routes = parseAllRoutes()
+  assert.ok(routes.length >= 120, `只从 http/ 路由文件解析到 ${routes.length} 条端点，解析方式没对上，这条判据在演空戏`)
   const catalog = JSON.parse(fs.readFileSync(CATALOG, 'utf8'))
   assert.ok(Array.isArray(catalog.endpoints) && catalog.endpoints.length === routes.length,
     `目录有 ${catalog.endpoints?.length ?? 0} 条，代码里注册了 ${routes.length} 条 —— 这两个数必须相等，全量覆盖是这份契约的全部意义`)

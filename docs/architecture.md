@@ -24,7 +24,7 @@
 | 层 | 文件 | 负责什么 | 边界 |
 | :--- | :--- | :--- | :--- |
 | 入口与装配 | `Application.kt`、`ServerConfig.kt`、`DesktopLauncher.kt` | Ktor 特性装配、路由注册、启动后台任务 | 端口就绪**不等**订阅同步 / 缓存续跑 / 封面回收，它们挂在 `ApplicationStarted` 之后 |
-| 路由 | `http/Routes.kt` | 全部 `/api/*` 与 WebSocket | 响应体一律 `@Serializable data class`；`Map<String, Any>` 在 Ktor 这边直接 500 |
+| 路由 | `http/Routes.kt` 装配点 + `http/<组>Routes.kt`（13 个业务组，0.8.2 拆出） | 全部 `/api/*` 与 WebSocket | 装配点只留目录/系统两组与挂载调用；响应体一律 `@Serializable data class`；`Map<String, Any>` 在 Ktor 这边直接 500 |
 | 数据 | `data/Database.kt` | 建表、迁移、连接生命周期、清单缓存 | 源清单在库层缓存，写路径统一失效；`close()` 也清缓存 |
 | 规则引擎 | `rules/RuleSplit.kt`、`rules/RuleValue.kt`、`rules/RuleRunner.kt`、`rules/JsSandbox.kt` | 把 Legado 的取值语法求值成值 | 沙箱**不开真实 Java 反射**：`JavaImporter` 是安全空替身；`{{}}` 模板展开后早退，不再被当选择器二次求值 |
 | 内容管道 | `content/ContentProcessor.kt`、`content/LooseJson.kt` | 正文净化、脏 JSON 兜底 | 净化在落库**之前**执行，离线缓存与朗读因此自动拿到干净文本 |
@@ -57,7 +57,7 @@
 
 | 步 | 端点 | 关键实现 | 为什么长这样 |
 | :--- | :--- | :--- | :--- |
-| 导入 | `POST /api/sources/import` | `http/Routes.kt` + 前端 `sources/bookSourceFields.ts` | 兼容 BOM、`{data｜sources｜bookSources: []}` 外层包装，以及中文自定义标识 |
+| 导入 | `POST /api/sources/import` | `http/SourcesRoutes.kt` + 前端 `sources/bookSourceFields.ts` | 兼容 BOM、`{data｜sources｜bookSources: []}` 外层包装，以及中文自定义标识 |
 | 搜索 | `webSocket /api/search/stream` | `SearchConcurrencyTest` 守着的那条：一个慢源的 30 秒超时算"这一个源失败"，不能把整次搜索取消成 500 | 边搜边出；前端判重表常驻（`lib/searchStore.ts`），每条结果不再 O(N×M) |
 | 详情 | `POST /api/books/details` | `RuleRunner.details` | 只请求主书源；候补源按需再取 |
 | 目录 | `POST /api/books/chapters` | `book_toc_cache` | 命中缓存直接回，几千章不再重抓 |

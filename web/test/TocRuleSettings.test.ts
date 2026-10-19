@@ -90,7 +90,8 @@ test('分章规则可新建可编辑：接口、就地编辑、删除键的可�
   assert.match(api, /deleteTocRule: \(key: string\)/, '有删除这一条')
   assert.match(api, /removable\?: boolean/, '清单要报得出"这条能不能删"，界面不能猜')
 
-  const routes = read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt')
+  // 0.8.2 拆组：分章规则面住在 TocRulesRoutes.kt
+  const routes = read('../../server/src/main/kotlin/io/legado/server/http/TocRulesRoutes.kt')
   assert.match(routes, /post\("\/books\/toc-rules\/save"\)/)
   assert.match(routes, /post\("\/books\/toc-rules\/delete"\)/)
   assert.match(routes, /rule_uncompilable/, '编不出来的正则回 400 并说清原因，而不是存进去')
@@ -115,7 +116,7 @@ test('分章规则可新建可编辑：接口、就地编辑、删除键的可�
  * 既看不见也选不了，而界面上根本没有启用开关。
  */
 test('手动可选 与 参与自动打分 是两件事，界面和服务端都按两件事做', () => {
-  const routes = read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/server/http/TocRulesRoutes.kt')
   assert.match(routes, /TocRules\.all\.map/, '清单发的是全表，不再是 candidates')
   assert.doesNotMatch(routes, /options = listOf\([\s\S]{0,220}\+ TocRules\.candidates\.map/,
     'candidates 只能用于自动打分，拿它当选择清单就是把 12 条规则藏起来')

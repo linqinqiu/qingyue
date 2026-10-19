@@ -59,7 +59,8 @@ test('书架确实接上了拖动排序（不只是一个没人调用的模块�
   assert.match(main, /onClickCapture=\{onClickCapture\}/, '拖完那一下不能被当成"点开这本书"')
   const layout = read('../src/shelf/shelfLayout.ts')
   assert.match(layout, /SORT_VALUES: ShelfSort\[\] = \[[^\]]*'custom'/, 'custom 是合法持久值，否则刷新就弹回默认档')
-  const server = read('../..', 'server/src/main/kotlin/io/legado/server/http/Routes.kt')
+  // 0.8.2 拆组：书架面住在 ShelfRoutes.kt
+  const server = read('../..', 'server/src/main/kotlin/io/legado/server/http/ShelfRoutes.kt')
   assert.match(server, /put\("\/bookshelf\/order"\)/, '服务端有这条路由')
 })
 

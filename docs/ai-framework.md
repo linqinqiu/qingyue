@@ -18,7 +18,7 @@
 这些对象就是 130 个 HTTP 端点背后那同一批实例。AI 调用它们 == 端点调用它们，
 **没有第二条实现路径**，也就不会出现「AI 能改、界面改不了」或反过来这种分裂。
 
-**关键约束（来自 `web/test/ApiCatalog.test.ts`）：** 那份判据逐条比对 `Routes.kt` 与
+**关键约束（来自 `web/test/ApiCatalog.test.ts`）：** 那份判据逐条比对 `http/` 目录的路由文件与
 `agent-api.json`，条数对不上、write 标错、purpose/response 缺字都会红。所以本框架
 **不注册任何新 HTTP 路由**，AI 完全在进程内通过 `Agent` 暴露，不增加端点计数。
 

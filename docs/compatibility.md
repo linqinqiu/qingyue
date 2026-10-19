@@ -48,7 +48,7 @@
 | :--- | :--- | :--- |
 | **段评规则不执行** | `ruleReview` 在服务端源码里**零引用**（`grep -rn ruleReview server/src` 为空） | 那 21 条字段可以填、可以存、可以随备份走，但不会产出段评。前端表单保留它们是为了"改存不丢配置" |
 | **没有 Android WebView** | 架构决定是纯 JVM + Rhino 沙箱；`webView: true` 只作为体检的**提示**参与分档（`source/SourceHealth.kt:44`） | 需要真浏览器执行 JS 过挑战的站点（部分 SPA、带风控的站）在服务端跑不通；这类源在界面上会被判成 `needs_webview`，**不算坏** |
-| **登录是五条路，不是一条** | 上游只有一个登录 WebView；这里是：填表 / 内置反向代理浏览器 / 拉起真浏览器抓取 / 粘贴 Cookie / 书签回传（`web/src/sources/SourceLoginModal.tsx`） | 书签与真浏览器抓取靠服务端 Cookie jar 按域归桶，跨域 Origin 由 `Routes.kt` 的 `allowCookieSyncOrigin` 判 |
+| **登录是五条路，不是一条** | 上游只有一个登录 WebView；这里是：填表 / 内置反向代理浏览器 / 拉起真浏览器抓取 / 粘贴 Cookie / 书签回传（`web/src/sources/SourceLoginModal.tsx`） | 书签与真浏览器抓取靠服务端 Cookie jar 按域归桶，跨域 Origin 由 `http/SourcesRoutes.kt` 的 `allowCookieSyncOrigin` 判 |
 | **不设身份** | 没有账号、登录页、会话；写操作唯一的门是 `http/Guard.kt:28 ServerIdentity` + `:40 isSameOriginIdentity`（Origin 的主机**与端口**都要等于服务自己的绑定身份） | 默认只绑 `127.0.0.1`。把 `LEGADO_HOST` 改成 `0.0.0.0` 等于把整个书库交给局域网 |
 | **凭据按域共享** | 一台机器一个 Cookie 罐，同域的书源共用（`cookie` 表 + `source_login_state`） | 删一条凭据会影响同域其它源，界面上必须这样说明 |
 | **TTS 只有两副引擎** | 浏览器 `speechSynthesis` 与服务端 Edge-TTS 会话流（外加自定义 HTTP 参数一档）；不实现上游其它 TTS 后端 | Edge-TTS 握手要带匹配的 `Sec-MS-GEC-Version` 与 `muid` Cookie，微软改协议时改 `LEGADO_EDGE_TTS_CHROMIUM_VERSION` 免重编译 |

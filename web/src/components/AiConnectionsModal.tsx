@@ -30,7 +30,7 @@ export function AiConnectionsModal({ onClose }: { onClose: () => void }) {
           <h2><Icon name="sliders" /> AI 接入 · 对话助手</h2>
           <button type="button" className="overlay-close" aria-label="关闭" onClick={onClose}><Icon name="close" /></button>
         </header>
-        <div className="page-dialog-body ai-connections-body">
+        <div className="page-dialog-body">
           <AiConnectionsPanel />
         </div>
       </div>
@@ -190,23 +190,23 @@ function ChatPanel({
     <section className="ai-chat">
       <div className="ai-chat-status">
         {externalConnected ? (
-          <span className="ai-tag">● 已连接外部模型{externalName ? `：${externalName}` : ''}，可真实对话</span>
+          <span className="ai-tag">已连接外部模型{externalName ? `：${externalName}` : ''}，可真实对话</span>
         ) : (
-          <span className="ai-tag ai-tag-warn">● 尚未登记外部模型，当前为本地兜底（无法真正对话）</span>
+          <span className="ai-tag ai-tag-warn">尚未登记外部模型，当前为本地兜底（无法真正对话）</span>
         )}
         <span className="ai-status-sep">·</span>
         {externalConnected ? (
           probe === 'probing' ? (
-            <span className="ai-tag ai-tag-testing">◌ 实测中…</span>
+            <span className="ai-tag ai-tag-testing">实测中…</span>
           ) : probe === 'ok' ? (
-            <span className="ai-tag ai-tag-ok">✓ 实测可达{probeEngine ? `（${probeEngine}）` : ''}</span>
+            <span className="ai-tag ai-tag-ok">实测可达{probeEngine ? `（${probeEngine}）` : ''}</span>
           ) : probe === 'fail' ? (
-            <span className="ai-tag ai-tag-warn">⚠ 实测不可达，将回退本地</span>
+            <span className="ai-tag ai-tag-warn">实测不可达，将回退本地</span>
           ) : (
-            <span className="ai-tag">○ 待实测</span>
+            <span className="ai-tag">待实测</span>
           )
         ) : (
-          <span className="ai-tag">○ 无需实测（无外部模型）</span>
+          <span className="ai-tag">无需实测（无外部模型）</span>
         )}
         {externalConnected && (
           <button type="button" className="link-button ai-probe-btn" onClick={() => void runProbe()} disabled={probe === 'probing'}>
@@ -237,7 +237,7 @@ function ChatPanel({
             {m.role === 'assistant' && !m.pending && m.engine && (
               <div className="ai-bubble-meta">
                 <span className="ai-tag">{m.engine.startsWith('external:') ? `外部模型 ${m.engine.replace('external:', '')}` : '本地兜底'}</span>
-                {m.fallback && <span className="ai-tag ai-tag-warn">⚠ 已回退本地</span>}
+                {m.fallback && <span className="ai-tag ai-tag-warn">已回退本地</span>}
               </div>
             )}
           </div>

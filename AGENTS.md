@@ -14,7 +14,7 @@
 - `io.legado.server.ai.Agent` —— 网关的实现：能力清单（`manifest`）、外呼切换 + 本地回退（`comprehend`）、工具分发（`call`）都在这里。
 - `AgentRoutes.kt` 里的 `agentManifest` / `agentComprehend` 等**只是薄收口**：解析 HTTP 入参 → 委派 `agentConnection.` 上的对应方法 → 把 `AgentResult` / `ComprehendOutcome` 包成 HTTP 响应。**任何外部模型切换、超时、回退逻辑都不在 HTTP 层，只在 `Agent` 里**。
 
-所以「更新网关」= 改 `Agent` / `AgentConnection`；`/api/agent/*` 的路由只负责把请求转发过去，保持 Routes.kt 与 agent-api.json 数量一致即可（见 §6）。
+所以「更新网关」= 改 `Agent` / `AgentConnection`；`/api/agent/*` 的路由只负责把请求转发过去，保持路由登记与 agent-api.json 数量一致即可（见 §6）。
 
 ## 1. 这组接口解决了什么
 
@@ -27,7 +27,7 @@
 
 ## 2. 端点目录（机器可读契约）
 
-`GET /api/catalog` 返回全部端点的机器可读契约（与 `Routes.kt` 双向核对，见下方“一致性闸门”）。本组 8 个端点的归属见 `resources/agent-api.json`（group: `AI 自定义接入`）。
+`GET /api/catalog` 返回全部端点的机器可读契约（与 `http/` 目录的路由文件双向核对，见下方“一致性闸门”）。本组 8 个端点的归属见 `resources/agent-api.json`（group: `AI 自定义接入`）。
 
 | 方法 | 路径 | 写门 | 说明 |
 |------|------|------|------|
@@ -145,7 +145,7 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/connections \
 
 ## 6. 一致性闸门（给维护者）
 
-`web/test/ApiCatalog.test.ts` 是双向核对闸门：`Routes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（130 → 138，+8）。
+`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（130 → 138，+8；0.8.2 拆组后判据扫 `http/` 整目录）。
 **改动 `/api/agent/*` 时禁止动既有路由数量、路径、分组**；新增端点要同时在两处登记。运行：
 
 ```bash
@@ -170,11 +170,11 @@ npx tsx test/ApiCatalog.test.ts   # 期望 3/3 PASS
 
 - **显示状态**（`externalConnected`）：只看 `GET /api/agent/connections` 里有没有非内置连接。有就显示「已连接外部模型：<name>」。
 - **实测便携状态**（`probe`）：真的发一条 `ping` 走 `POST /api/agent/chat`，看**此刻**外部模型是否可达。
-  - `probing` → ◌ 实测中…
-  - `ok` → ✓ 实测可达（<engine 去掉 external: 前缀>）
-  - `fail` → ⚠ 实测不可达，将回退本地
+  - `probing` → 「实测中…」（琥珀色标签）
+  - `ok` → 「实测可达（<engine 去掉 external: 前缀>）」（强调色标签）
+  - `fail` → 「实测不可达，将回退本地」（危险色标签）
   - 打开面板且已登记外部模型时自动实测一次；旁边有「重新实测」按钮。
-  - 没有外部模型时显示「○ 无需实测（无外部模型）」。
+  - 没有外部模型时显示「无需实测（无外部模型）」。（状态靠 `ai-tag` 三档配色区分，界面不用装饰字形——`CopyStyle.test.ts` 的 BANNED_GLYPHS 判据盯着。）
 
 两者是独立维度：显示状态说"配了没有"，实测状态说"现在通不通"。只有实测 `ok` 才代表真能对话。
 
@@ -204,12 +204,12 @@ tasks.named('jar', Jar) {
 
 改完 `gradlew :server:installDist` 后，发行版 `/healthz` 与启动日志都显示真实版本（`0.8.2`）。
 
-## 10. 便携发行测试版（`E:\legado\qingyue-dist`）
+## 10. 便携发行测试版（`E:\legado-releases\qingyue-dist-v0.8.2`）
 
-可直接双击运行、自带 JRE 的发行测试包，用于验证"换台电脑也能跑"：
+可直接双击运行、自带 JRE 的发行测试包，用于验证"换台电脑也能跑"。0.8.2 结构重排起按"产物出库"规则移出代码仓库，放 `legado-releases/`（与仓库并列）：
 
 ```
-qingyue-dist/
+qingyue-dist-v0.8.2/
 ├─ start.bat          ← 双击启动
 ├─ runtime/           ← jlink 精简 JRE 17（~45MB，不依赖本机 Java）
 ├─ app/lib/           ← legado-server-0.8.2.jar + 全部依赖

@@ -42,7 +42,8 @@ test('有位置才给"清除自定义顺序"，并且说的是条数', () => {
 })
 
 test('路由注册在 /sources/{id} 之前，PUT /sources/order 不会被当成某个源', () => {
-  const routes = read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt')
+  // 0.8.2 拆组：order 与 {id} 两条同住 SourcesRoutes.kt，先后关系仍然当场可证
+  const routes = read('../../server/src/main/kotlin/io/legado/server/http/SourcesRoutes.kt')
   const order = routes.indexOf('put("/sources/order")')
   const parameterized = routes.indexOf('route("/sources/{id}")')
   assert.ok(order > 0, '要有这条路由')
