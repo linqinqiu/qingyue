@@ -1,7 +1,7 @@
 # 架构 —— 青阅是怎么搭起来的
 
 这份文档说"东西在哪、为什么在这儿、边界在哪儿"。怎么构建与运行看 [`deploy.md`](deploy.md)，
-对外接口清单看 [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md)。
+对外接口清单看 [`../../docs/API-REFERENCE.md`](../../docs/API-REFERENCE.md)。
 模块边界见下文。
 
 ## 1. 一张图

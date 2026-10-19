@@ -181,7 +181,7 @@ web/                        前端（React 19 + TS + Vite，构建产物进同�
   src/shelf/                封面、空态引导、书架布局与拖动排序
   src/icons.tsx · styles.css  全站单色图标 · 样式与皮肤令牌
   test/                     单元与静态判据，入口是 test/run-all.ts（它扫目录登记，新加测试文件不用改清单）
-  AGENTS.md                 前端的工程口径：判据怎么写、什么才算验过
+
 tools/verify/               在真实浏览器和真实服务上跑的门禁脚本
 scripts/                    tasks.mjs（build / package / dev 单一入口）· runtime.mjs 启动运行时 · package-desktop.mjs 桌面打包
 docs/                       见下面「文档」一节
@@ -208,7 +208,7 @@ npm --prefix web test              # 前端：静态判据 + 组件渲染，一�
 node tools/verify/selfcheck.mjs    # 对着跑着的服务过一遍：搜索 → 详情 → 目录 → 正文 → 净化
 ```
 
-`tools/verify/` 下还有按功能划分的门禁（`toc-rule-check`、`source-health-check`、`shelf-layout-check`、`reader-flow-check`、`version-check` 等），都是开真浏览器量，不打桩。判据口径记在 [`AGENTS.md`](AGENTS.md)。
+`tools/verify/` 下还有按功能划分的门禁（`toc-rule-check`、`source-health-check`、`shelf-layout-check`、`reader-flow-check`、`version-check` 等），都是开真浏览器量，不打桩。判据口径以 `web/test/` 与 `tools/verify/` 的现有实现为准。
 
 ## 青阅到底是什么
 
