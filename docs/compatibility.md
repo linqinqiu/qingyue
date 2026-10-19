@@ -47,17 +47,17 @@
 | 差异 | 事实 | 影响 |
 | :--- | :--- | :--- |
 | **段评规则不执行** | `ruleReview` 在服务端源码里**零引用**（`grep -rn ruleReview server/src` 为空） | 那 21 条字段可以填、可以存、可以随备份走，但不会产出段评。前端表单保留它们是为了"改存不丢配置" |
-| **没有 Android WebView** | 架构决定见 [`decisions/ADR-001`](decisions/ADR-001-pure-jvm-ktor-and-rhino-sandbox.md)；`webView: true` 只作为体检的**提示**参与分档（`source/SourceHealth.kt:44`） | 需要真浏览器执行 JS 过挑战的站点（部分 SPA、带风控的站）在服务端跑不通；这类源在界面上会被判成 `needs_webview`，**不算坏** |
+| **没有 Android WebView** | 架构决定是纯 JVM + Rhino 沙箱；`webView: true` 只作为体检的**提示**参与分档（`source/SourceHealth.kt:44`） | 需要真浏览器执行 JS 过挑战的站点（部分 SPA、带风控的站）在服务端跑不通；这类源在界面上会被判成 `needs_webview`，**不算坏** |
 | **登录是五条路，不是一条** | 上游只有一个登录 WebView；这里是：填表 / 内置反向代理浏览器 / 拉起真浏览器抓取 / 粘贴 Cookie / 书签回传（`web/src/sources/SourceLoginModal.tsx`） | 书签与真浏览器抓取靠服务端 Cookie jar 按域归桶，跨域 Origin 由 `Routes.kt` 的 `allowCookieSyncOrigin` 判 |
 | **不设身份** | 没有账号、登录页、会话；写操作唯一的门是 `http/Guard.kt:28 ServerIdentity` + `:40 isSameOriginIdentity`（Origin 的主机**与端口**都要等于服务自己的绑定身份） | 默认只绑 `127.0.0.1`。把 `LEGADO_HOST` 改成 `0.0.0.0` 等于把整个书库交给局域网 |
 | **凭据按域共享** | 一台机器一个 Cookie 罐，同域的书源共用（`cookie` 表 + `source_login_state`） | 删一条凭据会影响同域其它源，界面上必须这样说明 |
 | **TTS 只有两副引擎** | 浏览器 `speechSynthesis` 与服务端 Edge-TTS 会话流（外加自定义 HTTP 参数一档）；不实现上游其它 TTS 后端 | Edge-TTS 握手要带匹配的 `Sec-MS-GEC-Version` 与 `muid` Cookie，微软改协议时改 `LEGADO_EDGE_TTS_CHROMIUM_VERSION` 免重编译 |
 
-## 4.1 2026-10-14 对照上游新确认的两条差异（发现 / 订阅重做的依据见 [`proposals/PROPOSAL-021`](proposals/PROPOSAL-021-explore-rss-settings-rewrite.md)）
+## 4.1 与上游新确认的两条差异
 
 | 差异 | 事实 | 影响 |
 | :--- | :--- | :--- |
-| **URL 里的分页占位不一样** | 上游分页用的是 `<页1,页2,…>`（`model/analyzeRule/AnalyzeUrl.kt` 的 `pagePattern = <(.*)>`，组内按逗号切，越界一律取**最后一个**），而 `{{…}}` 在 URL 里是**内嵌 JS**；我们服务端 `rules/RuleRunner.kt` 的 `renderUrl()` 把 `{{page}}` 当字面量替换 | 社区里按上游语义写的源（`...&page=<(1,2,3)>`）**翻不了页**；反过来按我们写法（`{{page}}`）写的源在上游 App 里也翻不了。发现页重做（PROPOSAL-021）建在改对这条语义之上，改动归 AI-1 领地，判据用例由我出 |
+| **URL 里的分页占位不一样** | 上游分页用的是 `<页1,页2,…>`（`model/analyzeRule/AnalyzeUrl.kt` 的 `pagePattern = <(.*)>`，组内按逗号切，越界一律取**最后一个**），而 `{{…}}` 在 URL 里是**内嵌 JS**；我们服务端 `rules/RuleRunner.kt` 的 `renderUrl()` 把 `{{page}}` 当字面量替换 | 社区里按上游语义写的源（`...&page=<(1,2,3)>`）**翻不了页**；反过来按我们写法（`{{page}}`）写的源在上游 App 里也翻不了。这条差异会影响按上游语义写的源的翻页。 |
 | **RSS 必须有列表规则才看得见** | 我们把"有 `ruleArticles`"当作可列目的前提（`main.tsx` / `RssPanel.tsx` 一侧的 `hasListRule` 口径）；上游另有 `model/rss/RssParserDefault.kt`，**标准 RSS/Atom XML 无需任何规则即可直解**（含 `content:encoded`、`dc:date`、从 `description` 抓首图） | 现成 RSS 订阅地址（绝大多数是标准 XML）在界面上被判成"这个源没有列表规则"而看不见条目 —— P1 要补的正是这条，不是让用户去写规则 |
 
 ## 5. 归属、许可与随包数据（"哪些内容是我们的"）

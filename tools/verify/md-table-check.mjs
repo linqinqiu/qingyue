@@ -12,7 +12,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  */
 const targets = process.argv[2]
   ? [process.argv[2]]
-  : ['README.md', 'AGENTS.md', 'CHANGELOG.md', 'docs/实现说明.md']
+  : ['README.md', 'CHANGELOG.md', 'docs/architecture.md', 'docs/deploy.md', 'docs/compatibility.md', 'docs/AI-AGENT.md']
 
 const count = row => (row.match(/(?<!\\)\|/g) ?? []).length
 
