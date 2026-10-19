@@ -77,7 +77,7 @@ const emit = (name, list) => `/** ${name} */\nexport const ${name} = [\n${encode
 /**
  * 把包取到临时目录 —— 只依赖 npm，不依赖本机能连 GitHub。
  *
- * 用 `npm install --prefix` 而不是 `npm pack` + 解包：Windows 上 `E:\...` 这种路径
+ * 用 `npm install --prefix` 而不是 `npm pack` + 解包：Windows 上带盘符的绝对路径
  * 会被 tar 当成"远端主机 E"，加 `--force-local` 又只有 GNU tar 认、bsdtar 不认。
  * 让 npm 自己落地就没有这一步。
  *
