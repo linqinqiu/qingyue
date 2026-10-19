@@ -4,7 +4,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { CoverFallback, SearchCover } from '../shelf/Cover'
 import { Icon } from '../icons'
-import { OpenBook } from '../reader/ReaderScreen'
+import type { OpenBook } from '../reader/openBook'
 import { Select } from '../components/Select'
 import { ShelfLayout, readSearchLayout, writeSearchLayout } from '../shelf/shelfLayout'
 import { SortMode, cleanTitle, filterSearchGroups, isExactMatch, pickBlurb } from '../lib/searchFilters'

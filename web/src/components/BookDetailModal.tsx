@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CoverFallback } from '../shelf/Cover'
 import { Icon } from '../icons'
-import { OpenBook } from '../reader/ReaderScreen'
+import type { OpenBook } from '../reader/openBook'
 import { SourceChoice } from '../lib/searchStore'
 import { SourceHealthInspection, clearStoredInspections, getInitialOrStoredInspections, inspectAllSourcesConcurrently } from '../sources/sourceInspector'
 import { SourceSummary, api } from '../lib/api'

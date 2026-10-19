@@ -3,7 +3,7 @@
 // `renderToStaticMarkup` 静态渲染才需要默认 React 在作用域里 —— 那件组件已拆进
 // `VirtualChapterList.tsx`，那条理由与它的默认导入一起搬过去了。）
 import React, { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { api, BookDetails, BookNote, Chapter, ReadingProgress, SearchResult, TocRuleOption } from '../lib/api'
+import { api, BookDetails, BookNote, Chapter, SearchResult, TocRuleOption } from '../lib/api'
 import { ContextMenuItem, showContextMenu } from '../components/ContextMenu'
 import { Icon } from '../icons'
 import { useEscapeClose } from '../lib/useEscapeClose'
@@ -42,31 +42,14 @@ import { resetTtsBarPosition } from './ttsBarPosition'
 import { isTypingTarget, normalizeKey, READER_SHORTCUTS, shortcutFor } from './shortcuts'
 import { ReplaceRulesModal } from '../components/ReplaceRulesModal'
 import { OfflineCacheModal } from '../components/OfflineCacheModal'
+import { warmContentImages } from './contentImages'
+import { splitParagraphs } from './paragraphs'
+import type { OpenBook } from './openBook'
 import {
   downloadChaptersToOffline,
   getOfflineChaptersSet,
 } from '../lib/offlineStorage'
 
-/**
- * 图片预热：把一段正文里的 `![图](url)` 地址提前发给服务端图片代理，
- * 趁用户在看首屏时把后续图片取回落盘缓存（代理命中 7 天有效），
- * 滚动/翻页下去就不必每张都等服务端联网一次。漫画章节正文就是一张张图，
- * 这一项直接决定翻页顺不顺。
- * 只预热外域图（站内资产本就在本地）；失败静默 —— 渲染层那一张会自己退化成「这张图没取到 + 重取这一张」。
- */
-function warmContentImages(text: string, page: string | undefined) {
-  if (!text) return
-  for (const raw of text.split('\n')) {
-    const image = contentImageUrl(raw)
-    if (!image || isSameSiteAsset(image)) continue
-    const img = new Image()
-    img.decoding = 'async'
-    // 与渲染层同一个地址算法（generation 都是 0），否则预热取回来的那张用不上。
-    img.src = readerImageSrc(image, page)
-  }
-}
-
-export type OpenBook = { details: BookDetails; bookUrl: string; chapters: Chapter[]; progress?: ReadingProgress }
 
 type ReaderScreenProps = {
   openBook: OpenBook
@@ -76,25 +59,6 @@ type ReaderScreenProps = {
   onClose: () => void
 }
 
-
-/**
- * 正文按行切成段落。单独抽出来是因为"屏幕上显示的"与"正在朗读的"两件事在切章过渡期间
- * 不是一回事：前者可以继续挂着上一章，后者必须等新章到位，否则朗读会一路读进旧章剩下的段落。
- */
-function splitParagraphs(content: string): string[] {
-  const rawLines = content.split('\n')
-  const result: string[] = []
-  for (let i = 0; i < rawLines.length; i++) {
-    // 这里的 trim 会连源站自带的 U+3000 全角空格缩进一起剥掉，是故意的：
-    // 首行缩进现在由 `--reader-text-indent` 统一控制，留着源站的空格会变成"缩进 + 缩进"，
-    // 而且用户把缩进调到 0 时反而还有一截甩尾。
-    const trimmed = rawLines[i].trim()
-    if (trimmed) {
-      result.push(trimmed)
-    }
-  }
-  return result
-}
 export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange, onClose }: ReaderScreenProps) {
   const [currentBook, setCurrentBook] = useState<OpenBook>(openBook)
   /**
