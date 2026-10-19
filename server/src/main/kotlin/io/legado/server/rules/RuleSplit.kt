@@ -88,10 +88,19 @@ private fun indexOfTopLevelChar(text: String, from: Int, ch: Char): Int? {
 }
 
 /**
- * Legado 的分支规则：`||` 取第一个有结果的分支，`&&` 把所有分支的结果拼接起来。
- * 依据上游 `RuleAnalyzer.splitRule("&&","||","%%")`：**无优先级、最左边的分隔符说了算**，
- * 并且切分要跳过 `{{…}}`、`[…]`（JSONPath 过滤谓词里本来就带 `&&`/`||`）、引号与 `##正则##` 段，
- * 否则 `$.book[?(@.price<10 && @.cat=="x")]` 会被从中间劈开。
+ * Legado 的分支规则（上游 `RuleAnalyzer.splitRule("&&","||","%%")` 的三种组合类型）：
+ *
+ * - `||` 取第一个有结果的分支；
+ * - `&&` 把**每个**分支的结果并集起来（`AnalyzeByJSoup.getElements` 里 `elements.addAll(es)`）；
+ * - `%%` 把各分支结果**按位交错**（`for (i in results[0].indices) for (temp in results)`）。
+ *
+ * **无优先级、最左边的分隔符说了算**，并且切分要跳过 `{{…}}`、`[…]`（JSONPath 过滤谓词里本来就带
+ * `&&`/`||`）、引号与 `##正则##` 段，否则 `$.book[?(@.price<10 && @.cat=="x")]` 会被从中间劈开。
+ *
+ * 为什么必须认 `&&`：本机 5,574 个源里 79 条非 JS 列表规则写的是 `&&`
+ * （极速漫画 `class.banner_detail_form&&class.mh-list@tag.li`、小说天堂 `class.chapters@…%%…`）。
+ * 只切 `||` 时整串被当成一个 CSS 选择器交给 Jsoup，报
+ * `SelectorParseException: unexpected token at '&&class.mh-list tag.li'` —— 表现为该源搜索 0 条。
  */
 internal fun splitLegadoBranches(rule: String): Pair<String?, List<String>> {
     val separators = topLevelSeparators(rule)
@@ -124,6 +133,7 @@ private fun topLevelSeparators(rule: String): List<Pair<Int, String>> {
             }
             depth == 0 && rule.startsWith("||", index) -> { found += index to "||"; index++ }
             depth == 0 && rule.startsWith("&&", index) -> { found += index to "&&"; index++ }
+            depth == 0 && rule.startsWith("%%", index) -> { found += index to "%%"; index++ }
         }
         index++
     }

@@ -1320,6 +1320,22 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
     private fun trimJsNumberFraction(text: String): String =
         if (JS_NUMBER_FRACTION.matches(text)) text.substringBefore('.') else text
 
+    /**
+     * `%%` 组合（上游 `AnalyzeByJSoup.getElements` 的 `elementsType == "%%"` 分支）：
+     * 以**第一支**的条数为准，逐条把各支同一位置取出来拼在一起。
+     * 目录规则里典型写法是两卷目录交替排回阅读顺序，少一支就整卷错位。
+     */
+    private fun interleaveNodes(branches: List<List<NodeValue>>): List<NodeValue> {
+        if (branches.isEmpty()) return emptyList()
+        if (branches.size == 1) return branches[0]
+        val rows = branches[0].size
+        val out = ArrayList<NodeValue>(rows * branches.size)
+        for (index in 0 until rows) {
+            for (nodes in branches) nodes.getOrNull(index)?.let { out += it }
+        }
+        return out
+    }
+
     private fun nodes(body: String, rule: String): List<NodeValue> {
         // @xpath 方言优先：xpath 里的 `|` 并集不能被当成 Legado 的 `||` 备选来切分
         if (isXpathRule(rule)) return xpathNodes(Jsoup.parse(body), stripXpathPrefix(rule))
@@ -1328,48 +1344,30 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
             val path = stripJsonPrefix(rule)
             return runCatching { (JsonPath.read<Any>(body, path) as? List<*>)?.map { NodeValue.json(it) } ?: emptyList() }.getOrDefault(emptyList())
         }
-        val alternatives = splitLegadoAlternatives(rule)
-        if (alternatives.size > 1) {
-            return alternatives.firstNotNullOfOrNull { branch -> nodes(body, branch).ifEmpty { null } } ?: emptyList()
+        val (branchSeparator, branches) = splitLegadoBranches(rule)
+        if (branches.size > 1) {
+            // 上游 AnalyzeByJSoup.getElements 的三种组合：`||` 取首个非空、`&&` 并集、`%%` 逐位交错。
+            // 以前只认 `||`，`class.a&&class.b@tag.li` 整串被当 CSS 选择器 → SelectorParseException，
+            // 该源搜索/目录 0 条（本机 79 条非 JS 列表规则这么写，极速漫画是实测样本）。
+            return when (branchSeparator) {
+                "&&" -> branches.flatMap { nodes(body, it) }.distinct()
+                "%%" -> interleaveNodes(branches.map { nodes(body, it) })
+                else -> branches.firstNotNullOfOrNull { branch -> nodes(body, branch).ifEmpty { null } } ?: emptyList()
+            }
         }
         return when {
             rule.startsWith("$") -> (JsonPath.read<Any>(body, rule) as? List<*>)?.map { NodeValue.json(it) } ?: emptyList()
             else -> {
+                // 列表规则与字段规则走同一套选择器方言（`class.a@tag.li` / `id.list@tag.dd` / `@children`）：
+                // 原来这里只把各段用空格拼成一条 CSS，`tag.` / `id.` 段被当成标签名，整条规则一条都选不出来。
+                val document = Jsoup.parse(body)
                 val (base, ops) = splitIndexSuffix(rule)
-                val selected = Jsoup.parse(body).select(base.css()).map(NodeValue::html)
+                val selected = selectLegadoSegments(document, base).map(NodeValue::html)
                 if (ops.isEmpty()) selected else applyIndexTokens(selected, ops)
             }
         }
     }
 
-    private fun String.css(): String {
-        val clean = removePrefix("@css:").trim()
-        val parts = clean.split("@")
-        val cssParts = mutableListOf<String>()
-        for (part in parts) {
-            val trimmed = part.trim()
-            if (trimmed.isEmpty()) continue
-            if (trimmed in setOf("text", "href", "src", "content", "html", "textNodes", "textNode")) break
-            if (trimmed.startsWith("attr(") || trimmed.startsWith("text(") || trimmed.startsWith("all")) break
-            if (trimmed.startsWith("class.")) {
-                val cls = trimmed.removePrefix("class.")
-                if ("." in cls) {
-                    val (cName, idxStr) = cls.split(".", limit = 2)
-                    val idx = idxStr.toIntOrNull()
-                    if (idx != null) cssParts.add(".$cName:nth-of-type(${idx + 1})") else cssParts.add(".$cls")
-                } else {
-                    cssParts.add(".$cls")
-                }
-            } else if (trimmed.matches(TAG_DOT_INDEX)) {
-                val (tag, idxStr) = trimmed.split(".", limit = 2)
-                val idx = idxStr.toIntOrNull()
-                if (idx != null) cssParts.add("$tag:nth-of-type(${idx + 1})") else cssParts.add(trimmed)
-            } else {
-                cssParts.add(trimmed)
-            }
-        }
-        return if (cssParts.isEmpty()) clean else cssParts.joinToString(" ")
-    }
     /**
      * `cleanContent()` 会把所有标签抹掉，正文配图因此整张消失（上游是用 ImageGetter 渲染的）。
      * 先把 `<img>` 换成 `![图片](绝对地址)` 占位行，前端按行还原成 `<img>` —— 这样在线读、
@@ -1444,7 +1442,6 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         // 下方几个正则原来在每次调用处现编译：cleanContent 走每章正文（离线缓存整本 = 上万次），
         // 其余的走每个字段取值。语义不变，只是提到类级只编译一次。
         val JS_NUMBER_FRACTION = Regex("""-?\d+\.0+""")
-        val TAG_DOT_INDEX = Regex("^[a-zA-Z0-9-]+\\.\\d+$")
         val CONTENT_IMG_TAG = Regex("(?i)<img\\b[^>]*>")
         /** 在一个 `<img …>` 标签里找 src / data-src / data-original 的值（到引号或空白为止）。 */
         val IMG_SRC = Regex("(?i)(?:data-original|data-src|src)\\s*=\\s*[\"']?([^\"'\\s>]+)")

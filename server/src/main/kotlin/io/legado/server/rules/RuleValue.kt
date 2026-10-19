@@ -62,8 +62,13 @@ internal class NodeValue private constructor(private val html: Element?, private
             val evaluated = branches.mapNotNull { branch ->
                 value(branch, jsSandbox, rawBody, baseUrl)?.takeIf { it.isNotBlank() }
             }
-            // `&&` 是「并且」：每个分支都要取值再拼接；`||` 只要第一个非空。
-            return if (branchSeparator == "&&") evaluated.joinToString("\n").takeIf { it.isNotBlank() } else evaluated.firstOrNull()
+            // `&&` 是「并且」：每个分支都要取值再拼接；`||` 只要第一个非空；
+            // `%%` 与上游 getStringList 一致，按**第一支的行数**逐行交错。
+            return when (branchSeparator) {
+                "&&" -> evaluated.joinToString("\n").takeIf { it.isNotBlank() }
+                "%%" -> interleaveLines(evaluated).takeIf { it.isNotBlank() }
+                else -> evaluated.firstOrNull()
+            }
         }
 
         if (trimmedRule.contains("{{") && trimmedRule.contains("}}")) {
@@ -133,6 +138,24 @@ internal class NodeValue private constructor(private val html: Element?, private
 
     private fun documentText(): String = html?.html() ?: json?.toString() ?: ""
 
+    /**
+     * `%%` 组合（上游 `AnalyzeByJSoup.getStringList` 的 `elementsType == "%%"` 分支）：
+     * 以**第一支**的行数为准，逐行把各支同一位置的行拼在一起。
+     * 目录规则里典型的写法是 `class.chapters@tag.ul.0@tag.a%%class.chapters@tag.ul.1@tag.li@tag.a`
+     * —— 两卷目录交错排回它们原本的阅读顺序，少一支就会整卷错位。
+     */
+    private fun interleaveLines(branches: List<String>): String {
+        if (branches.isEmpty()) return ""
+        if (branches.size == 1) return branches[0]
+        val split = branches.map { it.lines() }
+        val rows = split[0].size
+        val out = ArrayList<String>(rows * split.size)
+        for (index in 0 until rows) {
+            for (lines in split) lines.getOrNull(index)?.let { out += it }
+        }
+        return out.joinToString("\n")
+    }
+
     /** `@put:{k:rule,...}`：每个键都求值存表并吃掉这段（多键解析见 `putPairs`）。 */
     private fun storePutVariables(rule: String, jsSandbox: JsSandbox?, rawBody: String?, baseUrl: String?): String =
         PUT_VARIABLE.replace(rule) { match ->
@@ -189,7 +212,10 @@ internal class NodeValue private constructor(private val html: Element?, private
                 for (segment in selectorChain) {
                     val nextList = mutableListOf<Element>()
                     for (curr in currentList) {
-                        nextList.addAll(selectAllLegado(curr, segment))
+                        // 字段取值**吞掉**写坏的选择器（上游 getResultLast 也不抛）：一条 kind/coverUrl
+                        // 写坏了只该让那个字段为空，不能把整条搜索结果连坐。列表规则那一层则不吞 ——
+                        // 那里写坏就是整源 0 条，必须让体检报出来。
+                        nextList.addAll(runCatching { selectLegadoSegment(curr, segment) }.getOrDefault(emptyList()))
                     }
                     currentList = nextList
                     if (currentList.isEmpty()) break
@@ -210,45 +236,6 @@ internal class NodeValue private constructor(private val html: Element?, private
             resultText.takeIf { it.isNotBlank() }
         }
     }
-
-    private fun selectAllLegado(element: Element, selector: String): List<Element> = runCatching {
-        val trimmed = selector.trim()
-        if (trimmed == "children") return@runCatching element.children().toList()
-        val (base, ops) = splitIndexSuffix(trimmed)
-        if (ops.isNotEmpty()) {
-            if (base.isBlank()) return@runCatching applyIndexTokens(element.children().toList(), ops)
-            return@runCatching applyIndexTokens(selectAllLegado(element, base), ops)
-        }
-        val idOnly = ID_ONLY.find(trimmed)
-        if (idOnly != null) {
-            val el = element.getElementById(idOnly.groupValues[1])
-            return@runCatching if (el != null) listOf(el) else emptyList()
-        }
-        val tagOnly = TAG_ONLY.find(trimmed)
-        if (tagOnly != null) {
-            return@runCatching element.getElementsByTag(tagOnly.groupValues[1]).toList()
-        }
-        val classOnly = CLASS_ONLY.find(trimmed)
-        if (classOnly != null) {
-            return@runCatching element.select(".${classOnly.groupValues[1]}")
-        }
-        val indexed = TAG_INDEXED.find(trimmed)
-        if (indexed != null) {
-            val tag = indexed.groupValues[1]
-            val ordinal = indexed.groupValues[2].toInt().coerceAtLeast(0)
-            val matches = element.getElementsByTag(tag)
-            return@runCatching matches.getOrNull(ordinal)?.let { listOf(it) } ?: emptyList()
-        }
-        val classIndexed = CLASS_INDEXED.find(trimmed)
-            ?: CLASS_DOT_INDEXED.find(trimmed)
-        if (classIndexed != null) {
-            val className = classIndexed.groupValues[1]
-            val ordinal = classIndexed.groupValues[2].toInt().coerceAtLeast(0)
-            val matches = element.select(".$className")
-            return@runCatching matches.getOrNull(ordinal)?.let { listOf(it) } ?: emptyList()
-        }
-        element.select(trimmed)
-    }.getOrDefault(emptyList())
 
     fun at(rule: String?): NodeValue {
         if (json == null || rule.isNullOrBlank() || !rule.trimStart().startsWith("$")) return this
@@ -373,13 +360,6 @@ internal class NodeValue private constructor(private val html: Element?, private
         private val BARE_JSON_KEY = Regex("[A-Za-z_][\\w-]*(\\.[A-Za-z_][\\w-]*)*")
         /** `{{}}` 文本模板：value() 与 valueJson() 都要走，提到类级只编译一次（每字段取值都路过）。 */
         private val BRACE_TEMPLATE = Regex("\\{\\{(.*?)}}")
-        // selectAllLegado 的六段选择器方言：最热的取值路径，只编译一次
-        private val ID_ONLY = Regex("^id\\.([a-zA-Z0-9_-]+)$")
-        private val TAG_ONLY = Regex("^tag\\.([a-zA-Z0-9_-]+)$")
-        private val CLASS_ONLY = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)$")
-        private val TAG_INDEXED = Regex("^([a-zA-Z][a-zA-Z0-9-]*)\\.(\\d+)$")
-        private val CLASS_INDEXED = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$")
-        private val CLASS_DOT_INDEXED = Regex("^\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$")
         private val JS_IDENT_PREFIX = Regex("^(?:java|cookie|source|book|chapter|result|baseUrl|key|page)\\b")
         private val PUT_VARIABLE = Regex("@put:\\{([^{}]*?)\\}", RegexOption.IGNORE_CASE)
         private val GET_VARIABLE = Regex("@get:\\{([^{}]*?)\\}", RegexOption.IGNORE_CASE)
@@ -396,6 +376,17 @@ internal class NodeValue private constructor(private val html: Element?, private
 
 internal val XPATH_PREFIX = Regex("""^@(?:xpath|xp)\s*:\s*""", RegexOption.IGNORE_CASE)
 
+// 选择器方言的六种段形态（`selectLegadoSegment` 用）：最热的取值路径，只编译一次
+private val ID_ONLY = Regex("^id\\.([a-zA-Z0-9_-]+)$")
+private val TAG_ONLY = Regex("^tag\\.([a-zA-Z0-9_-]+)$")
+private val CLASS_ONLY = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)$")
+private val TAG_INDEXED = Regex("^([a-zA-Z][a-zA-Z0-9-]*)\\.(\\d+)$")
+private val CLASS_INDEXED = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$")
+private val CLASS_DOT_INDEXED = Regex("^\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.(\\d+)$")
+// 段内索引写法 `class.foo.0:1:2` / `tag.div.-1:10:2`（上游 findIndexSet 的另一种写法）
+private val CLASS_INDEX_SPEC = Regex("^class\\.([a-zA-Z][a-zA-Z0-9_-]*)\\.([-\\d][\\d,:\\-]*)$")
+private val TAG_INDEX_SPEC = Regex("^tag\\.([a-zA-Z][a-zA-Z0-9-]*)\\.([-\\d][\\d,:\\-]*)$")
+
 internal fun isXpathRule(rule: String): Boolean {
     val r = rule.trim()
     // 对齐原版 AnalyzeRule：显式 @xpath:/@xp: 前缀，或以 "/" 开头的裸 XPath（真实书源常不带前缀）都判为 XPath。
@@ -411,6 +402,100 @@ internal fun isJsonPrefixedRule(rule: String): Boolean = JSON_PREFIX.containsMat
 internal fun stripJsonPrefix(rule: String): String = JSON_PREFIX.replace(rule.trim(), "").trim()
 
 internal fun stripXpathPrefix(rule: String): String = XPATH_PREFIX.replace(rule.trim(), "").trim()
+
+/**
+ * Legado 的选择器链（上游 `AnalyzeByJSoup.ElementsSingle.getElementsSingle`）：
+ * `class.a@tag.li@text`、`id.list@tag.dd`、`class.BOX@tag.tr!0`、`class.cover@children`。
+ *
+ * 列表规则与字段规则**必须走同一套**：列表规则原来只把各段用空格拼成一条 CSS，
+ * 于是 `@tag.` / `@id.` / `@children` 这些方言段被当成标签名去查，整条规则一条都选不出来
+ * （本机 11,280 条非 JS 列表规则里 2,164 条带 `tag.`、1,063 条带 `id.`、30 条带 `children`）。
+ *
+ * 尾段是取值模式（`text` / `href` / `html` / `attr(x)` …）时不参与选元素 —— 那是字段取值层的事。
+ */
+internal fun selectLegadoSegments(element: Element, selector: String): List<Element> {
+    // 显式 `@css:` 前缀（上游 SourceRule.isCss）只是「这是原生 CSS」的标记，不是选择器的一部分；
+    // 不剥掉的话首段变成 `css:ul.chapter-list > li`，Jsoup 报 unexpected token at '.chapter-list'。
+    val cleaned = selector.trim().let { if (it.startsWith("@css:", ignoreCase = true)) it.substring(5).trim() else it }
+    val segments = cleaned.split('@').map { it.trim() }.filter { it.isNotEmpty() }
+    if (segments.isEmpty()) return listOf(element)
+    var current = listOf(element)
+    for ((index, segment) in segments.withIndex()) {
+        if (index == segments.lastIndex && isValueModeSegment(segment)) break
+        current = current.flatMap { selectLegadoSegment(it, segment) }
+        if (current.isEmpty()) return emptyList()
+    }
+    return current
+}
+
+/** 上游 `getResultLast` 认的取值模式段；出现在链尾时说明前面都是选元素。 */
+private fun isValueModeSegment(segment: String): Boolean {
+    val s = segment.trim()
+    // 注意 `children` **不是**取值模式：上游 ElementsSingle 把它当选择器（取子元素）。
+    return s in setOf("text", "href", "src", "content", "html", "textNodes", "textNode", "ownText", "all") ||
+        s.startsWith("attr(") || s.startsWith("text(")
+}
+
+/**
+ * 单段选择器：`tag.li` / `id.list` / `class.a` / `children` / `.a` / `li.0` / `li!0` / `[1]` / 原生 CSS。
+ *
+ * **不吞异常**：写坏的 CSS（`class.x@tag.li[[`）必须抛出去 —— 调用方会把它接成
+ * 「RuleExecutionException: SelectorParseException…」摆到体检与界面上。静默返回空列表的话，
+ * 「规则写坏了」与「站点真的没内容」就再也分不开（极速漫画那条缺陷正是靠这句报错定位的）。
+ *
+ * 注意：**字段取值**那一层会自己吞掉异常（上游 `getResultLast` 同样不抛），见 [valuePlain]。
+ */
+private fun selectLegadoSegment(element: Element, selector: String): List<Element> {
+    val trimmed = selector.trim()
+    if (trimmed.isEmpty()) return emptyList()
+    if (trimmed == "children") return element.children().toList()
+    val (base, ops) = splitIndexSuffix(trimmed)
+    if (ops.isNotEmpty()) {
+        if (base.isBlank()) return applyIndexTokens(element.children().toList(), ops)
+        return applyIndexTokens(selectLegadoSegment(element, base), ops)
+    }
+    val idOnly = ID_ONLY.find(trimmed)
+    if (idOnly != null) {
+        val el = element.getElementById(idOnly.groupValues[1])
+        return if (el != null) listOf(el) else emptyList()
+    }
+    val tagOnly = TAG_ONLY.find(trimmed)
+    if (tagOnly != null) {
+        return element.getElementsByTag(tagOnly.groupValues[1]).toList()
+    }
+    // `class.foo.0:1:2` / `tag.div.-1:10:2`：索引写在段里而不是 `[]`/`!` 后缀
+    // （上游 `findIndexSet` 的另一种写法，真实语料里 `.book_tag.0:1:2` 就是它）。
+    val classSpec = CLASS_INDEX_SPEC.find(trimmed)
+    if (classSpec != null) {
+        val matches = element.select(".${classSpec.groupValues[1]}")
+        return applyIndexTokens(matches.toList(), listOf(classSpec.groupValues[2]))
+    }
+    val tagSpec = TAG_INDEX_SPEC.find(trimmed)
+    if (tagSpec != null) {
+        val matches = element.getElementsByTag(tagSpec.groupValues[1])
+        return applyIndexTokens(matches.toList(), listOf(tagSpec.groupValues[2]))
+    }
+    val classOnly = CLASS_ONLY.find(trimmed)
+    if (classOnly != null) {
+        return element.select(".${classOnly.groupValues[1]}")
+    }
+    val indexed = TAG_INDEXED.find(trimmed)
+    if (indexed != null) {
+        val tag = indexed.groupValues[1]
+        val ordinal = indexed.groupValues[2].toInt().coerceAtLeast(0)
+        val matches = element.getElementsByTag(tag)
+        return matches.getOrNull(ordinal)?.let { listOf(it) } ?: emptyList()
+    }
+    val classIndexed = CLASS_INDEXED.find(trimmed)
+        ?: CLASS_DOT_INDEXED.find(trimmed)
+    if (classIndexed != null) {
+        val className = classIndexed.groupValues[1]
+        val ordinal = classIndexed.groupValues[2].toInt().coerceAtLeast(0)
+        val matches = element.select(".$className")
+        return matches.getOrNull(ordinal)?.let { listOf(it) } ?: emptyList()
+    }
+    return element.select(trimmed)
+}
 
 /** JXDocument 2.5.1 只吃 Document / Elements / String / List，不接受裸 Node，这里按类型适配。 */
 internal fun jx(node: Node): JXDocument = when (node) {
