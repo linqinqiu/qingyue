@@ -1,7 +1,7 @@
 # 架构 —— 青阅是怎么搭起来的
 
 这份文档说"东西在哪、为什么在这儿、边界在哪儿"。怎么构建与运行看 [`deploy.md`](deploy.md)，
-对外接口清单看 [`API-CONTRACT.md`](API-CONTRACT.md)，前端每个模块干什么看 [`code-map-frontend.md`](code-map-frontend.md)。
+对外接口清单看 [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md)。
 更细的历史推演在 `sessions/`，决策的理由在 `decisions/`。
 
 ## 1. 一张图
@@ -71,8 +71,7 @@
 
 ## 5. 前端模块
 
-入口是 `web/src/main.tsx`（路由 + 页面壳 + 几个 store）。按职责分五块，细节与逐文件行数见
-[`code-map-frontend.md`](code-map-frontend.md)：
+入口是 `web/src/main.tsx`（路由 + 页面壳 + 几个 store）。按职责分五块：
 
 - **外壳与导航**：一级目的地只有一张表（`reader/shortcuts.ts` 的 `PRIMARY_PAGES` 同时喂顶栏、数字键、`Alt+←/→`）。
   规则 / 备份 / 更新日志 / 关于 自 0.6.27 起是**悬浮层**（`PageDialog`），不占路由。
@@ -95,6 +94,7 @@
 
 ## 7. 改动边界
 
-2026-10-14 实测：本机只剩一棵工作树（`git worktree list` 只剩主仓那一条，分支 `main`），两个 AI 都在 `main` 上按各自前缀提交；`ai1/backend` / `ai2/frontend` 只剩远端分支。
-**谁改什么、遇到具体情况照哪一行做，只在 [`docs/dual-ai/README.md`](dual-ai/README.md) 里**——本文件不复述规则，
-复述就是下一次"同一个真相写两处"。工作树与分支的对应关系见 [`docs/dual-ai/README.md`](dual-ai/README.md)。
+- 后端与规则引擎：`server/`
+- 内置 Web UI：`web/`
+- 文档：`docs/`
+- 版本号唯一来源：`server/build.gradle`
