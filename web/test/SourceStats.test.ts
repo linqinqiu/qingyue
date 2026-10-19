@@ -20,7 +20,8 @@ const codeOnly = (text: string) => text.split(/\r?\n/)
   .join('\n')
 
 test('统计带只有数得出东西的四档，没有恒为 0 的那一档', () => {
-  const main = read('..', 'src', 'main.tsx')
+  // 0.8.2 拆组：书源页在 pages/SourcesPage.tsx，sourceStats 那段跟着它走
+  const main = read('..', 'src', 'pages', 'SourcesPage.tsx')
   const block = /const sourceStats = useMemo\(\(\) => \(\{([\s\S]*?)\}\)/.exec(main)
   assert.ok(block, '解析不到 sourceStats 那一段，这条判据在演空戏')
   const fields = [...block[1].matchAll(/^\s*(\w+):/gm)].map(m => m[1])
@@ -29,7 +30,8 @@ test('统计带只有数得出东西的四档，没有恒为 0 的那一档', ()
 })
 
 test('界面上不再出现「JS 书源」这个说法', () => {
-  const files = ['main.tsx', path.join('sources', 'SourceEditorPanel.tsx'), path.join('lib', 'api.ts')]
+  // 反向断言：扫得更广才更严（拆出来的书源/书库/书架页与两个弹窗也一并进面）
+  const files = ['main.tsx', path.join('pages', 'SourcesPage.tsx'), path.join('pages', 'LibraryPage.tsx'), path.join('pages', 'ShelfPage.tsx'), path.join('components', 'SourceChoiceList.tsx'), path.join('components', 'BookDetailModal.tsx'), path.join('sources', 'SourceEditorPanel.tsx'), path.join('lib', 'api.ts')]
   for (const name of files) {
     const text = codeOnly(read('..', 'src', ...name.split(path.sep)))
     assert.ok(!text.includes('JS 书源'), `${name} 里还写着「JS 书源」`)
@@ -37,7 +39,8 @@ test('界面上不再出现「JS 书源」这个说法', () => {
 })
 
 test('分组那一栏只说分组的事，不许拿"是不是 JS 源"去顶「未分组」', () => {
-  const main = codeOnly(read('..', 'src', 'main.tsx'))
+  // 0.8.2 拆组：分组栏那两行在 pages/SourcesPage.tsx（splitSourceGroups 也随它引自 sourceGrouping）
+  const main = codeOnly(read('..', 'src', 'pages', 'SourcesPage.tsx'))
   const rows = main.split(/\r?\n/).filter(line => /splitSourceGroups\(source\.group\)[^<]*\|\|/.test(line))
   assert.ok(rows.length >= 2, `只解析到 ${rows.length} 处分组栏，这条在演空戏`)
   for (const row of rows) {

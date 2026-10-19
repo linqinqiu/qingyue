@@ -23,9 +23,9 @@ import path from 'node:path'
 const SRC = path.resolve(import.meta.dirname, '../src')
 const read = (rel: string) => fs.readFileSync(path.join(SRC, rel), 'utf8')
 
-/** 取一个顶层 `function Name(` 到下一个顶层声明之间的源码（判"这段东西长在哪个组件里"） */
+/** 取一个顶层 `function Name(`（0.8.2 起可能是 `export function`）到下一个顶层声明之间的源码 */
 function functionBody(text: string, name: string): string {
-  const start = text.search(new RegExp(`^function ${name}\\(`, 'm'))
+  const start = text.search(new RegExp(`^(?:export )?function ${name}\\(`, 'm'))
   assert.ok(start >= 0, `找不到顶层 function ${name}(`)
   // 从声明行的**下一行**起算：从 `function` 中间切开的话，第一行仍是顶格，
   // 下面的 `^[\w]` 立刻命中，函数体就成了空串 —— 三条判据会一起变成空判。
@@ -41,7 +41,9 @@ function functionBody(text: string, name: string): string {
 function auditSubscriptionSplit(files: { name: string; text: string }[]): string[] {
   const problems: string[] = []
   const byName = new Map(files.map(f => [f.name, f.text]))
-  const main = byName.get('main.tsx') ?? ''
+  // 0.8.2 拆组：SourcesPage 从 main.tsx 搬进 pages/SourcesPage.tsx；这一判据要的是"书源页开出了那一档"，
+  // 读它现在的家。断言逐字不变。
+  const main = byName.get('pages/SourcesPage.tsx') ?? ''
   const rssPage = byName.get('pages/RssPage.tsx') ?? ''
   const panel = byName.get('sources/SourceSubscriptionPanel.tsx') ?? ''
 
@@ -83,9 +85,12 @@ test('订阅两件事分居：页签没了、RSS 页不碰书源订阅、书源�
 test('形状核对：新的两份文件各在其位', () => {
   const main = read('main.tsx')
   assert.match(main, /import \{ RssPage \} from '\.\/pages\/RssPage'/, '「订阅」页要由 pages/RssPage 提供')
-  assert.match(main, /import \{ SourceSubscriptionPanel \} from '\.\/sources\/SourceSubscriptionPanel'/,
+  // 0.8.2 拆组：开书源订阅那一档的是 SourcesPage，这条 import 跟着它住进 pages/SourcesPage.tsx；
+  // 事实没变 —— 书源订阅仍由 sources/ 提供（它在书源域），只是"谁引它"从 App 挪到了书源页。
+  assert.match(read('pages/SourcesPage.tsx'), /import \{ SourceSubscriptionPanel \} from '[.][./]*sources\/SourceSubscriptionPanel'/,
     '书源订阅要由 sources/ 提供（它在书源域）')
-  const sourcesPage = functionBody(main, 'SourcesPage')
+  // 0.8.2 拆组：SourcesPage 的家在 pages/SourcesPage.tsx
+  const sourcesPage = functionBody(read('pages/SourcesPage.tsx'), 'SourcesPage')
   assert.ok(sourcesPage.length > 4000, `SourcesPage 只切出 ${sourcesPage.length} 字，切分本身没在做事`)
   assert.ok(sourcesPage.includes('subsOpen'), 'SourcesPage 要有那档的开合状态')
   const rss = read('pages/RssPanel.tsx')
@@ -103,8 +108,8 @@ test('反向对照：把旧形状塞回去必须报，而且逐项报得出是�
   // 书源订阅又并进 RSS 页
   const merged = auditSubscriptionSplit(patch('pages/RssPage.tsx', t => `${t}\nvoid api.subscriptions()\n`))
   assert.ok(merged.some(p => p.includes('api.subscriptions()')), `塞回书源订阅 API 没报：${merged.join(' / ')}`)
-  // 书源页不再开出那一档
-  const unwired = auditSubscriptionSplit(base.map(f => (f.name === 'main.tsx' ? { ...f, text: f.text.split('<SourceSubscriptionPanel').join('<!-- 拆掉了 -->') } : f)))
+  // 书源页不再开出那一档（0.8.2 拆组后那一档住在 pages/SourcesPage.tsx）
+  const unwired = auditSubscriptionSplit(base.map(f => (f.name === 'pages/SourcesPage.tsx' ? { ...f, text: f.text.split('<SourceSubscriptionPanel').join('<!-- 拆掉了 -->') } : f)))
   assert.ok(unwired.some(p => p.includes('SourcesPage 里没有渲染')), `拆掉书源页那档没报：${unwired.join(' / ')}`)
   // 解散掉的合体组件复活
   const revived = auditSubscriptionSplit(patch('main.tsx', t => `${t}\nfunction SubscriptionPage() { return null }\n`))

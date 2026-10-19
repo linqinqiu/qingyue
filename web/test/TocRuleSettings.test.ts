@@ -41,7 +41,8 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
   const customize = read('../src/components/CustomizeModal.tsx')
   // 判的是代码痕迹，不是那句"搬走了"的说明文字
   assert.doesNotMatch(customize, /api\.tocRules|txtTocRule|<Select/, '「自定义」只剩皮肤；分章规则的代码别再长回来')
-  const main = read('../src/main.tsx')
+  // 0.8.2 拆组：弹窗挂在书架页（pages/ShelfPage.tsx），那份阅读设置仍在 App（main.tsx）—— 读两面，断言不变
+  const main = read('../src/main.tsx') + '\n' + read('../src/pages/ShelfPage.tsx')
   assert.match(main, /<TocRulesModal/, '书架渲染这个弹窗')
   assert.match(main, /<span>分章规则<\/span>/, '入口按钮就挨着「导入本地」')
   assert.match(main, /onTxtTocRuleChange=\{value => setSettings\(\{ \.\.\.settings, txtTocRule: value \}\)\}/,
@@ -76,7 +77,7 @@ test('阅读设置抽屉里那一档只对着手上这本', () => {
   assert.match(panel, /onReparseLocal\(repickRule\)/, '重切用的是那颗选择器的暂选')
   assert.match(panel, /useEffect\(\(\) => \{ setRepick\(null\) \}, \[localBook\?\.name\]\)/,
     '换书时暂选归零：抽屉是常驻挂载的，不清就会带着上一本的选择')
-  const main = read('../src/main.tsx')
+  const main = read('../src/pages/ShelfPage.tsx')
   assert.match(main, /api\.importLocalBooks\(list, txtTocRule\)/, '导入用的是书架那一份选择')
 })
 

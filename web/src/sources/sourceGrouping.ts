@@ -131,3 +131,10 @@ export function buildGroupingPlan(rows: GroupingRow[], currentGroups: Record<str
   }
   return [...buckets.values()].filter(plan => plan.ids.length > 0)
 }
+
+/**
+ * Legado 的 `bookSourceGroup` 是标签串而非单个分组名：`小说 书源`、`js失效，音乐` 表示同时属于两个分组。
+ * 整串当一个分组的话，4876 个源只数得出 20 个"分组"，选任何分组都只剩几条，且 91% 的源永远归不进去。
+ */
+export const splitSourceGroups = (raw?: string) =>
+  (raw ?? '').split(/[,，、\s]+/).map(tag => tag.trim()).filter(Boolean)

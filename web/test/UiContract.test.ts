@@ -84,7 +84,8 @@ test('页面级浮层都在挡片之下（弹窗开着时顶栏与批量条不�
 
 test('体检弹窗不把"清单还没取到"写成"0 个书源"', () => {
   const modal = fs.readFileSync(path.resolve(import.meta.dirname, '../src/sources/SourceHealthModal.tsx'), 'utf8')
-  const page = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
+  // 0.8.2 拆组：传 sourcesState 的那个"父组件"就是书源页（pages/SourcesPage.tsx），断言逐字不变
+  const page = fs.readFileSync(path.resolve(import.meta.dirname, '../src/pages/SourcesPage.tsx'), 'utf8')
   // 空数组有两种成因，只有一种该报数字
   assert.match(modal, /sourcesState: 'loading' \| 'ready' \| 'failed'/, '弹窗得知道清单到没到手')
   assert.match(page, /sourcesState=\{sourcesState\}/, '父组件得把它传进来')

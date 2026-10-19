@@ -172,12 +172,12 @@ server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
     ops/                    LogService.kt · UpdateCheck.kt
     model/                  Models.kt 全部请求 / 响应体
 web/                        前端（React 19 + TS + Vite，构建产物进同一个 jar）
-  src/main.tsx              应用外壳 + hash 路由 + 全局快捷键 + 书库 / 书架 / 书源 / 订阅四个页面
+  src/main.tsx              应用外壳 + hash 路由 + 全局快捷键（0.8.2 起四个页面拆到 pages/，书源候选与详情弹窗拆到 components/）
   src/reader/               阅读器与朗读：翻页与滚动几何、点击分区、分句、悬浮条位置、设置读写
   src/sources/              书源：结构化字段表、编辑、体检、换源、登录五条路、内置反代浏览器、批量
   src/lib/                  api 端点表、流式搜索 store、IndexedDB 离线库、结果清洗、报错翻译
-  src/components/           浮层一档、下拉 / Toast / 右键菜单、日志、订阅 RSS、PWA 更新、皮肤
-  src/pages/                关于、更新日志、备份、发现、设置
+  src/components/           浮层一档、下拉 / Toast / 右键菜单、日志、订阅 RSS、PWA 更新、皮肤、书源候选列表与书籍详情弹窗
+  src/pages/                关于、更新日志、备份、发现、设置，与书库 / 书架 / 书源三个主页面
   src/shelf/                封面、空态引导、书架布局与拖动排序
   src/icons.tsx · styles.css  全站单色图标 · 样式与皮肤令牌
   test/                     单元与静态判据，入口是 test/run-all.ts（它扫目录登记，新加测试文件不用改清单）

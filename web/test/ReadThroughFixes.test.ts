@@ -93,7 +93,8 @@ test('换源的晚到响应不许把上一轮的书写回屏幕（§4.1 那条 P
  * 所以钉源码结构（每条都带反向对照 —— 光扫"新写法在不在"是空判）。
  */
 test('书架：还没到手 / 取失败了 / 确实没有 是三件事，全选只看可见那一列', () => {
-  const shelf = read('main.tsx')
+  // 0.8.2 拆组：ShelfPage 从 main.tsx 搬进 pages/ShelfPage.tsx，断言逐字不变
+  const shelf = read('pages', 'ShelfPage.tsx')
   const body = shelf.slice(shelf.indexOf('function ShelfPage'))
   assert.match(body, /const \[itemsLoaded, setItemsLoaded\] = useState\(false\)/, '要有一个"到手了"的旗标')
   assert.match(body, /setItemsLoaded\(true\)/, '旗标要在 load 的 finally 里置位')
@@ -112,7 +113,7 @@ test('书架：还没到手 / 取失败了 / 确实没有 是三件事，全选�
 })
 
 test('一张卡只有一个百分比口径，本地同步的进度分子只数这一次切片', () => {
-  const shelf = read('main.tsx')
+  const shelf = read('pages', 'ShelfPage.tsx')
   const meta = /className="shelf-meta-percent"[\s\S]{0,220}/.exec(shelf)
   assert.ok(meta, '卡底部那格百分比要还在')
   assert.match(meta[0], /\(\(item\.chapterIndex \?\? 0\) \+ 1\) \/ item\.totalChapters/, '与 hover 层同口径')

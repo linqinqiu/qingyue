@@ -99,7 +99,9 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
 })
 
 test('路由与"去书架开弹窗"的信号接上了', () => {
-  const main = read('../src/main.tsx')
+  // 0.8.2 拆组：路由与信号发出在 main.tsx，消费那半在 pages/ShelfPage.tsx —— 读整个应用面，
+  // 断言逐字不变（这一条只判"在不在"，拼接不放宽任何一条）。
+  const main = [read('../src/main.tsx'), read('../src/pages/ShelfPage.tsx')].join('\n')
   assert.match(main, /location\.hash === '#settings' \? 'settings'/)
   assert.match(main, /page === 'settings' \? \(\s*<SettingsPage sections=\{buildSettingsSections\(\{/)
   assert.match(main, /tocRulesSignal=\{tocRulesSignal\}/)

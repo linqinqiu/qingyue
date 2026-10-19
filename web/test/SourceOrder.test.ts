@@ -9,9 +9,12 @@ import path from 'node:path'
  * 这里判的是"书源这一侧真的接上了，而且顺序只有一个来源"。
  */
 const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.dirname, ...parts), 'utf8')
+// 0.8.2 拆组：书源页从 main.tsx 搬进 pages/SourcesPage.tsx；这三条读的书源页代码都在那里。
+// 相对 import 因层级变化（./shelf → ../shelf），正则收两种写法，断言的事实不变。
+const sourcesPage = () => read('../src/pages/SourcesPage.tsx')
 
 test('顺序只有一个来源：服务端排，客户端只做原位回填', () => {
-  const main = read('../src/main.tsx')
+  const main = sourcesPage()
   assert.doesNotMatch(main, /filteredSources[\s\S]{0,200}\.sort\(/,
     '客户端不写第二套比较器 —— 中文书名上 SQLite 的 nocase 与 localeCompare 本来就会分歧')
   assert.match(main, /const queue = \[\.\.\.ordered\]/,
@@ -25,8 +28,8 @@ test('顺序只有一个来源：服务端排，客户端只做原位回填', ()
 })
 
 test('书源拖动与书架共用同一份手势，且批量模式让路', () => {
-  const main = read('../src/main.tsx')
-  assert.match(main, /from '\.\/shelf\/dragSort'/, '手势在 dragSort.ts 里，两处共用一份')
+  const main = sourcesPage()
+  assert.match(main, /from '[.][./]*shelf\/dragSort'/, '手势在 dragSort.ts 里，两处共用一份')
   assert.match(main, /itemSelector: '\.source-list-item'/)
   assert.match(main, /enabled: \(\) => !isBatchMode/, '批量模式里点按是勾选，不能抢成拖动')
   assert.match(main, /onPointerDown=\{onSourcePointerDown\(index\)\}/)
@@ -35,7 +38,7 @@ test('书源拖动与书架共用同一份手势，且批量模式让路', () =>
 })
 
 test('有位置才给"清除自定义顺序"，并且说的是条数', () => {
-  const main = read('../src/main.tsx')
+  const main = sourcesPage()
   assert.match(main, /orderedCount > 0 && \(/)
   assert.match(main, /个书源有自定义位置；其余按名称排在后面/, '不能只说"已自定义"而不讲清其余那批还是按名称')
   assert.match(main, /api\.clearSourceOrder/)

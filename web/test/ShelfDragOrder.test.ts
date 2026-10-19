@@ -48,7 +48,8 @@ test('挪位置 - 前移与后移的下标语义一致，越界原样返回', ()
 })
 
 test('书架确实接上了拖动排序（不只是一个没人调用的模块）', () => {
-  const main = read('../src/main.tsx')
+  // 0.8.2 拆组：书架页从 main.tsx 搬进 pages/ShelfPage.tsx，断言逐字不变
+  const main = read('../src/pages/ShelfPage.tsx')
   assert.match(main, /case 'custom': sorted\.sort\(compareCustomSort\)/, '「自定义」这一档真的按 sortOrder 排')
   assert.match(main, /value: 'custom', label: '自定义（长按拖动）'/, '排序下拉里选得到')
   assert.match(main, /enabled: \(\) => sort === 'custom' && !batchMode/, '只在自定义档、且不在批量模式里可拖')
