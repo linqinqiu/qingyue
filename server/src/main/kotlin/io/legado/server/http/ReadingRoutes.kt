@@ -9,6 +9,14 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.content.ContentProcessor
 import io.legado.server.data.Database
+import io.legado.server.data.cacheBookContent
+import io.legado.server.data.cachedContent
+import io.legado.server.data.getCachedChaptersFallback
+import io.legado.server.data.getEnabledReplaceRulesForScope
+import io.legado.server.data.getSource
+import io.legado.server.data.getTocCache
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.saveTocCache
 import io.legado.server.localbook.LocalBookParser
 import io.legado.server.model.ApiError
 import io.legado.server.model.BookDetails

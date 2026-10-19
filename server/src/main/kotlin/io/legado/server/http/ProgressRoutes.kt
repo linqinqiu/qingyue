@@ -8,6 +8,14 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.data.Database
+import io.legado.server.data.addNote
+import io.legado.server.data.addReadingLog
+import io.legado.server.data.deleteNote
+import io.legado.server.data.getProgress
+import io.legado.server.data.listNotes
+import io.legado.server.data.listReadingLog
+import io.legado.server.data.saveProgress
+import io.legado.server.data.updateNote
 import io.legado.server.model.ApiError
 import io.legado.server.model.BookNoteUpdate
 import io.legado.server.model.BookNoteWrite

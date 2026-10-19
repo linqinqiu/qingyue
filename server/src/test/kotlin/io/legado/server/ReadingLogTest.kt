@@ -9,6 +9,8 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import io.legado.server.data.Database
+import io.legado.server.data.addReadingLog
+import io.legado.server.data.listReadingLog
 import io.legado.server.model.ReadingLogRequest
 import java.nio.file.Files
 import java.nio.file.Path

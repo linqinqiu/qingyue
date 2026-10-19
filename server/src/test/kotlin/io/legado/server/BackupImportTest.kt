@@ -13,6 +13,22 @@ import java.util.zip.ZipOutputStream
 import io.legado.server.backup.BackupAes
 import io.legado.server.backup.BackupImporter
 import io.legado.server.data.Database
+import io.legado.server.data.cookieBucketMentions
+import io.legado.server.data.createBookGroup
+import io.legado.server.data.deleteRssSource
+import io.legado.server.data.getCookieForUrl
+import io.legado.server.data.getProgress
+import io.legado.server.data.importSources
+import io.legado.server.data.listBookGroups
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.listCookieBuckets
+import io.legado.server.data.listReplaceRules
+import io.legado.server.data.listRssSources
+import io.legado.server.data.listSources
+import io.legado.server.data.rssSourceIsEnabled
+import io.legado.server.data.saveProgress
+import io.legado.server.data.setCookieForUrl
+import io.legado.server.data.setRssSourceEnabled
 import io.legado.server.model.ReadingProgress
 
 /** 备份包导入：只认备份内的固定文件名，且不因缺失条目而失败。 */

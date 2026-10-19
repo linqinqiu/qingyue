@@ -43,6 +43,13 @@ import io.legado.server.content.ContentProcessor
 import io.legado.server.content.LooseJson
 import io.legado.server.content.applyReplaceEntry
 import io.legado.server.data.Database
+import io.legado.server.data.cookieBucketsForHosts
+import io.legado.server.data.getCookieForUrl
+import io.legado.server.data.getEnabledReplaceRulesForScope
+import io.legado.server.data.getSourceLoginState
+import io.legado.server.data.getTocCache
+import io.legado.server.data.setCookieFromSetCookie
+import io.legado.server.data.shelfBook
 import io.legado.server.http.NetworkSecurity
 import io.legado.server.model.FlexChildStyle
 import io.legado.server.model.SourceLoginActionResult

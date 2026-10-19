@@ -1,5 +1,34 @@
 package io.legado.server.ai
 
+import io.legado.server.data.addNote
+import io.legado.server.data.addReadingLog
+import io.legado.server.data.deleteNote
+import io.legado.server.data.deleteReplaceRule
+import io.legado.server.data.deleteRssSource
+import io.legado.server.data.deleteSource
+import io.legado.server.data.getReplaceRule
+import io.legado.server.data.getRssSource
+import io.legado.server.data.getSource
+import io.legado.server.data.importReplaceRules
+import io.legado.server.data.importSources
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.listNotes
+import io.legado.server.data.listReadingLog
+import io.legado.server.data.listReplaceRules
+import io.legado.server.data.listRssSources
+import io.legado.server.data.listSources
+import io.legado.server.data.listSubscriptions
+import io.legado.server.data.removeBookshelf
+import io.legado.server.data.reorderSources
+import io.legado.server.data.saveBookshelf
+import io.legado.server.data.saveReplaceRule
+import io.legado.server.data.saveSource
+import io.legado.server.data.setBookshelfCompleted
+import io.legado.server.data.setRssSourceEnabled
+import io.legado.server.data.toggleReplaceRules
+import io.legado.server.data.updateBookshelfInfo
+import io.legado.server.data.updateNote
+
 import io.legado.server.model.ReplaceRule
 import io.legado.server.model.ReplaceRuleImportResponse
 import io.legado.server.model.BookshelfWriteRequest

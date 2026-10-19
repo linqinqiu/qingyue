@@ -19,6 +19,20 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import io.legado.server.data.Database
+import io.legado.server.data.cookieBucket
+import io.legado.server.data.getCookieForUrl
+import io.legado.server.data.getSource
+import io.legado.server.data.getSourceKv
+import io.legado.server.data.getSourceLoginState
+import io.legado.server.data.getSourceVariable
+import io.legado.server.data.removeCookieBucket
+import io.legado.server.data.removeSourceLoginHeader
+import io.legado.server.data.removeSourceLoginInfo
+import io.legado.server.data.saveSourceKv
+import io.legado.server.data.saveSourceLoginHeader
+import io.legado.server.data.saveSourceLoginInfo
+import io.legado.server.data.saveSourceVariable
+import io.legado.server.data.setCookieForUrl
 import io.legado.server.source.WebViewProxy
 
 data class JsExecutionContext(

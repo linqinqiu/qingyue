@@ -18,7 +18,8 @@ test('顺序只有一个来源：服务端排，客户端只做原位回填', ()
     '松手后要就地回填，否则"拖了但那一行没动"，只有刷新才看得见结果')
   assert.match(main, /if \(!rank\.has\(item\.id\)\) return item/, '没在这一列里的源保持原位，不跟着重排')
   assert.match(main, /items: visibleSources,\s*\n\s*onReorder: applySourceOrder/, '拖的是屏幕上这一列，写的也是这一列')
-  const server = read('../../server/src/main/kotlin/io/legado/server/data/Database.kt')
+  // 0.8.2 DAO 拆组：这条 SQL 住在 SourcesDao.kt（Database.kt 只剩连接/建表/迁移）
+  const server = read('../../server/src/main/kotlin/io/legado/server/data/SourcesDao.kt')
   assert.match(server, /order by sort_order is null, sort_order, name collate nocase/,
     '排过序的在前、没排过的按名称跟在后面（全 NULL 时等价于原来的按名称排）')
 })

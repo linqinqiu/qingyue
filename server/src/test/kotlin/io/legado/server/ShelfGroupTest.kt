@@ -8,6 +8,15 @@ import org.junit.Test
 import java.nio.file.Files
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.assignBookGroup
+import io.legado.server.data.coverContentType
+import io.legado.server.data.createBookGroup
+import io.legado.server.data.deleteBookGroup
+import io.legado.server.data.importLocalBook
+import io.legado.server.data.listBookGroups
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.saveBookshelf
+import io.legado.server.data.saveTocCache
 import io.legado.server.localbook.ParsedBook
 import io.legado.server.localbook.ParsedChapter
 import io.legado.server.model.BookshelfWriteRequest

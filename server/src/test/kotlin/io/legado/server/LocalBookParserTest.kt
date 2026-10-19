@@ -10,6 +10,12 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.cachedContent
+import io.legado.server.data.createBookGroup
+import io.legado.server.data.getTocCache
+import io.legado.server.data.importLocalBook
+import io.legado.server.data.listBookGroups
+import io.legado.server.data.removeBookshelf
 import io.legado.server.localbook.LocalBookParser
 import io.legado.server.localbook.ParsedBook
 import io.legado.server.localbook.ParsedChapter

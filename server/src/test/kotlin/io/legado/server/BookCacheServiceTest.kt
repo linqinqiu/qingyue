@@ -14,6 +14,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import io.legado.server.cache.BookCacheService
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.cacheBookContent
+import io.legado.server.data.cachedContent
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.saveBookshelf
+import io.legado.server.data.saveSource
 import io.legado.server.model.BookshelfWriteRequest
 import io.legado.server.model.CachedBookRequest
 import io.legado.server.model.ChapterContent

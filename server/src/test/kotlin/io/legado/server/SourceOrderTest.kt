@@ -6,6 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 import io.legado.server.data.Database
+import io.legado.server.data.clearSourceOrder
+import io.legado.server.data.listSources
+import io.legado.server.data.reorderSources
+import io.legado.server.data.saveSource
 import io.legado.server.source.SourceCodec
 
 /**

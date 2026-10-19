@@ -21,6 +21,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import io.legado.server.AppConfig
 import io.legado.server.data.Database
+import io.legado.server.data.beginBookCache
+import io.legado.server.data.cacheBookContent
+import io.legado.server.data.cacheRequests
+import io.legado.server.data.cachedChapterUrls
+import io.legado.server.data.finishBookCache
+import io.legado.server.data.getSource
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.saveTocCache
+import io.legado.server.data.updateBookCacheProgress
 import io.legado.server.localbook.LocalBookParser
 import io.legado.server.model.CachedBookRequest
 import io.legado.server.rules.RuleExecutionException

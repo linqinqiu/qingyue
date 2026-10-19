@@ -10,6 +10,8 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.coverContentType
+import io.legado.server.data.getCookieForUrl
 import io.legado.server.model.ApiError
 import io.legado.server.model.RefreshedImage
 import io.legado.server.ops.LogService

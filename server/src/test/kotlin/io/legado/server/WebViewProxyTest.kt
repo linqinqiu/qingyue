@@ -8,6 +8,11 @@ import org.junit.Test
 import java.net.URI
 import java.nio.file.Files
 import io.legado.server.data.Database
+import io.legado.server.data.extractCookiePair
+import io.legado.server.data.getCookieForUrl
+import io.legado.server.data.listCookieBuckets
+import io.legado.server.data.setCookieForUrl
+import io.legado.server.data.setCookieFromSetCookie
 import io.legado.server.source.WebViewException
 import io.legado.server.source.WebViewProxy
 

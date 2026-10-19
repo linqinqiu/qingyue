@@ -9,6 +9,11 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import io.legado.server.data.Database
+import io.legado.server.data.bumpLogRepeat
+import io.legado.server.data.clearLogEntries
+import io.legado.server.data.ensureLogTable
+import io.legado.server.data.insertLog
+import io.legado.server.data.queryLogs
 
 /**
  * 结构化日志服务：按类别收集，落库 + 单行写文件 + 单行写标准输出，前端「运行日志」读这里。

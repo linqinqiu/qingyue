@@ -13,6 +13,9 @@ import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import io.legado.server.data.Database
+import io.legado.server.data.importSources
+import io.legado.server.data.listSearchSourceRecords
+import io.legado.server.data.saveSource
 import io.legado.server.http.SearchSourceOutcome
 import io.legado.server.http.SearchStreamCounters
 import io.legado.server.http.boundedConcurrentMap

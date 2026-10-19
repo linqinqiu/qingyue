@@ -9,6 +9,15 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.content.ContentProcessor
 import io.legado.server.data.Database
+import io.legado.server.data.deleteReplaceRule
+import io.legado.server.data.deleteReplaceRules
+import io.legado.server.data.exportReplaceRules
+import io.legado.server.data.getEnabledReplaceRulesForScope
+import io.legado.server.data.getReplaceRule
+import io.legado.server.data.importReplaceRules
+import io.legado.server.data.listReplaceRules
+import io.legado.server.data.saveReplaceRule
+import io.legado.server.data.toggleReplaceRules
 import io.legado.server.model.ApiError
 import io.legado.server.model.ReplaceRule
 import io.legado.server.model.ReplaceRulePreviewRequest

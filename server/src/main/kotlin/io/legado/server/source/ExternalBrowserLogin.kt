@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.TimeUnit
 import io.legado.server.data.Database
+import io.legado.server.data.setCookieForUrl
 
 /**
  * 外部真浏览器登录：由服务端拉起一个真正的 Chromium 窗口（Chrome / Edge），

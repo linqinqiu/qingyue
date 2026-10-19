@@ -9,6 +9,9 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.AppConfig
 import io.legado.server.data.Database
+import io.legado.server.data.getSource
+import io.legado.server.data.listExploreSources
+import io.legado.server.data.listSearchSourceRecords
 import io.legado.server.model.ApiError
 import io.legado.server.model.ExploreRequest
 import io.legado.server.model.SearchRequest

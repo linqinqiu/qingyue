@@ -1,5 +1,7 @@
 package io.legado.server
 
+import io.legado.server.data.queryLogs
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

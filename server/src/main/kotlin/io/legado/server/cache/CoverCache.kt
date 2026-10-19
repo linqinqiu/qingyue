@@ -16,6 +16,8 @@ import java.time.Duration
 import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 import io.legado.server.data.Database
+import io.legado.server.data.forgetCover
+import io.legado.server.data.generatedLocalCoverKeys
 import io.legado.server.http.NetworkSecurity
 import io.legado.server.http.proxyRequestHeaders
 

@@ -8,6 +8,14 @@ import org.junit.Test
 import java.nio.file.Files
 import io.legado.server.content.ContentProcessor
 import io.legado.server.data.Database
+import io.legado.server.data.deleteReplaceRule
+import io.legado.server.data.exportReplaceRules
+import io.legado.server.data.getEnabledReplaceRulesForScope
+import io.legado.server.data.getReplaceRule
+import io.legado.server.data.importReplaceRules
+import io.legado.server.data.listReplaceRules
+import io.legado.server.data.saveReplaceRule
+import io.legado.server.data.toggleReplaceRules
 import io.legado.server.model.ReplaceRule
 import io.legado.server.rules.JsSandbox
 import io.legado.server.rules.RuleRunner

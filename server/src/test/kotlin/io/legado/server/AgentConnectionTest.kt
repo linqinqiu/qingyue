@@ -5,6 +5,7 @@ import io.legado.server.ai.AgentContext
 import io.legado.server.ai.Guardrails
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.getCookieForUrl
 import io.legado.server.rules.RuleRunner
 import io.legado.server.source.SourceDebugger
 import io.legado.server.source.SourceHealth

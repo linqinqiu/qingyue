@@ -161,7 +161,7 @@ server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
     BuildInfo.kt · DesktopLauncher.kt  版本清单 · 桌面壳（探端口、开浏览器、托盘退出）
     http/                   Guard.kt 写操作同源闸门 · NetworkSecurity.kt · Routes.kt 装配点 + 按面拆组的 <组>Routes.kt（REST 与 WebSocket）
     rules/                  RuleRunner.kt 规则执行（Rhino + Jsoup + JsonPath + XPath）· JsSandbox.kt · JsGuard.kt · RuleSplit.kt · RuleValue.kt
-    data/                   Database.kt SQLite 数据层与连接生命周期
+    data/                   Database.kt 连接与建表 · <面>Dao.kt 各数据面（同包扩展，0.8.2 拆出）
     source/                 SourceCodec.kt 书源编解码 · SourceHealth.kt 体检分档 · SourceDebugger.kt 分阶段调试 · WebViewProxy.kt 整站反代 · ExternalBrowserLogin.kt
     content/                ContentPipeline.kt · ContentProcessor.kt 正文净化 · LooseJson.kt 宽松 JSON
     cache/                  BookCacheService.kt 离线缓存调度 · CoverCache.kt 封面与防盗链代理

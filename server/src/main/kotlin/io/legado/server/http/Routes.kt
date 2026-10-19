@@ -14,6 +14,7 @@ import io.legado.server.backup.BackupStore
 import io.legado.server.cache.BookCacheService
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.queryLogs
 import io.legado.server.localbook.TocRules
 import io.legado.server.model.AboutInfo
 import io.legado.server.model.ApiError

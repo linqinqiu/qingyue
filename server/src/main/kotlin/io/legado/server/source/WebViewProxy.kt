@@ -20,6 +20,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 import io.legado.server.data.Database
+import io.legado.server.data.cookieBucketsForHosts
+import io.legado.server.data.getCookieForUrl
+import io.legado.server.data.setCookieFromSetCookie
 import io.legado.server.http.NetworkSecurity
 import io.legado.server.ops.LogLevel
 import io.legado.server.ops.logSystem

@@ -17,6 +17,12 @@ import java.util.zip.ZipFile
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 import io.legado.server.data.Database
+import io.legado.server.data.importBookGroups
+import io.legado.server.data.importLibrary
+import io.legado.server.data.importReplaceRules
+import io.legado.server.data.importRssSources
+import io.legado.server.data.importSources
+import io.legado.server.data.setCookieForUrl
 import io.legado.server.model.BackupImportSummary
 import io.legado.server.model.BackupShelfEntry
 import io.legado.server.model.KeptBackupEntry

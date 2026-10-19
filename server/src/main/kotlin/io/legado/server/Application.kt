@@ -19,6 +19,7 @@ import java.nio.file.Files
 import io.legado.server.cache.BookCacheService
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
+import io.legado.server.data.getCookieForUrl
 import io.legado.server.http.ServerIdentity
 import io.legado.server.http.apiRoutes
 import io.legado.server.model.HealthStatus

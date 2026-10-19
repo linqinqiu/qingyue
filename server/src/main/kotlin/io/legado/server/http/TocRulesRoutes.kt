@@ -9,6 +9,9 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.backup.BackupStore
 import io.legado.server.data.Database
+import io.legado.server.data.clampShelfProgress
+import io.legado.server.data.importLocalBook
+import io.legado.server.data.shelfBook
 import io.legado.server.localbook.LocalBookParser
 import io.legado.server.localbook.TocRules
 import io.legado.server.model.ApiError

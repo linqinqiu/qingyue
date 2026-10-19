@@ -6,6 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 import io.legado.server.data.Database
+import io.legado.server.data.clearBookshelfOrder
+import io.legado.server.data.listBookshelf
+import io.legado.server.data.reorderBookshelf
+import io.legado.server.data.saveBookshelf
 import io.legado.server.model.BookIdentifier
 import io.legado.server.model.BookshelfWriteRequest
 

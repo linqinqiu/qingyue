@@ -11,6 +11,11 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import io.legado.server.data.Database
+import io.legado.server.data.addNote
+import io.legado.server.data.deleteNote
+import io.legado.server.data.listNotes
+import io.legado.server.data.removeBookshelf
+import io.legado.server.data.updateNote
 import io.legado.server.model.BookNoteWrite
 import java.nio.file.Files
 import java.nio.file.Path
