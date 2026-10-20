@@ -50,6 +50,14 @@ export type LabHostContext = {
   uiContext?: unknown
   /** 宿主的服务端版本号（来自 /healthz）。插件要显示版本时用它，别自己写死。 */
   serverVersion?: string
+  /**
+   * 宿主能替插件做的事（打开别的浮层、跳页等）。
+   *
+   * 为什么用 `Record<string, (...args: unknown[]) => void>` 而不是具体签名：
+   * 实验室是框架，不该知道"宿主支持哪些动作"。插件与宿主之间自己约定 key
+   * （如 `openShortcuts`），框架只负责**原样转发**这张表。
+   */
+  actions?: Record<string, (...args: never[]) => void>
 }
 
 const POS_KEY = 'qingyue-lab-position-v1'
@@ -93,6 +101,19 @@ export function Lab({
     if (initialEntryId && entries.some(e => e.id === initialEntryId)) return initialEntryId
     return entries[0]?.id ?? ''
   })
+
+  // initialEntryId 变了就跟着切（同一次会话里点不同深链/不同入口时会发生）。
+  // 只靠 useState 的初始值不行 —— 那是一次性的，组件没重挂就永远停在第一条。
+  //
+  // 依赖里刻意不放 `entries`：宿主每次渲染都会传一个新数组（插件清单是现拼的），
+  // 放进来就是每轮都重跑 effect。条目存在性用 ref 读最新值来判断。
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
+  useEffect(() => {
+    if (!initialEntryId) return
+    if (!entriesRef.current.some(e => e.id === initialEntryId)) return
+    setActiveId(initialEntryId)
+  }, [initialEntryId])
   const [position, setPosition] = useState<Position | null>(() => loadPosition())
   const [minimized, setMinimized] = useState<boolean>(() => {
     try { return window.localStorage.getItem(MINIMIZED_KEY) === '1' } catch { return false }

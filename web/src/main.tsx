@@ -7,8 +7,6 @@ import type { OpenBook } from './reader/openBook'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { activeCustomSkin, loadReaderSettings, ReaderSettings, saveReaderSettings, themeClassNames } from './reader/readerSettings'
 import { AppHeader } from './components/AppHeader'
-import { ReadingLogPage } from './pages/ReadingLogPage'
-import { AboutPage } from './pages/AboutPage'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
@@ -22,7 +20,6 @@ import { PageDialog } from './components/PageDialog'
 import { ExplorePage } from './pages/ExplorePage'
 import { RssPage } from './pages/RssPage'
 import { Select } from './components/Select'
-import { BackupPage } from './pages/BackupPage'
 import { OfflineCacheModal } from './components/OfflineCacheModal'
 import { LogsModal } from './components/LogsModal'
 import { ShortcutHelp } from './reader/ShortcutHelp'
@@ -43,11 +40,24 @@ import { parseSourceJsonText, extractSourcesFromRaw, sanitizeImageUrl } from './
 
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
-const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则', backup: '备份包', about: '关于', 'reading-log': '阅读记录' }
+const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则' }
 const readerStorageKey = 'legado-open-book-v1'
 const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#settings' ? 'settings' : 'library'
 /** 旧深链进来仍开对的那一个悬浮层，不白屏也不跳页 */
-const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#about' ? 'about' : location.hash === '#reading-log' ? 'reading-log' : null
+const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : null
+
+/**
+ * 已下沉成插件的页面，它们的旧深链该开实验室的哪个条目。
+ *
+ * 0.8.3 起这些页面不在主程序里了（住 `plugins/` 里），但老书签/老链接还在 ——
+ * 映射到实验室对应条目，比 404 或空弹窗都体面。
+ */
+const LAB_DEEP_LINKS: Record<string, string> = {
+  '#changelog': 'changelog',
+  '#backup': 'backup',
+  '#about': 'about',
+  '#reading-log': 'reading-log',
+}
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -228,11 +238,12 @@ function App() {
     // 深链与浏览器前进/后退都从这里走：命中悬浮层 hash（#backup 等）就开层、不换页（保住语境）；
     // 命中普通页面 hash 就换页并关掉可能还开着的悬浮层。
     const sync = () => {
-      // 旧深链 #changelog 兼容：那一页已下沉为插件（住实验室里），这里把它引到实验室，
-      // 而不是留一个没有渲染分支的空悬浮层。
-      if (location.hash === '#changelog') {
+      // 旧深链兼容：这些页面在 0.8.3 都下沉成插件了（住实验室里）。
+      // 老链接不该白屏、也不该留个没有渲染分支的空悬浮层 —— 引到实验室并直达对应条目。
+      const labDeepLink = LAB_DEEP_LINKS[location.hash]
+      if (labDeepLink) {
         setPageDialog(null)
-        setLabEntryId('changelog')
+        setLabEntryId(labDeepLink)
         setShowLab(true)
         return
       }
@@ -241,6 +252,9 @@ function App() {
       if (!dialog) setPage(pageFromHash())
     }
     addEventListener('hashchange', sync)
+    // 首次挂载也跑一次：直接打开 `/#backup` 这类深链时没有 hashchange 事件，
+    // 不跑就等于"深链只对已经在页面里的人有效"—— 那正是新标签页打开老链接的常见场景。
+    sync()
     return () => removeEventListener('hashchange', sync)
   }, [])
 
@@ -451,15 +465,15 @@ function App() {
         onSettingsChange={setSettings}
         onNavigate={navigate}
         onOpenChangelog={() => { setLabEntryId('changelog'); setShowLab(true) }}
-        onOpenAbout={() => setPageDialog('about')}
-        onOpenReadingLog={() => setPageDialog('reading-log')}
+        onOpenAbout={() => { setLabEntryId('about'); setShowLab(true) }}
+        onOpenReadingLog={() => { setLabEntryId('reading-log'); setShowLab(true) }}
         onOpenCustomize={() => setShowCustomize(true)}
         version={serverVersion}
       />
       {page === 'sources' ? (
         <SourcesPage selected={selected} onSelect={setSelected} onSourcesChange={setSources} />
       ) : page === 'subscriptions' ? (
-        <RssPage onOpenBackup={() => setPageDialog('backup')} />
+        <RssPage onOpenBackup={() => { setLabEntryId('backup'); setShowLab(true) }} />
       ) : page === 'settings' ? (
         <SettingsPage sections={buildSettingsSections({
           openShortcuts: () => setShowShortcuts(true),
@@ -467,7 +481,7 @@ function App() {
           openCustomize: () => setShowCustomize(true),
           openReplaceRules: () => setPageDialog('rules'),
           openTocRules: () => setTocRulesSignal(value => value + 1),
-          openBackup: () => setPageDialog('backup'),
+          openBackup: () => { setLabEntryId('backup'); setShowLab(true) },
           openLogs: () => setShowLogs(true),
           openServerPort: () => setShowServerPort(true),
           openAiConnections: () => setShowLab(true),
@@ -505,18 +519,7 @@ function App() {
         isOpen={pageDialog === 'rules'}
         onClose={() => setPageDialog(null)}
       />
-      {pageDialog && pageDialog !== 'rules' && (
-        <PageDialog title={PAGE_DIALOG_TITLES[pageDialog]} onClose={() => setPageDialog(null)}>
-          {pageDialog === 'backup' && <BackupPage />}
-          {pageDialog === 'reading-log' && <ReadingLogPage />}
-          {pageDialog === 'about' && (
-            <AboutPage
-              onOpenChangelog={() => { setLabEntryId('changelog'); setShowLab(true) }}
-              onOpenShortcuts={() => setShowShortcuts(true)}
-            />
-          )}
-        </PageDialog>
-      )}
+
       {showOfflineCache && (
         <OfflineCacheModal onClose={() => setShowOfflineCache(false)} />
       )}
@@ -538,6 +541,11 @@ function App() {
           uiContext={currentUiContext}
           serverVersion={serverVersion}
           initialEntryId={labEntryId}
+          actions={{
+            // 插件要"去别处"时用：实验室只转发，不解释这些 key 是什么。
+            openChangelog: () => setLabEntryId('changelog'),
+            openShortcuts: () => setShowShortcuts(true),
+          }}
         />
       )}
     </div>
