@@ -13,7 +13,8 @@ import { AboutPage } from './pages/AboutPage'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
-import { LabModal } from './lab/labEntries'
+import { LabModal } from './plugins/labHost'
+import { frontendPlugins } from './lab/pluginRegistry'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
 import { ReplaceRulesModal } from './components/ReplaceRulesModal'
@@ -200,7 +201,12 @@ function App() {
         // 三处同一个数，不会出现"改了 build.gradle 忘了改界面"的假版本号。
         const health = await response.json().catch(() => null)
         if (cancelled) return
-        if (health?.version) setServerVersion(String(health.version))
+        if (health?.version) {
+          setServerVersion(String(health.version))
+          // 插件里用 HOST_VERSION 声明的版本号，展示时替换成这个真实值
+          // （前端不许写字面量版本号，见 HeaderMenu.test.ts）。
+          frontendPlugins.setHostVersion(String(health.version))
+        }
         setBootHint('')
         setReady(true)
         void api.sources().then(list => { if (!cancelled) setSources(list) }).catch(() => undefined)

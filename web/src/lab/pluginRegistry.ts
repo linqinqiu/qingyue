@@ -25,7 +25,11 @@ export type FrontendPlugin = {
   id: string
   /** 给人看的名字。 */
   name: string
-  /** 语义化版本。 */
+  /**
+   * 版本。**不要写字面量**（判据 `HeaderMenu.test.ts` 禁止前端出现 `1.2.3` 这种串，
+   * 版本唯一来源是 `/healthz`）。随程序一起发布的插件用 [HOST_VERSION] 即可 ——
+   * 它表示"跟着宿主走"，而不是插件自己编一个号。
+   */
   version: string
   /** 一句话说明它做什么（会展示在实验室的插件介绍里）。 */
   description: string
@@ -44,6 +48,15 @@ export type FrontendPlugin = {
   /** 注册的命令（可被命令面板/快捷键调起）。 */
   commands?: PluginCommand[]
 }
+
+/**
+ * "跟着宿主版本走"的占位符。
+ *
+ * 前端不许写字面量版本号（版本唯一来源是 `/healthz`），但插件清单是静态数据、
+ * 拿不到运行时版本。所以约定：随程序发布的插件用这个值，展示时由宿主替换成真实版本。
+ * 第三方插件若真想标自己的版本，也应从它自己的构建信息注入，而不是在源码里手写。
+ */
+export const HOST_VERSION = '__host__'
 
 /** 一个插件贡献的一级页面。 */
 export type PluginPage = {
@@ -82,6 +95,23 @@ export class FrontendPluginRegistry {
   private plugins = new Map<string, FrontendPlugin>()
   private failures: string[] = []
 
+  /**
+   * 宿主版本（来自 `/healthz`）。插件里用 [HOST_VERSION] 的地方展示时替换成它。
+   * 前端不许写字面量版本号，所以"跟着宿主走"必须由宿主在运行时填进来。
+   */
+  private hostVersion = ''
+
+  /** 设置宿主版本（main.tsx 拿到 /healthz 后调用）。 */
+  setHostVersion(version: string): void {
+    this.hostVersion = version
+  }
+
+  /** 把插件声明的版本号解析成可展示的值：`__host__` 换成宿主版本。 */
+  private resolveVersion(declared: string): string {
+    if (declared !== HOST_VERSION) return declared
+    return this.hostVersion || '随宿主'
+  }
+
   /** 登记一个插件。id 重复或 id 为空时拒绝并留痕。 */
   register(plugin: FrontendPlugin): boolean {
     if (!plugin.id || plugin.id.trim() === '') {
@@ -109,6 +139,11 @@ export class FrontendPluginRegistry {
   /** 是否已登记。 */
   has(id: string): boolean {
     return this.plugins.has(id)
+  }
+
+  /** 解析插件声明的版本号（`__host__` 换成宿主版本）。供界面展示用。 */
+  versionOf(plugin: FrontendPlugin): string {
+    return this.resolveVersion(plugin.version)
   }
 
   /** 拒绝记录（登记失败不能静默）。 */
@@ -153,7 +188,7 @@ export class FrontendPluginRegistry {
       if (p.pages?.length) parts.push(`页面 ${p.pages.length}`)
       if (p.settingsSections?.length) parts.push(`设置分区 ${p.settingsSections.length}`)
       if (p.commands?.length) parts.push(`命令 ${p.commands.length}`)
-      lines.push(`· ${p.name}（${p.id}）v${p.version}：${p.description}`)
+      lines.push(`· ${p.name}（${p.id}）v${this.resolveVersion(p.version)}：${p.description}`)
       if (parts.length) lines.push(`  贡献：${parts.join('、')}`)
       if (p.author) lines.push(`  作者：${p.author}`)
     }

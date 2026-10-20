@@ -13,6 +13,16 @@
 | 后端插件 | `server/src/main/kotlin/io/legado/server/plugin/` | 工具（AI/自动化能调的能力）、工具调用钩子 |
 | 前端插件 | `web/src/lab/pluginRegistry.ts` | 实验室条目、一级页面、设置分区、命令 |
 
+**目录分层（重要）**：
+
+| 目录 | 是什么 | 允许依赖 |
+|---|---|---|
+| `web/src/lab/` | **框架**：容器 `Lab.tsx` + 注册表 `pluginRegistry.ts` | 谁都不依赖 |
+| `web/src/plugins/` | **内容**：具体插件 + 装载清单 + 装配点 | 可以依赖 `lab/` |
+
+依赖方向必须是 **内容 → 框架**。`lab/` 里出现任何 `import '../plugins/...'` 都是夹带，
+判据 `FrameworkHasNoContent.test.ts` 会红。同理 `Lab.tsx` 里不许出现任何具体功能的名字。
+
 两边都**不注册 HTTP 路由**，所以 `/api/catalog` 的端点计数恒定（138 条），
 既有门禁不受影响。
 
@@ -126,11 +136,21 @@ frontendPlugins.register({
 
 **AI 接入是它目前登记的第一条实验条目** —— 实验室不认识 AI，只是有人往它里面登记了一条。
 
-要让新东西进实验室，往 `lab/labEntries.tsx` 的数组里加一条，或在插件里登记 `labEntries`。
+要让新东西进实验室，在 `plugins/` 下写一个插件并加进 `plugins/index.ts` 的清单 ——
+**不要改 `lab/`**，那是框架目录。
+
+框架自带两个插件（都在 `plugins/` 里，不在框架目录）：
+- `plugins/aiPanel.tsx` —— AI 接入
+- `plugins/pluginIntro.tsx` —— 插件与扩展（列出装了什么）
+
+把这两个文件删掉、清单清空，实验室就是一个空的悬浮容器 —— 那才是框架该有的样子，
+判据 `LabIsFrameworkOnly.test.ts` 钉着这一点。
 
 ## 4. 为什么这样分
 
-- **框架零内容**：`plugin/` 与 `lab/` 目录里没有一行业务逻辑，只有契约、注册表、容器。
+- **框架零内容**：`plugin/` 与 `lab/` 里没有一行业务逻辑，只有契约、注册表、容器。
+  具体插件全部在 `plugins/`（前端）与外部 jar（后端）。
+- **依赖单向**：内容依赖框架，框架不依赖内容。判据守着这条。
 - **两半独立**：后端插件不需要前端存在，前端插件也不需要后端；各自可单独演进。
 - **可介绍**：两边都有 `describe()`，装了什么、谁装的、失败了几项，都说得清。
 - **不破坏既有门禁**：不注册路由 → 端点计数不变；实验室沿用 `.dialog-shell` → 浮层判据照过。
