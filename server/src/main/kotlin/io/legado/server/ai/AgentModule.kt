@@ -1,5 +1,6 @@
 package io.legado.server.ai
 
+import io.legado.server.AppConfig
 import io.legado.server.cache.CoverCache
 import io.legado.server.data.Database
 import io.legado.server.ops.logSystem
@@ -29,6 +30,9 @@ object AgentModule {
     /**
      * 用启动时已有的服务对象构造一个内部 AI 连接。
      * 调用方职责：传入的对象必须与 HTTP 端点共用同一实例（Application 已经如此构造）。
+     *
+     * [registry] / [hooks] 是给外部留的标准接入点：不传就用默认（内置工具 + 无钩子），
+     * 传了就挂上去 —— 想注册自定义工具或挂审计钩子，不必改这个文件。
      */
     fun connect(
         database: Database,
@@ -37,6 +41,8 @@ object AgentModule {
         subscriptions: SubscriptionService,
         homeDirectory: java.nio.file.Path = java.nio.file.Path.of("."),
         profileStore: AgentProfileStore = AgentProfileStore,
+        registry: ToolRegistry = ToolRegistry(allowRemovingBuiltin = AppConfig.aiAllowRemovingBuiltinTools),
+        hooks: ToolHooks = ToolHooks(),
     ): AgentConnection {
         val ctx = AgentContext(
             database = database,
@@ -47,7 +53,7 @@ object AgentModule {
             coverCache = coverCache,
         )
         // 网关需要 homeDirectory 才能读写 agent-profiles.json，从而真正支持外部模型阅读理解。
-        return AgentConnection(Agent(ctx, homeDirectory, profileStore))
+        return AgentConnection(Agent(ctx, homeDirectory, profileStore, registry = registry, hooks = hooks))
     }
 
     /**
@@ -107,6 +113,6 @@ object AgentModule {
         println("[ai-connection]\n$report")
     }
 
-    /** 是否启用（仅调试属性置位时）。 */
-    fun isEnabled(): Boolean = System.getProperty(DEBUG_PROPERTY) != null
+    /** 是否启用：环境变量 `LEGADO_AI_ENABLED` 或系统属性 `-Dai.debug` 任一置位（见 [AppConfig.aiEnabled]）。 */
+    fun isEnabled(): Boolean = AppConfig.aiEnabled
 }

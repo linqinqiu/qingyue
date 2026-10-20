@@ -32,23 +32,37 @@ class Agent(
     private val ctx: AgentContext,
     private val homeDirectory: Path,
     private val profileStore: AgentProfileStore = AgentProfileStore,
-    private val tools: List<Tool> = BuiltinTools.all(),
+    tools: List<Tool> = BuiltinTools.all(),
+    /** 工具注册表：默认用传入的 tools 建一份；外部想运行时增删工具就自己构造一个传进来。 */
+    val registry: ToolRegistry = ToolRegistry(tools),
+    /** 生命周期钩子：默认没有钩子（零开销），外部挂审计/限流/改写用。 */
+    val hooks: ToolHooks = ToolHooks(),
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
 
-    private val byId = tools.associateBy { it.meta.id }
-
     /** 暴露给外部（含 `/api/agent`）的能力清单，与 `/api/catalog` 的"可改范围"对齐。 */
-    fun toolManifest(): List<ToolMeta> = tools.map { it.meta }
+    fun toolManifest(): List<ToolMeta> = registry.manifest()
 
     /** 是否注册了外部（openai-compatible）连接；供 manifest 的 `enabled` 字段使用。 */
     fun hasExternalConnection(): Boolean = firstExternalProfile() != null
 
     /** 直接按工具 id 执行（已解析出该调哪个工具时用）。 */
     suspend fun runTool(id: String, args: ToolArgs): AgentResult {
-        val tool = byId[id] ?: return ctx.error("unknown_tool", "未注册的工具：$id")
-        return try {
+        val tool = registry.find(id) ?: return ctx.error("unknown_tool", "未注册的工具：$id")
+        val meta = tool.meta
+
+        // 1) before 链：任一钩子返回非 null 即拦截，工具不执行。
+        val blocked = try {
+            hooks.runBefore(meta, args)
+        } catch (e: Throwable) {
+            // 钩子自己炸了不能把整条链路带走：转成 error 结果，工具照常不执行。
+            ctx.error("hook_failed", "工具前置钩子异常：${e.message ?: e::class.simpleName}")
+        }
+        if (blocked != null) return hooks.runAfter(meta, args, blocked)
+
+        // 2) 执行工具本体（异常统一兜底成 error 结果）。
+        val raw: AgentResult = try {
             tool.invoke(ctx, args)
         } catch (e: Guardrails.AgentVersionConflict) {
             ctx.error("version_conflict", e.message ?: "书源版本冲突，请先读取最新版本再保存")
@@ -57,8 +71,14 @@ class Agent(
         } catch (e: IllegalArgumentException) {
             ctx.error("invalid_request", e.message ?: "参数非法")
         } catch (e: Throwable) {
-            ctx.error("internal_error", e.message ?: "工具执行异常")
+            // 先造出结果再回调：钩子看到的必须就是最终返回的那一个，不能各造一份。
+            val converted = ctx.error("internal_error", e.message ?: "工具执行异常")
+            hooks.runOnError(meta, args, e, converted)
+            converted
         }
+
+        // 3) after 链：可改写结果。
+        return hooks.runAfter(meta, args, raw)
     }
 
     /**

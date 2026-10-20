@@ -56,4 +56,36 @@ object AppConfig {
     /** 目录 / 正文分页抓取的最大页数。 */
     val maxTocPages: Int = int("LEGADO_MAX_TOC_PAGES", 40)
     val maxContentPages: Int = int("LEGADO_MAX_CONTENT_PAGES", 30)
+
+    // ———— AI 接入框架（io.legado.server.ai）————
+    //
+    // 从前这组能力只有一个开关：系统属性 `-Dai.debug`。想让"进程内 AI 连接"在正式部署里
+    // 也能用（而不只是本地自检），就得改启动脚本加 JVM 参数 —— 对一个自托管程序来说太窄。
+    // 现在补一条环境变量通道，两者**取或**：任一为真即启用。默认都关，行为与从前一致。
+
+    /**
+     * 是否启用 AI 接入框架的进程内自检与对外句柄。
+     * `true` / `1` / `yes` / `on` 视为启用（大小写不敏感）；其它值或未设置 = 关闭。
+     * 与系统属性 `-Dai.debug` 取或 —— 老用法照常有效。
+     *
+     * 注意这是 `get()` 计算属性而不是 val：环境变量在进程启动时就定了，但系统属性
+     * 可以在运行期改（测试、嵌入式宿主、调试器都会这么干）。写成 val 的话，
+     * `object` 初始化那一刻就把结果冻住，之后 `System.setProperty("ai.debug", …)` 完全无效 ——
+     * 那会让"向后兼容 -Dai.debug"变成一句假话。
+     */
+    val aiEnabled: Boolean
+        get() = flag("LEGADO_AI_ENABLED") || System.getProperty("ai.debug") != null
+
+    /**
+     * 是否允许外部注册的工具**注销内置工具**（默认 false）。
+     * 保持 false：插件只能增删自己注册的工具，摘不掉 `source.delete` 这类核心能力。
+     * 只有明确知道自己要干什么的部署才该打开。
+     */
+    val aiAllowRemovingBuiltinTools: Boolean = flag("LEGADO_AI_ALLOW_REMOVING_BUILTIN_TOOLS")
+
+    private fun flag(key: String): Boolean =
+        when (env[key]?.trim()?.lowercase()) {
+            "1", "true", "yes", "on" -> true
+            else -> false
+        }
 }
