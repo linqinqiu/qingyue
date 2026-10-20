@@ -110,7 +110,8 @@ test('「我的」菜单不再重复列「更新日志」「快捷键」，这�
   const aboutPlugin = read('../src/plugins/aboutPanel.tsx')
   assert.match(aboutPlugin, /onOpenShortcuts=\{\(\) => actions\.openShortcuts\?\.\(\)\}/,
     '插件要把按钮接到宿主动作表上')
-  assert.match(read('../src/main.tsx'), /openShortcuts: \(\) => setShowShortcuts\(true\)/,
+  // 同一轮把 5 个弹窗布尔收成一个 openModal，写法从 setShowShortcuts(true) 变成 setOpenModal('shortcuts')。
+  assert.match(read('../src/main.tsx'), /openShortcuts: \(\) => setOpenModal\('shortcuts'\)/,
     '宿主那边要真的把 openShortcuts 接上，不是摆个死按钮')
   const header = read('../src/components/AppHeader.tsx')
   assert.doesNotMatch(header, /<span>快捷键<\/span>/, '菜单里那条已经收进「关于」')

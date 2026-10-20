@@ -88,9 +88,11 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   // 接的都是原来那一份实现，不是第二套：逐个点名。
   // 0.8.3 起「备份」下沉成插件，它的动作改成"开实验室并直达那个条目" —— 期望值跟着换，
   // 但"必须接到某一份真实现"这条不变（不接就是死按钮）。
-  for (const call of ['setShowShortcuts(true)', 'setShowOfflineCache(true)', 'setShowCustomize(true)',
+  // 同一轮把 5 个独立布尔收成一个 openModal：弹窗类动作的期望值从 setShowXxx(true) 变成 setOpenModal('xxx')，
+  // 语义完全等价（同一时刻只开一个），判据跟着换写法而不是放宽要求。
+  for (const call of ["setOpenModal('shortcuts')", "setOpenModal('offline-cache')", "setOpenModal('customize')",
     "setPageDialog('rules')", 'setTocRulesSignal(value => value + 1)', "setLabEntryId('backup')",
-    'setShowLogs(true)', 'setShowServerPort(true)']) {
+    "setOpenModal('logs')", "setOpenModal('server-port')"]) {
     assert.ok(wiredBlock.includes(call), `设置页的动作没接到 ${call}（悬浮层/弹窗/插件那一份）`)
   }
   const sectionsBody = /export function buildSettingsSections[\s\S]*$/m.exec(sectionsFile)?.[0] ?? ''

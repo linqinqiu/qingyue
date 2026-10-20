@@ -52,6 +52,12 @@ const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ?
  * 0.8.3 起这些页面不在主程序里了（住 `plugins/` 里），但老书签/老链接还在 ——
  * 映射到实验室对应条目，比 404 或空弹窗都体面。
  */
+/**
+ * 单例弹窗的 id。加新弹窗只需往这里加一个字面量，不用再加一个 useState。
+ * 实验室（lab）不在这里 —— 它要带 labEntryId，有自己的一对状态。
+ */
+type AppModal = 'offline-cache' | 'logs' | 'shortcuts' | 'customize' | 'server-port'
+
 const LAB_DEEP_LINKS: Record<string, string> = {
   '#changelog': 'changelog',
   '#backup': 'backup',
@@ -143,13 +149,16 @@ function App() {
     }
   })
   const [pageDialog, setPageDialog] = useState<PageDialogKind | null>(dialogFromHash())
-  const [showOfflineCache, setShowOfflineCache] = useState(false)
-  const [showLogs, setShowLogs] = useState(false)
-  const [showShortcuts, setShowShortcuts] = useState(false)
-  /** 「自定义」弹窗：只有皮肤那一档（界面布局随 v2 一起撤掉了）。 */
-  const [showCustomize, setShowCustomize] = useState(false)
-  /** 「设置 → 服务端口」：改的是安装根的 port.txt，重启青阅后生效。 */
-  const [showServerPort, setShowServerPort] = useState(false)
+  /**
+   * 当前开着的那个「单例弹窗」。
+   *
+   * 从前是 5 个独立布尔（showOfflineCache / showLogs / showShortcuts / showCustomize /
+   * showServerPort），每加一个弹窗就要多一个 useState + 一段 JSX + 一处 onClose 接线 ——
+   * 主框架就是这么一点点变重的。而且布尔们允许多个同时为 true，真同时开两层就没人管了。
+   *
+   * 收成一个字符串状态：同一时刻只可能开一个，加新弹窗只需往 union 里加一个字面量。
+   */
+  const [openModal, setOpenModal] = useState<AppModal | null>(null)
   /**
    * 「实验室」（Lab）：悬浮式框架容器，承载还没进主界面的能力。
    * AI 接入是它目前登记的第一条实验条目 —— 实验室本身不认识 AI。
@@ -301,12 +310,12 @@ function App() {
         if (focusSearch()) event.preventDefault()
       } else if (hit.action === 'help') {
         event.preventDefault()
-        setShowShortcuts(value => !value)
+        setOpenModal(value => (value === 'shortcuts' ? null : 'shortcuts'))
       } else if (hit.action === 'close-help') {
-        setShowShortcuts(value => (value ? false : value))
+        setOpenModal(value => (value === 'shortcuts' ? null : value))
       } else if (hit.action === 'logs') {
         event.preventDefault()
-        setShowLogs(true)
+        setOpenModal('logs')
       } else if (hit.page) {
         event.preventDefault()
         navigate(hit.page as Page)
@@ -314,7 +323,7 @@ function App() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [page, showShortcuts])
+  }, [page, openModal])
 
   const openReader = (book: OpenBook, index: number, origin: Page = 'library') => {
     const fallbackCover = book.details.coverUrl || book.details.alternateSources?.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
@@ -467,7 +476,7 @@ function App() {
         onOpenChangelog={() => { setLabEntryId('changelog'); setShowLab(true) }}
         onOpenAbout={() => { setLabEntryId('about'); setShowLab(true) }}
         onOpenReadingLog={() => { setLabEntryId('reading-log'); setShowLab(true) }}
-        onOpenCustomize={() => setShowCustomize(true)}
+        onOpenCustomize={() => setOpenModal('customize')}
         version={serverVersion}
       />
       {page === 'sources' ? (
@@ -476,14 +485,14 @@ function App() {
         <RssPage onOpenBackup={() => { setLabEntryId('backup'); setShowLab(true) }} />
       ) : page === 'settings' ? (
         <SettingsPage sections={buildSettingsSections({
-          openShortcuts: () => setShowShortcuts(true),
-          openOfflineCache: () => setShowOfflineCache(true),
-          openCustomize: () => setShowCustomize(true),
+          openShortcuts: () => setOpenModal('shortcuts'),
+          openOfflineCache: () => setOpenModal('offline-cache'),
+          openCustomize: () => setOpenModal('customize'),
           openReplaceRules: () => setPageDialog('rules'),
           openTocRules: () => setTocRulesSignal(value => value + 1),
           openBackup: () => { setLabEntryId('backup'); setShowLab(true) },
-          openLogs: () => setShowLogs(true),
-          openServerPort: () => setShowServerPort(true),
+          openLogs: () => setOpenModal('logs'),
+          openServerPort: () => setOpenModal('server-port'),
           openAiConnections: () => setShowLab(true),
         })} />
       ) : page === 'shelf' ? (
@@ -520,21 +529,14 @@ function App() {
         onClose={() => setPageDialog(null)}
       />
 
-      {showOfflineCache && (
-        <OfflineCacheModal onClose={() => setShowOfflineCache(false)} />
+      {/* 单例弹窗：同一时刻只开一个。加新弹窗往 AppModal 加字面量，不必再添 useState。 */}
+      {openModal === 'offline-cache' && <OfflineCacheModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'logs' && <LogsModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'shortcuts' && <ShortcutHelp onClose={() => setOpenModal(null)} />}
+      {openModal === 'customize' && (
+        <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setOpenModal(null)} />
       )}
-      {showLogs && (
-        <LogsModal onClose={() => setShowLogs(false)} />
-      )}
-      {showShortcuts && (
-        <ShortcutHelp onClose={() => setShowShortcuts(false)} />
-      )}
-      {showCustomize && (
-        <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setShowCustomize(false)} />
-      )}
-      {showServerPort && (
-        <ServerPortModal onClose={() => setShowServerPort(false)} />
-      )}
+      {openModal === 'server-port' && <ServerPortModal onClose={() => setOpenModal(null)} />}
       {showLab && (
         <LabModal
           onClose={() => { setShowLab(false); setLabEntryId(undefined) }}
@@ -544,7 +546,7 @@ function App() {
           actions={{
             // 插件要"去别处"时用：实验室只转发，不解释这些 key 是什么。
             openChangelog: () => setLabEntryId('changelog'),
-            openShortcuts: () => setShowShortcuts(true),
+            openShortcuts: () => setOpenModal('shortcuts'),
           }}
         />
       )}

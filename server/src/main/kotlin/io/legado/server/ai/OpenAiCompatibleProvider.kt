@@ -1,5 +1,6 @@
 package io.legado.server.ai
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -71,6 +72,8 @@ class OpenAiCompatibleProvider : LlmProvider {
                 model = profile.model ?: "gpt-3.5-turbo",
                 messages = messages.map { ChatMessage(it.role, it.content) },
                 temperature = 0.7,
+                // 思考强度：只有连接自己配了才发（老服务不认这个字段会直接 400）。
+                reasoningEffort = ProfileOptions.thinking(profile.options)?.wire,
                 tools = tools?.takeIf { it.isNotEmpty() }?.map { meta ->
                     ToolSpec(
                         function = ToolSpecFunction(
@@ -90,10 +93,12 @@ class OpenAiCompatibleProvider : LlmProvider {
         )
         val builder = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .timeout(Duration.ofSeconds(30))
+            .timeout(Duration.ofMillis(ProfileOptions.timeoutMs(profile.options) ?: 30_000L))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
         if (!profile.apiKey.isNullOrBlank()) builder.header("Authorization", "Bearer " + profile.apiKey)
+        // 连接自己的额外请求头（中转站/自建服务常要）。危险头已在 ProfileOptions 里挡掉。
+        ProfileOptions.headers(profile.options).forEach { (name, value) -> builder.header(name, value) }
         val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
         val resp = runCatching { client.send(builder.build(), HttpResponse.BodyHandlers.ofString()) }.getOrNull() ?: return null
         if (resp.statusCode() !in 200..299) return null
@@ -156,5 +161,11 @@ class OpenAiCompatibleProvider : LlmProvider {
         val messages: List<ChatMessage>,
         val temperature: Double,
         val tools: List<ToolSpec>? = null,
+        /**
+         * 思考强度。OpenAI 的 `reasoning_effort` 字段；不设就不发（老服务不认会报错）。
+         * 档位见 [ProfileOptions.Thinking]。
+         */
+        @SerialName("reasoning_effort")
+        val reasoningEffort: String? = null,
     )
 }

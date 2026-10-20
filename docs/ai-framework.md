@@ -221,6 +221,36 @@ val conn = AgentModule.connect(database, runner, coverCache, subscriptions, regi
 要让人/脚本以「AI 客户端」方式驱动这台服务，仍然走 `GET /api/catalog` 拿契约、
 走既有 138 个端点执行——进程内 `Agent` 是给"服务自己内嵌的自动化/智能体"用的同一条路径。
 
+## 6.5 连接自己的配置（`options`）
+
+`agent-profiles.json` 里每个连接的 `options` 字段现在**真的生效**了（此前是死字段，
+只被写入、从没被读）。三条约定，借鉴自上游 `legado-with-MD3`：
+
+| key | 作用 | 示例 |
+|---|---|---|
+| `header.<名字>` | 自定义请求头（中转站/自建服务常要） | `"header.X-Api-Key": "sk-relay"` |
+| `thinking` | 思考强度五档，发到 `reasoning_effort` | `"thinking": "medium"` |
+| `timeoutMs` | 单次请求超时（毫秒） | `"timeoutMs": "60000"` |
+
+思考强度沿用 OpenAI 的命名，不自己发明：`low` / `medium` / `high` / `xhigh` / `max`
+（大小写与空白宽容；写错或没设就不发这个字段，老服务不会因此 400）。
+
+**会被挡掉的头**：`Content-Type`、`Authorization`、`Host`、`Content-Length` ——
+前两个分别由 body 与 `apiKey` 字段表达（混着写两处必然漂移），后两个由 JDK HttpClient
+自己算（硬写会出错）。判据 `ProfileOptionsTest` 钉着这四条。
+
+```json
+{ "profiles": [{
+  "id": "relay", "name": "中转站", "kind": "openai-compatible",
+  "baseUrl": "https://relay.example.com/v1", "apiKey": "sk-xxx", "model": "gpt-4o",
+  "options": {
+    "header.X-Relay-Region": "cn",
+    "thinking": "high",
+    "timeoutMs": "60000"
+  }
+}] }
+```
+
 ## 7. 当前边界（骨架阶段只到这）
 
 - 已就位：连接句柄 `AgentConnection`、进程接线 `AgentModule`（默认关闭）、能力清单、护栏、~39 个工具、异常兜底、目录读取、两套运行验证。
