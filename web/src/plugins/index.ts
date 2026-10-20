@@ -5,6 +5,7 @@ import { changelogPlugin } from './changelogPanel'
 import { readingLogPlugin } from './readingLogPanel'
 import { backupPlugin } from './backupPanel'
 import { aboutPlugin } from './aboutPanel'
+import { sourceHealthPlugin } from './sourceHealthPanel'
 
 /**
  * 内置前端插件清单 —— 框架启动时装载这些插件。
@@ -19,6 +20,7 @@ import { aboutPlugin } from './aboutPanel'
  */
 const BUILTIN_PLUGINS = [
   aiPlugin,
+  sourceHealthPlugin,
   pluginIntroPlugin,
   changelogPlugin,
   readingLogPlugin,

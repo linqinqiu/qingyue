@@ -26,6 +26,7 @@ export function LabModal({
   serverVersion,
   initialEntryId,
   actions,
+  data,
 }: {
   onClose: () => void
   uiContext?: UiContext
@@ -33,9 +34,11 @@ export function LabModal({
   /** 直接打开某个实验条目（点版本号进更新日志、深链 #changelog 等）。 */
   initialEntryId?: string
   /** 宿主能替插件做的事（打开别的浮层等）。插件与宿主约定 key，框架只转发。 */
-  actions?: Record<string, (...args: never[]) => void>
+  actions?: Record<string, (...args: any[]) => void>
+  /** 宿主能给插件读的数据快照（书源清单等）。同样只转发、不解释。 */
+  data?: Record<string, unknown>
 }) {
-  const host: LabHostContext = { uiContext, serverVersion, actions }
+  const host: LabHostContext = { uiContext, serverVersion, actions, data }
   return (
     <Lab
       entries={buildLabEntries()}

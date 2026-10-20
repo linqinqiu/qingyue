@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons'
+import { FloatingWindow } from './FloatingWindow'
 import { useEscapeClose } from '../lib/useEscapeClose'
 
 /**
@@ -44,6 +45,14 @@ export type LabEntry = {
  *
  * 刻意用 `unknown` 而不是具体类型：实验室是框架，不该知道 `uiContext` 是什么形状
  * （那是插件与宿主之间的约定）。框架只负责**通道**，不解释内容。
+ *
+ * 两条通道，刻意分开：
+ * - [actions]：**做**某事（打开浮层、跳页、刷新）
+ * - [data]：**取**某个值（某个清单、加载状态、当前设置 —— 具体是什么由插件与宿主约定）
+ *
+ * 为什么不合成一个：动作有副作用、数据不该有；混在一张表里，插件很容易在 render
+ * 期间调一个"顺便改了状态"的动作，那就是在渲染期写状态（React 会警告且行为不可预期）。
+ * 分开之后，`data` 明确是只读快照，`actions` 明确是事件回调。
  */
 export type LabHostContext = {
   /** 任意宿主提供的上下文（当前是 UI 上下文，见 lib/uiContext.ts）。 */
@@ -53,30 +62,19 @@ export type LabHostContext = {
   /**
    * 宿主能替插件做的事（打开别的浮层、跳页等）。
    *
-   * 为什么用 `Record<string, (...args: unknown[]) => void>` 而不是具体签名：
+   * 为什么用 `Record<string, (...args: never[]) => void>` 而不是具体签名：
    * 实验室是框架，不该知道"宿主支持哪些动作"。插件与宿主之间自己约定 key
    * （如 `openShortcuts`），框架只负责**原样转发**这张表。
    */
-  actions?: Record<string, (...args: never[]) => void>
-}
-
-const POS_KEY = 'qingyue-lab-position-v1'
-const MINIMIZED_KEY = 'qingyue-lab-minimized-v1'
-
-type Position = { x: number; y: number }
-
-function loadPosition(): Position | null {
-  try {
-    const raw = window.localStorage.getItem(POS_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Position
-    if (typeof parsed.x === 'number' && typeof parsed.y === 'number') return parsed
-  } catch { /* 存不进就当没存过 */ }
-  return null
-}
-
-function savePosition(pos: Position) {
-  try { window.localStorage.setItem(POS_KEY, JSON.stringify(pos)) } catch { /* 忽略 */ }
+  actions?: Record<string, (...args: any[]) => void>
+  /**
+   * 宿主能给插件读的数据快照（某个清单、加载状态等 —— 具体是什么由插件与宿主约定）。
+   *
+   * 同样是开放表：key 由插件与宿主约定，框架不认识内容。
+   * 取到的是**渲染那一刻的快照** —— 插件要更新就靠宿主重新渲染，
+   * 不要在插件里缓存它（缓存了就会看到过期数据）。
+   */
+  data?: Record<string, unknown>
 }
 
 export function Lab({
@@ -114,146 +112,51 @@ export function Lab({
     if (!entriesRef.current.some(e => e.id === initialEntryId)) return
     setActiveId(initialEntryId)
   }, [initialEntryId])
-  const [position, setPosition] = useState<Position | null>(() => loadPosition())
-  const [minimized, setMinimized] = useState<boolean>(() => {
-    try { return window.localStorage.getItem(MINIMIZED_KEY) === '1' } catch { return false }
-  })
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null)
-  const shellRef = useRef<HTMLDivElement | null>(null)
-
   const active = useMemo(
     () => entries.find(e => e.id === activeId) ?? entries[0],
     [entries, activeId],
   )
 
-  // 拖拽：按下标题栏开始，松开结束。用 window 监听保证鼠标移出容器也不丢。
-  useEffect(() => {
-    const onMove = (event: MouseEvent) => {
-      const drag = dragRef.current
-      if (!drag) return
-      const next = {
-        x: drag.origX + (event.clientX - drag.startX),
-        y: drag.origY + (event.clientY - drag.startY),
-      }
-      setPosition(next)
-    }
-    const onUp = () => {
-      if (!dragRef.current) return
-      dragRef.current = null
-      setPosition(prev => {
-        if (prev) savePosition(prev)
-        return prev
-      })
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
-
-  const startDrag = (event: React.MouseEvent) => {
-    // 只认左键，且不抢关闭按钮/切换按钮的点击
-    if (event.button !== 0) return
-    if ((event.target as HTMLElement).closest('button')) return
-    const shell = shellRef.current
-    const rect = shell?.getBoundingClientRect()
-    const orig = position ?? { x: rect?.left ?? 0, y: rect?.top ?? 0 }
-    dragRef.current = { startX: event.clientX, startY: event.clientY, origX: orig.x, origY: orig.y }
-  }
-
-  const resetPosition = () => {
-    setPosition(null)
-    try { window.localStorage.removeItem(POS_KEY) } catch { /* 忽略 */ }
-  }
-
-  const toggleMinimize = () => {
-    setMinimized(prev => {
-      const next = !prev
-      try { window.localStorage.setItem(MINIMIZED_KEY, next ? '1' : '0') } catch { /* 忽略 */ }
-      return next
-    })
-  }
-
   // 悬浮定位：有记忆位置就 fixed 到那儿，否则用默认的右下角
-  const shellStyle: React.CSSProperties = position
-    ? { position: 'fixed', left: position.x, top: position.y, margin: 0, right: 'auto', bottom: 'auto' }
-    : { position: 'fixed', right: 24, bottom: 24, margin: 0, left: 'auto', top: 'auto' }
-
-  if (minimized) {
-    return (
-      <button
-        type="button"
-        className="lab-fab"
-        style={shellStyle}
-        onClick={toggleMinimize}
-        aria-label={`展开${title}`}
-        title={`展开${title}`}
-      >
-        <Icon name="sliders" />
-        <span>{title}</span>
-      </button>
-    )
-  }
-
+  // 窗口几何/钉住/最小化/拖拽/缩放全部交给 FloatingWindow —— 实验室自己不再管定位。
+  // 这正是"宏大架构"的落点：窗口怎么摆是框架能力，装什么内容是插件的事。
   return (
-    <div className="lab-overlay" onClick={onClose}>
-      <div
-        ref={shellRef}
-        className="dialog-shell size-l lab-shell"
-        style={shellStyle}
-        onClick={event => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <header className="dialog-head lab-head" onMouseDown={startDrag} onDoubleClick={resetPosition}>
-          <h2><Icon name="sliders" /> {title}</h2>
-          <div className="lab-head-actions">
+    <FloatingWindow
+      storageKey="qingyue-lab-window-v1"
+      title={title}
+      defaultRect={{ width: 780, height: 560 }}
+      minWidth={420}
+      minHeight={320}
+      onClose={onClose}
+      actions={<Icon name="sliders" />}
+    >
+      <div className="lab-body">
+        <nav className="lab-nav" aria-label="实验条目">
+          {entries.map(entry => (
             <button
+              key={entry.id}
               type="button"
-              className="overlay-close"
-              aria-label="最小化"
-              title="最小化（再点悬浮按钮展开）"
-              onClick={toggleMinimize}
+              className={`lab-nav-item${entry.id === active?.id ? ' active' : ''}`}
+              onClick={() => setActiveId(entry.id)}
             >
-              <Icon name="chevronDown" />
+              <span className="lab-nav-title">{entry.title}</span>
+              {entry.badge && <span className="lab-nav-badge">{entry.badge}</span>}
             </button>
-            <button type="button" className="overlay-close" aria-label="关闭" onClick={onClose}>
-              <Icon name="close" />
-            </button>
-          </div>
-        </header>
+          ))}
+          {entries.length === 0 && <p className="lab-empty">还没有登记任何实验条目。</p>}
+        </nav>
 
-        <div className="lab-body">
-          <nav className="lab-nav" aria-label="实验条目">
-            {entries.map(entry => (
-              <button
-                key={entry.id}
-                type="button"
-                className={`lab-nav-item${entry.id === active?.id ? ' active' : ''}`}
-                onClick={() => setActiveId(entry.id)}
-              >
-                <span className="lab-nav-title">{entry.title}</span>
-                {entry.badge && <span className="lab-nav-badge">{entry.badge}</span>}
-              </button>
-            ))}
-            {entries.length === 0 && <p className="lab-empty">还没有登记任何实验条目。</p>}
-          </nav>
-
-          <section className="lab-content" aria-label={active?.title ?? '实验内容'}>
-            {active ? (
-              <>
-                <p className="lab-desc">{active.description}</p>
-                {active.render(host)}
-              </>
-            ) : (
-              <p className="lab-empty">实验室是空的：这里是承载"还没进主界面"能力的地方。</p>
-            )}
-          </section>
-        </div>
+        <section className="lab-content" aria-label={active?.title ?? '实验内容'}>
+          {active ? (
+            <>
+              <p className="lab-desc">{active.description}</p>
+              {active.render(host)}
+            </>
+          ) : (
+            <p className="lab-empty">实验室是空的：这里是承载"还没进主界面"能力的地方。</p>
+          )}
+        </section>
       </div>
-    </div>
+    </FloatingWindow>
   )
 }

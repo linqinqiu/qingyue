@@ -544,9 +544,17 @@ function App() {
           serverVersion={serverVersion}
           initialEntryId={labEntryId}
           actions={{
-            // 插件要"去别处"时用：实验室只转发，不解释这些 key 是什么。
+            // 插件要"做某事"时用：实验室只转发，不解释这些 key 是什么。
             openChangelog: () => setLabEntryId('changelog'),
             openShortcuts: () => setOpenModal('shortcuts'),
+            closeLab: () => { setShowLab(false); setLabEntryId(undefined) },
+            refreshSources,
+            toast: (message: string) => toast.info(message),
+          }}
+          data={{
+            // 插件要"读某个值"时用：渲染那一刻的快照，宿主重新渲染它就更新。
+            sources,
+            sourcesState: sources.length > 0 ? 'ready' : 'loading',
           }}
         />
       )}

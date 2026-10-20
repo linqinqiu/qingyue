@@ -5980,3 +5980,62 @@ input[type="checkbox"] {
   padding: 1px 6px; border-radius: var(--r-1);
   background: var(--surface-muted); color: var(--muted); font-size: var(--t-xs);
 }
+
+/* ———— 浮动窗口框架（FloatingWindow）：位置/尺寸/钉住/最小化都可自定义 ———— */
+/* 它是"窗口怎么摆"的框架，与"窗口里装什么"无关。几何由 inline style 给（可拖动/可缩放），
+   这里只管外观与交互反馈。 */
+
+.fw-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: transparent;
+}
+.fw-shell {
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-3); box-shadow: var(--elev-3);
+  overflow: hidden; min-width: 0; min-height: 0;
+}
+/* 钉住时给一圈强调边，让人一眼看出"这个窗被固定了" */
+.fw-shell.is-pinned { box-shadow: var(--elev-3), 0 0 0 2px var(--accent, var(--line)); }
+
+.fw-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-2); padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: move; user-select: none;
+}
+.fw-shell.is-pinned .fw-head { cursor: default; }
+.fw-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-sm); font-weight: 600; }
+.fw-head-actions { display: flex; align-items: center; gap: var(--s-1); flex: none; }
+
+.fw-btn {
+  min-width: 28px; height: 26px; padding: 0 6px;
+  display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: var(--r-1);
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: var(--t-xs);
+}
+.fw-btn:hover { background: var(--surface-muted); color: var(--ink); }
+.fw-btn.is-on { background: var(--surface-muted); color: var(--ink); border-color: var(--line); }
+
+.fw-body { flex: 1; min-height: 0; overflow: auto; padding: var(--s-3); }
+
+/* 右下角缩放把手：三条斜线，纯 CSS，不用图形字符 */
+.fw-resize {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 45%, var(--line) 45%, var(--line) 55%, transparent 55%),
+    linear-gradient(135deg, transparent 70%, var(--line) 70%, var(--line) 80%, transparent 80%);
+}
+
+/* 最小化后的悬浮按钮 */
+.fw-fab {
+  z-index: 101;
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--elev-2);
+  cursor: pointer; font-size: var(--t-sm);
+}
+.fw-fab:hover { background: var(--surface-muted); }
+.fw-fab-title { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
