@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { api, AgentChatMessage, AgentConnection } from '../lib/api'
 import { Icon } from '../icons'
 import { useEscapeClose } from '../lib/useEscapeClose'
+import { EMPTY_UI_CONTEXT, uiContextMessage, type UiContext } from '../lib/uiContext'
 
 /**
  * 「AI 接入」（自定义接入面 /api/agent/*）。
@@ -19,12 +20,12 @@ import { useEscapeClose } from '../lib/useEscapeClose'
  * 关闭键。再套一层就会出现"弹窗套弹窗"（两层遮罩、两颗关闭键），UiContract 的
  * "浮层只有一档"判据会红。embedded 时只渲染内容体，外壳交给实验室。
  */
-export function AiConnectionsModal({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
+export function AiConnectionsModal({ onClose, embedded = false, uiContext }: { onClose: () => void; embedded?: boolean; uiContext?: UiContext }) {
   useEscapeClose(onClose)
   if (embedded) {
     return (
       <div className="ai-connections" aria-label="AI 接入">
-        <AiConnectionsPanel />
+        <AiConnectionsPanel uiContext={uiContext} />
       </div>
     )
   }
@@ -42,7 +43,7 @@ export function AiConnectionsModal({ onClose, embedded = false }: { onClose: () 
           <button type="button" className="overlay-close" aria-label="关闭" onClick={onClose}><Icon name="close" /></button>
         </header>
         <div className="page-dialog-body">
-          <AiConnectionsPanel />
+          <AiConnectionsPanel uiContext={uiContext} />
         </div>
       </div>
     </div>
@@ -55,9 +56,11 @@ type ChatLine = {
   pending?: boolean
   engine?: string
   fallback?: boolean
+  /** AI 这一轮实际执行过的工具（`工具id:结果码`）。 */
+  toolRounds?: string[]
 }
 
-function AiConnectionsPanel() {
+function AiConnectionsPanel({ uiContext }: { uiContext?: UiContext }) {
   const [connections, setConnections] = useState<AgentConnection[]>([])
   const [loadError, setLoadError] = useState('')
   const external = connections.find(c => !c.builtin)
@@ -71,7 +74,7 @@ function AiConnectionsPanel() {
 
   return (
     <div className="ai-connections">
-      <ChatPanel externalConnected={!!external} externalName={external?.name} onConnectionsChanged={refresh} />
+      <ChatPanel externalConnected={!!external} externalName={external?.name} uiContext={uiContext} onConnectionsChanged={refresh} />
       <details className="ai-advanced">
         <summary>连接与工具（登记外部模型、校验书源）</summary>
         <section className="ai-section">
@@ -113,10 +116,13 @@ function ChatPanel({
   externalConnected,
   externalName,
   onConnectionsChanged,
+  uiContext,
 }: {
   externalConnected: boolean
   externalName?: string
   onConnectionsChanged: () => void
+  /** 当前界面上下文：随对话发出，让模型知道用户在哪、在看什么。 */
+  uiContext?: UiContext
 }) {
   const [messages, setMessages] = useState<ChatLine[]>([])
   const [systemPrompt, setSystemPrompt] = useState('你是青阅的阅读助手，帮助用户理解文章、管理书源、解答阅读相关的问题。')
@@ -166,6 +172,10 @@ function ChatPanel({
 
     const payload: AgentChatMessage[] = []
     if (systemPrompt.trim()) payload.push({ role: 'system', content: systemPrompt.trim() })
+    // 界面上下文：让模型知道用户此刻在哪、在看什么（"这本书讲了什么"才知道指哪本）。
+    // 采集层只描述真实状态、不给指令，见 lib/uiContext.ts。
+    const ctxMsg = uiContextMessage(uiContext ?? EMPTY_UI_CONTEXT)
+    if (ctxMsg) payload.push(ctxMsg)
     for (const m of history) payload.push({ role: m.role, content: m.content })
 
     setSending(true)
@@ -174,7 +184,7 @@ function ChatPanel({
       setMessages(prev => {
         const copy = [...prev]
         const idx = copy.findIndex(m => m.role === 'assistant' && m.pending)
-        if (idx >= 0) copy[idx] = { role: 'assistant', content: res.content, engine: res.engine, fallback: res.fallback === true }
+        if (idx >= 0) copy[idx] = { role: 'assistant', content: res.content, engine: res.engine, fallback: res.fallback === true, toolRounds: res.toolRounds }
         return copy
       })
     } catch (failure) {
@@ -245,6 +255,16 @@ function ChatPanel({
           <div key={i} className={`ai-bubble ai-bubble-${m.role}${m.pending ? ' ai-bubble-pending' : ''}`}>
             <div className="ai-bubble-role">{m.role === 'user' ? '我' : '助手'}</div>
             <div className="ai-bubble-content">{m.content || (m.pending ? '思考中…' : '')}</div>
+            {m.role === 'assistant' && !m.pending && m.toolRounds && m.toolRounds.length > 0 && (
+              <div className="ai-bubble-tools">
+                <span className="ai-bubble-tools-label">用了 {m.toolRounds.length} 个能力</span>
+                <ul className="ai-tool-list">
+                  {m.toolRounds.map((r, k) => (
+                    <li key={k} className="ai-tool-item">{r.replace(':', ' · ')}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {m.role === 'assistant' && !m.pending && m.engine && (
               <div className="ai-bubble-meta">
                 <span className="ai-tag">{m.engine.startsWith('external:') ? `外部模型 ${m.engine.replace('external:', '')}` : '本地兜底'}</span>

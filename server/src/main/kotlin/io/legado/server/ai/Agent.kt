@@ -154,9 +154,17 @@ class Agent(
     }
 
     /**
-     * 自由对话（多轮）：直接把 `messages` 数组交给外部 openai-compatible 模型；
-     * 缺外部连接时回退到本地说明（不假装是模型），由调用方决定怎么展示。
-     * 这是 `POST /api/agent/chat` 的真正执行体。
+     * 自由对话（多轮）—— **带工具能力**：模型可以要求执行已注册工具，框架执行后回灌结果，
+     * 它再继续推理，直到给出最终文本。
+     *
+     * 这是"内置 AI 接入后可以完成插件级功能"的核心：工具清单来自 [registry]，
+     * 所以**插件注册的工具自动对模型可见**。模型想查书源、改规则、搜书，都能真的做到，
+     * 而不是只能聊天。
+     *
+     * 三条约束：
+     * - 最多 [MAX_TOOL_ROUNDS] 轮，防止模型无限调工具
+     * - 工具执行走 [runTool]，护栏、钩子、权限全部照常生效
+     * - 任何一轮失败都回退到"已有文本"，不把整条对话带崩
      */
     suspend fun chat(messages: List<Pair<String, String>>): ChatOutcome {
         val norm = messages
@@ -166,23 +174,90 @@ class Agent(
             return ChatOutcome(engine = "error", content = "", fallback = false, error = "messages 不能为空")
         }
         val ext = firstExternalProfile()
-        if (ext != null) {
-            val reply = callExternalHttp(ext, norm)
-            if (reply != null) {
-                return ChatOutcome(engine = "external:" + ext.id, content = reply.trim(), fallback = false)
-            }
-            // 外部调用失败 → 回退本地说明，标注 fallback，保证永远有结果。
+        if (ext == null) {
             return ChatOutcome(
                 engine = "local-fallback",
-                content = "（外部模型 ${ext.id} 暂时连不上，回答由本地兜底生成）你可以继续，但当前回复不是模型原话。",
+                content = "（尚未登记任何外部模型连接，无法真正对话；请在「AI 接入 → 连接」里登记一个 openai-compatible 地址，或在 agent-profiles.json 里配置。）",
                 fallback = true,
+            )
+        }
+
+        val provider = providerRegistry.forProfile(ext)
+        val tools = registry.manifest()
+        val toolRounds = mutableListOf<String>()
+        val convo = norm.toMutableList()
+
+        // 多轮：模型要调工具 → 框架执行 → 结果回灌 → 再问。
+        for (round in 0 until MAX_TOOL_ROUNDS) {
+            val reply = runCatching { provider?.chatWithTools(ext, convo, tools) }.getOrNull()
+            if (reply == null) {
+                // 外呼失败：有工具结果就把已发生的说清楚，否则回退本地说明。
+                return if (toolRounds.isEmpty()) {
+                    ChatOutcome(
+                        engine = "local-fallback",
+                        content = "（外部模型 ${ext.id} 暂时连不上，回答由本地兜底生成）你可以继续，但当前回复不是模型原话。",
+                        fallback = true,
+                    )
+                } else {
+                    ChatOutcome(
+                        engine = "local-fallback",
+                        content = "（外部模型 ${ext.id} 在工具调用中途连不上了；已执行：${toolRounds.joinToString(", ")}）",
+                        fallback = true,
+                        toolRounds = toolRounds.toList(),
+                    )
+                }
+            }
+            if (reply.toolCalls.isEmpty()) {
+                // 没有工具调用 = 模型给出了最终答复，收工。
+                return ChatOutcome(
+                    engine = "external:" + ext.id,
+                    content = reply.content.trim(),
+                    fallback = false,
+                    toolRounds = toolRounds.ifEmpty { null },
+                )
+            }
+            // 有工具调用：先把它的话留下，再逐个执行并回灌。
+            if (reply.content.isNotBlank()) convo += LlmMessage("assistant", reply.content)
+            for (call in reply.toolCalls) {
+                val result = runTool(call.id, call.args)
+                toolRounds += "${call.id}:${result.code}"
+                convo += LlmMessage("tool", renderToolResult(call.id, result))
+            }
+        }
+
+        // 轮数用完：逼它收敛（不带工具再问一次）。
+        val finalText = runCatching {
+            provider?.chat(ext, convo + LlmMessage("user", "请基于以上工具结果直接回答，不要再调用工具。"))
+        }.getOrNull()
+        if (!finalText.isNullOrBlank()) {
+            return ChatOutcome(
+                engine = "external:" + ext.id,
+                content = finalText.trim(),
+                fallback = false,
+                toolRounds = toolRounds.ifEmpty { null },
             )
         }
         return ChatOutcome(
             engine = "local-fallback",
-            content = "（尚未登记任何外部模型连接，无法真正对话；请在「AI 接入 → 连接」里登记一个 openai-compatible 地址，或在 agent-profiles.json 里配置。）",
+            content = "（外部模型 ${ext.id} 在 $MAX_TOOL_ROUNDS 轮工具调用后仍未给出结论，已停止。）",
             fallback = true,
+            toolRounds = toolRounds.ifEmpty { null },
         )
+    }
+
+    /** 把一次工具结果压成给模型看的短文本（太长会挤爆上下文）。 */
+    private fun renderToolResult(toolId: String, result: AgentResult): String {
+        val body = buildString {
+            append("工具 ").append(toolId).append(" 返回（").append(result.status).append("/").append(result.code).append("）")
+            if (!result.message.isNullOrBlank()) append("：").append(result.message)
+            if (result.data != null) {
+                // 工具结果本来就是给人/模型看的（List/Map/String），toString 足够；
+                // 不走 kotlinx 序列化 —— Any? 没有序列化器，硬塞会编译不过。
+                val raw = result.data.toString()
+                append("｜数据：").append(if (raw.length <= MAX_TOOL_DATA) raw else raw.take(MAX_TOOL_DATA) + "…（已截断）")
+            }
+        }
+        return body
     }
 
     /** 当前档案里第一个非内置（openai-compatible）连接；没有就返回 null（用本地兜底）。 */
@@ -247,5 +322,15 @@ class Agent(
         val content: String,
         val fallback: Boolean,
         val error: String? = null,
+        /** 本轮对话实际执行过的工具（`工具id:结果码`）。没调工具就是 null。 */
+        val toolRounds: List<String>? = null,
     )
+
+    companion object {
+        /** 一次对话里最多让模型调几轮工具 —— 防止它无限"我要再查一个"把请求拖死。 */
+        const val MAX_TOOL_ROUNDS = 6
+
+        /** 单次工具结果塞回上下文的字符上限。 */
+        const val MAX_TOOL_DATA = 4000
+    }
 }

@@ -250,6 +250,8 @@ private data class ChatResponseDto(
     val content: String,
     val fallback: Boolean? = null,
     val error: String? = null,
+    /** 本轮实际执行过的工具（`工具id:结果码`）；没调工具就不出现。 */
+    val toolRounds: List<String>? = null,
 )
 
 // 自由对话（多轮）：直接把 messages 数组交给外部模型，缺连接/失败回退本地说明，
@@ -278,6 +280,7 @@ suspend fun ApplicationCall.agentChat(agentConnection: AgentConnection?) {
             content = outcome.content,
             fallback = if (outcome.fallback) true else null,
             error = outcome.error,
+            toolRounds = outcome.toolRounds,
         ),
     )
 }

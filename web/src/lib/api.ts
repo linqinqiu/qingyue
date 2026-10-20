@@ -746,4 +746,6 @@ export type AgentChatResult = {
   content: string
   fallback?: boolean
   error?: string
+  /** 本轮 AI 实际执行过的工具（`工具id:结果码`）。没调工具就不出现。 */
+  toolRounds?: string[]
 }

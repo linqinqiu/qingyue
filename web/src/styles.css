@@ -5971,3 +5971,12 @@ input[type="checkbox"] {
   font-size: var(--t-sm);
 }
 .lab-plugin-failures ul { margin: var(--s-2) 0 0; padding-left: 1.2em; color: var(--muted); }
+
+/* AI 对话气泡里的工具调用记录：让用户看到 AI 真的执行了哪些能力 */
+.ai-bubble-tools { margin-top: var(--s-2); padding-top: var(--s-2); border-top: 1px dashed var(--line); }
+.ai-bubble-tools-label { display: block; color: var(--muted); font-size: var(--t-xs); }
+.ai-tool-list { margin: var(--s-1) 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.ai-tool-item {
+  padding: 1px 6px; border-radius: var(--r-1);
+  background: var(--surface-muted); color: var(--muted); font-size: var(--t-xs);
+}

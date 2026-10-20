@@ -27,10 +27,27 @@ export type LabEntry = {
   title: string
   /** 一句话说明这是什么、能干什么。 */
   description: string
-  /** 渲染这个实验的内容。 */
-  render: () => React.ReactNode
+  /**
+   * 渲染这个实验的内容。
+   *
+   * 参数是**宿主上下文**（[LabHostContext]）—— 由实验室的调用方提供，
+   * 让条目能知道"用户此刻在哪个界面、在看什么"。实验室自己不认识这些字段，
+   * 只是原样转发：框架不解释内容，只提供通道。
+   */
+  render: (host: LabHostContext) => React.ReactNode
   /** 可选：条目标签，如 '实验' / '调试' / 'AI'。 */
   badge?: string
+}
+
+/**
+ * 宿主上下文 —— 实验室向条目转发的"外面世界"。
+ *
+ * 刻意用 `unknown` 而不是具体类型：实验室是框架，不该知道 `uiContext` 是什么形状
+ * （那是插件与宿主之间的约定）。框架只负责**通道**，不解释内容。
+ */
+export type LabHostContext = {
+  /** 任意宿主提供的上下文（当前是 UI 上下文，见 lib/uiContext.ts）。 */
+  uiContext?: unknown
 }
 
 const POS_KEY = 'qingyue-lab-position-v1'
@@ -56,10 +73,13 @@ export function Lab({
   entries,
   onClose,
   title = '实验室',
+  host = {},
 }: {
   entries: LabEntry[]
   onClose: () => void
   title?: string
+  /** 宿主上下文：原样转发给每个条目，实验室不解释内容。 */
+  host?: LabHostContext
 }) {
   useEscapeClose(onClose)
 
@@ -196,7 +216,7 @@ export function Lab({
             {active ? (
               <>
                 <p className="lab-desc">{active.description}</p>
-                {active.render()}
+                {active.render(host)}
               </>
             ) : (
               <p className="lab-empty">实验室是空的：这里是承载"还没进主界面"能力的地方。</p>

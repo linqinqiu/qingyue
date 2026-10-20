@@ -38,10 +38,55 @@ interface LlmProvider {
      * @return 模型回复的文本；拿不到就返回 null（调用方回退本地），**不要抛异常**
      */
     fun chat(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String?
+
+    /**
+     * 带工具能力的一次对话。**默认实现退化为纯文本**，保证既有 provider 不用改。
+     *
+     * 想支持工具调用（让模型能执行插件注册的能力）的 provider 覆盖这个方法。
+     * 框架拿到 [LlmReply.toolCalls] 后会执行对应工具、把结果回灌，再问一轮。
+     *
+     * @param tools 当前可用的工具清单（来自 ToolRegistry，含插件注册的）
+     * @return 文本 + 工具调用；拿不到返回 null（调用方回退）
+     */
+    fun chatWithTools(
+        profile: AgentProfileStore.Profile,
+        messages: List<LlmMessage>,
+        tools: List<ToolMeta>,
+    ): LlmReply? {
+        // 默认：忽略工具，退化成普通对话 —— 老 provider 零改动。
+        val text = chat(profile, messages) ?: return null
+        return LlmReply(content = text)
+    }
 }
 
 /** 一条对话消息。与 [Agent] 内部的 ChatMessage 同形，公开出来供 provider 使用。 */
 data class LlmMessage(val role: String, val content: String)
+
+/**
+ * 一次工具调用请求 —— 模型说"我要调这个工具、带这些参数"。
+ *
+ * 这是"AI 能完成插件级功能"的关键：模型不再只能聊天，它能要求执行某个已注册工具，
+ * 由框架执行后把结果回灌给它，它再继续推理。工具清单来自 [ToolRegistry]，
+ * 所以**插件注册的工具自动对模型可见**，不必额外登记。
+ */
+data class LlmToolCall(
+    /** 工具 id（对应 [ToolMeta.id]）。 */
+    val id: String,
+    /** 参数（扁平键值，与 [ToolArgs] 同形）。 */
+    val args: Map<String, Any?> = emptyMap(),
+)
+
+/**
+ * 模型的一次回复：文本 + 可能要调的工具。
+ *
+ * 两者可以同时存在（模型先说一句再调工具），所以不是二选一的结构。
+ */
+data class LlmReply(
+    /** 文本部分，可能为空。 */
+    val content: String = "",
+    /** 要调的工具，可能为空。 */
+    val toolCalls: List<LlmToolCall> = emptyList(),
+)
 
 /**
  * Provider 注册表 —— 让协议可插拔。

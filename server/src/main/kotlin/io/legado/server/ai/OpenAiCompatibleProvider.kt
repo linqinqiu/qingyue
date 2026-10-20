@@ -5,6 +5,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -36,6 +38,32 @@ class OpenAiCompatibleProvider : LlmProvider {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
 
     override fun chat(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String? {
+        val reply = post(profile, messages, tools = null) ?: return null
+        return reply.content.ifBlank { null }
+    }
+
+    /**
+     * 带工具调用。用 OpenAI 的 `tools` / `tool_calls` 协议：
+     * 请求给 `tools:[{type:"function",function:{name,description,parameters}}]`，
+     * 响应可能带 `tool_calls:[{id,function:{name,arguments}}]`。
+     *
+     * 模型不认工具（或服务端不支持）时自然退化 —— 只返回普通文本，toolCalls 为空。
+     */
+    override fun chatWithTools(
+        profile: AgentProfileStore.Profile,
+        messages: List<LlmMessage>,
+        tools: List<ToolMeta>,
+    ): LlmReply? {
+        if (tools.isEmpty()) return chat(profile, messages)?.let { LlmReply(content = it) }
+        return post(profile, messages, tools)
+    }
+
+    /** 一次 HTTP 往返。tools 为 null 时不带工具（纯对话）。 */
+    private fun post(
+        profile: AgentProfileStore.Profile,
+        messages: List<LlmMessage>,
+        tools: List<ToolMeta>?,
+    ): LlmReply? {
         val base = profile.baseUrl?.trim()?.removeSuffix("/") ?: return null
         val url = if (base.endsWith("/v1")) base + "/chat/completions" else base + "/v1/chat/completions"
         val body = json.encodeToString(
@@ -43,6 +71,21 @@ class OpenAiCompatibleProvider : LlmProvider {
                 model = profile.model ?: "gpt-3.5-turbo",
                 messages = messages.map { ChatMessage(it.role, it.content) },
                 temperature = 0.7,
+                tools = tools?.takeIf { it.isNotEmpty() }?.map { meta ->
+                    ToolSpec(
+                        function = ToolSpecFunction(
+                            name = meta.id,
+                            description = meta.description,
+                            // 工具参数是扁平键值（见 ToolArgs），不强制 schema ——
+                            // 模型按描述自己填，框架侧对未知键宽容。
+                            parameters = buildJsonObject {
+                                put("type", "object")
+                                put("properties", buildJsonObject { })
+                                put("additionalProperties", true)
+                            },
+                        ),
+                    )
+                },
             ),
         )
         val builder = HttpRequest.newBuilder()
@@ -54,20 +97,64 @@ class OpenAiCompatibleProvider : LlmProvider {
         val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
         val resp = runCatching { client.send(builder.build(), HttpResponse.BodyHandlers.ofString()) }.getOrNull() ?: return null
         if (resp.statusCode() !in 200..299) return null
-        // 最小解析：取 choices[0].message.content；解析失败就返回原文。
-        return runCatching {
-            val root = json.parseToJsonElement(resp.body())
-            val choices = (root as? JsonObject)?.get("choices") as? JsonArray
-            val first = choices?.firstOrNull() as? JsonObject
-            val message = first?.get("message") as? JsonObject
-            val content = (message?.get("content") as? JsonPrimitive)?.content
-            content ?: resp.body()
-        }.getOrNull() ?: resp.body()
+        return runCatching { parseReply(resp.body()) }.getOrNull()
     }
+
+    /** 解析 OpenAI 响应：取 content，以及 tool_calls（如果有）。 */
+    private fun parseReply(body: String): LlmReply {
+        val root = json.parseToJsonElement(body) as? JsonObject ?: return LlmReply(content = body)
+        val choices = root["choices"] as? JsonArray
+        val first = choices?.firstOrNull() as? JsonObject
+        val message = first?.get("message") as? JsonObject
+        val content = (message?.get("content") as? JsonPrimitive)?.content ?: ""
+
+        val calls = mutableListOf<LlmToolCall>()
+        val rawCalls = message?.get("tool_calls") as? JsonArray
+        rawCalls?.forEach { item ->
+            val obj = item as? JsonObject ?: return@forEach
+            val fn = obj["function"] as? JsonObject ?: return@forEach
+            val name = (fn["name"] as? JsonPrimitive)?.content ?: return@forEach
+            val argsRaw = (fn["arguments"] as? JsonPrimitive)?.content ?: "{}"
+            calls += LlmToolCall(id = name, args = parseArgs(argsRaw))
+        }
+        // 既没 content 也没工具调用 → 退回原文（与改造前一致，别把响应吃成空）。
+        if (content.isBlank() && calls.isEmpty()) return LlmReply(content = body)
+        return LlmReply(content = content, toolCalls = calls)
+    }
+
+    /** 把模型给的 arguments 字符串解析成扁平键值。解析不了就当空参，不抛。 */
+    private fun parseArgs(raw: String): Map<String, Any?> = runCatching {
+        val el = json.parseToJsonElement(raw)
+        (el as? JsonObject)?.entries?.associate { (k, v) ->
+            k to when (v) {
+                is JsonPrimitive -> v.content
+                else -> v.toString()
+            }
+        } ?: emptyMap()
+    }.getOrDefault(emptyMap())
 
     @Serializable
     private data class ChatMessage(val role: String, val content: String)
 
     @Serializable
-    private data class ChatRequest(val model: String, val messages: List<ChatMessage>, val temperature: Double)
+    private data class ToolSpecFunction(
+        val name: String,
+        val description: String,
+        /**
+         * 参数 schema。用 JsonObject 而不是 `Map<String, Any?>` —— 后者没有序列化器
+         * （kotlinx 需要具体类型），而这里本来就是要发一段 JSON。
+         */
+        val parameters: JsonObject,
+    )
+
+    @Serializable
+    private data class ToolSpec(val type: String = "function", val function: ToolSpecFunction)
+
+    @Serializable
+    private data class ChatRequest(
+        val model: String,
+        val messages: List<ChatMessage>,
+        val temperature: Double,
+        val tools: List<ToolSpec>? = null,
+    )
 }

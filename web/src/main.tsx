@@ -15,6 +15,7 @@ import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
 import { LabModal } from './plugins/labHost'
 import { frontendPlugins } from './lab/pluginRegistry'
+import type { UiContext } from './lib/uiContext'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
 import { ReplaceRulesModal } from './components/ReplaceRulesModal'
@@ -404,6 +405,29 @@ function App() {
     void api.sources().then(setSources).catch(() => undefined)
   }
 
+  /**
+   * 当前界面上下文 —— 给实验室里的 AI 面板用（它随对话发给模型）。
+   *
+   * 只收集**真实存在**的状态：当前页、打开的浮层、选中的书源、正在读的书与章节。
+   * 不做推断、不塞正文（正文让模型用工具去取，那才是插件级功能的用法）。
+   */
+  const currentUiContext: UiContext = {
+    page,
+    dialog: pageDialog,
+    source: selected ? { id: selected.id, name: selected.name } : null,
+    book: reader
+      ? {
+          sourceId: reader.book.details.sourceId,
+          bookUrl: reader.book.bookUrl,
+          name: reader.book.details.name,
+          author: reader.book.details.author,
+          chapterIndex: reader.index,
+          chapterTitle: reader.book.chapters[reader.index]?.title,
+        }
+      : null,
+    keyword: null,
+  }
+
   return (
     <div className={`app-shell ${skinClasses}`}>
       <SkinStyle settings={settings} />
@@ -501,7 +525,7 @@ function App() {
         <ServerPortModal onClose={() => setShowServerPort(false)} />
       )}
       {showLab && (
-        <LabModal onClose={() => setShowLab(false)} />
+        <LabModal onClose={() => setShowLab(false)} uiContext={currentUiContext} />
       )}
     </div>
   )
