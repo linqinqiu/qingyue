@@ -68,12 +68,15 @@
 
 ## 5. 前端模块
 
-入口是 `web/src/main.tsx`（路由 + 页面壳 + 几个 store）。按职责分五块：
+入口是 `web/src/main.tsx`（0.8.2 结构重排后只剩路由 + 页面壳，约 490 行）。按职责分五块：
 
 - **外壳与导航**：一级目的地只有一张表（`reader/shortcuts.ts` 的 `PRIMARY_PAGES` 同时喂顶栏、数字键、`Alt+←/→`）。
   规则 / 备份 / 更新日志 / 关于是悬浮层（`PageDialog`），不占路由。
 - **阅读器**：`reader/ReaderScreen.tsx` 只做编排，几何与翻页算术在 `reader/readerFlow.ts`、手势在
   `reader/readerInteractions.ts`、点击区域在 `reader/tapZones.ts` + `reader/TapZoneEditor.tsx`。
+  0.8.2 结构重排又拆出四块：目录虚拟列表 `reader/VirtualChapterList.tsx`（窗口算式仍只有
+  `reader/virtualSlice.ts` 一份）、朗读集群 `reader/useReaderTts.ts`（状态 + 回调 + effect）、
+  图片预热 `reader/contentImages.ts`、正文切段 `reader/paragraphs.ts`；传书合同 `reader/openBook.ts`。
 - **设置与本机存储**：`reader/readerSettings.ts`（唯一那份阅读偏好）、`lib/offlineStorage.ts`
   （IndexedDB：正文分片 + 书架快照 + 离线进度队列）。
 - **浮层**：所有弹窗共用 `.dialog-shell` + `.overlay-backdrop` + `.overlay-close` 一档几何。
