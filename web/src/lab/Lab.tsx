@@ -104,15 +104,13 @@ export function Lab({
   // initialEntryId 变了就跟着切（同一次会话里点不同深链/不同入口时会发生）。
   // 只靠 useState 的初始值不行 —— 那是一次性的，组件没重挂就永远停在第一条。
   //
-  // 依赖里刻意不放 `entries`：宿主每次渲染都会传一个新数组（插件清单是现拼的），
-  // 放进来就是每轮都重跑 effect。条目存在性用 ref 读最新值来判断。
-  const entriesRef = useRef(entries)
-  entriesRef.current = entries
+  // 依赖里可以放心带 `entries`：装配点（plugins/labHost.tsx）已经把条目清单缓存成稳定引用，
+  // 运行期不变。从前它每轮现拼新数组，这里不得不用 ref 绕开 —— 那是框架设计不够好留下的补丁。
   useEffect(() => {
     if (!initialEntryId) return
-    if (!entriesRef.current.some(e => e.id === initialEntryId)) return
+    if (!entries.some(e => e.id === initialEntryId)) return
     setActiveId(initialEntryId)
-  }, [initialEntryId])
+  }, [initialEntryId, entries])
   const active = useMemo(
     () => entries.find(e => e.id === activeId) ?? entries[0],
     [entries, activeId],

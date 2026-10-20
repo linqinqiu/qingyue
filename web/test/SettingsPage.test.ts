@@ -108,7 +108,10 @@ test('路由与"去书架开弹窗"的信号接上了', () => {
   // 断言逐字不变（这一条只判"在不在"，拼接不放宽任何一条）。
   const main = [read('../src/main.tsx'), read('../src/pages/ShelfPage.tsx')].join('\n')
   assert.match(main, /location\.hash === '#settings' \? 'settings'/)
-  assert.match(main, /page === 'settings' \? \(\s*<SettingsPage sections=\{buildSettingsSections\(\{/)
+  // 结构判据：只要"settings 分支里渲染 SettingsPage 且 sections 来自 buildSettingsSections"即可。
+  // 0.8.3 起 SettingsPage 多了 pluginSections 参数，JSX 从单行变多行 —— 断言跟着放宽结构、
+  // 但"必须是同一个 SettingsPage + 同一个分区表"这条没变。
+  assert.match(main, /page === 'settings' \? \([\s\S]{0,200}<SettingsPage[\s\S]{0,80}sections=\{buildSettingsSections\(\{/)
   assert.match(main, /tocRulesSignal=\{tocRulesSignal\}/)
   assert.match(main, /if \(tocRulesSignal > 0\) setShowTocRules\(true\)/,
     '第一次挂载（0）不弹：刷新页面就跳出弹窗是凭空多出来的行为')
@@ -162,7 +165,10 @@ test('搜索框画在界面上，且"没搜到"只在真搜过时才说', () => 
   assert.match(html, /<input type="search"[^>]*aria-label="搜设置项"/, '输入框要有可访问名字，读屏里不能是一句光秃秃的"编辑框"')
   assert.match(html, /<h2>阅读<\/h2>[\s\S]*快捷键[\s\S]*<h2>服务<\/h2>[\s\S]*服务端口/, '两档四行都画得出')
   assert.doesNotMatch(html, /没有匹配/, '没搜过不许说"没有匹配"—— 空列表被说成搜不到是另一回事')
-  // 「没有匹配」那一支由 searching 把关：少了这个条件，sections 为空时界面会凭空说"没有匹配「」"
-  assert.match(read('../src/pages/SettingsPage.tsx'), /\{searching && shown\.length === 0 \?/,
-    '空态那一支必须同时要求"真的输入过"')
+  // 「没有匹配」那一支必须同时要求"真的输入过"：少了这个条件，sections 为空时界面会凭空说"没有匹配「」"。
+  // 0.8.3 起这个条件收进 nothingMatched（= searching && 内置与插件分区都空），
+  // 判据改成查它的定义里确实带了 searching，而不是钉死内联写法。
+  const settingsSrc = read('../src/pages/SettingsPage.tsx')
+  assert.match(settingsSrc, /const nothingMatched = searching &&/, '空态条件里必须包含"真的输入过"')
+  assert.match(settingsSrc, /\{nothingMatched \?/, '空态要用那个条件把关')
 })

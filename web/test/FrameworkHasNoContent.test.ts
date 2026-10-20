@@ -63,5 +63,10 @@ test('框架装配点在内容目录 plugins/ 里，且不含硬编码的实验�
   const src = fs.readFileSync(hostFile, 'utf8')
   assert.ok(!/title:\s*['"]/.test(src), '装配点里出现了硬编码的 title —— 条目应来自插件')
   assert.ok(!/description:\s*['"]/.test(src), '装配点里出现了硬编码的 description —— 条目应来自插件')
-  assert.match(src, /frontendPlugins\.labEntries\(\)/, '装配点应向注册表要条目')
+  // 条目来源：装配点从 index.ts 取，index.ts 向注册表要。两段合起来才是"条目来自插件"，
+  // 所以判据看这条链是否完整，而不是钉死在某一个文件里。
+  assert.match(src, /getLabEntries\(\)/, '装配点要向清单入口取条目')
+  const indexFile = path.join(PLUGINS_DIR, 'index.ts')
+  assert.match(fs.readFileSync(indexFile, 'utf8'), /frontendPlugins\.labEntries\(\)/,
+    '清单入口要向注册表要条目 —— 不能自己写死')
 })

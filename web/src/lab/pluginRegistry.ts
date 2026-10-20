@@ -131,6 +131,18 @@ export class FrontendPluginRegistry {
     return this.plugins.delete(id)
   }
 
+  /**
+   * 清空全部登记与失败记录。
+   *
+   * 为什么需要它：注册表是**模块级单例**，而测试要能各自从干净状态开始。
+   * 没有重置就只能靠"测试之间别互相影响"这种脆弱约定 —— 一个测试装了插件，
+   * 后面所有测试都会看到它。这也是热重载要用的入口。
+   */
+  reset(): void {
+    this.plugins.clear()
+    this.failures = []
+  }
+
   /** 已登记插件。 */
   list(): FrontendPlugin[] {
     return [...this.plugins.values()]

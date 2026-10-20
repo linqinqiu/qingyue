@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api, BookDetails, BookshelfItem, SearchResult, SourceSummary } from './lib/api'
 import { ContextMenuLayer } from './components/ContextMenu'
@@ -12,6 +12,7 @@ import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
 import { LabModal } from './plugins/labHost'
 import { frontendPlugins } from './lab/pluginRegistry'
+import { installBuiltinPlugins } from './plugins'
 import type { UiContext } from './lib/uiContext'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
@@ -397,6 +398,24 @@ function App() {
     }
   }
 
+  /**
+   * 插件贡献的设置分区。
+   *
+   * 从前 `frontendPlugins.settingsSections()` 有 getter 但**从没被调用** —— 插件注册了也不生效，
+   * 那是"承诺了却没实现"。现在接上：插件注册的分区会出现在设置页末尾。
+   *
+   * 用 useMemo 缓存：`settingsSections()` 每次返回新数组，直接传给 SettingsPage 会让它每轮
+   * 都当成新 prop（虽然它不 memo，但少一次数组拼接也是少一次）。
+   */
+  const pluginSettingsSections = useMemo(
+    () => frontendPlugins.settingsSections().map(s => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      render: s.render,
+    })),
+    [],
+  )
   if (!ready) {
     // 慢启动期间也要挂 PwaManager 与 Toast：更新提示、后台同步的反馈不能因为"还在等"就消失。
     return (
@@ -436,6 +455,7 @@ function App() {
   const refreshSources = () => {
     void api.sources().then(setSources).catch(() => undefined)
   }
+
 
   /**
    * 当前界面上下文 —— 给实验室里的 AI 面板用（它随对话发给模型）。
@@ -484,17 +504,21 @@ function App() {
       ) : page === 'subscriptions' ? (
         <RssPage onOpenBackup={() => { setLabEntryId('backup'); setShowLab(true) }} />
       ) : page === 'settings' ? (
-        <SettingsPage sections={buildSettingsSections({
-          openShortcuts: () => setOpenModal('shortcuts'),
-          openOfflineCache: () => setOpenModal('offline-cache'),
-          openCustomize: () => setOpenModal('customize'),
-          openReplaceRules: () => setPageDialog('rules'),
-          openTocRules: () => setTocRulesSignal(value => value + 1),
-          openBackup: () => { setLabEntryId('backup'); setShowLab(true) },
-          openLogs: () => setOpenModal('logs'),
-          openServerPort: () => setOpenModal('server-port'),
-          openAiConnections: () => setShowLab(true),
-        })} />
+        <SettingsPage
+          sections={buildSettingsSections({
+            openShortcuts: () => setOpenModal('shortcuts'),
+            openOfflineCache: () => setOpenModal('offline-cache'),
+            openCustomize: () => setOpenModal('customize'),
+            openReplaceRules: () => setPageDialog('rules'),
+            openTocRules: () => setTocRulesSignal(value => value + 1),
+            openBackup: () => { setLabEntryId('backup'); setShowLab(true) },
+            openLogs: () => setOpenModal('logs'),
+            openServerPort: () => setOpenModal('server-port'),
+            openAiConnections: () => setShowLab(true),
+          })}
+          // 插件贡献的设置分区：宿主只负责摆位置与搜索，不解释内容。
+          pluginSections={pluginSettingsSections}
+        />
       ) : page === 'shelf' ? (
         <ShelfPage
           sources={sources}
@@ -561,6 +585,11 @@ function App() {
     </div>
   )
 }
+
+// 插件必须在**应用启动前**装载，不能等"打开实验室"时才装 ——
+// 设置页的插件分区、插件的页面/命令都要在首屏就能用。
+// （从前只有 getLabEntries() 里装，于是"没开过实验室"时插件等于不存在。）
+installBuiltinPlugins()
 
 // 根上这一层是最后兜底：连页面外壳自己抛错时，也不能剩一片白屏让人以为程序没了
 createRoot(document.getElementById('root')!).render(

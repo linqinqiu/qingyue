@@ -6047,3 +6047,16 @@ input[type="checkbox"] {
   font-size: var(--t-sm); font-weight: 600;
 }
 .lab-section-title:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* 插件贡献的设置分区：与内置分区同形摆放，但内容是插件自己渲染的 */
+.settings-section-plugin { margin-top: var(--s-5); }
+.settings-plugin-desc { margin: 0 0 var(--s-3); color: var(--muted); font-size: var(--t-sm); }
+.settings-plugin-body { display: flex; flex-direction: column; gap: var(--s-3); }
+
+/* 插件设置分区里的开关行 */
+.settings-plugin-row {
+  display: flex; align-items: center; gap: var(--s-2);
+  font-size: var(--t-sm); cursor: pointer;
+}
+.settings-plugin-row input { flex: none; }
+.settings-plugin-note { margin: 0; color: var(--muted); font-size: var(--t-xs); }

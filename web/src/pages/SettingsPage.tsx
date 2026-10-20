@@ -21,10 +21,34 @@ export type SettingsRow = {
 
 export type SettingsSection = { title: string; rows: SettingsRow[] }
 
-export function SettingsPage({ sections }: { sections: SettingsSection[] }) {
+/**
+ * 插件贡献的设置分区。
+ *
+ * 与内置分区（[SettingsSection]）刻意不同形：内置分区是"一行一个入口"的导航表，
+ * 插件分区是**自带渲染的内容块** —— 插件想放表单、开关、说明都行，宿主不规定里面长什么样。
+ * 硬把两者塞进同一个形状，要么让插件只能放"打开某处"的按钮，要么让内置分区背上一堆用不上的字段。
+ */
+export type PluginSection = {
+  id: string
+  title: string
+  description?: string
+  render: () => React.ReactNode
+}
+
+export function SettingsPage({ sections, pluginSections = [] }: {
+  sections: SettingsSection[]
+  /** 插件贡献的分区。宿主只负责摆位置与搜索，不解释内容。 */
+  pluginSections?: PluginSection[]
+}) {
   const [query, setQuery] = useState('')
   const shown = filterSettingsSections(sections, query)
+  const needle = query.trim().toLowerCase()
+  // 插件分区也参与搜索：命中标题或说明就留着（内容内部不筛 —— 宿主不认识它的结构）
+  const shownPlugins = needle === ''
+    ? pluginSections
+    : pluginSections.filter(s => `${s.title} ${s.description ?? ''}`.toLowerCase().includes(needle))
   const searching = query.trim() !== ''
+  const nothingMatched = searching && shown.length === 0 && shownPlugins.length === 0
   return (
     <main className="settings-page">
       <header className="page-title">
@@ -42,7 +66,7 @@ export function SettingsPage({ sections }: { sections: SettingsSection[] }) {
         />
         {searching && <button type="button" className="link-button" onClick={() => setQuery('')}>清空</button>}
       </div>
-      {searching && shown.length === 0 ? (
+      {nothingMatched ? (
         <p className="settings-no-match">
           {`没有匹配「${query.trim()}」的设置项。`}
           <button type="button" className="link-button" onClick={() => setQuery('')}>清空搜索</button>
@@ -61,6 +85,13 @@ export function SettingsPage({ sections }: { sections: SettingsSection[] }) {
               </div>
             ))}
           </div>
+        </section>
+      ))}
+      {shownPlugins.map(section => (
+        <section key={`plugin-${section.id}`} className="settings-section settings-section-plugin">
+          <h2>{section.title}</h2>
+          {section.description && <p className="settings-plugin-desc">{section.description}</p>}
+          <div className="settings-plugin-body">{section.render()}</div>
         </section>
       ))}
     </main>

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Lab, LabEntry, LabHostContext } from '../lab/Lab'
 import { frontendPlugins } from '../lab/pluginRegistry'
-import { installBuiltinPlugins } from './index'
+import { getLabEntries } from './index'
 import type { UiContext } from '../lib/uiContext'
 
 /**
@@ -14,9 +14,10 @@ import type { UiContext } from '../lib/uiContext'
  * 它还负责把**宿主上下文**（用户此刻在哪个界面、在看什么）打包给实验室，
  * 由实验室原样转发给每个插件条目。实验室自己不认识 UiContext 的形状。
  */
+
+/** 实验室条目清单：缓存住（清单在运行期不变，稳定引用才能让下游正常按引用比较）。 */
 export function buildLabEntries(): LabEntry[] {
-  installBuiltinPlugins()
-  return frontendPlugins.labEntries()
+  return getLabEntries()
 }
 
 /** 实验室悬浮层：把插件登记的条目交给 Lab 渲染，并带上宿主上下文。 */
