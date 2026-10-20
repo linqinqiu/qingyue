@@ -9,6 +9,8 @@ import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.legado.server.BuildInfo
 import io.legado.server.ai.AgentConnection
+import io.legado.server.plugin.PluginManager
+import io.legado.server.plugin.PluginStatusDto
 import io.legado.server.ai.AgentProfileStore
 import io.legado.server.backup.BackupStore
 import io.legado.server.cache.BookCacheService
@@ -63,6 +65,8 @@ fun Route.apiRoutes(
     agentConnection: AgentConnection? = null,
     // 「自定义接入」持久层（连接描述存取）；传 null 时各处理器内部自行回退到 AgentProfileStore 默认实现。
     profileStore: AgentProfileStore? = null,
+    // 插件管理器：`/api/plugins` 报插件状态用。null 表示插件框架未接线（界面会显示"未接线"）。
+    pluginManager: PluginManager? = null,
 ) {
     val webView = WebViewProxy(database)
     // 备份包里没有原生归宿的个性化条目，原样收在数据目录下的一个文件夹里（见 BackupStore 的取舍说明）。
@@ -82,6 +86,20 @@ fun Route.apiRoutes(
          */
         get("/catalog") {
             call.respondText(RouteCatalog.serve(BuildInfo.version), ContentType.Application.Json)
+        }
+        /**
+         * 插件状态：装了什么、各自贡献了什么、哪些装载失败了。
+         *
+         * 为什么需要这个端点：后端插件的装载失败原来**只打到控制台**，
+         * 用户在界面上完全看不到 —— 那违背了"能提供知道介绍"这条要求。
+         * 插件是第三方代码，装没装上、为什么没装上，必须能被人看见。
+         *
+         * 只读，不写门；不返回插件内部对象，只返回描述文本与元信息。
+         */
+        get("/plugins") {
+            val snapshot = pluginManager?.status()
+                ?: PluginStatusDto(loaded = 0, tools = 0, providers = 0, plugins = emptyList(), failures = emptyList(), describe = "（插件框架未接线）")
+            call.respond(snapshot)
         }
         // 服务自身 + 改端口。端口只写安装根的 `port.txt`，**重启后生效** —— 正在跑的这个进程改不了。
         get("/server") {

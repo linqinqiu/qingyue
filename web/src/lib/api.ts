@@ -693,6 +693,8 @@ export const api = {
     request<AgentComprehendResult>('/api/agent/comprehend', { method: 'POST', body: JSON.stringify(req) }),
   agentChat: (messages: AgentChatMessage[]) =>
     request<AgentChatResult>('/api/agent/chat', { method: 'POST', body: JSON.stringify({ messages }) }),
+  /** 后端插件状态：装了什么、贡献了什么、哪些失败了。 */
+  plugins: () => request<PluginStatus>('/api/plugins'),
 }
 
 export function streamSearch(keyword: string, sourceIds: string[] | undefined, onEvent: (event: SearchStreamEvent) => void, onError: (message: string) => void, onClose: () => void): WebSocket {
@@ -740,6 +742,26 @@ export type AgentComprehendResult = {
 }
 
 export type AgentChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+/** 插件状态（GET /api/plugins）：后端装了什么、贡献了什么、哪些失败了。 */
+export type PluginStatus = {
+  loaded: number
+  tools: number
+  providers: number
+  plugins: Array<{
+    id: string
+    name: string
+    version: string
+    description: string
+    author?: string | null
+    tools?: string[]
+    llmProviders?: string[]
+    subscriptions?: number
+  }>
+  failures: Array<{ source: string; reason: string }>
+  /** 人读的完整介绍，界面可直接展示。 */
+  describe: string
+}
 
 export type AgentChatResult = {
   engine: string

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../icons'
 import { FloatingWindow } from './FloatingWindow'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { useEscapeClose } from '../lib/useEscapeClose'
 
 /**
@@ -150,7 +151,15 @@ export function Lab({
           {active ? (
             <>
               <p className="lab-desc">{active.description}</p>
-              {active.render(host)}
+              {/*
+                插件隔离：一个插件渲染时抛异常，不能把整个实验室（乃至整个应用）带崩。
+                这是插件框架的基本要求 —— 第三方代码不可信，必须挡在边界里。
+                用 key={active.id}：切到别的条目时重建边界，否则上一个插件的错误状态会粘住，
+                切过去看到的还是"崩了"。
+              */}
+              <ErrorBoundary key={active.id} region={active.title}>
+                {active.render(host)}
+              </ErrorBoundary>
             </>
           ) : (
             <p className="lab-empty">实验室是空的：这里是承载"还没进主界面"能力的地方。</p>

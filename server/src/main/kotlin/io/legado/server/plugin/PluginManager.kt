@@ -3,6 +3,7 @@ package io.legado.server.plugin
 import io.legado.server.ai.ToolHooks
 import io.legado.server.ai.LlmProviderRegistry
 import io.legado.server.ai.ToolRegistry
+import kotlinx.serialization.Serializable
 import java.util.ServiceLoader
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -30,7 +31,8 @@ class PluginManager(
     private val hooks: ToolHooks,
     private val providers: LlmProviderRegistry = LlmProviderRegistry(),
     private val events: EventBus = AppEvents.bus,
-    private val frameworkVersion: String = "0.8.2",
+    /** 框架版本：默认取构建号（`BuildInfo.version`），不写死 —— 写死就会像 0.8.2 那样漂走。 */
+    private val frameworkVersion: String = io.legado.server.BuildInfo.version,
 ) {
 
     /** 已装载的插件（按装载顺序）。 */
@@ -220,6 +222,33 @@ class PluginManager(
         }
     }
 
+    /**
+     * 结构化状态快照 —— 给 `/api/plugins` 用。
+     *
+     * 为什么要有它：装载失败原来只打到控制台，用户在界面上看不到。
+     * 插件是第三方代码，装没装上、为什么没装上必须能被人看见。
+     */
+    fun status(): PluginStatusDto = PluginStatusDto(
+        loaded = loaded.size,
+        tools = registry.size(),
+        providers = providers.size(),
+        plugins = loaded.map { lp ->
+            val m = lp.plugin.metadata
+            PluginStatusDto.Item(
+                id = m.id,
+                name = m.name,
+                version = m.version,
+                description = m.description,
+                author = m.author.ifBlank { null },
+                tools = lp.registeredToolIds,
+                llmProviders = lp.registeredProviderIds,
+                subscriptions = lp.subscriptionHandles.size,
+            )
+        },
+        failures = failures.map { PluginStatusDto.Failure(it.source, it.reason) },
+        describe = describe(),
+    )
+
     // ———— 内部装载 ————
 
     private fun load(plugin: Plugin, source: String): Boolean {
@@ -314,4 +343,42 @@ class PluginManager(
         )
         return true
     }
+}
+
+/**
+ * 插件状态快照（`GET /api/plugins` 的响应体）。
+ *
+ * 刻意只暴露**描述性**信息，不暴露插件内部对象 —— 界面只需要知道"装了什么、谁装的、
+ * 贡献了什么、哪些失败了"，不需要也不能拿到可调用的句柄（那会让前端能绕过框架直调）。
+ */
+@Serializable
+data class PluginStatusDto(
+    /** 已装载插件数。 */
+    val loaded: Int,
+    /** 当前工具总数（含内置）。 */
+    val tools: Int,
+    /** 当前 LLM 协议总数（含内置 openai-compatible）。 */
+    val providers: Int,
+    val plugins: List<Item>,
+    val failures: List<Failure>,
+    /** 人读的完整介绍（`describe()` 的原文），界面可直接展示。 */
+    val describe: String,
+) {
+    @Serializable
+    data class Item(
+        val id: String,
+        val name: String,
+        val version: String,
+        val description: String,
+        val author: String? = null,
+        /** 这个插件注册的工具 id。 */
+        val tools: List<String> = emptyList(),
+        /** 这个插件注册的 LLM 协议 id。 */
+        val llmProviders: List<String> = emptyList(),
+        /** 这个插件挂了几条事件订阅。 */
+        val subscriptions: Int = 0,
+    )
+
+    @Serializable
+    data class Failure(val source: String, val reason: String)
 }

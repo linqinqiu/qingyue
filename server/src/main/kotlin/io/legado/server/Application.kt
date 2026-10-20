@@ -197,6 +197,8 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
             database, runner, coverCache, subscriptions, bookCache, edgeTts, ttsSessions,
             config.localBooksDirectory, config.homeDirectory, config.host, config.port,
             agentConnection, profileStore,
+            // 插件状态报给界面（`GET /api/plugins`）—— 装没装上、为什么没装上，用户要看得见。
+            pluginManager,
         )
         // 注册在 staticWeb 之前：根路由是 `staticResources("/")`，先摆 /next 才不必去猜路由树的优先级
         staticNext(config.nextDirectory)

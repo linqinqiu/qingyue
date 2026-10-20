@@ -22,6 +22,7 @@
 ,
   "endpoints": [
     {"method":"GET","path":"/api/catalog","write":false,"purpose":"就是这份机器可读契约；version 字段回的是当前运行的构建号","response":"{service,version,scope,howToConnect,workflow,endpoints[],count}","group":"目录"},
+{"method":"GET","path":"/api/plugins","write":false,"purpose":"插件状态：装了什么、各自贡献了哪些工具与 LLM 协议、哪些装载失败了。插件是第三方代码，装没装上必须能被人看见","response":"{loaded,tools,providers,plugins[],failures[],describe}","group":"系统"},
     {"method":"GET","path":"/api/server","write":false,"group":"系统","purpose":"服务现在绑在哪个主机与端口（界面上那个「服务端口」就是它）","response":"{host,port}"},
     {"method":"PUT","path":"/api/server/port","write":true,"group":"系统","purpose":"改监听端口：写进包目录下的 port.txt，下次启动生效","body":{"port":"1–65535"},"response":"{port,restartRequired}：restartRequired=true 表示改了但没重启，当前还在旧端口上；越界 400 invalid_port，写不进文件 500 write_failed"},
     {"method":"GET","path":"/api/sources","write":false,"purpose":"书源列表（投影，不载完整规则 JSON）","query":{"q":"可选，按名称或地址子串筛，忽略大小写"},"response":"[{id,name,url,group,enabled,isJsSource,hasLogin,updatedAt,version}]；version 就是 PUT 的乐观锁编号","group":"书源"},
