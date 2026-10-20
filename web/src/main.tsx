@@ -13,7 +13,7 @@ import { AboutPage } from './pages/AboutPage'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
-import { AiConnectionsModal } from './components/AiConnectionsModal'
+import { LabModal } from './lab/labEntries'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
 import { ReplaceRulesModal } from './components/ReplaceRulesModal'
@@ -139,7 +139,11 @@ function App() {
   const [showCustomize, setShowCustomize] = useState(false)
   /** 「设置 → 服务端口」：改的是安装根的 port.txt，重启青阅后生效。 */
   const [showServerPort, setShowServerPort] = useState(false)
-  const [showAiConnections, setShowAiConnections] = useState(false)
+  /**
+   * 「实验室」（Lab）：悬浮式框架容器，承载还没进主界面的能力。
+   * AI 接入是它目前登记的第一条实验条目 —— 实验室本身不认识 AI。
+   */
+  const [showLab, setShowLab] = useState(false)
   /**
    * 「设置 → TXT 分章规则」点下去的意图。规则弹窗连同它那颗「按这条导入本地书」都住在
    * 书架里（导书的动作在那边），所以这里只发一个"去开一下"的信号，不复制一份弹窗。
@@ -427,7 +431,7 @@ function App() {
           openBackup: () => setPageDialog('backup'),
           openLogs: () => setShowLogs(true),
           openServerPort: () => setShowServerPort(true),
-          openAiConnections: () => setShowAiConnections(true),
+          openAiConnections: () => setShowLab(true),
         })} />
       ) : page === 'shelf' ? (
         <ShelfPage
@@ -490,8 +494,8 @@ function App() {
       {showServerPort && (
         <ServerPortModal onClose={() => setShowServerPort(false)} />
       )}
-      {showAiConnections && (
-        <AiConnectionsModal onClose={() => setShowAiConnections(false)} />
+      {showLab && (
+        <LabModal onClose={() => setShowLab(false)} />
       )}
     </div>
   )

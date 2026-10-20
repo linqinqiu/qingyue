@@ -5889,3 +5889,85 @@ input[type="checkbox"] {
     backdrop-filter: blur(18px) saturate(1.5);
   }
 }
+
+/* ———— 实验室（Lab）：悬浮式框架容器 ———— */
+/* 它本身不含功能，只提供"可悬浮的壳 + 实验条目登记位"。
+   几何全部沿用 .dialog-shell 那一档（UiContract 判据要求），这里只加定位与分栏。 */
+
+/* 悬浮时不铺满全屏的挡片：实验室是"浮在上面"的工具，不是模态遮罩，
+   但仍然接 Esc 关闭、点击空白处关闭（与其它浮层同一套语义）。 */
+.lab-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: transparent;
+}
+.lab-shell {
+  /* 位置由 inline style 给（可拖拽、可记忆），这里只约束尺寸与内部结构 */
+  max-width: min(var(--dw-l), 94vw);
+  max-height: min(70vh, 720px);
+}
+.lab-head { cursor: move; user-select: none; }
+.lab-head-actions { display: flex; align-items: center; gap: var(--s-1); }
+
+.lab-body {
+  display: grid; grid-template-columns: 168px minmax(0, 1fr);
+  min-height: 0; flex: 1;
+}
+.lab-nav {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--s-3); border-right: 1px solid var(--line);
+  overflow-y: auto; min-height: 0;
+}
+.lab-nav-item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  padding: 8px 10px; border: 0; border-radius: var(--r-1);
+  background: transparent; color: var(--ink); cursor: pointer;
+  font-size: var(--t-sm); text-align: left;
+}
+.lab-nav-item:hover { background: var(--surface-muted); }
+.lab-nav-item.active { background: var(--surface-muted); font-weight: 600; }
+.lab-nav-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lab-nav-badge {
+  flex: none; padding: 1px 6px; border-radius: var(--r-1);
+  background: var(--surface-muted); color: var(--muted); font-size: var(--t-xs);
+}
+.lab-content {
+  padding: var(--s-4) var(--s-5); overflow-y: auto; min-height: 0;
+}
+.lab-desc { margin: 0 0 var(--s-3); color: var(--muted); font-size: var(--t-sm); }
+.lab-empty { margin: 0; color: var(--muted); font-size: var(--t-sm); }
+
+/* 最小化后的悬浮按钮：贴在哪由 inline style 决定 */
+.lab-fab {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--elev-2);
+  cursor: pointer; font-size: var(--t-sm);
+}
+.lab-fab:hover { background: var(--surface-muted); }
+.lab-fab svg { width: 16px; height: 16px; }
+
+@media (max-width: 640px) {
+  .lab-shell { max-width: 94vw; max-height: 76vh; }
+  .lab-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .lab-nav {
+    flex-direction: row; overflow-x: auto; border-right: 0;
+    border-bottom: 1px solid var(--line); padding: var(--s-2);
+  }
+  .lab-nav-item { white-space: nowrap; }
+}
+
+/* 实验室 · 插件介绍面板 */
+.lab-plugin-intro { display: flex; flex-direction: column; gap: var(--s-3); }
+.lab-plugin-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--s-2); }
+.lab-plugin-item {
+  padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-2);
+  background: var(--surface-muted);
+}
+.lab-plugin-item strong { display: block; font-size: var(--t-sm); }
+.lab-plugin-meta { display: block; margin-top: 2px; color: var(--muted); font-size: var(--t-xs); }
+.lab-plugin-item p { margin: var(--s-2) 0 0; font-size: var(--t-sm); color: var(--muted); }
+.lab-plugin-failures {
+  padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-2);
+  font-size: var(--t-sm);
+}
+.lab-plugin-failures ul { margin: var(--s-2) 0 0; padding-left: 1.2em; color: var(--muted); }

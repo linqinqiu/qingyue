@@ -14,9 +14,20 @@ import { useEscapeClose } from '../lib/useEscapeClose'
  * openai-compatible 地址（或在 agent-profiles.json 里配置）。书源只读校验也放在折叠区。
  *
  * 写操作由服务端同源闸门把关（浏览器自动带 Origin），这里不注入令牌。
+ *
+ * [embedded]：0.8.2 起它被放进**实验室**（Lab），那一层已经提供了 overlay + dialog-shell +
+ * 关闭键。再套一层就会出现"弹窗套弹窗"（两层遮罩、两颗关闭键），UiContract 的
+ * "浮层只有一档"判据会红。embedded 时只渲染内容体，外壳交给实验室。
  */
-export function AiConnectionsModal({ onClose }: { onClose: () => void }) {
+export function AiConnectionsModal({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
   useEscapeClose(onClose)
+  if (embedded) {
+    return (
+      <div className="ai-connections" aria-label="AI 接入">
+        <AiConnectionsPanel />
+      </div>
+    )
+  }
   return (
     <div className="overlay-backdrop" onClick={onClose}>
       <div

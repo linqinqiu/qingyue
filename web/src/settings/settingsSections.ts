@@ -98,11 +98,12 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
       }],
     },
     {
-      title: 'AI 接入',
+      title: '实验室',
       rows: [{
-        title: '自定义接入',
-        hint: '挂一个 openai-compatible 模型当「网关」，或只用内置本地抽取：登记/删除连接、文章理解、书源校验。',
-        action: '打开',
+        title: 'AI 接入与扩展',
+        hint: '程序内部的 AI 网关（/api/agent）：挂一个 openai-compatible 模型当「网关」，或只用内置本地抽取。'
+          + '实验室同时列出已装载的插件与它们贡献的能力。',
+        action: '打开实验室',
         onClick: actions.openAiConnections,
       }],
     },

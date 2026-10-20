@@ -28,6 +28,7 @@ import io.legado.server.ops.logSystem
 import io.legado.server.rules.RuleRunner
 import io.legado.server.subscription.SubscriptionService
 import io.legado.server.ai.AgentModule
+import io.legado.server.plugin.PluginManager
 import io.legado.server.ai.AgentProfileStore
 import io.legado.server.tts.EdgeTtsService
 import io.legado.server.tts.TtsSessionService
@@ -96,6 +97,29 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     )
     // 仅调试：额外自检（不会污染真实库）。生产环境返回 null，不影响任何对外行为。
     AgentModule.install(agentConnection)
+
+    // 插件框架：从安装根的 `plugins/` 目录装载外部插件（jar）。
+    // 目录不存在 = 没装插件，正常状态，不报错。框架本身不含任何插件。
+    // 插件只能通过注册工具/钩子扩展能力，不能注册路由（端点计数恒定）。
+    val pluginManager = PluginManager(
+        registry = agentConnection.registry,
+        hooks = agentConnection.hooks,
+    )
+    val loadedPlugins = pluginManager.discoverFrom(config.homeDirectory.resolve("plugins"))
+    if (loadedPlugins > 0 || pluginManager.loadFailures().isNotEmpty()) {
+        logSystem(
+            "插件装载完成",
+            mapOf(
+                "loaded" to loadedPlugins.toString(),
+                "tools" to agentConnection.registry.size().toString(),
+                "failed" to pluginManager.loadFailures().size.toString(),
+            ),
+        )
+        // 装失败了不能静默：把完整介绍（含失败原因）打到日志里。
+        if (pluginManager.loadFailures().isNotEmpty()) {
+            println("[plugins]${System.lineSeparator()}${pluginManager.describe()}")
+        }
+    }
     environment.monitor.subscribe(ApplicationStopping) { 
         logSystem("服务器正在停止")
         subscriptions.stop(); bookCache.stop(); ttsSessions.close(); database.close() 
