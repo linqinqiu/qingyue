@@ -38,6 +38,14 @@ interface Plugin {
     fun tools(): List<io.legado.server.ai.Tool> = emptyList()
 
     /**
+     * 本插件提供的 LLM 协议实现。默认空。
+     *
+     * 这是"内置 AI 接入也能以插件形式完成"的落点：插件可以注册自己的 [io.legado.server.ai.LlmProvider]
+     * （Anthropic / Ollama / 自建服务……），不必改框架源码。`openai-compatible` 只是内置的默认实现。
+     */
+    fun llmProviders(): List<io.legado.server.ai.LlmProvider> = emptyList()
+
+    /**
      * 本插件要挂的钩子。默认空。
      *
      * 注意：插件**不能**通过钩子绕过 [io.legado.server.ai.Guardrails] ——
@@ -103,6 +111,8 @@ data class PluginContext(
     val registry: io.legado.server.ai.ToolRegistry,
     /** 本插件可用的钩子容器。 */
     val hooks: io.legado.server.ai.ToolHooks,
+    /** LLM 协议注册表：插件在这里注册自己的 provider（如 Ollama / Anthropic）。 */
+    val providers: io.legado.server.ai.LlmProviderRegistry = io.legado.server.ai.LlmProviderRegistry(),
     /** 框架版本，便于插件做兼容判断。 */
     val frameworkVersion: String,
 )

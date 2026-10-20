@@ -10,7 +10,7 @@
 
 | 半边 | 位置 | 能扩展什么 |
 |---|---|---|
-| 后端插件 | `server/src/main/kotlin/io/legado/server/plugin/` | 工具（AI/自动化能调的能力）、工具调用钩子 |
+| 后端插件 | `server/src/main/kotlin/io/legado/server/plugin/` | 工具、**LLM 协议**、工具调用钩子 |
 | 前端插件 | `web/src/lab/pluginRegistry.ts` | 实验室条目、一级页面、设置分区、命令 |
 
 **目录分层（重要）**：
@@ -51,6 +51,27 @@ class HelloPlugin : Plugin {
 
 装上之后，`hello.greet` 就出现在能力清单里，能被 `/api/agent` 调到。
 
+### 1.1b 用插件提供 LLM 协议（内置 AI 接入也能做成插件）
+
+```kotlin
+class MyProtocolPlugin : Plugin {
+    override val metadata = PluginMetadata("provider.mine", "我的协议", "1.0.0", "接一家新模型")
+    override fun llmProviders() = listOf(object : LlmProvider {
+        override val id = "mine"
+        override val displayName = "我的协议"
+        override val description = "自建服务的私有协议"
+        override fun chat(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String? {
+            // 自己发请求、自己解响应；失败返回 null（框架会回退本地）
+            return null
+        }
+    })
+}
+```
+
+框架只认 `LlmProvider` 这个形状，**不认识任何一家协议**。`openai-compatible` 只是
+`LlmProviderRegistry` 里的默认实现 —— 把它 `unregister` 掉、再用插件装回来，AI 照样工作。
+判据 `AiAsPluginTest` 走完了这条路（拿掉内置 → 插件装回 → 对话可用 → 卸载干净 → 可重装）。
+
 ### 1.2 三种装载方式
 
 框架不预设"插件该放哪"，三条路都支持：
@@ -71,11 +92,13 @@ pm.discoverFrom(Path.of("plugins"))    // 3) 从目录里的 jar 加载（不重
 
 框架允许任意插件进来，但**不允许插件破坏既有纪律**：
 
-1. **一个坏插件不拖垮别的** —— `onLoad` / `tools()` / `hooks()` 抛异常只记录进
+1. **一个坏插件不拖垮别的** —— `onLoad` / `tools()` / `llmProviders()` / `hooks()` 抛异常只记录进
    `loadFailures()`，其余插件照常装载。
 2. **内置工具撤不掉** —— 插件撞上内置 id 时跳过并留痕；要放开得显式
    `ToolRegistry(allowRemovingBuiltin = true)`。
 3. **插件不能绕过护栏** —— 钩子在工具**外面**，只能拒绝或改写，不能替工具跳过写前确认。
+4. **卸载要干净** —— 插件带来的工具、LLM 协议、钩子全部撤销。漏一样，下次换实现就会撞 id；
+   判据 `AiAsPluginTest` 里的"卸载后可重装"钉着这一点。
 
 ### 1.4 自我介绍
 
@@ -158,9 +181,15 @@ frontendPlugins.register({
 ## 5. 验证
 
 ```bash
-# 后端插件框架（17 例）
+# 后端插件框架（19 例）
 cd E:\legado\legado
 .\gradlew.bat :server:test --tests "*PluginFrameworkTest"
+
+# LLM 协议可插拔（10 例）
+.\gradlew.bat :server:test --tests "*LlmProviderFrameworkTest"
+
+# "内置 AI 能做成插件"的端到端证明（3 例）
+.\gradlew.bat :server:test --tests "*AiAsPluginTest"
 
 # 前端插件框架（11 例）
 cd web

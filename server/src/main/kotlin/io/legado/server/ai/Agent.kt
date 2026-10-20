@@ -37,6 +37,8 @@ class Agent(
     val registry: ToolRegistry = ToolRegistry(tools),
     /** 生命周期钩子：默认没有钩子（零开销），外部挂审计/限流/改写用。 */
     val hooks: ToolHooks = ToolHooks(),
+    /** LLM 协议注册表：默认含 openai-compatible；想接别家协议注册自己的 provider。 */
+    val providerRegistry: LlmProviderRegistry = LlmProviderRegistry(),
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
@@ -112,7 +114,7 @@ class Agent(
      */
     suspend fun callLlm(prompt: String): String? {
         val ext = firstExternalProfile() ?: return null
-        return callExternalHttp(ext, listOf(ChatMessage("user", prompt)))
+        return callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
     }
 
     /**
@@ -128,7 +130,7 @@ class Agent(
         val ext = firstExternalProfile()
         if (ext != null) {
             val prompt = buildComprehensionPrompt(text, question, summarySentences, topKeywords)
-            val llm = callExternalHttp(ext, listOf(ChatMessage("user", prompt)))
+            val llm = callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
             if (llm != null) {
                 return ComprehendOutcome(
                     engine = "external:" + ext.id,
@@ -159,7 +161,7 @@ class Agent(
     suspend fun chat(messages: List<Pair<String, String>>): ChatOutcome {
         val norm = messages
             .filter { it.second.isNotBlank() }
-            .map { ChatMessage(role = it.first.takeIf { r -> r in setOf("system", "user", "assistant") } ?: "user", content = it.second) }
+            .map { LlmMessage(role = it.first.takeIf { r -> r in setOf("system", "user", "assistant") } ?: "user", content = it.second) }
         if (norm.isEmpty()) {
             return ChatOutcome(engine = "error", content = "", fallback = false, error = "messages 不能为空")
         }
@@ -209,45 +211,17 @@ class Agent(
         }
 
     /**
-     * 通过 JDK 自带 HttpClient 调一个 OpenAI 兼容的 chat/completions。
-     * 注意：Ktor 客户端不在 implementation 依赖里，外呼只能用 java.net.http。
-     * 超时 30s、连接 10s；非 2xx 或解析失败返回 null（由调用方回退本地）。
+     * 通过注册的 [LlmProvider] 外呼。具体协议由 provider 决定 —— 框架不认识任何一家。
+     *
+     * 这是本次"框架牢固化"的关键：从前这里写死了 OpenAI 协议（URL 拼 /v1/chat/completions、
+     * 解析 choices[0]），想接别家只能改框架。现在只认 [LlmProvider] 这个形状。
+     *
+     * 失败语义不变：provider 返回 null 或抛异常，都视为"这次没拿到"，由调用方回退本地。
      */
-    private fun callExternalHttp(profile: AgentProfileStore.Profile, messages: List<ChatMessage>): String? {
-        val base = profile.baseUrl?.trim()?.removeSuffix("/") ?: return null
-        val url = if (base.endsWith("/v1")) base + "/chat/completions" else base + "/v1/chat/completions"
-        val body = json.encodeToString(
-            ChatRequest(
-                model = profile.model ?: "gpt-3.5-turbo",
-                messages = messages,
-                temperature = 0.7,
-            ),
-        )
-        val builder = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .timeout(Duration.ofSeconds(30))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-        if (!profile.apiKey.isNullOrBlank()) builder.header("Authorization", "Bearer " + profile.apiKey)
-        val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-        val resp = runCatching { client.send(builder.build(), HttpResponse.BodyHandlers.ofString()) }.getOrNull() ?: return null
-        if (resp.statusCode() !in 200..299) return null
-        // 最小解析：取 choices[0].message.content；解析失败就返回原文。
-        return runCatching {
-            val root = json.parseToJsonElement(resp.body())
-            val choices = (root as? JsonObject)?.get("choices") as? JsonArray
-            val first = choices?.firstOrNull() as? JsonObject
-            val message = first?.get("message") as? JsonObject
-            val content = (message?.get("content") as? JsonPrimitive)?.content
-            content ?: resp.body()
-        }.getOrNull() ?: resp.body()
+    private fun callExternalHttp(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String? {
+        val provider = providerRegistry.forProfile(profile) ?: return null
+        return runCatching { provider.chat(profile, messages) }.getOrNull()
     }
-
-    @Serializable
-    private data class ChatMessage(val role: String, val content: String)
-
-    @Serializable
-    private data class ChatRequest(val model: String, val messages: List<ChatMessage>, val temperature: Double)
 
     /** 文章阅读理解的结构化结果，与 HTTP 层 ComprehendResponse 对齐。 */
     data class ComprehendOutcome(

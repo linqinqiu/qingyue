@@ -43,6 +43,7 @@ object AgentModule {
         profileStore: AgentProfileStore = AgentProfileStore,
         registry: ToolRegistry = ToolRegistry(allowRemovingBuiltin = AppConfig.aiAllowRemovingBuiltinTools),
         hooks: ToolHooks = ToolHooks(),
+        providerRegistry: LlmProviderRegistry = LlmProviderRegistry(),
     ): AgentConnection {
         val ctx = AgentContext(
             database = database,
@@ -53,7 +54,14 @@ object AgentModule {
             coverCache = coverCache,
         )
         // 网关需要 homeDirectory 才能读写 agent-profiles.json，从而真正支持外部模型阅读理解。
-        return AgentConnection(Agent(ctx, homeDirectory, profileStore, registry = registry, hooks = hooks))
+        return AgentConnection(
+            Agent(
+                ctx, homeDirectory, profileStore,
+                registry = registry,
+                hooks = hooks,
+                providerRegistry = providerRegistry,
+            )
+        )
     }
 
     /**

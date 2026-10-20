@@ -56,6 +56,18 @@ class AgentConnection internal constructor(private val agent: Agent) {
     val hooks: ToolHooks get() = agent.hooks
 
     /**
+     * LLM 协议注册表 —— 让"怎么跟模型说话"可插拔，而不是硬编码 OpenAI 协议。
+     *
+     * ```kotlin
+     * conn.providerRegistry.register(OllamaProvider())   // 加一家
+     * conn.providerRegistry.unregister("openai-compatible") // 不要默认那家
+     * ```
+     *
+     * 框架只认 `LlmProvider` 这个形状；`openai-compatible` 只是内置的默认实现。
+     */
+    val providerRegistry: LlmProviderRegistry get() = agent.providerRegistry
+
+    /**
      * 文章阅读理解（同步）。外部模型优先，失败/缺连接自动回退本地抽取，保证永远有结果。
      * HTTP 层的 `POST /api/agent/comprehend` 就是直接委派到这里。
      */

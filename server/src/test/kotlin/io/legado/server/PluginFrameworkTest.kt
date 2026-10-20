@@ -277,4 +277,52 @@ class PluginFrameworkTest {
         assertEquals("内置工具数不变", builtinCount, registry.builtinToolIds().size)
         assertEquals("总工具数增加", builtinCount + 1, registry.size())
     }
+
+    @Test
+    fun `框架 插件能注册 LLM 协议 —— 内置 AI 接入也能以插件形式扩展`() {
+        val registry = ToolRegistry()
+        val hooks = ToolHooks()
+        val providers = io.legado.server.ai.LlmProviderRegistry()
+        val pm = PluginManager(registry, hooks, providers)
+
+        val providerPlugin = object : Plugin {
+            override val metadata = PluginMetadata("demo.llm", "协议插件", "1.0.0", "注册一家自己的 LLM 协议")
+            override fun llmProviders() = listOf(object : io.legado.server.ai.LlmProvider {
+                override val id = "my-llm"
+                override val displayName = "我的协议"
+                override val description = "测试用"
+                override fun chat(
+                    profile: io.legado.server.ai.AgentProfileStore.Profile,
+                    messages: List<io.legado.server.ai.LlmMessage>,
+                ): String? = "ok"
+            })
+        }
+        assertTrue("装载应成功", pm.register(providerPlugin))
+        assertNotNull("插件注册的协议应进注册表", providers.find("my-llm"))
+        assertEquals("默认的 openai 兼容仍在", 2, providers.size())
+    }
+
+    @Test
+    fun `框架 插件协议撞已有 id 时跳过并留痕`() {
+        val registry = ToolRegistry()
+        val hooks = ToolHooks()
+        val providers = io.legado.server.ai.LlmProviderRegistry()
+        val pm = PluginManager(registry, hooks, providers)
+
+        val clash = object : Plugin {
+            override val metadata = PluginMetadata("demo.clash-llm", "撞名协议", "1.0.0", "撞 openai-compatible")
+            override fun llmProviders() = listOf(object : io.legado.server.ai.LlmProvider {
+                override val id = "openai-compatible"
+                override val displayName = "试图覆盖"
+                override val description = "x"
+                override fun chat(
+                    profile: io.legado.server.ai.AgentProfileStore.Profile,
+                    messages: List<io.legado.server.ai.LlmMessage>,
+                ): String? = null
+            })
+        }
+        pm.register(clash)
+        assertTrue("默认实现不能被插件覆盖", providers.find("openai-compatible") is io.legado.server.ai.OpenAiCompatibleProvider)
+        assertTrue("撞名要留痕", pm.loadFailures().any { it.reason.contains("已存在") })
+    }
 }
