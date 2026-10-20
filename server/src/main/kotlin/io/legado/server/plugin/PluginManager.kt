@@ -29,6 +29,7 @@ class PluginManager(
     private val registry: ToolRegistry,
     private val hooks: ToolHooks,
     private val providers: LlmProviderRegistry = LlmProviderRegistry(),
+    private val events: EventBus = AppEvents.bus,
     private val frameworkVersion: String = "0.8.2",
 ) {
 
@@ -43,6 +44,7 @@ class PluginManager(
         val plugin: Plugin,
         val registeredToolIds: List<String>,
         val registeredProviderIds: List<String>,
+        val subscriptionHandles: List<AutoCloseable>,
         val hookHandle: AutoCloseable?,
     )
 
@@ -158,6 +160,14 @@ class PluginManager(
             // 下次换成别的实现就会撞 id（"卸载不干净"是插件框架最容易漏的一处）。
             providers.unregister(id)
         }
+        target.subscriptionHandles.forEach { handle ->
+            // 订阅同样要撤：否则卸载后回调还在跑，指向已失效的对象。
+            try {
+                handle.close()
+            } catch (e: Throwable) {
+                failures += LoadFailure(source = pluginId, reason = "注销订阅失败：${e.message ?: e::class.simpleName}")
+            }
+        }
         try {
             target.hookHandle?.close()
         } catch (e: Throwable) {
@@ -191,8 +201,17 @@ class PluginManager(
                 if (m.homepage.isNotBlank()) appendLine("  主页：${m.homepage}")
                 if (m.capabilities.isNotEmpty()) appendLine("  能力：${m.capabilities.joinToString(", ")}")
                 appendLine("  工具：${lp.registeredToolIds.joinToString(", ").ifBlank { "（无）" }}")
+                if (lp.registeredProviderIds.isNotEmpty()) {
+                    appendLine("  LLM 协议：${lp.registeredProviderIds.joinToString(", ")}")
+                }
+                if (lp.subscriptionHandles.isNotEmpty()) {
+                    appendLine("  事件订阅：${lp.subscriptionHandles.size} 条")
+                }
             }
         }
+        // 事件总线状态也报出来 —— 否则"为什么我的插件没收到事件"没法查。
+        appendLine()
+        appendLine(events.describe().trimEnd())
         val failed = failures.toList()
         if (failed.isNotEmpty()) {
             appendLine()
@@ -205,7 +224,7 @@ class PluginManager(
 
     private fun load(plugin: Plugin, source: String): Boolean {
         val meta = plugin.metadata
-        val context = PluginContext(registry = registry, hooks = hooks, providers = providers, frameworkVersion = frameworkVersion)
+        val context = PluginContext(registry = registry, hooks = hooks, providers = providers, events = events, frameworkVersion = frameworkVersion)
 
         // 1) onLoad 先跑：插件可以在这里做自己的初始化（失败即整体失败）。
         try {
@@ -269,10 +288,28 @@ class PluginManager(
         val handle = if (ph.before == null && ph.after == null && ph.onError == null) null
         else hooks.install(before = ph.before, after = ph.after, onError = ph.onError)
 
+        // 5) 订阅事件。框架代管句柄 —— 插件自己管很容易漏，
+        //    漏了就是"卸载后回调还在跑，指向已失效的对象"。
+        val subscriptionHandles = mutableListOf<AutoCloseable>()
+        val subs = try {
+            plugin.subscriptions()
+        } catch (e: Throwable) {
+            failures += LoadFailure(source = source, reason = "subscriptions() 抛异常：${e.message ?: e::class.simpleName}")
+            emptyList()
+        }
+        for ((name, handler) in subs) {
+            try {
+                subscriptionHandles += events.subscribe(name, handler)
+            } catch (e: Throwable) {
+                failures += LoadFailure(source = source, reason = "订阅事件 $name 失败：${e.message ?: e::class.simpleName}")
+            }
+        }
+
         loaded += LoadedPlugin(
             plugin = plugin,
             registeredToolIds = registeredIds,
             registeredProviderIds = registeredProviderIds,
+            subscriptionHandles = subscriptionHandles,
             hookHandle = handle,
         )
         return true

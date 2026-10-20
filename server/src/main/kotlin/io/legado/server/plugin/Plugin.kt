@@ -54,6 +54,22 @@ interface Plugin {
     fun hooks(): PluginHooks = PluginHooks.NONE
 
     /**
+     * 本插件想订阅的事件。默认空。
+     *
+     * 框架会在装载时替它订阅、卸载时**自动注销** —— 插件不必自己管理句柄
+     * （自己管很容易漏，卸载后回调还在跑，指向已失效的对象）。
+     *
+     * 返回 `事件名 to 回调` 的列表；`"*"` 表示订阅全部（审计/日志类插件用）。
+     *
+     * ```kotlin
+     * override fun subscriptions() = listOf(
+     *     "source.saved" to EventBus.Handler { e -> println("书源变了：${e.payload["id"]}") },
+     * )
+     * ```
+     */
+    fun subscriptions(): List<Pair<String, EventBus.Handler>> = emptyList()
+
+    /**
      * 插件装载时的初始化（可选）。抛异常 = 装载失败，框架会记录并跳过这个插件，
      * **不影响其它插件**（一个坏插件不能把整个插件系统带走）。
      */
@@ -113,6 +129,8 @@ data class PluginContext(
     val hooks: io.legado.server.ai.ToolHooks,
     /** LLM 协议注册表：插件在这里注册自己的 provider（如 Ollama / Anthropic）。 */
     val providers: io.legado.server.ai.LlmProviderRegistry = io.legado.server.ai.LlmProviderRegistry(),
+    /** 事件总线：插件可以订阅系统事件（也可用 [Plugin.subscriptions] 交给框架代管）。 */
+    val events: EventBus = EventBus(),
     /** 框架版本，便于插件做兼容判断。 */
     val frameworkVersion: String,
 )

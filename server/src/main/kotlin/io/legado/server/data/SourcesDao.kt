@@ -1,5 +1,8 @@
 package io.legado.server.data
 
+import io.legado.server.plugin.AppEvents
+import io.legado.server.plugin.EventNames
+
 import io.legado.server.model.ImportResponse
 import io.legado.server.model.SourceRecord
 import io.legado.server.model.SourceSummary
@@ -159,7 +162,10 @@ fun Database.saveSource(parsed: ParsedSource, expectedVersion: Long?): SourceRec
             values(?,?,?,?,?,?,?,?,?,?) on conflict(id) do update set name=excluded.name,source_url=excluded.source_url,source_group=excluded.source_group,enabled=excluded.enabled,is_js=excluded.is_js,payload=excluded.payload,version=excluded.version,updated_at=excluded.updated_at,has_login=excluded.has_login""").use {
             it.setString(1, parsed.id); it.setString(2, parsed.name); it.setString(3, parsed.url); it.setString(4, parsed.group); it.setInt(5, if (parsed.enabled) 1 else 0); it.setInt(6, if (parsed.isJs) 1 else 0); it.setString(7, parsed.json); it.setLong(8, version); it.setLong(9, now); it.setInt(10, if (parsed.hasLogin) 1 else 0); it.executeUpdate()
         }
-        db.commit(); invalidateSourceCaches(); SourceRecord(parsed.id, parsed.json, version, now)
+        db.commit(); invalidateSourceCaches()
+        // 事务提交之后再发事件：订阅者看到的必须是"真的落库了"的状态。
+        AppEvents.publish(EventNames.SOURCE_SAVED, mapOf("id" to parsed.id, "version" to version))
+        SourceRecord(parsed.id, parsed.json, version, now)
     } catch (error: Throwable) { db.rollback(); throw error } finally { db.autoCommit = true }
 }
 
@@ -180,6 +186,8 @@ fun Database.deleteSource(id: String): Boolean = write { db ->
         // 删除也是写入路径（第 239 行的规矩）：不失效的话，删除后 sourceSummariesCache
         // 还是旧清单 —— 界面上"删了还显示"，E2E 场景 5 的 95 断言逮到的就是它。
         invalidateSourceCaches()
+        // 只在真删掉了才发事件（removed=false 说明本来就没有，不该惊动订阅者）。
+        if (removed) AppEvents.publish(EventNames.SOURCE_DELETED, mapOf("id" to id))
         removed
     } catch (error: Exception) {
         runCatching { db.rollback() }

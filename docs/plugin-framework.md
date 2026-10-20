@@ -30,7 +30,15 @@
 
 ### 1.1 最小插件
 
-实现 `Plugin` 接口即可。三个方法全部可选，只实现关心的那部分：
+实现 `Plugin` 接口即可。方法全部可选，只实现关心的那部分：
+
+| 方法 | 贡献什么 |
+|---|---|
+| `tools()` | 工具（AI/自动化能调的能力） |
+| `llmProviders()` | LLM 协议（Anthropic / Ollama / 自建服务…） |
+| `hooks()` | 工具调用的生命周期钩子（审计、限流、改写） |
+| `subscriptions()` | **事件订阅**（感知系统里发生了什么） |
+| `metadata` | 自我描述（名字、版本、作者、说明） |
 
 ```kotlin
 class HelloPlugin : Plugin {
@@ -97,8 +105,33 @@ pm.discoverFrom(Path.of("plugins"))    // 3) 从目录里的 jar 加载（不重
 2. **内置工具撤不掉** —— 插件撞上内置 id 时跳过并留痕；要放开得显式
    `ToolRegistry(allowRemovingBuiltin = true)`。
 3. **插件不能绕过护栏** —— 钩子在工具**外面**，只能拒绝或改写，不能替工具跳过写前确认。
-4. **卸载要干净** —— 插件带来的工具、LLM 协议、钩子全部撤销。漏一样，下次换实现就会撞 id；
-   判据 `AiAsPluginTest` 里的"卸载后可重装"钉着这一点。
+4. **卸载要干净** —— 插件带来的工具、LLM 协议、钩子、事件订阅全部撤销。漏一样，
+   下次换实现就会撞 id 或留下指向失效对象的回调；判据 `AiAsPluginTest` 与 `EventBusTest` 钉着这一点。
+
+### 1.3b 事件：让插件感知系统变化
+
+插件不必轮询数据库 —— 订阅事件即可：
+
+```kotlin
+class AuditPlugin : Plugin {
+    override val metadata = PluginMetadata("audit", "审计", "1.0.0", "记录书源变更")
+    override fun subscriptions() = listOf(
+        EventNames.SOURCE_SAVED to EventBus.Handler { e -> println("书源变了：${e.payload["id"]}") },
+        EventNames.SOURCE_DELETED to EventBus.Handler { e -> println("书源删了：${e.payload["id"]}") },
+    )
+}
+```
+
+框架在装载时替它订阅、卸载时自动注销（插件自己管很容易漏）。
+
+机制在 `plugin/EventBus.kt`，进程级入口在 `plugin/AppEvents.kt`：
+
+- `AppEvents.bus` —— 业务代码发布、插件订阅都走这一个
+- `EventNames` —— **只是约定常量，不是枚举**。事件名是开放集合，插件可以发布自己的；
+  用 sealed class 会把"事件有哪些"锁死在框架里，那又变成夹带内容
+- 四条纪律：一个订阅者抛异常不影响别人、发布永不抛、`"*"` 通配订阅、注销要彻底
+- 业务侧已接的事件：`source.saved` / `source.deleted` / `app.started` / `app.stopping`
+  （其余常量已定义，等业务侧需要时接上）
 
 ### 1.4 自我介绍
 
@@ -190,6 +223,9 @@ cd E:\legado\legado
 
 # "内置 AI 能做成插件"的端到端证明（3 例）
 .\gradlew.bat :server:test --tests "*AiAsPluginTest"
+
+# 事件机制（14 例）与业务侧真发事件（5 例）
+.\gradlew.bat :server:test --tests "*EventBusTest" --tests "*BusinessEventsTest"
 
 # 前端插件框架（11 例）
 cd web

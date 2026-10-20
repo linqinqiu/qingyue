@@ -28,6 +28,8 @@ import io.legado.server.ops.logSystem
 import io.legado.server.rules.RuleRunner
 import io.legado.server.subscription.SubscriptionService
 import io.legado.server.ai.AgentModule
+import io.legado.server.plugin.AppEvents
+import io.legado.server.plugin.EventNames
 import io.legado.server.plugin.PluginManager
 import io.legado.server.ai.AgentProfileStore
 import io.legado.server.tts.EdgeTtsService
@@ -122,6 +124,8 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
         }
     }
     environment.monitor.subscribe(ApplicationStopping) { 
+        // 先让插件知道要停了：它们可能要在库关闭前做清理（写缓存、落盘状态）。
+        AppEvents.publish(EventNames.APP_STOPPING)
         logSystem("服务器正在停止")
         subscriptions.stop(); bookCache.stop(); ttsSessions.close(); database.close() 
     }
@@ -146,6 +150,8 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
             bookCache.start()
             val purgedCovers = coverCache.purgeGeneratedLocalCovers(database)
             if (purgedCovers > 0) log.info("已回收 {} 张自动生成的本地书封面", purgedCovers)
+            // 通知插件：服务已就绪（插件可据此做延迟初始化）。
+            AppEvents.publish(EventNames.APP_STARTED, mapOf("version" to BuildInfo.version))
         }
     } else {
         // 生成脚本趁这几秒预热几个接口（让请求路径的类也进归档），然后正常退出。
