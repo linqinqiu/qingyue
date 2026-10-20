@@ -29,6 +29,33 @@ class AgentConnection internal constructor(private val agent: Agent) {
     fun hasExternalConnection(): Boolean = agent.hasExternalConnection()
 
     /**
+     * 工具注册表 —— 让调用方**在运行时**增删工具，而不是只能调内置那 39 个。
+     *
+     * ```kotlin
+     * conn.registry.register(Tool { ctx, _ -> ctx.error("ok", "hi") }.also {
+     *     it.meta = ToolMeta("demo.hi", "demo", "示例", writes = false)
+     * })
+     * conn.call("demo.hi")   // 立刻就能调到
+     * ```
+     *
+     * 约束由注册表本身守：id 唯一、内置工具默认删不掉、线程安全。
+     * 这里注册的工具**不产生 HTTP 路由**，`/api/catalog` 的端点计数不变。
+     */
+    val registry: ToolRegistry get() = agent.registry
+
+    /**
+     * 生命周期钩子 —— 让调用方挂审计 / 限流 / 结果改写，而不必改框架源码。
+     *
+     * ```kotlin
+     * val handle = conn.hooks.install(
+     *     before = { meta, _ -> if (meta.writes) AgentResult(status = "error", code = "forbidden") else null },
+     *     after  = { _, _, r -> r },
+     * )
+     * ```
+     */
+    val hooks: ToolHooks get() = agent.hooks
+
+    /**
      * 文章阅读理解（同步）。外部模型优先，失败/缺连接自动回退本地抽取，保证永远有结果。
      * HTTP 层的 `POST /api/agent/comprehend` 就是直接委派到这里。
      */

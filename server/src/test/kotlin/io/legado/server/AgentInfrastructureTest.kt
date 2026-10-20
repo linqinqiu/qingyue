@@ -351,4 +351,36 @@ class AgentInfrastructureTest {
             cleanup(path)
         }
     }
+
+    @Test
+    fun `组合 通过 AgentConnection 这条对外句柄也能注册工具并挂钩子`() {
+        val path = tempDb()
+        try {
+            val reg = ToolRegistry()
+            val hooks = ToolHooks()
+            val (db, agent) = buildAgent(path, registry = reg, hooks = hooks)
+            // 外部调用方拿到的是 AgentConnection 而不是 Agent —— 这条测的是那条真实路径。
+            val conn = io.legado.server.ai.AgentConnection(agent)
+
+            conn.registry.register(echoTool("ext.via-conn"))
+            assertTrue("经 conn.registry 注册的工具应立刻出现在 manifest 里",
+                conn.manifest().any { it.id == "ext.via-conn" })
+
+            var audited = false
+            conn.hooks.install(before = { meta, _ ->
+                if (meta.id == "ext.via-conn") audited = true
+                null
+            })
+
+            runBlocking {
+                val res = conn.callSuspend("ext.via-conn", mapOf("x" to 1))
+                assertEquals("ok", res.status)
+                assertTrue("经 conn.hooks 挂的钩子应真的被调用", audited)
+            }
+            assertEquals("内置工具仍应在册", 39, conn.registry.builtinToolIds().size)
+            db.close()
+        } finally {
+            cleanup(path)
+        }
+    }
 }
