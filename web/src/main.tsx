@@ -7,7 +7,6 @@ import type { OpenBook } from './reader/openBook'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { activeCustomSkin, loadReaderSettings, ReaderSettings, saveReaderSettings, themeClassNames } from './reader/readerSettings'
 import { AppHeader } from './components/AppHeader'
-import { ChangelogPage } from './pages/ChangelogPage'
 import { ReadingLogPage } from './pages/ReadingLogPage'
 import { AboutPage } from './pages/AboutPage'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
@@ -44,11 +43,11 @@ import { parseSourceJsonText, extractSourcesFromRaw, sanitizeImageUrl } from './
 
 export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
-const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则', backup: '备份包', changelog: '更新日志', about: '关于', 'reading-log': '阅读记录' }
+const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则', backup: '备份包', about: '关于', 'reading-log': '阅读记录' }
 const readerStorageKey = 'legado-open-book-v1'
 const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#settings' ? 'settings' : 'library'
 /** 旧深链进来仍开对的那一个悬浮层，不白屏也不跳页 */
-const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#changelog' ? 'changelog' : location.hash === '#about' ? 'about' : location.hash === '#reading-log' ? 'reading-log' : null
+const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : location.hash === '#backup' ? 'backup' : location.hash === '#about' ? 'about' : location.hash === '#reading-log' ? 'reading-log' : null
 
 /**
  * 自定义皮肤的注入点（「自定义」里填的 CSS 真的挂上，不是摆个空控件）。
@@ -146,6 +145,8 @@ function App() {
    * AI 接入是它目前登记的第一条实验条目 —— 实验室本身不认识 AI。
    */
   const [showLab, setShowLab] = useState(false)
+  /** 实验室要直接打开哪个条目（点版本号进更新日志等）；空 = 第一条。 */
+  const [labEntryId, setLabEntryId] = useState<string | undefined>(undefined)
   /**
    * 「设置 → TXT 分章规则」点下去的意图。规则弹窗连同它那颗「按这条导入本地书」都住在
    * 书架里（导书的动作在那边），所以这里只发一个"去开一下"的信号，不复制一份弹窗。
@@ -227,6 +228,14 @@ function App() {
     // 深链与浏览器前进/后退都从这里走：命中悬浮层 hash（#backup 等）就开层、不换页（保住语境）；
     // 命中普通页面 hash 就换页并关掉可能还开着的悬浮层。
     const sync = () => {
+      // 旧深链 #changelog 兼容：那一页已下沉为插件（住实验室里），这里把它引到实验室，
+      // 而不是留一个没有渲染分支的空悬浮层。
+      if (location.hash === '#changelog') {
+        setPageDialog(null)
+        setLabEntryId('changelog')
+        setShowLab(true)
+        return
+      }
       const dialog = dialogFromHash()
       setPageDialog(dialog)
       if (!dialog) setPage(pageFromHash())
@@ -441,7 +450,7 @@ function App() {
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
-        onOpenChangelog={() => setPageDialog('changelog')}
+        onOpenChangelog={() => { setLabEntryId('changelog'); setShowLab(true) }}
         onOpenAbout={() => setPageDialog('about')}
         onOpenReadingLog={() => setPageDialog('reading-log')}
         onOpenCustomize={() => setShowCustomize(true)}
@@ -499,11 +508,10 @@ function App() {
       {pageDialog && pageDialog !== 'rules' && (
         <PageDialog title={PAGE_DIALOG_TITLES[pageDialog]} onClose={() => setPageDialog(null)}>
           {pageDialog === 'backup' && <BackupPage />}
-          {pageDialog === 'changelog' && <ChangelogPage serverVersion={serverVersion} />}
           {pageDialog === 'reading-log' && <ReadingLogPage />}
           {pageDialog === 'about' && (
             <AboutPage
-              onOpenChangelog={() => setPageDialog('changelog')}
+              onOpenChangelog={() => { setLabEntryId('changelog'); setShowLab(true) }}
               onOpenShortcuts={() => setShowShortcuts(true)}
             />
           )}
@@ -525,7 +533,12 @@ function App() {
         <ServerPortModal onClose={() => setShowServerPort(false)} />
       )}
       {showLab && (
-        <LabModal onClose={() => setShowLab(false)} uiContext={currentUiContext} />
+        <LabModal
+          onClose={() => { setShowLab(false); setLabEntryId(undefined) }}
+          uiContext={currentUiContext}
+          serverVersion={serverVersion}
+          initialEntryId={labEntryId}
+        />
       )}
     </div>
   )

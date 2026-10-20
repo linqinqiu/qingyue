@@ -20,7 +20,26 @@ export function buildLabEntries(): LabEntry[] {
 }
 
 /** 实验室悬浮层：把插件登记的条目交给 Lab 渲染，并带上宿主上下文。 */
-export function LabModal({ onClose, uiContext }: { onClose: () => void; uiContext?: UiContext }) {
-  const host: LabHostContext = { uiContext }
-  return <Lab entries={buildLabEntries()} onClose={onClose} title="实验室" host={host} />
+export function LabModal({
+  onClose,
+  uiContext,
+  serverVersion,
+  initialEntryId,
+}: {
+  onClose: () => void
+  uiContext?: UiContext
+  serverVersion?: string
+  /** 直接打开某个实验条目（点版本号进更新日志、深链 #changelog 等）。 */
+  initialEntryId?: string
+}) {
+  const host: LabHostContext = { uiContext, serverVersion }
+  return (
+    <Lab
+      entries={buildLabEntries()}
+      onClose={onClose}
+      title="实验室"
+      host={host}
+      initialEntryId={initialEntryId}
+    />
+  )
 }

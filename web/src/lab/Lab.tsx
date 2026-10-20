@@ -48,6 +48,8 @@ export type LabEntry = {
 export type LabHostContext = {
   /** 任意宿主提供的上下文（当前是 UI 上下文，见 lib/uiContext.ts）。 */
   uiContext?: unknown
+  /** 宿主的服务端版本号（来自 /healthz）。插件要显示版本时用它，别自己写死。 */
+  serverVersion?: string
 }
 
 const POS_KEY = 'qingyue-lab-position-v1'
@@ -74,16 +76,23 @@ export function Lab({
   onClose,
   title = '实验室',
   host = {},
+  initialEntryId,
 }: {
   entries: LabEntry[]
   onClose: () => void
   title?: string
   /** 宿主上下文：原样转发给每个条目，实验室不解释内容。 */
   host?: LabHostContext
+  /** 直接打开某个条目（深链/快捷入口用）。找不到就退回第一条。 */
+  initialEntryId?: string
 }) {
   useEscapeClose(onClose)
 
-  const [activeId, setActiveId] = useState<string>(() => entries[0]?.id ?? '')
+  const [activeId, setActiveId] = useState<string>(() => {
+    // 指定了 initialEntryId 且确实存在就用它（深链/快捷入口），否则第一条。
+    if (initialEntryId && entries.some(e => e.id === initialEntryId)) return initialEntryId
+    return entries[0]?.id ?? ''
+  })
   const [position, setPosition] = useState<Position | null>(() => loadPosition())
   const [minimized, setMinimized] = useState<boolean>(() => {
     try { return window.localStorage.getItem(MINIMIZED_KEY) === '1' } catch { return false }

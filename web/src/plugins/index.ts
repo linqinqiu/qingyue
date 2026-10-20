@@ -1,6 +1,7 @@
 import { frontendPlugins } from '../lab/pluginRegistry'
 import { aiPlugin } from './aiPanel'
 import { pluginIntroPlugin } from './pluginIntro'
+import { changelogPlugin } from './changelogPanel'
 
 /**
  * 内置前端插件清单 —— 框架启动时装载这些插件。
@@ -16,6 +17,7 @@ import { pluginIntroPlugin } from './pluginIntro'
 const BUILTIN_PLUGINS = [
   aiPlugin,
   pluginIntroPlugin,
+  changelogPlugin,
 ]
 
 let installed = false
