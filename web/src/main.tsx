@@ -13,8 +13,14 @@ import { ServerPortModal } from './components/ServerPortModal'
 import { LabModal } from './plugins/labHost'
 import { frontendPlugins } from './extensions/registry'
 import { installBuiltinPlugins } from './plugins'
-import { labOwnedSettingsSections } from './features/labSettings'
-import { LAB_ENTRY } from './app/destinations'
+import { builtinSettingsSections } from './features/builtinSettings'
+import { ChangelogModal } from './features/modal/changelogPanel'
+import { BackupModal } from './features/modal/backupPanel'
+import { AboutModal } from './features/modal/aboutPanel'
+import { ReadingLogModal } from './features/modal/readingLogPanel'
+import { SourceHealthEntryModal } from './features/modal/sourceHealthPanel'
+import { AiModal } from './features/ai/AiModal'
+import { PluginsModal } from './features/plugins/PluginsModal'
 import type { UiContext } from './lib/uiContext'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
@@ -45,17 +51,18 @@ const readerStorageKey = 'legado-open-book-v1'
 const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : null
 
 /**
- * 已下沉成插件的页面，它们的旧深链该开实验室的哪个条目。
+ * 老深链 → 对应的**成熟功能浮层**。
  *
- * 0.8.3 起这些页面不在主程序里了（住 `features/` 与 `plugins/` 里），但老书签/老链接还在 ——
- * 映射到实验室对应条目，比 404 或空弹窗都体面。
+ * 0.8.3 起更新日志/备份/关于/阅读记录都不占一级导航了（它们是 `features/modal/` 里的独立浮层），
+ * 但老书签/老链接还在 —— 映射到对应浮层，比 404 或空弹窗都体面。
+ *
+ * 注意：这些**不是实验室条目**。实验室只放"待定、准备加入基础框架"的功能。
  */
-
-const LAB_DEEP_LINKS: Record<string, string> = {
-  '#changelog': LAB_ENTRY.changelog,
-  '#backup': LAB_ENTRY.backup,
-  '#about': LAB_ENTRY.about,
-  '#reading-log': LAB_ENTRY.readingLog,
+const MODAL_DEEP_LINKS: Record<string, AppModal> = {
+  '#changelog': 'changelog',
+  '#backup': 'backup',
+  '#about': 'about',
+  '#reading-log': 'reading-log',
 }
 
 /**
@@ -240,13 +247,13 @@ function App() {
     // 深链与浏览器前进/后退都从这里走：命中悬浮层 hash（#backup 等）就开层、不换页（保住语境）；
     // 命中普通页面 hash 就换页并关掉可能还开着的悬浮层。
     const sync = () => {
-      // 旧深链兼容：这些页面在 0.8.3 都下沉成插件了（住实验室里）。
-      // 老链接不该白屏、也不该留个没有渲染分支的空悬浮层 —— 引到实验室并直达对应条目。
-      const labDeepLink = LAB_DEEP_LINKS[location.hash]
-      if (labDeepLink) {
+      // 旧深链兼容：这些页面现在是独立浮层（features/modal/），不是实验室条目。
+      // 老链接不该白屏、也不该留个没有渲染分支的空悬浮层 —— 直接开对应浮层。
+      const modalDeepLink = MODAL_DEEP_LINKS[location.hash]
+      if (modalDeepLink) {
         setPageDialog(null)
-        setLabEntryId(labDeepLink)
-        setShowLab(true)
+        setShowLab(false)
+        setOpenModal(modalDeepLink)
         return
       }
       const dialog = dialogFromHash()
@@ -391,9 +398,9 @@ function App() {
   }
 
   /**
-   * 设置页末尾的分区，来自两处（与实验室条目同一个分类逻辑）：
+   * 设置页末尾的分区，来自两处：
    *
-   * - `features/lab/` 里实验室功能自己贡献的分区（如「界面偏好」）—— 产品自带；
+   * - `features/settings/` 里产品自带功能贡献的分区（如「界面偏好」）；
    * - `frontendPlugins.settingsSections()` 插件贡献的分区 —— 用户装的。
    *
    * 从前 `settingsSections()` 有 getter 但**从没被调用**，插件注册了也不生效 ——
@@ -404,7 +411,7 @@ function App() {
    */
   const pluginSettingsSections = useMemo(
     () => [
-      ...labOwnedSettingsSections.map(s => ({
+      ...builtinSettingsSections.map(s => ({
         id: s.id, title: s.title, description: s.description, render: s.render,
       })),
       ...frontendPlugins.settingsSections().map(s => ({
@@ -491,10 +498,12 @@ function App() {
       openCustomize: () => setOpenModal('customize'),
       openReplaceRules: () => setPageDialog('rules'),
       openTocRules: () => setTocRulesSignal(value => value + 1),
-      openBackup: () => { setLabEntryId(LAB_ENTRY.backup); setShowLab(true) },
+      openBackup: () => setOpenModal('backup'),
       openLogs: () => setOpenModal('logs'),
       openServerPort: () => setOpenModal('server-port'),
-      openAiConnections: () => { setLabEntryId(LAB_ENTRY.ai); setShowLab(true) },
+      openAiConnections: () => setOpenModal('ai'),
+      openPlugins: () => setOpenModal('plugins'),
+      openLab: () => setShowLab(true),
     }),
     // 插件贡献的设置分区：宿主只负责摆位置与搜索，不解释内容。
     pluginSections: pluginSettingsSections,
@@ -509,7 +518,8 @@ function App() {
     openModal: setOpenModal,
     openPageDialog: setPageDialog,
     openTocRules: () => setTocRulesSignal(value => value + 1),
-    openLabEntry: id => { setLabEntryId(id); setShowLab(true) },
+    /** 打开实验室（里面放待定功能与插件条目）。成熟功能不走这里，各有自己的浮层。 */
+    openLab: () => setShowLab(true),
   }
 
   return (
@@ -525,9 +535,9 @@ function App() {
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
-        onOpenChangelog={() => { setLabEntryId(LAB_ENTRY.changelog); setShowLab(true) }}
-        onOpenAbout={() => { setLabEntryId(LAB_ENTRY.about); setShowLab(true) }}
-        onOpenReadingLog={() => { setLabEntryId(LAB_ENTRY.readingLog); setShowLab(true) }}
+        onOpenChangelog={() => setOpenModal('changelog')}
+        onOpenAbout={() => setOpenModal('about')}
+        onOpenReadingLog={() => setOpenModal('reading-log')}
         onOpenCustomize={() => setOpenModal('customize')}
         version={serverVersion}
       />
@@ -561,6 +571,39 @@ function App() {
         <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setOpenModal(null)} />
       )}
       {openModal === 'server-port' && <ServerPortModal onClose={() => setOpenModal(null)} />}
+
+      {/* —— 成熟功能浮层（已定型、低频、不占导航）。它们**不是**实验室条目。 —— */}
+      {openModal === 'changelog' && (
+        <ChangelogModal onClose={() => setOpenModal(null)} serverVersion={serverVersion} />
+      )}
+      {openModal === 'backup' && <BackupModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'about' && (
+        <AboutModal
+          onClose={() => setOpenModal(null)}
+          onOpenChangelog={() => setOpenModal('changelog')}
+          onOpenShortcuts={() => setOpenModal('shortcuts')}
+        />
+      )}
+      {openModal === 'reading-log' && <ReadingLogModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'source-health' && (
+        <SourceHealthEntryModal
+          sources={sources}
+          sourcesState={sources.length > 0 ? 'ready' : 'loading'}
+          onClose={() => setOpenModal(null)}
+          onSourcesChange={refreshSources}
+          onToast={(message: string) => toast.info(message)}
+        />
+      )}
+
+      {/* —— AI 接入：**独立一类**（不是实验室、不是插件） —— */}
+      {openModal === 'ai' && (
+        <AiModal onClose={() => setOpenModal(null)} uiContext={currentUiContext} />
+      )}
+
+      {/* —— 插件：**独立一类**（查看当前装了哪些插件） —— */}
+      {openModal === 'plugins' && <PluginsModal onClose={() => setOpenModal(null)} />}
+
+      {/* —— 实验室：只放"待定、准备加入基础框架"的功能 + 插件贡献的条目 —— */}
       {showLab && (
         <LabModal
           onClose={() => { setShowLab(false); setLabEntryId(undefined) }}
@@ -569,7 +612,7 @@ function App() {
           initialEntryId={labEntryId}
           actions={{
             // 插件要"做某事"时用：实验室只转发，不解释这些 key 是什么。
-            openChangelog: () => setLabEntryId(LAB_ENTRY.changelog),
+            openChangelog: () => setOpenModal('changelog'),
             openShortcuts: () => setOpenModal('shortcuts'),
             closeLab: () => { setShowLab(false); setLabEntryId(undefined) },
             refreshSources,

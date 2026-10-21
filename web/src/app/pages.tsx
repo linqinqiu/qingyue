@@ -9,7 +9,6 @@ import type { BookshelfItem, SearchResult, SourceSummary } from '../lib/api'
 import type { OpenBook } from '../reader/openBook'
 import type { ReaderSettings } from '../reader/readerSettings'
 import type { AppModal, Page, PageDialogKind } from '../lib/nav'
-import { LAB_ENTRY } from './destinations'
 
 /**
  * 页面渲染表 —— 路由的另一半。
@@ -41,7 +40,8 @@ export type PageContext = {
   openModal: (modal: AppModal) => void
   openPageDialog: (kind: PageDialogKind) => void
   openTocRules: () => void
-  openLabEntry: (id: string) => void
+  /** 打开实验室：里面是"待定功能"与"插件条目"。成熟功能各有自己的浮层，不走这里。 */
+  openLab: () => void
 }
 
 export function renderPage(page: Page, ctx: PageContext): React.ReactNode {
@@ -55,7 +55,7 @@ export function renderPage(page: Page, ctx: PageContext): React.ReactNode {
         />
       )
     case 'subscriptions':
-      return <RssPage onOpenBackup={() => ctx.openLabEntry(LAB_ENTRY.backup)} />
+      return <RssPage onOpenBackup={() => ctx.openModal('backup')} />
     case 'settings':
       return <SettingsPage sections={ctx.settingsSections} pluginSections={ctx.pluginSections} />
     case 'shelf':

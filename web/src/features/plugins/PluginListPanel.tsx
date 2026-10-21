@@ -1,20 +1,18 @@
 import React, { useEffect, useState } from 'react'
 import { frontendPlugins } from '../../extensions/registry'
 import { api, type PluginStatus } from '../../lib/api'
-import type { LabOwnedEntry } from '../../lab/Lab'
 
 /**
- * 「插件」—— 实验室功能条目，**不是插件**（有点绕，但这是正确的位置）。
+ * 插件清单面板 —— **独立一类**的查看界面。
  *
- * 它做的是：把"当前装了哪些插件"如实列出来。这条界面本身是产品自带的，
- * 所以它属于实验室；被它列出来的那些才是插件。
- *
- * 框架的"能介绍自己"由这条呈现给用户，但框架本体（`lab/`、`extensions/`）里不含这段界面。
- * 换句话说：把这条删掉，实验室依然能用，只是没人告诉你装了哪些插件了。
+ * 它列出"当前装了哪些插件、各自贡献了什么、哪些装载失败了"。
+ * 面板本身是产品自带的窗口；被它列出来的那些才是插件。
  *
  * 前端与后端两半都要看得见 —— 从前后端装载失败只打到服务端控制台，界面上完全看不到。
- */
-function PluginIntro() {
+ *
+ * 空态很重要：插件清单为空是**正常状态**（框架不含任何插件），
+ * 不能让用户以为"插件功能坏了"。
+ */export function PluginListPanel() {
   const plugins = frontendPlugins.list()
   const failures = frontendPlugins.loadFailures()
   // 后端插件状态：从 /api/plugins 取。装没装上、为什么没装上，用户要看得见。
@@ -97,21 +95,4 @@ function PluginIntro() {
       )}
     </div>
   )
-}
-
-/**
- * 「插件」条目：列的是插件，但它自己是实验室功能。
- *
- * 位置容易搞混，注释写死在这儿：这条**不**由插件注册表产生，
- * 它和 AI 接入、书源体检一样，是产品自带的一条实验室条目。
- */
-export const pluginIntroEntry: LabOwnedEntry = {
-  id: 'plugins',
-  origin: 'lab',
-  title: '插件',
-  description:
-    '当前装了哪些插件、各自贡献了什么、哪些装载失败了。插件是用户自定义的扩展，可装可卸；'
-    + '实验室里其它条目是程序自带的，不属于插件。',
-  badge: '扩展',
-  render: () => <PluginIntro />,
 }

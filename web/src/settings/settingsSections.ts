@@ -21,7 +21,12 @@ export type SettingsActions = {
   openBackup: () => void
   openLogs: () => void
   openServerPort: () => void
+  /** AI 接入 —— 独立一类，不是实验室条目 */
   openAiConnections: () => void
+  /** 插件 —— 独立一类，不是实验室条目 */
+  openPlugins: () => void
+  /** 实验室 —— 只放"待定、准备加入基础框架"的功能 */
+  openLab: () => void
 }
 
 export function buildSettingsSections(actions: SettingsActions): SettingsSection[] {
@@ -98,16 +103,32 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
       }],
     },
     {
-      title: '实验室',
-      rows: [{
-        // 这一行是整个实验室的入口，不是"AI 入口" —— 实验室里有 7 条自带功能 + 若干插件。
-        // 从前标题写「AI 接入与扩展」，第一次用的人不知道里面还有更新日志/备份/阅读记录。
-        title: '实验室',
-        hint: '一个可悬浮的窗口，放那些不该占一级导航的功能：AI 接入、书源体检、更新日志、'
-          + '阅读记录、备份与恢复、关于，以及你自己装的插件。自带功能与插件分两区列出。',
-        action: '打开实验室',
-        onClick: actions.openAiConnections,
-      }],
+      // 三类东西各有各的入口，不要合并成一行 ——
+      // 实验室（待定功能）/ AI 接入（独立一类）/ 插件（用户自定义）是三种不同的东西。
+      title: '实验室与扩展',
+      rows: [
+        {
+          title: '实验室',
+          hint: '准备加入基础框架、但还没定下来的功能在这里试。目前没有待定功能，'
+            + '所以是空的 —— 空着是如实状态，不是坏了。',
+          action: '打开实验室',
+          onClick: actions.openLab,
+        },
+        {
+          title: 'AI 接入',
+          hint: '程序内部的 AI 网关（/api/agent）。登记一个 openai-compatible 模型后才能对话；'
+            + '没有连接时 AI 不可用，不做本地兜底。',
+          action: '打开 AI 接入',
+          onClick: actions.openAiConnections,
+        },
+        {
+          title: '插件',
+          hint: '插件是用户自定义的扩展，可装可卸、不装也不影响主程序。'
+            + '这里看当前装了哪些、各自贡献了什么、有没有装载失败。',
+          action: '打开插件',
+          onClick: actions.openPlugins,
+        },
+      ],
     },
   ]
 }

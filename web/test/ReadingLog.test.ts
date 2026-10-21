@@ -61,9 +61,9 @@ test('接线：「我的」菜单有「阅读记录」入口，且开的是同�
   assert.match(header, /onOpenReadingLog/, '菜单要能触发')
   assert.match(header, /阅读记录/)
   const main = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
-  // 0.8.3 起这一页下沉成插件（住实验室里）：入口改为"开实验室并直达那个条目"。
-  // 判据仍然要求"菜单能触发 + 真的接上了"，只是接线形态从 pageDialog 变成 labEntryId。
-  assert.match(main, /setLabEntryId\(LAB_ENTRY\.readingLog\)/, '入口要直达实验室里的阅读记录条目')
-  const plugin = fs.readFileSync(path.resolve(import.meta.dirname, '../src/features/lab/readingLogPanel.tsx'), 'utf8')
-  assert.match(plugin, /<ReadingLogPage \/>/, '插件里要真的渲染这一页，不是挂个空条目')
+  // 「阅读记录」是**成熟功能浮层**（features/modal/），不是实验室条目。
+  // 入口直接开对应浮层，接线形态是 setOpenModal。
+  assert.match(main, /setOpenModal\('reading-log'\)/, '入口要开阅读记录浮层')
+  const panel = fs.readFileSync(path.resolve(import.meta.dirname, '../src/features/modal/readingLogPanel.tsx'), 'utf8')
+  assert.match(panel, /<ReadingLogPage \/>/, '浮层里要真的渲染这一页，不是挂个空组件')
 })
