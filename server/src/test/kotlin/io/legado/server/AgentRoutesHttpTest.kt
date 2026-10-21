@@ -33,7 +33,7 @@ class AgentRoutesHttpTest {
         json.parseToJsonElement(resp.bodyAsText())
 
     @Test
-    fun `GET manifest returns disabled and builtin connection`() = testApplication {
+    fun `GET manifest returns disabled and no builtin connection`() = testApplication {
         val dbPath = Files.createTempFile("legado-agent-manifest", ".sqlite").toString()
         val home = tempDir("home-manifest")
         try {
@@ -44,14 +44,14 @@ class AgentRoutesHttpTest {
             val body = readJson(resp).jsonObject
             assertEquals(false, body["enabled"]?.jsonPrimitive?.boolean)
             val builtin = body["builtinConnections"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
-            assertTrue("should contain local", builtin.contains("local"))
+            assertTrue("no builtin connections anymore", builtin.isEmpty())
         } finally {
             cleanup(dbPath, home)
         }
     }
 
     @Test
-    fun `GET connections contains builtin local`() = testApplication {
+    fun `GET connections is empty before registering`() = testApplication {
         val dbPath = Files.createTempFile("legado-agent-conn", ".sqlite").toString()
         val home = tempDir("home-conn")
         try {
@@ -60,9 +60,7 @@ class AgentRoutesHttpTest {
             val resp = c.get("/api/agent/connections")
             assertEquals(HttpStatusCode.OK, resp.status)
             val list = readJson(resp).jsonArray
-            assertTrue("list should contain local", list.any {
-                it.jsonObject["id"]?.jsonPrimitive?.content == "local"
-            })
+            assertTrue("list should be empty", list.isEmpty())
         } finally {
             cleanup(dbPath, home)
         }
@@ -83,7 +81,6 @@ class AgentRoutesHttpTest {
             val created = readJson(create).jsonObject
             val id = created["id"]?.jsonPrimitive?.content ?: ""
             assertNotEquals("local", id)
-            assertEquals(false, created["builtin"]?.jsonPrimitive?.boolean)
             val del = c.delete("/api/agent/connections/$id")
             assertEquals(HttpStatusCode.OK, del.status)
             val again = c.delete("/api/agent/connections/$id")
@@ -94,14 +91,14 @@ class AgentRoutesHttpTest {
     }
 
     @Test
-    fun `DELETE builtin local is rejected`() = testApplication {
+    fun `DELETE missing connection returns 404`() = testApplication {
         val dbPath = Files.createTempFile("legado-agent-builtin", ".sqlite").toString()
         val home = tempDir("home-builtin")
         try {
             application { legadoApplication(serverConfig(dbPath, home)) }
             val c = makeClient()
             val resp = c.delete("/api/agent/connections/local")
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals(HttpStatusCode.NotFound, resp.status)
         } finally {
             cleanup(dbPath, home)
         }
@@ -151,7 +148,7 @@ class AgentRoutesHttpTest {
     }
 
     @Test
-    fun `POST comprehend returns local extraction`() = testApplication {
+    fun `POST comprehend without connection returns 409`() = testApplication {
         val dbPath = Files.createTempFile("legado-agent-comprehend", ".sqlite").toString()
         val home = tempDir("home-comprehend")
         try {
@@ -162,10 +159,28 @@ class AgentRoutesHttpTest {
                 contentType(ContentType.Application.Json)
                 setBody("""{"text":"$text","question":"What is QingYue?"}""")
             }
-            assertEquals("comprehend should be 200: ${resp.status}", HttpStatusCode.OK, resp.status)
+            assertEquals("comprehend should be 409: ${resp.status}", HttpStatusCode.Conflict, resp.status)
             val body = readJson(resp).jsonObject
-            assertEquals("local-extractive", body["engine"]?.jsonPrimitive?.content)
-            assertNotNull(body["summary"]?.jsonPrimitive?.content)
+            assertEquals("no_connection", body["code"]?.jsonPrimitive?.content)
+        } finally {
+            cleanup(dbPath, home)
+        }
+    }
+
+    @Test
+    fun `POST chat without connection returns 409`() = testApplication {
+        val dbPath = Files.createTempFile("legado-agent-chat", ".sqlite").toString()
+        val home = tempDir("home-chat")
+        try {
+            application { legadoApplication(serverConfig(dbPath, home)) }
+            val c = makeClient()
+            val resp = c.post("/api/agent/chat") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"messages":[{"role":"user","content":"ping"}]}""")
+            }
+            assertEquals("chat should be 409: ${resp.status}", HttpStatusCode.Conflict, resp.status)
+            val body = readJson(resp).jsonObject
+            assertEquals("no_connection", body["code"]?.jsonPrimitive?.content)
         } finally {
             cleanup(dbPath, home)
         }

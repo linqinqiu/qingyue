@@ -167,8 +167,9 @@ class LlmProviderFrameworkTest {
             ))
 
             val out = kotlinx.coroutines.runBlocking { agent.chat(listOf("user" to "你好")) }
-            assertEquals("拿不到就该回退本地", "local-fallback", out.engine)
-            assertTrue("要标 fallback", out.fallback)
+            assertEquals("拿不到就该明确报错，不再本地兜底", "unavailable", out.engine)
+            assertEquals("upstream_unreachable", out.error)
+            assertEquals("不该伪造回答", "", out.content)
         } finally {
             runCatching { db.close() }
         }
@@ -201,7 +202,8 @@ class LlmProviderFrameworkTest {
             ))
 
             val out = kotlinx.coroutines.runBlocking { agent.chat(listOf("user" to "你好")) }
-            assertEquals("provider 炸了也要回退，不能把链路带走", "local-fallback", out.engine)
+            assertEquals("provider 炸了也要明确报错，不能把链路带走", "unavailable", out.engine)
+            assertEquals("upstream_unreachable", out.error)
         } finally {
             runCatching { db.close() }
         }
@@ -224,7 +226,8 @@ class LlmProviderFrameworkTest {
             val agent = Agent(ctx, home, providerRegistry = providers)
 
             val out = kotlinx.coroutines.runBlocking { agent.chat(listOf("user" to "你好")) }
-            assertEquals("没有连接就该本地兜底", "local-fallback", out.engine)
+            assertEquals("没有连接就该明确不可用", "unavailable", out.engine)
+            assertEquals("no_connection", out.error)
             assertEquals("不该调用 provider", 0, fake.called)
         } finally {
             runCatching { db.close() }

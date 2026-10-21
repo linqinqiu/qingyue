@@ -72,9 +72,12 @@ object BuiltinTools {
     private fun strId(args: ToolArgs, key: String = "id"): Long? =
         (args[key] as? Number)?.toLong() ?: (args[key] as? String)?.toLongOrNull()
 
-    fun all(): List<Tool> = listOf(
+    fun all(policy: GuardrailsPolicy = DefaultGuardrailsPolicy): List<Tool> {
+        // 捕获注入的确认策略，供批量写工具（如 sourceBatch）在落库前询问确认。
+        val confirm: (ToolArgs, String) -> AgentResult? = policy::confirm
+        return listOf(
         // —— 书源 sources ——
-        sourceList, sourceGet, sourceValidate, sourceDebug, sourceHealth, sourceImport, sourceUpsert, sourceDelete, sourceBatch, sourceOrder,
+        sourceList, sourceGet, sourceValidate, sourceDebug, sourceHealth, sourceImport, sourceUpsert, sourceDelete, sourceBatchTool(confirm), sourceOrder,
 
         // —— 净化规则 replace-rules ——
         replaceList, replaceGet, replaceSave, replaceDelete, replaceToggle, replaceImport,
@@ -93,7 +96,8 @@ object BuiltinTools {
 
         // —— 发现/搜索/正文（只读探针，供 AI 探查内容）explore/search ——
         exploreTabs, explore, search, chapters, content,
-    )
+        )
+    }
 
     // ===== sources =====
 
@@ -174,11 +178,11 @@ object BuiltinTools {
     }.also { it.meta = ToolMeta("source.delete", "sources", "删除单个书源（同时清该源登录态）。", writes = true) }
 
     /** 批量动作：delete。delete 必须 confirm。 */
-    val sourceBatch = Tool { ctx, args ->
+    private fun sourceBatchTool(confirm: (ToolArgs, String) -> AgentResult?) = Tool { ctx, args ->
         val ids = listString(args, "ids")
         val action = string(args, "action")
         if (ids.isEmpty()) return@Tool ctx.error("empty_selection", "ids 为空")
-        Guardrails.requireConfirm(args, "将影响 ${ids.size} 个书源")?.let { return@Tool it }
+        confirm(args, "将影响 ${ids.size} 个书源")?.let { return@Tool it }
         when (action) {
             "delete" -> {
                 var n = 0

@@ -15,7 +15,7 @@ package io.legado.server.ai
  *
  * 三条约束（与工具框架同一纪律）：
  * 1. **id 唯一**：按 [id] 注册，重复注册默认拒绝（要覆盖必须显式）。
- * 2. **失败不抛**：provider 返回 null 表示"这次没拿到"，由调用方回退本地。
+ * 2. **失败不抛**：provider 返回 null 表示"这次没拿到"，由调用方返回明确的错误（409/502）。
  *    抛异常会被框架兜住并同样视为失败 —— 一个连不上的模型不能把整条链路带走。
  * 3. **不碰路由**：provider 只做外呼，不注册任何 HTTP 端点。
  */
@@ -35,7 +35,7 @@ interface LlmProvider {
      *
      * @param profile 连接档案（含 baseUrl / model / apiKey 等，由用户配置）
      * @param messages 多轮消息，role 为 system/user/assistant
-     * @return 模型回复的文本；拿不到就返回 null（调用方回退本地），**不要抛异常**
+     * @return 模型回复的文本；拿不到就返回 null（调用方报错），**不要抛异常**
      */
     fun chat(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String?
 
@@ -46,7 +46,7 @@ interface LlmProvider {
      * 框架拿到 [LlmReply.toolCalls] 后会执行对应工具、把结果回灌，再问一轮。
      *
      * @param tools 当前可用的工具清单（来自 ToolRegistry，含插件注册的）
-     * @return 文本 + 工具调用；拿不到返回 null（调用方回退）
+     * @return 文本 + 工具调用；拿不到返回 null（调用方报错）
      */
     fun chatWithTools(
         profile: AgentProfileStore.Profile,

@@ -46,6 +46,16 @@ interface Plugin {
     fun llmProviders(): List<io.legado.server.ai.LlmProvider> = emptyList()
 
     /**
+     * 本插件提供的连接选择策略。默认空。
+     *
+     * 这是"连哪个外部连接"可插拔的落点：框架默认取第一个连接（[io.legado.server.ai.FirstProfileSelector]），
+     * 插件可以在这里注册自己的 [io.legado.server.ai.ConnectionSelector]（例如按健康度 failover、
+     * 按地域/负载挑一个），并通过 [PluginContext.selectors] 把它装进运行中的注册表，
+     * 不必改框架源码。这延续了"框架只立钩子、决定交给外部"的红线。
+     */
+    fun connectionSelectors(): List<io.legado.server.ai.ConnectionSelector> = emptyList()
+
+    /**
      * 本插件要挂的钩子。默认空。
      *
      * 注意：插件**不能**通过钩子绕过 [io.legado.server.ai.Guardrails] ——
@@ -129,6 +139,8 @@ data class PluginContext(
     val hooks: io.legado.server.ai.ToolHooks,
     /** LLM 协议注册表：插件在这里注册自己的 provider（如 Ollama / Anthropic）。 */
     val providers: io.legado.server.ai.LlmProviderRegistry = io.legado.server.ai.LlmProviderRegistry(),
+    /** 连接选择策略注册表：插件在这里注册自己的 [io.legado.server.ai.ConnectionSelector]。 */
+    val selectors: io.legado.server.ai.ConnectionSelectorRegistry = io.legado.server.ai.ConnectionSelectorRegistry(),
     /** 事件总线：插件可以订阅系统事件（也可用 [Plugin.subscriptions] 交给框架代管）。 */
     val events: EventBus = EventBus(),
     /** 框架版本，便于插件做兼容判断。 */

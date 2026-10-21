@@ -98,7 +98,7 @@ fun Route.apiRoutes(
          */
         get("/plugins") {
             val snapshot = pluginManager?.status()
-                ?: PluginStatusDto(loaded = 0, tools = 0, providers = 0, plugins = emptyList(), failures = emptyList(), describe = "（插件框架未接线）")
+                ?: PluginStatusDto(loaded = 0, tools = 0, providers = 0, selectors = 0, plugins = emptyList(), failures = emptyList(), describe = "（插件框架未接线）")
             call.respond(snapshot)
         }
         // 服务自身 + 改端口。端口只写安装根的 `port.txt`，**重启后生效** —— 正在跑的这个进程改不了。

@@ -107,6 +107,7 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
         registry = agentConnection.registry,
         hooks = agentConnection.hooks,
         providers = agentConnection.providerRegistry,
+        selectors = agentConnection.selectorRegistry,
     )
     val loadedPlugins = pluginManager.discoverFrom(config.homeDirectory.resolve("plugins"))
     if (loadedPlugins > 0 || pluginManager.loadFailures().isNotEmpty()) {

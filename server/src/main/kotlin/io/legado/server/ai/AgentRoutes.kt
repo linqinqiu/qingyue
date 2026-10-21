@@ -15,11 +15,10 @@ import java.nio.file.Path
 // `/api/agent/` 这一组的真实处理体。
 // 这一组就是「用户自定义接入」的承载面，但**不动基础框架**：基础框架只在这里把几个稳固的钩子点
 // 立出来（清单 / 连接注册 / 书源新建 / 书源校验 / 阅读理解），真正「接什么模型、连哪个地址」完全
-// 交给用户在 agent-profiles.json 里配、或运行时 POST 注册。框架本身只认内置本地 stub。
+// 交给用户在 agent-profiles.json 里配、或运行时 POST 注册。没有连接时 AI 明确不可用，不做本地兜底。
 // 各路由在 Routes.kt 里仍是字面注册（供 ApiCatalog 门禁逐条核对）；这里把处理器抽成顶层扩展函数。
 // 写门（requireSameOriginWrite）仍由各路由自己的第一行字面值决定，本文件不替它下结论。
-// 阅读理解（comprehend）不再在此另写外呼逻辑，而是直接委派给网关 AgentConnection，
-// 由网关统一决定「外部模型优先 / 失败回退本地」。
+// 阅读理解（comprehend）与对话（chat）都委派给网关 AgentConnection，缺连接返回 409、外呼失败返回 502。
 
 // ===== 清单 manifest =====
 
@@ -35,9 +34,9 @@ private data class ManifestResponse(
 
 suspend fun ApplicationCall.agentManifest(profileStoreHome: Path, profileStore: AgentProfileStore?, agentConnection: AgentConnection?) {
     val store = profileStore ?: AgentProfileStore
-    // 「是否启用」取决于真实档案里有没有非内置的外部连接——而不是那个仅在 -Dai.debug 下存在的
-    // 运行时句柄（那只是骨架占位）。这样用户用 POST 注册一个 openai-compatible 连接后，清单立即变 enabled。
-    val externalExists = store.list(profileStoreHome).any { it.kind != AgentProfileStore.ProfileKind.BUILTIN_STUB }
+    // 「是否启用」取决于真实档案里有没有外部连接。没有连接时 AI 功能不可用，
+    // 不再用内置 local 兜底——所以 builtinConnections 恒为空，保留字段只为契约稳定。
+    val externalExists = store.list(profileStoreHome).isNotEmpty()
     val tools = agentConnection?.manifest().orEmpty().map {
         ManifestTool(id = it.id, group = it.group, description = it.description, writes = it.writes)
     }
@@ -45,7 +44,7 @@ suspend fun ApplicationCall.agentManifest(profileStoreHome: Path, profileStore: 
         ManifestResponse(
             enabled = externalExists,
             tools = tools,
-            builtinConnections = listOf(AgentProfileStore.BUILTIN_LOCAL.id),
+            builtinConnections = emptyList(),
         ),
     )
 }
@@ -68,7 +67,6 @@ private data class ConnectionResponse(
     val id: String,
     val name: String,
     val kind: String,
-    val builtin: Boolean,
     val model: String? = null,
     val baseUrl: String? = null,
 )
@@ -121,9 +119,6 @@ suspend fun ApplicationCall.agentDeleteConnection(
     profileStore: AgentProfileStore?,
 ) {
     val store = profileStore ?: AgentProfileStore
-    if (id == AgentProfileStore.BUILTIN_LOCAL.id) {
-        respond(HttpStatusCode.BadRequest, ApiError("builtin_protected", "内置连接 local 不可删除")); return
-    }
     val removed = store.delete(profileStoreHome, id)
     if (!removed) {
         respond(HttpStatusCode.NotFound, ApiError("not_found", "连接 $id 不存在")); return
@@ -138,7 +133,6 @@ private fun toConnectionResponse(p: AgentProfileStore.Profile) = ConnectionRespo
     id = p.id,
     name = p.name,
     kind = p.kind.name.lowercase(),
-    builtin = p.id == AgentProfileStore.BUILTIN_LOCAL.id,
     model = p.model,
     baseUrl = p.baseUrl,
 )
@@ -214,12 +208,11 @@ private data class ComprehendResponse(
     val keywords: List<String>,
     val answer: String? = null,
     val sentencesCount: Int,
-    val fallback: Boolean? = null,
     val error: String? = null,
 )
 
-// 把阅读理解整体收口到网关 AgentConnection：外部模型优先，失败/缺连接自动回退本地，
-// 保证接口永远有结果。HTTP 层只负责解析请求、委派、映射响应，不再另写一份外呼逻辑。
+// 阅读理解收口到网关 AgentConnection：必须有外部模型连接。
+// 缺连接返回 409，外呼失败返回 502 —— 不再回退本地抽取。
 suspend fun ApplicationCall.agentComprehend(agentConnection: AgentConnection?) {
     val req = runCatching { receive<ComprehendRequest>() }.getOrElse {
         respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 {text, question?}")); return
@@ -227,11 +220,15 @@ suspend fun ApplicationCall.agentComprehend(agentConnection: AgentConnection?) {
     if (req.text.isBlank()) {
         respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "text 不能为空")); return
     }
-    val outcome = if (agentConnection != null) {
-        agentConnection.comprehend(req.text, req.question, req.summarySentences, req.topKeywords)
-    } else {
-        // 理论上 1234 启动时会无条件构造网关句柄；若缺失，降级到本地 stub，保证接口永远有结果。
-        localFallbackOutcome(req)
+    val conn = agentConnection
+    if (conn == null) {
+        respond(HttpStatusCode.ServiceUnavailable, ApiError("gateway_missing", "AI 网关未初始化；请重启服务。"))
+        return
+    }
+    val outcome = conn.comprehend(req.text, req.question, req.summarySentences, req.topKeywords)
+    if (outcome.error != null) {
+        respond(outcomeStatus(outcome.error), ApiError(outcome.error, outcomeMessage(outcome.error)))
+        return
     }
     respond(toComprehendResponse(outcome))
 }
@@ -248,14 +245,13 @@ private data class ChatRequestDto(val messages: List<ChatMessageDto>)
 private data class ChatResponseDto(
     val engine: String,
     val content: String,
-    val fallback: Boolean? = null,
     val error: String? = null,
     /** 本轮实际执行过的工具（`工具id:结果码`）；没调工具就不出现。 */
     val toolRounds: List<String>? = null,
 )
 
-// 自由对话（多轮）：直接把 messages 数组交给外部模型，缺连接/失败回退本地说明，
-// 保证接口永远有结果。HTTP 层只负责解析请求、委派、映射响应，不另写外呼逻辑。
+// 自由对话（多轮）：直接把 messages 数组交给外部模型。
+// 缺连接返回 409，外呼失败返回 502 —— 不再编一段"本地说明"冒充回答。
 suspend fun ApplicationCall.agentChat(agentConnection: AgentConnection?) {
     val req = runCatching { receive<ChatRequestDto>() }.getOrElse {
         respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "请求体不是合法的 {messages:[{role,content}]}")); return
@@ -263,39 +259,40 @@ suspend fun ApplicationCall.agentChat(agentConnection: AgentConnection?) {
     if (req.messages.isEmpty()) {
         respond(HttpStatusCode.BadRequest, ApiError("invalid_request", "messages 不能为空")); return
     }
-    val pairMessages = req.messages.map { (it.role to it.content) }
-    val outcome = if (agentConnection != null) {
-        agentConnection.chat(pairMessages)
-    } else {
-        // 理论上 1234 启动时会无条件构造网关句柄；若缺失，给一条本地说明，保证接口永远有结果。
-        Agent.ChatOutcome(
-            engine = "local-fallback",
-            content = "（网关句柄未初始化，无法对话；请重启服务。）",
-            fallback = true,
-        )
+    val conn = agentConnection
+    if (conn == null) {
+        respond(HttpStatusCode.ServiceUnavailable, ApiError("gateway_missing", "AI 网关未初始化；请重启服务。"))
+        return
+    }
+    val outcome = conn.chat(req.messages.map { (it.role to it.content) })
+    if (outcome.error != null) {
+        respond(outcomeStatus(outcome.error), ApiError(outcome.error, outcomeMessage(outcome.error)))
+        return
     }
     respond(
         ChatResponseDto(
             engine = outcome.engine,
             content = outcome.content,
-            fallback = if (outcome.fallback) true else null,
             error = outcome.error,
             toolRounds = outcome.toolRounds,
         ),
     )
 }
 
-// 网关句柄缺失时的最后兜底：直接走本地抽取（无 fallback 标注）。
-private fun localFallbackOutcome(req: ComprehendRequest): Agent.ComprehendOutcome {
-    val local = LocalComprehension.analyze(req.text, req.question, req.summarySentences, req.topKeywords)
-    return Agent.ComprehendOutcome(
-        engine = "local-extractive",
-        summary = local.summary,
-        keywords = local.keywords,
-        answer = local.answer,
-        sentencesCount = local.sentencesCount,
-        fallback = false,
-    )
+/** 网关错误的 HTTP 语义：没配置是客户端可修复的（409），外呼失败是上游问题（502）。 */
+private fun outcomeStatus(code: String): HttpStatusCode = when (code) {
+    "no_connection" -> HttpStatusCode.Conflict
+    "upstream_unreachable", "tool_rounds_exhausted" -> HttpStatusCode.BadGateway
+    "empty_messages" -> HttpStatusCode.BadRequest
+    else -> HttpStatusCode.InternalServerError
+}
+
+private fun outcomeMessage(code: String): String = when (code) {
+    "no_connection" -> "尚未登记外部模型连接；请先在「AI 接入 → 连接」里登记一个 openai-compatible 地址。"
+    "upstream_unreachable" -> "外部模型连不上，本次没有结果。"
+    "tool_rounds_exhausted" -> "外部模型在工具调用轮数上限内仍未给出结论。"
+    "empty_messages" -> "messages 不能为空"
+    else -> "AI 请求失败：$code"
 }
 
 private fun toComprehendResponse(o: Agent.ComprehendOutcome) = ComprehendResponse(
@@ -304,6 +301,5 @@ private fun toComprehendResponse(o: Agent.ComprehendOutcome) = ComprehendRespons
     keywords = o.keywords,
     answer = o.answer,
     sentencesCount = o.sentencesCount,
-    fallback = if (o.fallback) true else null,
     error = o.error,
 )

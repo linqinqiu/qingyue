@@ -10,7 +10,7 @@ import io.legado.server.subscription.SubscriptionService
 /**
  * 程序内部 AI 的"连接"本体：把它要用的服务端能力一次性装好，传给每个工具。
  *
- * 这些对象就是 130 个 HTTP 端点背后那同一批服务（[Database]、[RuleRunner]、
+ * 这些对象就是 139 个 HTTP 端点背后那同一批服务（[Database]、[RuleRunner]、
  * [SourceDebugger]、[SourceHealth]……），所以 AI 在进程内能改的、能看到的东西，
  * 与界面/脚本通过 HTTP 能改的、能看的东西**完全一致**——没有第二条实现路径。
  *

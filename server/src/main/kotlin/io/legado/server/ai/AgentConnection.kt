@@ -23,10 +23,10 @@ class AgentConnection internal constructor(private val agent: Agent) {
     fun manifest(): List<ToolMeta> = agent.toolManifest()
 
     /**
-     * 是否存在非内置（openai-compatible）外部连接——决定 `manifest` 的 `enabled` 字段。
+     * 是否登记了外部连接——决定 `manifest` 的 `enabled` 字段。
      * 注意：这只是「连接已注册」的信号；真正外呼是否成功要看 [comprehend]/[callLlm] 的运行结果。
      */
-    fun hasExternalConnection(): Boolean = agent.hasExternalConnection()
+    fun hasConnection(): Boolean = agent.hasConnection()
 
     /**
      * 工具注册表 —— 让调用方**在运行时**增删工具，而不是只能调内置那 39 个。
@@ -68,7 +68,20 @@ class AgentConnection internal constructor(private val agent: Agent) {
     val providerRegistry: LlmProviderRegistry get() = agent.providerRegistry
 
     /**
-     * 文章阅读理解（同步）。外部模型优先，失败/缺连接自动回退本地抽取，保证永远有结果。
+     * 连接选择策略注册表 —— 让"连哪个外部连接"可插拔，而不是硬编码取第一个。
+     *
+     * ```kotlin
+     * conn.selectorRegistry.register(FailoverSelector())   // 加一个按健康度顺延的策略
+     * conn.selectorRegistry.setDefault("FailoverSelector") // 设为默认
+     * ```
+     *
+     * 默认 [io.legado.server.ai.FirstProfileSelector] 取第一个连接，与原行为完全一致；
+     * 框架只立 [io.legado.server.ai.ConnectionSelector] 这个钩子，决定权交给外部。
+     */
+    val selectorRegistry: ConnectionSelectorRegistry get() = agent.selectorRegistry
+
+    /**
+     * 文章阅读理解（同步）。必须有外部模型连接；没有或外呼失败返回 error，不做本地兜底。
      * HTTP 层的 `POST /api/agent/comprehend` 就是直接委派到这里。
      */
     fun comprehend(
@@ -90,7 +103,7 @@ class AgentConnection internal constructor(private val agent: Agent) {
 
     /**
      * 自由对话（多轮）。直接把 `messages` 交给外部 openai-compatible 模型；
-     * 缺连接 / 调用失败回退本地说明。HTTP 层 `POST /api/agent/chat` 直接委派到这里。
+     * 缺连接 / 调用失败返回 error。HTTP 层 `POST /api/agent/chat` 直接委派到这里。
      * `messages` 是 (role, content) 对，role 取 system/user/assistant 之一（其它值按 user 处理）。
      */
     fun chat(messages: List<Pair<String, String>>): Agent.ChatOutcome = runBlocking {

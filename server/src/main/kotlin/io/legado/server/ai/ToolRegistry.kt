@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  *    除非显式传 `allowRemovingBuiltin = true`（默认 false）。防止插件把 `source.delete` 悄悄摘掉。
  * 3. **线程安全**：注册表被 HTTP 请求线程与进程内调用方共用，用 `ConcurrentHashMap` 兜住。
  *
- * 与 HTTP 端点计数无关：这里注册的工具**不产生任何 HTTP 路由**，`/api/catalog` 的 138 条不变。
+ * 与 HTTP 端点计数无关：这里注册的工具**不产生任何 HTTP 路由**，`/api/catalog` 的 139 条不变。
  * `ApiCatalog.test.ts` 那道双向核对门禁照常成立。
  */
 class ToolRegistry(

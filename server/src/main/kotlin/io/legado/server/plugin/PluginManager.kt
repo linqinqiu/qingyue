@@ -2,6 +2,7 @@ package io.legado.server.plugin
 
 import io.legado.server.ai.ToolHooks
 import io.legado.server.ai.LlmProviderRegistry
+import io.legado.server.ai.ConnectionSelectorRegistry
 import io.legado.server.ai.ToolRegistry
 import kotlinx.serialization.Serializable
 import java.util.ServiceLoader
@@ -30,6 +31,7 @@ class PluginManager(
     private val registry: ToolRegistry,
     private val hooks: ToolHooks,
     private val providers: LlmProviderRegistry = LlmProviderRegistry(),
+    private val selectors: ConnectionSelectorRegistry = ConnectionSelectorRegistry(),
     private val events: EventBus = AppEvents.bus,
     /** 框架版本：默认取构建号（`BuildInfo.version`），不写死 —— 写死就会像 0.8.2 那样漂走。 */
     private val frameworkVersion: String = io.legado.server.BuildInfo.version,
@@ -46,6 +48,7 @@ class PluginManager(
         val plugin: Plugin,
         val registeredToolIds: List<String>,
         val registeredProviderIds: List<String>,
+        val registeredSelectorIds: List<String>,
         val subscriptionHandles: List<AutoCloseable>,
         val hookHandle: AutoCloseable?,
     )
@@ -162,6 +165,10 @@ class PluginManager(
             // 下次换成别的实现就会撞 id（"卸载不干净"是插件框架最容易漏的一处）。
             providers.unregister(id)
         }
+        target.registeredSelectorIds.forEach { id ->
+            // 同样：插件贡献的连接选择策略也要撤掉，否则换实现会撞 id。
+            selectors.unregister(id)
+        }
         target.subscriptionHandles.forEach { handle ->
             // 订阅同样要撤：否则卸载后回调还在跑，指向已失效的对象。
             try {
@@ -206,6 +213,9 @@ class PluginManager(
                 if (lp.registeredProviderIds.isNotEmpty()) {
                     appendLine("  LLM 协议：${lp.registeredProviderIds.joinToString(", ")}")
                 }
+                if (lp.registeredSelectorIds.isNotEmpty()) {
+                    appendLine("  连接策略：${lp.registeredSelectorIds.joinToString(", ")}")
+                }
                 if (lp.subscriptionHandles.isNotEmpty()) {
                     appendLine("  事件订阅：${lp.subscriptionHandles.size} 条")
                 }
@@ -232,6 +242,7 @@ class PluginManager(
         loaded = loaded.size,
         tools = registry.size(),
         providers = providers.size(),
+        selectors = selectors.size(),
         plugins = loaded.map { lp ->
             val m = lp.plugin.metadata
             PluginStatusDto.Item(
@@ -242,6 +253,7 @@ class PluginManager(
                 author = m.author.ifBlank { null },
                 tools = lp.registeredToolIds,
                 llmProviders = lp.registeredProviderIds,
+                connectionSelectors = lp.registeredSelectorIds,
                 subscriptions = lp.subscriptionHandles.size,
             )
         },
@@ -253,7 +265,7 @@ class PluginManager(
 
     private fun load(plugin: Plugin, source: String): Boolean {
         val meta = plugin.metadata
-        val context = PluginContext(registry = registry, hooks = hooks, providers = providers, events = events, frameworkVersion = frameworkVersion)
+        val context = PluginContext(registry = registry, hooks = hooks, providers = providers, selectors = selectors, events = events, frameworkVersion = frameworkVersion)
 
         // 1) onLoad 先跑：插件可以在这里做自己的初始化（失败即整体失败）。
         try {
@@ -307,6 +319,29 @@ class PluginManager(
             }
         }
 
+        // 3.5) 注册连接选择策略。对称于 LLM 协议：插件可以贡献"连哪个外部连接"的策略
+        //      （如按健康度 failover），默认仍是 FirstProfileSelector（取第一个，见 AGENTS.md §4）。
+        val connectionSelectors = try {
+            plugin.connectionSelectors()
+        } catch (e: Throwable) {
+            failures += LoadFailure(source = source, reason = "connectionSelectors() 抛异常：${e.message ?: e::class.simpleName}")
+            emptyList()
+        }
+        val registeredSelectorIds = mutableListOf<String>()
+        for (s in connectionSelectors) {
+            val id = s::class.simpleName ?: continue
+            val ok = try {
+                selectors.register(s)
+            } catch (e: Throwable) {
+                failures += LoadFailure(source = source, reason = "注册连接策略 $id 失败：${e.message ?: e::class.simpleName}")
+                false
+            }
+            if (ok) registeredSelectorIds += id
+            else {
+                failures += LoadFailure(source = source, reason = "连接策略 $id 已存在，本插件这一条被跳过")
+            }
+        }
+
         // 4) 挂钩子（三者都空就不挂，省一个句柄）。
         val ph = try {
             plugin.hooks()
@@ -338,6 +373,7 @@ class PluginManager(
             plugin = plugin,
             registeredToolIds = registeredIds,
             registeredProviderIds = registeredProviderIds,
+            registeredSelectorIds = registeredSelectorIds,
             subscriptionHandles = subscriptionHandles,
             hookHandle = handle,
         )
@@ -359,6 +395,8 @@ data class PluginStatusDto(
     val tools: Int,
     /** 当前 LLM 协议总数（含内置 openai-compatible）。 */
     val providers: Int,
+    /** 当前连接选择策略总数（含内置 FirstProfileSelector）。 */
+    val selectors: Int,
     val plugins: List<Item>,
     val failures: List<Failure>,
     /** 人读的完整介绍（`describe()` 的原文），界面可直接展示。 */
@@ -375,6 +413,8 @@ data class PluginStatusDto(
         val tools: List<String> = emptyList(),
         /** 这个插件注册的 LLM 协议 id。 */
         val llmProviders: List<String> = emptyList(),
+        /** 这个插件注册的连接选择策略 id。 */
+        val connectionSelectors: List<String> = emptyList(),
         /** 这个插件挂了几条事件订阅。 */
         val subscriptions: Int = 0,
     )

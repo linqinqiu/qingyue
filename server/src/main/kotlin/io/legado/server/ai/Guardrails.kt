@@ -3,6 +3,36 @@ package io.legado.server.ai
 import io.legado.server.data.VersionConflict
 
 /**
+ * 确认策略：把"批量写是否需要显式确认"这唯一一道**业务默认**抽成可插拔钩子。
+ *
+ * 框架其余两道护栏（[Guardrails.refuseExternalBind] 地址不可外绑、[Guardrails.catchVersionConflict]
+ * 乐观锁冲突转译）是安全 / 正确性的硬约束，**不可**通过此接口放开。
+ *
+ * 默认实现 [DefaultGuardrailsPolicy] 完全等价于框架历史行为：未显式 `confirm=true` 时拒绝并
+ * 要求确认（`confirm_required`）。外部若要"静默放行 / 走自己的人机确认流程"，实现本接口注入即可。
+ */
+interface GuardrailsPolicy {
+    /**
+     * 在工具真正落库前询问是否需要确认。
+     * 返回 null 表示放行；非 null 是拒绝原因（通常要求调用方带上 `confirm=true` 重试）。
+     */
+    fun confirm(args: ToolArgs, affectedHint: String): AgentResult?
+}
+
+/** 默认确认策略：等价于历史 [Guardrails.requireConfirm] 行为。 */
+object DefaultGuardrailsPolicy : GuardrailsPolicy {
+    override fun confirm(args: ToolArgs, affectedHint: String): AgentResult? {
+        val confirmed = args["confirm"] as? Boolean ?: false
+        if (confirmed) return null
+        return AgentResult(
+            status = "error",
+            code = "confirm_required",
+            message = "本次操作$affectedHint，需要显式确认（在入参里带上 confirm=true 再调用）。",
+        )
+    }
+}
+
+/**
  * 护栏：AI 在进程内改库前/后都必须过这里。骨架阶段落实三条，都对齐现有 HTTP 行为的语义：
  *
  * 1. 绑定地址不可被移动——[refuseExternalBind] 挡掉任何"把服务搬到 0.0.0.0 / 公网"的意图。

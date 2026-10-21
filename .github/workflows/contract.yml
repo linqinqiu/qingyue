@@ -1,0 +1,46 @@
+name: 框架守门（契约双锁）
+
+# 钉死"框架只立稳固钩子、内容交外部"的两条硬约束：
+#   前端双锁 —— web/test/ApiCatalog.test.ts（139 端点 / 19 组 / AI 自定义接入 8 条，不漂）
+#              + web/test/FrameworkHasNoContent.test.ts（内容→框架方向，容器不反向依赖）
+#   后端守门 —— :server:verifyFramework（plugin/ 容器不夹带具体功能 + 端点计数契约）
+# 与本地 `npm --prefix web test` 和 `./gradlew :server:verifyFramework` 一一对应。
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+# 同一 ref 上取消旧运行，省 CI 分钟。
+concurrency:
+  group: contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-gate:
+    name: 前端双锁（139/19/8 + 内容→框架方向）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+      - name: 安装前端依赖
+        run: npm --prefix web install --no-audit --no-fund
+      - name: 跑前端判据（含 ApiCatalog / FrameworkHasNoContent 双锁）
+        run: npm --prefix web test
+
+  backend-gate:
+    name: 后端守门（框架不夹带内容 + 端点计数契约）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+      - name: 跑框架契约测试（不拉起 headless Chrome，快且稳）
+        run: ./gradlew :server:verifyFramework --no-daemon

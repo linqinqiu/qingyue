@@ -27,7 +27,7 @@ import java.time.Duration
  * - 鉴权：`Authorization: Bearer <apiKey>`（apiKey 非空时）
  * - 超时：请求 30s、连接 10s
  * - 解析：`choices[0].message.content`，解析失败退回响应原文
- * - 非 2xx / 网络失败 → 返回 null（由调用方回退本地）
+ * - 非 2xx / 网络失败 → 返回 null（由调用方报错）
  */
 class OpenAiCompatibleProvider : LlmProvider {
 

@@ -13,7 +13,7 @@ import io.legado.server.subscription.SubscriptionService
  * 把 AI 连接 API 挂到本进程的接线处。
  *
  * 设计红线（来自"只写 1234 现有功能 + 保住 ApiCatalog 门"）：
- * - 这里**不注册任何 HTTP 路由**，从不调用 `routing { }`，因此 130 个端点计数不动，
+ * - 这里**不注册任何 HTTP 路由**，从不调用 `routing { }`，因此 139 个端点计数不动，
  *   [Application] 启动后的对外暴露面与从前完全一致；
  * - 整个模块默认是**惰性、可选**的：只有在系统属性 `ai.debug` 被设置时，
  *   [install] 才会真正构造 [AgentConnection] 并执行一次自检演示。
@@ -44,6 +44,12 @@ object AgentModule {
         registry: ToolRegistry = ToolRegistry(allowRemovingBuiltin = AppConfig.aiAllowRemovingBuiltinTools),
         hooks: ToolHooks = ToolHooks(),
         providerRegistry: LlmProviderRegistry = LlmProviderRegistry(),
+        selectorRegistry: ConnectionSelectorRegistry = ConnectionSelectorRegistry(),
+        /**
+         * 确认策略：默认 [DefaultGuardrailsPolicy]（等价于历史 `requireConfirm` 行为）。
+         * 仅放开"批量写需显式确认"这一业务默认；地址外绑 / 乐观锁冲突两道硬护栏不可经此放开。
+         */
+        guardrailsPolicy: GuardrailsPolicy = DefaultGuardrailsPolicy,
     ): AgentConnection {
         val ctx = AgentContext(
             database = database,
@@ -57,9 +63,11 @@ object AgentModule {
         return AgentConnection(
             Agent(
                 ctx, homeDirectory, profileStore,
+                guardrailsPolicy = guardrailsPolicy,
                 registry = registry,
                 hooks = hooks,
                 providerRegistry = providerRegistry,
+                selectorRegistry = selectorRegistry,
             )
         )
     }

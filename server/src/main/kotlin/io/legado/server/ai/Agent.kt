@@ -18,9 +18,12 @@ import java.time.Duration
  *
  * 设计定位（用户原话："我们要做的是提供大体框架支持"）：
  * 这一层**不绑定任何外部大模型**，只把"工具选择 + 执行 + 结果反馈"的管道立起来；
- * 真正接外部模型时，唯一入口是 [callLlm] 钩子——它现在会去 [AgentProfileStore] 里找
- * 第一个非内置（openai-compatible）连接，并真正发出 HTTP 请求；找不到或调用失败就返回 null，
- * 调用方据此走关键字路由或本地兜底。HTTP 层 `/api/agent/` 只是这个网关的收口，不再另写一份外呼。
+ * 真正接外部模型时，唯一入口是 [callLlm] 钩子——它经 [selectorRegistry] 从
+ * [AgentProfileStore] 里选出要用哪一个外部连接，再真正发出 HTTP 请求；找不到或调用失败就返回 null，
+ * 调用方据此返回明确的不可用错误。"连哪个"由可插拔的 [ConnectionSelector] 决定，
+ * 默认取第一个连接（[FirstProfileSelector]），行为与原先一致且可被插件替换。
+ * **没有本地兜底**：本地关键词抽取不是模型结果，
+ * 拿它冒充对话或摘要会让调用方分不清真假。HTTP 层 `/api/agent/` 只是这个网关的收口。
  *
  * 关键约束（沿用现有服务的语义）：
  * - AI 能调用的只有 [BuiltinTools] 注册过的工具，工具背后是和 HTTP 端点同一批服务。
@@ -32,13 +35,20 @@ class Agent(
     private val ctx: AgentContext,
     private val homeDirectory: Path,
     private val profileStore: AgentProfileStore = AgentProfileStore,
-    tools: List<Tool> = BuiltinTools.all(),
+    /**
+     * 确认策略：默认 [DefaultGuardrailsPolicy]（等价于历史 `requireConfirm` 行为）。
+     * 仅用于放宽"批量写需显式确认"这一业务默认；地址外绑 / 乐观锁冲突两道硬护栏不可经此放开。
+     */
+    val guardrailsPolicy: GuardrailsPolicy = DefaultGuardrailsPolicy,
+    tools: List<Tool> = BuiltinTools.all(guardrailsPolicy),
     /** 工具注册表：默认用传入的 tools 建一份；外部想运行时增删工具就自己构造一个传进来。 */
     val registry: ToolRegistry = ToolRegistry(tools),
     /** 生命周期钩子：默认没有钩子（零开销），外部挂审计/限流/改写用。 */
     val hooks: ToolHooks = ToolHooks(),
     /** LLM 协议注册表：默认含 openai-compatible；想接别家协议注册自己的 provider。 */
     val providerRegistry: LlmProviderRegistry = LlmProviderRegistry(),
+    /** 连接选择策略注册表：默认取第一个连接（[FirstProfileSelector]），策略可插拔。 */
+    val selectorRegistry: ConnectionSelectorRegistry = ConnectionSelectorRegistry(),
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
@@ -47,7 +57,7 @@ class Agent(
     fun toolManifest(): List<ToolMeta> = registry.manifest()
 
     /** 是否注册了外部（openai-compatible）连接；供 manifest 的 `enabled` 字段使用。 */
-    fun hasExternalConnection(): Boolean = firstExternalProfile() != null
+    fun hasConnection(): Boolean = selectedProfile() != null
 
     /** 直接按工具 id 执行（已解析出该调哪个工具时用）。 */
     suspend fun runTool(id: String, args: ToolArgs): AgentResult {
@@ -108,18 +118,19 @@ class Agent(
     }
 
     /**
-     * LLM 钩子：存在非内置的外部连接时，真正调用该 openai-compatible 模型；
-     * 缺连接或调用失败都返回 null，调用方据此走关键字路由或本地兜底。
+     * LLM 钩子：有外部连接时真正调用该 openai-compatible 模型；
+     * 缺连接或调用失败都返回 null，调用方据此返回明确的不可用错误。
      * 接真实 LLM 的唯一入口就在这里——不在 HTTP 层另写一份外呼。
      */
     suspend fun callLlm(prompt: String): String? {
-        val ext = firstExternalProfile() ?: return null
+        val ext = selectedProfile() ?: return null
         return callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
     }
 
     /**
-     * 文章阅读理解：外部模型优先，失败/缺连接自动回退本地抽取，保证永远有结果。
-     * 这是 `/api/agent/comprehend` 的真正执行体（经由 [io.legado.server.ai.AgentConnection] 收口到 HTTP）。
+     * 文章阅读理解：必须有外部模型连接。没有连接或外呼失败都返回 `error`，
+     * 由 HTTP 层映射成 409/502 —— 不再用本地关键词抽取冒充模型结果。
+     * 这是 `/api/agent/comprehend` 的真正执行体（经由 [AgentConnection] 收口到 HTTP）。
      */
     suspend fun comprehend(
         text: String,
@@ -127,29 +138,31 @@ class Agent(
         summarySentences: Int = 3,
         topKeywords: Int = 8,
     ): ComprehendOutcome {
-        val ext = firstExternalProfile()
-        if (ext != null) {
-            val prompt = buildComprehensionPrompt(text, question, summarySentences, topKeywords)
-            val llm = callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
-            if (llm != null) {
-                return ComprehendOutcome(
-                    engine = "external:" + ext.id,
-                    summary = llm.trim(),
-                    keywords = emptyList(),
-                    answer = question,
-                    sentencesCount = -1,
-                    fallback = false,
-                )
-            }
-            // 外部调用失败 → 回退本地并标注 fallback，保证接口永远有结果。
-            return toLocalOutcome(
-                LocalComprehension.analyze(text, question, summarySentences, topKeywords),
-                fallback = true,
+        val ext = selectedProfile()
+            ?: return ComprehendOutcome(
+                engine = "unavailable",
+                summary = "",
+                keywords = emptyList(),
+                answer = null,
+                sentencesCount = 0,
+                error = "no_connection",
             )
-        }
-        return toLocalOutcome(
-            LocalComprehension.analyze(text, question, summarySentences, topKeywords),
-            fallback = false,
+        val prompt = buildComprehensionPrompt(text, question, summarySentences, topKeywords)
+        val llm = callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
+            ?: return ComprehendOutcome(
+                engine = "unavailable",
+                summary = "",
+                keywords = emptyList(),
+                answer = null,
+                sentencesCount = 0,
+                error = "upstream_unreachable",
+            )
+        return ComprehendOutcome(
+            engine = "external:" + ext.id,
+            summary = llm.trim(),
+            keywords = emptyList(),
+            answer = question,
+            sentencesCount = -1,
         )
     }
 
@@ -164,23 +177,17 @@ class Agent(
      * 三条约束：
      * - 最多 [MAX_TOOL_ROUNDS] 轮，防止模型无限调工具
      * - 工具执行走 [runTool]，护栏、钩子、权限全部照常生效
-     * - 任何一轮失败都回退到"已有文本"，不把整条对话带崩
+     * - 没有连接或外呼失败都返回 error，不编一段"本地说明"冒充回答
      */
     suspend fun chat(messages: List<Pair<String, String>>): ChatOutcome {
         val norm = messages
             .filter { it.second.isNotBlank() }
             .map { LlmMessage(role = it.first.takeIf { r -> r in setOf("system", "user", "assistant") } ?: "user", content = it.second) }
         if (norm.isEmpty()) {
-            return ChatOutcome(engine = "error", content = "", fallback = false, error = "messages 不能为空")
+            return ChatOutcome(engine = "error", content = "", error = "empty_messages")
         }
-        val ext = firstExternalProfile()
-        if (ext == null) {
-            return ChatOutcome(
-                engine = "local-fallback",
-                content = "（尚未登记任何外部模型连接，无法真正对话；请在「AI 接入 → 连接」里登记一个 openai-compatible 地址，或在 agent-profiles.json 里配置。）",
-                fallback = true,
-            )
-        }
+        val ext = selectedProfile()
+            ?: return ChatOutcome(engine = "unavailable", content = "", error = "no_connection")
 
         val provider = providerRegistry.forProfile(ext)
         val tools = registry.manifest()
@@ -191,28 +198,19 @@ class Agent(
         for (round in 0 until MAX_TOOL_ROUNDS) {
             val reply = runCatching { provider?.chatWithTools(ext, convo, tools) }.getOrNull()
             if (reply == null) {
-                // 外呼失败：有工具结果就把已发生的说清楚，否则回退本地说明。
-                return if (toolRounds.isEmpty()) {
-                    ChatOutcome(
-                        engine = "local-fallback",
-                        content = "（外部模型 ${ext.id} 暂时连不上，回答由本地兜底生成）你可以继续，但当前回复不是模型原话。",
-                        fallback = true,
-                    )
-                } else {
-                    ChatOutcome(
-                        engine = "local-fallback",
-                        content = "（外部模型 ${ext.id} 在工具调用中途连不上了；已执行：${toolRounds.joinToString(", ")}）",
-                        fallback = true,
-                        toolRounds = toolRounds.toList(),
-                    )
-                }
+                // 外呼失败：明确报错；已经执行过的工具照实带回去，不伪造回答。
+                return ChatOutcome(
+                    engine = "unavailable",
+                    content = "",
+                    error = "upstream_unreachable",
+                    toolRounds = toolRounds.ifEmpty { null },
+                )
             }
             if (reply.toolCalls.isEmpty()) {
                 // 没有工具调用 = 模型给出了最终答复，收工。
                 return ChatOutcome(
                     engine = "external:" + ext.id,
                     content = reply.content.trim(),
-                    fallback = false,
                     toolRounds = toolRounds.ifEmpty { null },
                 )
             }
@@ -233,14 +231,13 @@ class Agent(
             return ChatOutcome(
                 engine = "external:" + ext.id,
                 content = finalText.trim(),
-                fallback = false,
                 toolRounds = toolRounds.ifEmpty { null },
             )
         }
         return ChatOutcome(
-            engine = "local-fallback",
-            content = "（外部模型 ${ext.id} 在 $MAX_TOOL_ROUNDS 轮工具调用后仍未给出结论，已停止。）",
-            fallback = true,
+            engine = "unavailable",
+            content = "",
+            error = "tool_rounds_exhausted",
             toolRounds = toolRounds.ifEmpty { null },
         )
     }
@@ -260,20 +257,12 @@ class Agent(
         return body
     }
 
-    /** 当前档案里第一个非内置（openai-compatible）连接；没有就返回 null（用本地兜底）。 */
-    private fun firstExternalProfile(): AgentProfileStore.Profile? =
-        profileStore.list(homeDirectory).firstOrNull { it.kind != AgentProfileStore.ProfileKind.BUILTIN_STUB }
-
-    /** 把本地抽取结果映射成对外统一的 [ComprehendOutcome]（internal 以便 HTTP 层在缺句柄时也能复用本地兜底）。 */
-    internal fun toLocalOutcome(r: LocalComprehension.ComprehensionResult, fallback: Boolean): ComprehendOutcome =
-        ComprehendOutcome(
-            engine = "local-extractive",
-            summary = r.summary,
-            keywords = r.keywords,
-            answer = r.answer,
-            sentencesCount = r.sentencesCount,
-            fallback = fallback,
-        )
+    /**
+     * 当前选中的外部连接——统一走 [selectorRegistry]，把"连哪个"的决定权交给可插拔策略。
+     * 默认策略 [FirstProfileSelector] 取第一个，行为与改动前完全一致（见 AGENTS.md §4）。
+     */
+    private fun selectedProfile(): AgentProfileStore.Profile? =
+        selectorRegistry.selected(profileStore.list(homeDirectory))
 
     // 把摘要/关键词/问答需求拼成一个给外部模型的 prompt（通用模板，不绑定某家）。
     private fun buildComprehensionPrompt(text: String, question: String?, summarySentences: Int, topKeywords: Int): String =
@@ -291,7 +280,7 @@ class Agent(
      * 这是本次"框架牢固化"的关键：从前这里写死了 OpenAI 协议（URL 拼 /v1/chat/completions、
      * 解析 choices[0]），想接别家只能改框架。现在只认 [LlmProvider] 这个形状。
      *
-     * 失败语义不变：provider 返回 null 或抛异常，都视为"这次没拿到"，由调用方回退本地。
+     * 失败语义不变：provider 返回 null 或抛异常，都视为"这次没拿到"，由调用方报错。
      */
     private fun callExternalHttp(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String? {
         val provider = providerRegistry.forProfile(profile) ?: return null
@@ -305,7 +294,6 @@ class Agent(
         val keywords: List<String>,
         val answer: String?,
         val sentencesCount: Int,
-        val fallback: Boolean,
         val error: String? = null,
     )
 
@@ -320,7 +308,6 @@ class Agent(
     data class ChatOutcome(
         val engine: String,
         val content: String,
-        val fallback: Boolean,
         val error: String? = null,
         /** 本轮对话实际执行过的工具（`工具id:结果码`）。没调工具就是 null。 */
         val toolRounds: List<String>? = null,
