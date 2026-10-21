@@ -56,16 +56,16 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   assert.ok(!/<span>设置<\/span>/.test(header), '「设置」已是一级入口，不该再在「我的」菜单里留第二条路')
   assert.ok(!/<span>规则<\/span>|<span>备份<\/span>|<span>书源<\/span>/.test(header), '规则 / 备份 / 书源 不在菜单里重复')
 
-  const table = read('../src/reader/shortcuts.ts')
+  const table = read('../src/app/pageMeta.ts')
   // 书源已回到顶栏：它必须是一级入口，且不再出现在收编清单里
-  assert.ok(/\{ page: 'sources'/.test(table), '书源要回到顶栏一级表里')
+  assert.ok(/\{ key: 'sources'/.test(table), '书源要回到顶栏一级表里')
   // 规则 / 备份 仍从「设置」页进：规则是悬浮层（PageDialog），备份 0.8.3 起下沉成插件
   // （住实验室里）。两者都不占顶栏、不占路由，但入口与处理必须真的接上（不能凭空消失）。
   const app = read('../src/main.tsx')
-  assert.ok(!new RegExp(`\\{ page: 'rules'`).test(table), 'rules 不该占顶栏')
+  assert.ok(!new RegExp(`\\{ key: 'rules'`).test(table), 'rules 不该占顶栏')
   assert.ok(app.includes(`setPageDialog('rules')`), 'rules 的悬浮层没接线')
-  assert.ok(!new RegExp(`\\{ page: 'backup'`).test(table), 'backup 不该占顶栏')
-  assert.ok(app.includes(`setLabEntryId('backup')`), 'backup 的入口要接到实验室条目')
+  assert.ok(!new RegExp(`\\{ key: 'backup'`).test(table), 'backup 不该占顶栏')
+  assert.ok(app.includes(`setLabEntryId(LAB_ENTRY.backup)`), 'backup 的入口要接到实验室条目')
   assert.match(read('../src/plugins/backupPanel.tsx'), /<BackupPage \/>/,
     '备份插件里要真的渲染这一页，不是挂个空条目')
   assert.doesNotMatch(app, /showReplaceRules/,
@@ -80,7 +80,7 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
     '分区表又内联回 App 组件了 —— 一张要给人读的清单不该长在三千多行那个文件中间')
   const declared = [...sectionsFile.matchAll(/^ {2}(open[A-Z]\w*): \(\) => void$/gm)].map(m => m[1])
   assert.ok(declared.length >= 8, `只从 SettingsActions 认出 ${declared.length} 个动作，这条正则瞎了`)
-  const wiredBlock = /buildSettingsSections\(\{([\s\S]*?)\}\)\}/.exec(main)?.[1] ?? ''
+  const wiredBlock = /buildSettingsSections\(\{([\s\S]*?)\}\)/.exec(main)?.[1] ?? ''
   assert.ok(wiredBlock.length > 120, '取不到 main.tsx 里 buildSettingsSections 那一段（取空串的话下面的断言对什么都成立）')
   for (const name of declared) {
     assert.match(wiredBlock, new RegExp(`^\\s+${name}: \\(\\) =>`, 'm'), `${name} 在 main.tsx 里没接上动作`)
@@ -91,7 +91,7 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   // 同一轮把 5 个独立布尔收成一个 openModal：弹窗类动作的期望值从 setShowXxx(true) 变成 setOpenModal('xxx')，
   // 语义完全等价（同一时刻只开一个），判据跟着换写法而不是放宽要求。
   for (const call of ["setOpenModal('shortcuts')", "setOpenModal('offline-cache')", "setOpenModal('customize')",
-    "setPageDialog('rules')", 'setTocRulesSignal(value => value + 1)', "setLabEntryId('backup')",
+    "setPageDialog('rules')", 'setTocRulesSignal(value => value + 1)', "setLabEntryId(LAB_ENTRY.backup)",
     "setOpenModal('logs')", "setOpenModal('server-port')"]) {
     assert.ok(wiredBlock.includes(call), `设置页的动作没接到 ${call}（悬浮层/弹窗/插件那一份）`)
   }
@@ -104,15 +104,18 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
 })
 
 test('路由与"去书架开弹窗"的信号接上了', () => {
-  // 0.8.2 拆组：路由与信号发出在 main.tsx，消费那半在 pages/ShelfPage.tsx —— 读整个应用面，
-  // 断言逐字不变（这一条只判"在不在"，拼接不放宽任何一条）。
-  const main = [read('../src/main.tsx'), read('../src/pages/ShelfPage.tsx')].join('\n')
-  assert.match(main, /location\.hash === '#settings' \? 'settings'/)
-  // 结构判据：只要"settings 分支里渲染 SettingsPage 且 sections 来自 buildSettingsSections"即可。
-  // 0.8.3 起 SettingsPage 多了 pluginSections 参数，JSX 从单行变多行 —— 断言跟着放宽结构、
-  // 但"必须是同一个 SettingsPage + 同一个分区表"这条没变。
-  assert.match(main, /page === 'settings' \? \([\s\S]{0,200}<SettingsPage[\s\S]{0,80}sections=\{buildSettingsSections\(\{/)
-  assert.match(main, /tocRulesSignal=\{tocRulesSignal\}/)
+  // 0.8.2 拆组：路由与信号发出在 main.tsx，消费那半在 pages/ShelfPage.tsx。
+  // P2 起路由解析搬到 app/pageMeta.ts，页面渲染表在 app/pages.tsx —— 读整个应用面，
+  // 断言仍是"接上了"，不放宽任何一条。
+  const route = read('../src/app/pageMeta.ts')
+  assert.match(route, /pageFromHash/, 'hash 解析要由页面元数据表提供')
+  assert.match(route, /\{ key: 'settings'/, 'settings 必须在页面表里')
+  const pages = read('../src/app/pages.tsx')
+  const main = [read('../src/main.tsx'), pages, read('../src/pages/ShelfPage.tsx')].join('\n')
+  // 结构判据：settings 分支里渲染 SettingsPage，sections 来自宿主接好的分区表。
+  assert.match(pages, /<SettingsPage sections=\{ctx\.settingsSections\}/)
+  assert.match(main, /settingsSections: buildSettingsSections\(\{/)
+  assert.match(main, /tocRulesSignal=\{ctx\.tocRulesSignal\}/)
   assert.match(main, /if \(tocRulesSignal > 0\) setShowTocRules\(true\)/,
     '第一次挂载（0）不弹：刷新页面就跳出弹窗是凭空多出来的行为')
   assert.match(read('../src/styles.css'), /\.settings-page \{/)

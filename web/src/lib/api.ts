@@ -718,7 +718,6 @@ export type AgentConnection = {
   id: string
   name: string
   kind: string
-  builtin: boolean
   model: string | null
   baseUrl: string | null
 }
@@ -738,7 +737,6 @@ export type AgentComprehendResult = {
   keywords: string[]
   answer: string
   sentencesCount: number
-  fallback?: boolean
 }
 
 export type AgentChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -766,7 +764,6 @@ export type PluginStatus = {
 export type AgentChatResult = {
   engine: string
   content: string
-  fallback?: boolean
   error?: string
   /** 本轮 AI 实际执行过的工具（`工具id:结果码`）。没调工具就不出现。 */
   toolRounds?: string[]

@@ -4,7 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
-import { AppHeader, APP_THEMES, AppPage } from '../src/components/AppHeader'
+import { AppHeader, APP_THEMES } from '../src/components/AppHeader'
+import type { Page } from '../src/lib/nav'
 import { Logo } from '../src/components/Logo'
 import { defaultReaderSettings, ReaderSettings } from '../src/reader/readerSettings'
 
@@ -19,7 +20,7 @@ test('HeaderMenu - APP_THEMES configuration', () => {
 
 test('HeaderMenu - AppHeader static rendering', () => {
   const settings: ReaderSettings = { ...defaultReaderSettings, theme: 'paper' }
-  let navigatedTo: AppPage | null = null
+  let navigatedTo: Page | null = null
   let nextSettings: ReaderSettings | null = null
 
   const element = React.createElement(AppHeader, {

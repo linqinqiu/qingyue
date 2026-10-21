@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FrontendPluginRegistry, type FrontendPlugin } from '../src/lab/pluginRegistry.ts'
+import { FrontendPluginRegistry, type FrontendPlugin } from '../src/extensions/registry.ts'
 
 /**
  * 前端插件框架的判据。测的是「框架」：登记、拒绝、注销、合并贡献、自我介绍。
@@ -68,27 +68,20 @@ test('合并 实验室条目按插件顺序拼起来', () => {
   assert.deepEqual(ids, ['a1', 'b1', 'b2'])
 })
 
-test('合并 页面/设置分区/命令各自汇总', () => {
+test('合并 设置分区汇总', () => {
   const reg = new FrontendPluginRegistry()
   reg.register(stubPlugin({
     id: 'p',
-    pages: [{ key: 'demo', title: '演示页', icon: 'info', render: () => null }],
     settingsSections: [{ id: 's1', title: '演示设置', render: () => null }],
-    commands: [{ id: 'c1', title: '演示命令', run: () => true }],
   }))
-  assert.equal(reg.pages().length, 1)
-  assert.equal(reg.pages()[0].key, 'demo')
   assert.equal(reg.settingsSections().length, 1)
-  assert.equal(reg.commands().length, 1)
 })
 
 test('合并 没有贡献的插件不产生空项', () => {
   const reg = new FrontendPluginRegistry()
   reg.register(stubPlugin({ id: 'empty' }))
   assert.deepEqual(reg.labEntries(), [])
-  assert.deepEqual(reg.pages(), [])
   assert.deepEqual(reg.settingsSections(), [])
-  assert.deepEqual(reg.commands(), [])
 })
 
 test('框架 默认不含任何插件', () => {
@@ -104,7 +97,6 @@ test('介绍 装了插件后能列出名字/id/版本/说明/贡献', () => {
     id: 'intro.demo', name: '介绍演示', version: '2.3.4',
     description: '用来说明介绍面板', author: '测试者',
     labEntries: [{ id: 'x', title: 'X', description: 'd', render: () => null }],
-    commands: [{ id: 'cmd', title: '命令', run: () => true }],
   }))
   const text = reg.describe()
   assert.match(text, /介绍演示/)
@@ -113,7 +105,6 @@ test('介绍 装了插件后能列出名字/id/版本/说明/贡献', () => {
   assert.match(text, /用来说明介绍面板/)
   assert.match(text, /测试者/)
   assert.match(text, /实验条目 1/)
-  assert.match(text, /命令 1/)
 })
 
 test('介绍 登记失败也如实写出来，不静默', () => {

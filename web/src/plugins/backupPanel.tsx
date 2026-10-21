@@ -1,6 +1,6 @@
 import React from 'react'
 import { BackupPage } from '../pages/BackupPage'
-import { HOST_VERSION, type FrontendPlugin } from '../lab/pluginRegistry'
+import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
 
 /**
  * 「备份与恢复」插件 —— 低频信息页下沉为插件。

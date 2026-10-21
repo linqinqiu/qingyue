@@ -1,18 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
-import { PRIMARY_PAGES } from '../reader/shortcuts'
+import { PRIMARY_PAGES } from '../app/pageMeta'
+import type { Page } from '../lib/nav'
 import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from '../reader/readerSettings'
 
-export type AppPage = 'sources' | 'subscriptions' | 'library' | 'shelf' | 'explore' | 'reader' | 'settings'
-
 export interface AppHeaderProps {
-  page: AppPage
+  page: Page
   settings: ReaderSettings
   searching?: boolean
   onSettingsChange: (next: ReaderSettings) => void
-  onNavigate: (page: AppPage) => void
+  onNavigate: (page: Page) => void
   /** 顶栏那颗版本号芯片点开的「更新日志」页（菜单里不再重复列一条）。 */
   onOpenChangelog?: () => void
   /** 「我的」菜单里的「关于」：0.6.27 起是悬浮层，不再走整页导航。 */
@@ -142,7 +141,7 @@ export function AppHeader({
             type="button"
             className={navActive(item.page) ? 'active' : ''}
             aria-current={navActive(item.page) ? 'page' : undefined}
-            onClick={() => onNavigate(item.page as AppPage)}
+            onClick={() => onNavigate(item.page)}
           >
             {item.nav}
             {item.page === 'library' && searching && (

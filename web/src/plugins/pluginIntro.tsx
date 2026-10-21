@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { frontendPlugins } from '../lab/pluginRegistry'
+import { frontendPlugins } from '../extensions/registry'
 import { api, type PluginStatus } from '../lib/api'
-import { HOST_VERSION, type FrontendPlugin } from '../lab/pluginRegistry'
+import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
 
 /**
  * 「插件与扩展」插件 —— 把插件系统自身的状态挂进实验室。
@@ -24,7 +24,7 @@ export const pluginIntroPlugin: FrontendPlugin = {
       title: '插件与扩展',
       description:
         '这里列出当前登记了哪些插件、各自贡献了什么。后端插件通过实现 Plugin 接口并放进插件目录加载；'
-        + '前端插件通过 frontendPlugins.register 登记实验条目、页面、设置分区与命令。',
+        + '前端插件通过 frontendPlugins.register 登记实验条目与设置分区。',
       badge: '框架',
       render: () => <PluginIntro />,
     },

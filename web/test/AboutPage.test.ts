@@ -92,7 +92,7 @@ test('开发者那一格不许兜底成别人的仓库，也不把配置项说�
 test('路由与样式都接上了', () => {
   // 0.8.3 起「关于」下沉成插件（住实验室里）：深链映射到实验室条目，
   // 页面本身在 plugins/aboutPanel.tsx 里渲染。断言仍是"接上了"，只是读取面跟着搬家。
-  assert.match(read('../src/main.tsx'), /'#about': 'about'/, '旧深链要映射到实验室条目')
+  assert.match(read('../src/main.tsx'), /'#about': LAB_ENTRY\.about/, '旧深链要映射到实验室条目')
   assert.match(read('../src/plugins/aboutPanel.tsx'), /<AboutPage[\s\S]{0,200}onOpenChangelog=\{/)
   assert.match(read('../src/components/AppHeader.tsx'), /<span>关于<\/span>/)
   assert.match(read('../src/styles.css'), /\.about-page \{/)

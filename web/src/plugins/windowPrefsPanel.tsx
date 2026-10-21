@@ -1,5 +1,5 @@
 import React from 'react'
-import { HOST_VERSION, type FrontendPlugin } from '../lab/pluginRegistry'
+import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
 
 /**
  * 「界面偏好」插件 —— 演示 `settingsSections` 能力：插件往设置页加自己的配置分区。

@@ -83,8 +83,9 @@ test('订阅两件事分居：页签没了、RSS 页不碰书源订阅、书源�
 })
 
 test('形状核对：新的两份文件各在其位', () => {
-  const main = read('main.tsx')
-  assert.match(main, /import \{ RssPage \} from '\.\/pages\/RssPage'/, '「订阅」页要由 pages/RssPage 提供')
+  // P2 起页面渲染表在 app/pages.tsx，RssPage 由它引入。
+  const pages = read('app/pages.tsx')
+  assert.match(pages, /import \{ RssPage \} from '\.\.\/pages\/RssPage'/, '「订阅」页要由 pages/RssPage 提供')
   // 0.8.2 拆组：开书源订阅那一档的是 SourcesPage，这条 import 跟着它住进 pages/SourcesPage.tsx；
   // 事实没变 —— 书源订阅仍由 sources/ 提供（它在书源域），只是"谁引它"从 App 挪到了书源页。
   assert.match(read('pages/SourcesPage.tsx'), /import \{ SourceSubscriptionPanel \} from '[.][./]*sources\/SourceSubscriptionPanel'/,

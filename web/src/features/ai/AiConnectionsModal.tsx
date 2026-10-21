@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, AgentChatMessage, AgentConnection } from '../lib/api'
-import { Icon } from '../icons'
-import { useEscapeClose } from '../lib/useEscapeClose'
-import { EMPTY_UI_CONTEXT, uiContextMessage, type UiContext } from '../lib/uiContext'
+import { api, AgentChatMessage, AgentConnection } from '../../lib/api'
+import { Icon } from '../../icons'
+import { useEscapeClose } from '../../lib/useEscapeClose'
+import { EMPTY_UI_CONTEXT, uiContextMessage, type UiContext } from '../../lib/uiContext'
 
 /**
  * 「AI 接入」（自定义接入面 /api/agent/*）。
  *
  * 这一页把后端那套**已在 127.0.0.1:1234 跑起来的** HTTP 接口做成本地设置入口。
- * 主形态是**对话助手**：在输入框里说话，消息走 `POST /api/agent/chat`——
- * 有外部模型（openai-compatible）就真对话，没有或连不上就回退本地说明。
+ * 主形态是**对话助手**：在输入框里说话，消息走 `POST /api/agent/chat`。
+ * **必须有外部模型（openai-compatible）连接**：没有连接时 AI 明确不可用，
+ * 外呼失败直接报错——不做本地抽取兜底，也不假装能对话。
  *
- * 连接管理（登记 / 删除外部模型）收进「高级」折叠区：要真对话，先在那里登记一个
+ * 连接管理（登记 / 删除外部模型）收进「高级」折叠区：要对话，先在那里登记一个
  * openai-compatible 地址（或在 agent-profiles.json 里配置）。书源只读校验也放在折叠区。
  *
  * 写操作由服务端同源闸门把关（浏览器自动带 Origin），这里不注入令牌。
@@ -55,7 +56,6 @@ type ChatLine = {
   content: string
   pending?: boolean
   engine?: string
-  fallback?: boolean
   /** AI 这一轮实际执行过的工具（`工具id:结果码`）。 */
   toolRounds?: string[]
 }
@@ -63,7 +63,7 @@ type ChatLine = {
 function AiConnectionsPanel({ uiContext }: { uiContext?: UiContext }) {
   const [connections, setConnections] = useState<AgentConnection[]>([])
   const [loadError, setLoadError] = useState('')
-  const external = connections.find(c => !c.builtin)
+  const external = connections[0]
 
   const refresh = () => {
     api.listAgentConnections()
@@ -80,8 +80,8 @@ function AiConnectionsPanel({ uiContext }: { uiContext?: UiContext }) {
         <section className="ai-section">
           <h3>连接</h3>
           <p className="ai-section-hint">
-            内置 <code>local</code> 永远在、不可删；其余 openai-compatible 连接可登记/删除，重启后保留。
-            要真正对话，请登记一个外部模型（多个时只走第一条）。
+            连接会写入 <code>agent-profiles.json</code>，重启后保留。多个连接时只走第一条；
+            没有连接时 AI 不可用，不会用本地抽取冒充模型结果。
           </p>
           {loadError ? (
             <p className="customize-error" role="alert">{loadError}</p>
@@ -91,15 +91,13 @@ function AiConnectionsPanel({ uiContext }: { uiContext?: UiContext }) {
                 <li key={c.id} className="ai-conn-item">
                   <div className="ai-conn-main">
                     <strong>{c.name}</strong>
-                    <small>{c.builtin ? '内置' : '外部'} · {c.model ?? '—'}{c.baseUrl ? ` · ${c.baseUrl}` : ''}</small>
+                    <small>外部 · {c.model ?? '—'}{c.baseUrl ? ` · ${c.baseUrl}` : ''}</small>
                   </div>
-                  {!c.builtin && (
-                    <button
-                      type="button"
-                      className="link-button ai-conn-del"
-                      onClick={() => void api.deleteAgentConnection(c.id).then(refresh).catch(() => setLoadError('删除失败'))}
-                    >删除</button>
-                  )}
+                  <button
+                    type="button"
+                    className="link-button ai-conn-del"
+                    onClick={() => void api.deleteAgentConnection(c.id).then(refresh).catch(() => setLoadError('删除失败'))}
+                  >删除</button>
                 </li>
               ))}
             </ul>
@@ -163,7 +161,7 @@ function ChatPanel({
 
   const send = async () => {
     const text = input.trim()
-    if (!text || sending) return
+    if (!text || sending || !externalConnected) return
     setError('')
     const userLine: ChatLine = { role: 'user', content: text }
     const history: ChatLine[] = [...messages, userLine]
@@ -184,7 +182,7 @@ function ChatPanel({
       setMessages(prev => {
         const copy = [...prev]
         const idx = copy.findIndex(m => m.role === 'assistant' && m.pending)
-        if (idx >= 0) copy[idx] = { role: 'assistant', content: res.content, engine: res.engine, fallback: res.fallback === true, toolRounds: res.toolRounds }
+        if (idx >= 0) copy[idx] = { role: 'assistant', content: res.content, engine: res.engine, toolRounds: res.toolRounds }
         return copy
       })
     } catch (failure) {
@@ -211,28 +209,24 @@ function ChatPanel({
     <section className="ai-chat">
       <div className="ai-chat-status">
         {externalConnected ? (
-          <span className="ai-tag">已连接外部模型{externalName ? `：${externalName}` : ''}，可真实对话</span>
+          <>
+            <span className="ai-tag">已连接外部模型{externalName ? `：${externalName}` : ''}</span>
+            <span className="ai-status-sep">·</span>
+            {probe === 'probing' ? (
+              <span className="ai-tag ai-tag-testing">实测中…</span>
+            ) : probe === 'ok' ? (
+              <span className="ai-tag ai-tag-ok">实测可达{probeEngine ? `（${probeEngine}）` : ''}</span>
+            ) : probe === 'fail' ? (
+              <span className="ai-tag ai-tag-warn">实测不可达</span>
+            ) : (
+              <span className="ai-tag">待实测</span>
+            )}
+            <button type="button" className="link-button ai-probe-btn" onClick={() => void runProbe()} disabled={probe === 'probing'}>
+              重新实测
+            </button>
+          </>
         ) : (
-          <span className="ai-tag ai-tag-warn">尚未登记外部模型，当前为本地兜底（无法真正对话）</span>
-        )}
-        <span className="ai-status-sep">·</span>
-        {externalConnected ? (
-          probe === 'probing' ? (
-            <span className="ai-tag ai-tag-testing">实测中…</span>
-          ) : probe === 'ok' ? (
-            <span className="ai-tag ai-tag-ok">实测可达{probeEngine ? `（${probeEngine}）` : ''}</span>
-          ) : probe === 'fail' ? (
-            <span className="ai-tag ai-tag-warn">实测不可达，将回退本地</span>
-          ) : (
-            <span className="ai-tag">待实测</span>
-          )
-        ) : (
-          <span className="ai-tag">无需实测（无外部模型）</span>
-        )}
-        {externalConnected && (
-          <button type="button" className="link-button ai-probe-btn" onClick={() => void runProbe()} disabled={probe === 'probing'}>
-            重新实测
-          </button>
+          <span className="ai-tag ai-tag-warn">未连接外部模型，AI 不可用</span>
         )}
       </div>
 
@@ -249,7 +243,9 @@ function ChatPanel({
 
       <div className="ai-chat-log" ref={scrollRef}>
         {messages.length === 0 && (
-          <p className="ai-chat-empty">在下面输入消息开始对话。有外部模型时会真正调用它；没有时只回本地说明。</p>
+          <p className="ai-chat-empty">
+            {externalConnected ? '在下面输入消息开始对话。' : '先在「连接与工具」里登记一个 openai-compatible 模型，才能对话。'}
+          </p>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`ai-bubble ai-bubble-${m.role}${m.pending ? ' ai-bubble-pending' : ''}`}>
@@ -267,8 +263,9 @@ function ChatPanel({
             )}
             {m.role === 'assistant' && !m.pending && m.engine && (
               <div className="ai-bubble-meta">
-                <span className="ai-tag">{m.engine.startsWith('external:') ? `外部模型 ${m.engine.replace('external:', '')}` : '本地兜底'}</span>
-                {m.fallback && <span className="ai-tag ai-tag-warn">已回退本地</span>}
+                <span className="ai-tag">
+                  {m.engine.startsWith('external:') ? `外部模型 ${m.engine.replace('external:', '')}` : '未返回模型结果'}
+                </span>
               </div>
             )}
           </div>
@@ -283,15 +280,16 @@ function ChatPanel({
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           rows={2}
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+          disabled={!externalConnected}
+          placeholder={externalConnected ? '输入消息，Enter 发送，Shift+Enter 换行' : '先登记外部模型连接'}
         />
-        <button type="button" className="primary-button" onClick={() => void send()} disabled={sending || !input.trim()}>
+        <button type="button" className="primary-button" onClick={() => void send()} disabled={!externalConnected || sending || !input.trim()}>
           {sending ? '发送中…' : '发送'}
         </button>
       </div>
       <p className="ai-muted ai-chat-hint">
         快捷键：Enter 发送，Shift+Enter 换行。对话走 <code>POST /api/agent/chat</code>，不落库。
-        {!externalConnected && ' 要真对话，请在下方「连接与工具」里登记一个 openai-compatible 模型。'}
+        {!externalConnected && ' 没有连接时不会用本地抽取代替模型回答。'}
       </p>
     </section>
   )

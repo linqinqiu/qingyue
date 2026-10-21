@@ -1,6 +1,6 @@
 import React from 'react'
 import { ReadingLogPage } from '../pages/ReadingLogPage'
-import { HOST_VERSION, type FrontendPlugin } from '../lab/pluginRegistry'
+import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
 
 /**
  * 「阅读记录」插件 —— 低频信息页下沉为插件。

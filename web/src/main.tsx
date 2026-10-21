@@ -11,31 +11,28 @@ import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
 import { LabModal } from './plugins/labHost'
-import { frontendPlugins } from './lab/pluginRegistry'
+import { frontendPlugins } from './extensions/registry'
 import { installBuiltinPlugins } from './plugins'
+import { LAB_ENTRY } from './app/destinations'
 import type { UiContext } from './lib/uiContext'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
 import { ReplaceRulesModal } from './components/ReplaceRulesModal'
 import { PageDialog } from './components/PageDialog'
-import { ExplorePage } from './pages/ExplorePage'
-import { RssPage } from './pages/RssPage'
 import { Select } from './components/Select'
 import { OfflineCacheModal } from './components/OfflineCacheModal'
 import { LogsModal } from './components/LogsModal'
 import { ShortcutHelp } from './reader/ShortcutHelp'
 import { GLOBAL_SHORTCUTS, isTypingTarget, normalizeKey, PRIMARY_PAGES, shortcutFor } from './reader/shortcuts'
-import { SettingsPage } from './pages/SettingsPage'
 import { buildSettingsSections } from './settings/settingsSections'
 import { PwaManager } from './components/PwaManager'
 import { flushOfflineProgress } from './lib/offlineStorage'
 import { toast, ToastContainer } from './components/Toast'
 import './styles.css'
-import { Page, PageDialogKind } from './lib/nav'
+import { AppModal, Page, PageDialogKind } from './lib/nav'
 import { BookDetailModal } from './components/BookDetailModal'
-import { SourcesPage } from './pages/SourcesPage'
-import { LibraryPage } from './pages/LibraryPage'
-import { ShelfPage } from './pages/ShelfPage'
+import { pageFromHash } from './app/pageMeta'
+import { renderPage, type PageContext } from './app/pages'
 
 import { parseSourceJsonText, extractSourcesFromRaw, sanitizeImageUrl } from './sources/sourceImport'
 
@@ -43,27 +40,21 @@ export { extractSourcesFromRaw, parseSourceJsonText, sanitizeImageUrl }
 export type { SourceChoice, SourceChoiceStatus }
 const PAGE_DIALOG_TITLES: Record<PageDialogKind, string> = { rules: '替换净化规则' }
 const readerStorageKey = 'legado-open-book-v1'
-const pageFromHash = (): Page => location.hash === '#sources' ? 'sources' : location.hash === '#subscriptions' ? 'subscriptions' : location.hash === '#shelf' ? 'shelf' : location.hash === '#explore' ? 'explore' : location.hash === '#reader' ? 'reader' : location.hash === '#settings' ? 'settings' : 'library'
 /** 旧深链进来仍开对的那一个悬浮层，不白屏也不跳页 */
 const dialogFromHash = (): PageDialogKind | null => location.hash === '#rules' ? 'rules' : null
 
 /**
  * 已下沉成插件的页面，它们的旧深链该开实验室的哪个条目。
  *
- * 0.8.3 起这些页面不在主程序里了（住 `plugins/` 里），但老书签/老链接还在 ——
+ * 0.8.3 起这些页面不在主程序里了（住 `features/` 与 `plugins/` 里），但老书签/老链接还在 ——
  * 映射到实验室对应条目，比 404 或空弹窗都体面。
  */
-/**
- * 单例弹窗的 id。加新弹窗只需往这里加一个字面量，不用再加一个 useState。
- * 实验室（lab）不在这里 —— 它要带 labEntryId，有自己的一对状态。
- */
-type AppModal = 'offline-cache' | 'logs' | 'shortcuts' | 'customize' | 'server-port'
 
 const LAB_DEEP_LINKS: Record<string, string> = {
-  '#changelog': 'changelog',
-  '#backup': 'backup',
-  '#about': 'about',
-  '#reading-log': 'reading-log',
+  '#changelog': LAB_ENTRY.changelog,
+  '#backup': LAB_ENTRY.backup,
+  '#about': LAB_ENTRY.about,
+  '#reading-log': LAB_ENTRY.readingLog,
 }
 
 /**
@@ -480,6 +471,41 @@ function App() {
     keyword: null,
   }
 
+  /**
+   * 页面渲染上下文 —— 宿主只负责把状态与动作打包，选哪一页由 `app/pages.tsx` 的
+   * 渲染表决定。这里不再写 `page === 'x' ? …` 的三元链。
+   */
+  const pageContext: PageContext = {
+    sources,
+    selected,
+    settings,
+    settingsSections: buildSettingsSections({
+      openShortcuts: () => setOpenModal('shortcuts'),
+      openOfflineCache: () => setOpenModal('offline-cache'),
+      openCustomize: () => setOpenModal('customize'),
+      openReplaceRules: () => setPageDialog('rules'),
+      openTocRules: () => setTocRulesSignal(value => value + 1),
+      openBackup: () => { setLabEntryId(LAB_ENTRY.backup); setShowLab(true) },
+      openLogs: () => setOpenModal('logs'),
+      openServerPort: () => setOpenModal('server-port'),
+      openAiConnections: () => { setLabEntryId(LAB_ENTRY.ai); setShowLab(true) },
+    }),
+    // 插件贡献的设置分区：宿主只负责摆位置与搜索，不解释内容。
+    pluginSections: pluginSettingsSections,
+    tocRulesSignal,
+    onSelectSource: setSelected,
+    onSourcesChange: setSources,
+    refreshSources,
+    openBook: openReader,
+    openShelfItem: item => void openShelfItem(item),
+    openExploreDetail,
+    onSettingsChange: setSettings,
+    openModal: setOpenModal,
+    openPageDialog: setPageDialog,
+    openTocRules: () => setTocRulesSignal(value => value + 1),
+    openLabEntry: id => { setLabEntryId(id); setShowLab(true) },
+  }
+
   return (
     <div className={`app-shell ${skinClasses}`}>
       <SkinStyle settings={settings} />
@@ -493,45 +519,13 @@ function App() {
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
-        onOpenChangelog={() => { setLabEntryId('changelog'); setShowLab(true) }}
-        onOpenAbout={() => { setLabEntryId('about'); setShowLab(true) }}
-        onOpenReadingLog={() => { setLabEntryId('reading-log'); setShowLab(true) }}
+        onOpenChangelog={() => { setLabEntryId(LAB_ENTRY.changelog); setShowLab(true) }}
+        onOpenAbout={() => { setLabEntryId(LAB_ENTRY.about); setShowLab(true) }}
+        onOpenReadingLog={() => { setLabEntryId(LAB_ENTRY.readingLog); setShowLab(true) }}
         onOpenCustomize={() => setOpenModal('customize')}
         version={serverVersion}
       />
-      {page === 'sources' ? (
-        <SourcesPage selected={selected} onSelect={setSelected} onSourcesChange={setSources} />
-      ) : page === 'subscriptions' ? (
-        <RssPage onOpenBackup={() => { setLabEntryId('backup'); setShowLab(true) }} />
-      ) : page === 'settings' ? (
-        <SettingsPage
-          sections={buildSettingsSections({
-            openShortcuts: () => setOpenModal('shortcuts'),
-            openOfflineCache: () => setOpenModal('offline-cache'),
-            openCustomize: () => setOpenModal('customize'),
-            openReplaceRules: () => setPageDialog('rules'),
-            openTocRules: () => setTocRulesSignal(value => value + 1),
-            openBackup: () => { setLabEntryId('backup'); setShowLab(true) },
-            openLogs: () => setOpenModal('logs'),
-            openServerPort: () => setOpenModal('server-port'),
-            openAiConnections: () => setShowLab(true),
-          })}
-          // 插件贡献的设置分区：宿主只负责摆位置与搜索，不解释内容。
-          pluginSections={pluginSettingsSections}
-        />
-      ) : page === 'shelf' ? (
-        <ShelfPage
-          sources={sources}
-          onOpen={item => void openShelfItem(item)}
-          txtTocRule={settings.txtTocRule}
-          onTxtTocRuleChange={value => setSettings({ ...settings, txtTocRule: value })}
-          tocRulesSignal={tocRulesSignal}
-        />
-      ) : page === 'explore' ? (
-        <ExplorePage onOpen={openExploreDetail} />
-      ) : (
-        <LibraryPage sources={sources} onSourcesChanged={refreshSources} onOpen={(book, index) => openReader(book, index, 'library')} />
-      )}
+      {renderPage(page, pageContext)}
       {explorePick && page === 'explore' && (
         <BookDetailModal
           book={explorePick.book}
@@ -569,7 +563,7 @@ function App() {
           initialEntryId={labEntryId}
           actions={{
             // 插件要"做某事"时用：实验室只转发，不解释这些 key 是什么。
-            openChangelog: () => setLabEntryId('changelog'),
+            openChangelog: () => setLabEntryId(LAB_ENTRY.changelog),
             openShortcuts: () => setOpenModal('shortcuts'),
             closeLab: () => { setShowLab(false); setLabEntryId(undefined) },
             refreshSources,

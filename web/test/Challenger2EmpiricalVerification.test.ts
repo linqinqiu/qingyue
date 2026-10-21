@@ -115,7 +115,7 @@ export class LibraryCandidateHarness {
     return { details, bookUrl: result.bookUrl, chapters, progress }
   }
 
-  // Exact logic from web/src/main.tsx:118-142
+  // Exact logic from lib/searchStore.ts 的 openGroup（0.8.2 前住在 main.tsx）
   async open(group: { sources: SearchResult[] }): Promise<void> {
     this.loading = true
     this.message = ''
@@ -147,7 +147,7 @@ export class LibraryCandidateHarness {
     this.loading = false
   }
 
-  // Exact logic from web/src/main.tsx:143-157
+  // Exact logic from lib/searchStore.ts 的 chooseSource（0.8.2 前住在 main.tsx）
   async handleChooseSource(choice: SourceChoice): Promise<void> {
     if (choice.book) {
       this.openBook = choice.book
@@ -207,7 +207,7 @@ export function computeScrollPosition(scrollTop: number, scrollHeight: number, c
 
 /**
  * Scroll Controller reproducing the exact RAF coalescing and debounce logic
- * from web/src/ReaderScreen.tsx:282-324
+ * from web/src/reader/ReaderScreen.tsx 的 scroll effect（rafId 合并 + persist）
  */
 export class ReaderScrollController {
   rafId: number | null = null

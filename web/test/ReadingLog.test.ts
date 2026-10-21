@@ -63,7 +63,7 @@ test('接线：「我的」菜单有「阅读记录」入口，且开的是同�
   const main = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
   // 0.8.3 起这一页下沉成插件（住实验室里）：入口改为"开实验室并直达那个条目"。
   // 判据仍然要求"菜单能触发 + 真的接上了"，只是接线形态从 pageDialog 变成 labEntryId。
-  assert.match(main, /setLabEntryId\('reading-log'\)/, '入口要直达实验室里的阅读记录条目')
+  assert.match(main, /setLabEntryId\(LAB_ENTRY\.readingLog\)/, '入口要直达实验室里的阅读记录条目')
   const plugin = fs.readFileSync(path.resolve(import.meta.dirname, '../src/plugins/readingLogPanel.tsx'), 'utf8')
   assert.match(plugin, /<ReadingLogPage \/>/, '插件里要真的渲染这一页，不是挂个空条目')
 })

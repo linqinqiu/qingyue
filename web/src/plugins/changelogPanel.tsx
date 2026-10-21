@@ -1,6 +1,6 @@
 import React from 'react'
 import { ChangelogPage } from '../pages/ChangelogPage'
-import { HOST_VERSION, type FrontendPlugin } from '../lab/pluginRegistry'
+import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
 import type { LabHostContext } from '../lab/Lab'
 
 /**

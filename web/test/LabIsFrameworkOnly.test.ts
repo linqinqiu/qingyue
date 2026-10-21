@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { FrontendPluginRegistry } from '../src/lab/pluginRegistry.ts'
+import { FrontendPluginRegistry } from '../src/extensions/registry.ts'
 
 /**
  * 「框架零内容」判据 —— 证明 lab/ 只是容器，plugins/ 才是内容。
@@ -16,9 +16,7 @@ import { FrontendPluginRegistry } from '../src/lab/pluginRegistry.ts'
 test('零内容 空注册表：没有任何条目、没有失败、介绍说清自己是空的', () => {
   const reg = new FrontendPluginRegistry()
   assert.deepEqual(reg.labEntries(), [], '框架本身不产生任何实验条目')
-  assert.deepEqual(reg.pages(), [])
   assert.deepEqual(reg.settingsSections(), [])
-  assert.deepEqual(reg.commands(), [])
   assert.equal(reg.loadFailures().length, 0)
   assert.match(reg.describe(), /没有登记任何前端插件/)
 })

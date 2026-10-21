@@ -101,8 +101,8 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
       title: '实验室',
       rows: [{
         title: 'AI 接入与扩展',
-        hint: '程序内部的 AI 网关（/api/agent）：挂一个 openai-compatible 模型当「网关」，或只用内置本地抽取。'
-          + '实验室同时列出已装载的插件与它们贡献的能力。',
+        hint: '程序内部的 AI 网关（/api/agent）：登记一个 openai-compatible 模型后才能对话；'
+          + '没有连接时 AI 不可用，不做本地兜底。实验室同时列出已装载的插件与它们贡献的能力。',
         action: '打开实验室',
         onClick: actions.openAiConnections,
       }],

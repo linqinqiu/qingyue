@@ -41,12 +41,13 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
   const customize = read('../src/components/CustomizeModal.tsx')
   // 判的是代码痕迹，不是那句"搬走了"的说明文字
   assert.doesNotMatch(customize, /api\.tocRules|txtTocRule|<Select/, '「自定义」只剩皮肤；分章规则的代码别再长回来')
-  // 0.8.2 拆组：弹窗挂在书架页（pages/ShelfPage.tsx），那份阅读设置仍在 App（main.tsx）—— 读两面，断言不变
-  const main = read('../src/main.tsx') + '\n' + read('../src/pages/ShelfPage.tsx')
+  // 0.8.2 拆组：弹窗挂在书架页（pages/ShelfPage.tsx），那份阅读设置仍在宿主（main.tsx），
+  // P2 起页面渲染表在 app/pages.tsx —— 读三面，断言不变
+  const main = read('../src/main.tsx') + '\n' + read('../src/app/pages.tsx') + '\n' + read('../src/pages/ShelfPage.tsx')
   assert.match(main, /<TocRulesModal/, '书架渲染这个弹窗')
   assert.match(main, /<span>分章规则<\/span>/, '入口按钮就挨着「导入本地」')
-  assert.match(main, /onTxtTocRuleChange=\{value => setSettings\(\{ \.\.\.settings, txtTocRule: value \}\)\}/,
-    '它写的是 App 那一份阅读设置，不是又造一份状态')
+  assert.match(main, /onTxtTocRuleChange=\{value => ctx\.onSettingsChange\(\{ \.\.\.ctx\.settings, txtTocRule: value \}\)\}/,
+    '它写的是宿主那一份阅读设置，不是又造一份状态')
   const modal = read('../src/components/TocRulesModal.tsx')
   assert.match(modal, /api\.tocRules\(\)/, '它自己去服务端取规则清单')
   assert.match(modal, /onClick=\{onImport\}/, '弹窗里能直接接着导书，不用关掉再找那颗按钮')

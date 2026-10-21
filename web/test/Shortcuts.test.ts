@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { GLOBAL_SHORTCUTS, PRIMARY_PAGES, READER_SHORTCUTS, SHORTCUT_TABLES, isTypingTarget, normalizeKey, shortcutFor } from '../src/reader/shortcuts'
+import { PAGES } from '../src/app/pageMeta'
 import { ShortcutHelp } from '../src/reader/ShortcutHelp'
 
 /**
@@ -114,10 +115,9 @@ test('一级入口只有一张表：顶栏、数字键、Alt 循环都从 PRIMAR
   const digitLabels = GLOBAL_SHORTCUTS.filter(item => item.action === 'navigate').map(item => item.display)
   assert.deepEqual(digitLabels, PRIMARY_PAGES.map((_, index) => String(index + 1)),
     '数字键与一级页面的条数不一致 —— 加了一页就得能按到它')
-  // 表里的每一页都得是 AppHeader 认得的页面名（拼错一个字母就是点了没反应）
-  const knownPages = (header.match(/export type AppPage = ([^\n]+)/) ?? [])[1] ?? ''
+  // 表里的每一页都得在页面元数据表里（拼错一个字母就是点了没反应）
   for (const item of PRIMARY_PAGES) {
-    assert.ok(knownPages.includes(`'${item.page}'`), `PRIMARY_PAGES 里的「${item.page}」不在 AppPage 里`)
+    assert.ok(PAGES.some(page => page.key === item.page), `PRIMARY_PAGES 里的「${item.page}」不在 PAGES 里`)
   }
 })
 
