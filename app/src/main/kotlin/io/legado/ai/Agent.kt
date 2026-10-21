@@ -195,8 +195,43 @@ class Agent(
         val convo = norm.toMutableList()
 
         // 多轮：模型要调工具 → 框架执行 → 结果回灌 → 再问。
+        //
+        // 回灌有两种协议形态，按能力自动降级：
+        //  A. **原生 tool 协议**（标准 OpenAI）：带 tool_calls 的 assistant 轮次 + 每条
+        //     role="tool" 且带 tool_call_id 的消息。这是最正确的形态。
+        //  B. **纯文本回灌**：把工具结果写成一段 user 消息、并且**不再带 tools**。
+        //     有些网关（实测 pipio.io）把工具调用实现成服务端有状态的「原生工具运行」，
+        //     客户端把结果回灌第二轮时那次运行已经过期，上游直接报
+        //     `invalid_tool_contract: native tool run expired … start a new turn with the
+        //     original request instead of resending tool results`。
+        //     对这类上游，只有 B 能通。所以 A 失败一次就整体切到 B，不再回头试 A。
+        var useNativeToolProtocol = true
         for (round in 0 until MAX_TOOL_ROUNDS) {
-            val reply = runCatching { provider?.chatWithTools(ext, convo, tools) }.getOrNull()
+            val reply = runCatching {
+                if (useNativeToolProtocol) provider?.chatWithTools(ext, convo, tools)
+                else provider?.chatWithTools(ext, convo, emptyList())
+            }.getOrNull()
+            // 原生协议这一跳失败：可能是上游不认「回灌」形态。切到文本回灌重试一次本轮。
+            if (reply == null && useNativeToolProtocol && convo.any { it.role == "tool" }) {
+                useNativeToolProtocol = false
+                // 把历史里已有的 tool 结果改写成 user 消息 —— 文本回灌形态不认 tool 角色。
+                val transcript = convo.filter { it.role == "tool" }.joinToString("\n") { it.content }
+                val stripped = convo.filter { it.role != "tool" && it.role != "assistant" }
+                convo.clear()
+                convo.addAll(stripped)
+                convo += LlmMessage(
+                    role = "user",
+                    content = "已执行以下工具，结果如下：\n$transcript\n请基于这些结果直接回答，不要再次请求工具。",
+                )
+                val retry = runCatching { provider?.chatWithTools(ext, convo, emptyList()) }.getOrNull()
+                if (retry != null && retry.toolCalls.isEmpty()) {
+                    return ChatOutcome(
+                        engine = "external:" + ext.id,
+                        content = retry.content.trim(),
+                        toolRounds = toolRounds.ifEmpty { null },
+                    )
+                }
+            }
             if (reply == null) {
                 // 外呼失败：明确报错；已经执行过的工具照实带回去，不伪造回答。
                 return ChatOutcome(
@@ -215,11 +250,35 @@ class Agent(
                 )
             }
             // 有工具调用：先把它的话留下，再逐个执行并回灌。
-            if (reply.content.isNotBlank()) convo += LlmMessage("assistant", reply.content)
-            for (call in reply.toolCalls) {
-                val result = runTool(call.id, call.args)
-                toolRounds += "${call.id}:${result.code}"
-                convo += LlmMessage("tool", renderToolResult(call.id, result))
+            if (useNativeToolProtocol) {
+                // 标准 OpenAI 形态：assistant 轮次原样带回 tool_calls，
+                // 每条 tool 消息用 tool_call_id 指回是哪一个调用。
+                convo += LlmMessage(
+                    role = "assistant",
+                    content = reply.content,
+                    toolCalls = reply.toolCalls,
+                )
+                for (call in reply.toolCalls) {
+                    val result = runTool(call.id, call.args)
+                    toolRounds += "${call.id}:${result.code}"
+                    convo += LlmMessage(
+                        role = "tool",
+                        content = renderToolResult(call.id, result),
+                        toolCallId = call.id,
+                    )
+                }
+            } else {
+                // 文本回灌形态：结果写成 user 消息，历史里不留 tool 角色。
+                val executed = reply.toolCalls.map { call ->
+                    val result = runTool(call.id, call.args)
+                    toolRounds += "${call.id}:${result.code}"
+                    renderToolResult(call.id, result)
+                }
+                convo += LlmMessage(
+                    role = "user",
+                    content = "已执行以下工具，结果如下：\n" + executed.joinToString("\n") +
+                        "\n请基于这些结果直接回答，不要再次请求工具。",
+                )
             }
         }
 

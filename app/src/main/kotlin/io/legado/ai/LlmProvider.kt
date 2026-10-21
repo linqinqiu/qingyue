@@ -59,8 +59,24 @@ interface LlmProvider {
     }
 }
 
-/** 一条对话消息。与 [Agent] 内部的 ChatMessage 同形，公开出来供 provider 使用。 */
-data class LlmMessage(val role: String, val content: String)
+/**
+ * 一条对话消息。
+ *
+ * [toolCallId] 只在 `role == "tool"` 时有意义：OpenAI 协议要求工具结果必须用
+ * `tool_call_id` 指回**是哪一个** `tool_calls` 条目的结果，缺了它上游直接 400
+ * （实测 pipio.io 报 `invalid_tool_contract: tool result requires call_id`）。
+ * 之前这里只有 role/content，所以「模型要调工具」这一半能跑、「结果回灌」那一半
+ * 必然失败 —— 表现为 AI 一碰工具就 `upstream_unreachable`。
+ *
+ * [toolCalls] 只在 `role == "assistant"` 时有意义：模型上一轮要求调的那些工具，
+ * 按 OpenAI 协议必须原样带回对话历史，否则上游会认为 tool 消息没有对应的调用。
+ */
+data class LlmMessage(
+    val role: String,
+    val content: String,
+    val toolCallId: String? = null,
+    val toolCalls: List<LlmToolCall> = emptyList(),
+)
 
 /**
  * 一次工具调用请求 —— 模型说"我要调这个工具、带这些参数"。

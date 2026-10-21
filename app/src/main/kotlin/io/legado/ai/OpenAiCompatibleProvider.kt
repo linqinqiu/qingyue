@@ -69,7 +69,28 @@ class OpenAiCompatibleProvider : LlmProvider {
         val body = json.encodeToString(
             ChatRequest(
                 model = profile.model ?: "gpt-3.5-turbo",
-                messages = messages.map { ChatMessage(it.role, it.content) },
+                messages = messages.map { m ->
+                    ChatMessage(
+                        role = m.role,
+                        content = m.content,
+                        toolCallId = m.toolCallId,
+                        toolCalls = m.toolCalls.takeIf { it.isNotEmpty() }?.map { call ->
+                            WireToolCall(
+                                // 框架里 LlmToolCall.id 存的就是工具 id（解析时取的 function.name），
+                                // 而协议要求 id 与 tool_call_id 成对 —— 两者同用一个值即可闭环。
+                                id = call.id,
+                                function = WireToolCallFunction(
+                                    name = call.id,
+                                    // 协议要求字符串形式的 JSON。
+                                    arguments = json.encodeToString(
+                                        JsonObject.serializer(),
+                                        JsonObject(call.args.mapValues { (_, v) -> JsonPrimitive(v?.toString() ?: "") }),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                },
                 temperature = 0.7,
                 // 思考强度：只有连接自己配了才发（老服务不认这个字段会直接 400）。
                 reasoningEffort = ProfileOptions.thinking(profile.options)?.wire,
@@ -128,7 +149,14 @@ class OpenAiCompatibleProvider : LlmProvider {
         // 表现为"模型没回答"，而真相是"上游返回了非 JSON（可能是 502 页面/HTML 错误页）"。
         // 包一层 runCatching，让兜底真正生效。
         val root = runCatching { json.parseToJsonElement(body) }.getOrNull() as? JsonObject
-            ?: return LlmReply(content = body)
+        // 上游无视 `stream:false` 仍回 SSE 时的兜底（实测 pipio.io 在字段缺省时就是流式）：
+        // 把 `data: {...}` 分块里的 delta.content 拼起来，等同于非流式的 message.content。
+        // 不做这层的话，用户看到的是整段 `data: {"choices":[...]}` 原文。
+        if (root == null) {
+            val streamed = concatSseDeltas(body)
+            if (streamed != null) return LlmReply(content = streamed)
+            return LlmReply(content = body)
+        }
         val choices = root["choices"] as? JsonArray
         val first = choices?.firstOrNull() as? JsonObject
         val message = first?.get("message") as? JsonObject
@@ -148,6 +176,29 @@ class OpenAiCompatibleProvider : LlmProvider {
         return LlmReply(content = content, toolCalls = calls)
     }
 
+    /**
+     * 把 SSE 流式响应里的 `delta.content` 拼成一段完整文本。
+     *
+     * 只在 [parseReply] 拿到**非 JSON** 时才试：逐行找 `data: {...}`，取
+     * `choices[0].delta.content`，遇到 `[DONE]` 或非 data 行就跳过。
+     * 一段 delta 都没有时返回 null，让调用方继续走「退回原文」。
+     */
+    internal fun concatSseDeltas(body: String): String? {
+        val sb = StringBuilder()
+        for (line in body.lineSequence()) {
+            val trimmed = line.trim()
+            if (!trimmed.startsWith("data:")) continue
+            val payload = trimmed.removePrefix("data:").trim()
+            if (payload == "[DONE]" || payload.isEmpty()) continue
+            val obj = runCatching { json.parseToJsonElement(payload) }.getOrNull() as? JsonObject ?: continue
+            val choice = (obj["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: continue
+            val delta = choice["delta"] as? JsonObject ?: continue
+            val piece = (delta["content"] as? JsonPrimitive)?.content ?: continue
+            sb.append(piece)
+        }
+        return sb.toString().takeIf { it.isNotEmpty() }
+    }
+
     /** 把模型给的 arguments 字符串解析成扁平键值。解析不了就当空参，不抛。 */
     internal fun parseArgs(raw: String): Map<String, Any?> = runCatching {
         val el = json.parseToJsonElement(raw)
@@ -159,8 +210,38 @@ class OpenAiCompatibleProvider : LlmProvider {
         } ?: emptyMap()
     }.getOrDefault(emptyMap())
 
+    /**
+     * 发给上游的一条消息。
+     *
+     * `role == "tool"` 时必须带 `tool_call_id`（指回是哪个调用的结果），
+     * `role == "assistant"` 且模型要调工具时必须带 `tool_calls`。
+     * 这两个字段以前没有，于是工具轮次永远在第二跳被上游 400 掉。
+     */
     @Serializable
-    private data class ChatMessage(val role: String, val content: String)
+    private data class ChatMessage(
+        val role: String,
+        /** 工具结果/带工具调用的 assistant 轮次，content 可以是 null（协议允许）。 */
+        val content: String? = null,
+        @SerialName("tool_call_id")
+        val toolCallId: String? = null,
+        @SerialName("tool_calls")
+        val toolCalls: List<WireToolCall>? = null,
+    )
+
+    /** 回传模型上一轮要求的工具调用（OpenAI 协议要求原样带回）。 */
+    @Serializable
+    private data class WireToolCall(
+        val id: String,
+        val type: String = "function",
+        val function: WireToolCallFunction,
+    )
+
+    @Serializable
+    private data class WireToolCallFunction(
+        val name: String,
+        /** 协议要求是**字符串**形式的 JSON，不是对象。 */
+        val arguments: String,
+    )
 
     @Serializable
     private data class ToolSpecFunction(
@@ -181,6 +262,17 @@ class OpenAiCompatibleProvider : LlmProvider {
         val model: String,
         val messages: List<ChatMessage>,
         val temperature: Double,
+        /**
+         * **必须显式发 `stream:false`。**
+         *
+         * OpenAI 自己的默认值就是 false，但不少中转站/自建网关（实测 pipio.io）
+         * 在**字段缺省**时按 SSE 流式回 `data: {...}` 分块。而本客户端用的是
+         * `BodyHandlers.ofString()` + `parseReply` 按**普通 JSON** 解析，
+         * 拿到 SSE 会解析失败、走「退回响应原文」那条兜底，用户看到的是
+         * 一大串 `data: {"choices":[...]}` —— 表现为「AI 答非所问」。
+         * 显式写出来，不依赖上游的缺省行为。
+         */
+        val stream: Boolean = false,
         val tools: List<ToolSpec>? = null,
         /**
          * 思考强度。OpenAI 的 `reasoning_effort` 字段；不设就不发（老服务不认会报错）。
