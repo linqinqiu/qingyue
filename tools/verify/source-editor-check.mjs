@@ -354,15 +354,42 @@ if (removed === 'selected') {
   // 「删除书源」这一档在**页头**（`.page-title-actions`）里，不在编辑器面板里 ——
   // 只翻 `.editor-actions` 会一条都找不到，于是清理静默失败、库里留下 `界面自检临时源`，
   // 下一次跑就被自己上一条"残留"判红（AGENTS §3 ②：崩溃/失败的那一次会留下探针）。
-  for (const btn of await p.$$('.page-title-actions button, .source-editor-header button, .editor-actions button')) {
-    if ((await btn.evaluate(el => el.textContent)).includes('删除书源')) { await btn.click(); break }
-  }
-  await wait(1500)
+  //
+  // ⚠ 这里**不能用 `p.$$(...)` 拿句柄再 `btn.click()`**：选中行之后 React 会重渲染页头，
+  // 句柄指向的是已被卸载的旧节点，`btn.click()` 静默无效（实测：dialogs 一个都没弹，
+  // 删除请求根本没发）。必须在页面里**现查现点**，拿当前挂着的那个节点。
+  const deleteClicked = await p.evaluate(() => {
+    const btn = [...document.querySelectorAll('.page-title-actions button')]
+      .find(n => (n.textContent ?? '').includes('删除书源'))
+    if (!btn) return 'no-button'
+    btn.click()
+    return 'clicked'
+  })
+  if (deleteClicked !== 'clicked') say(`⚠ 清理时没找到「删除书源」按钮（${deleteClicked}）`)
+  // 等"这一行真的从列表消失"，而不是睡固定 1500ms ——
+  // 删除要走 confirm → DELETE 请求 → 重新拉 5,597 条 → 虚拟列表重排，
+  // 这几步叠起来常常超过 1.5 秒，睡固定时间就会误判成"残留"。
+  await p.waitForFunction(
+    name => ![...document.querySelectorAll('.source-list button')].some(el => el.innerText.includes(name)),
+    { timeout: 15000 },
+    TEST_NAME,
+  ).catch(() => undefined)
   await filterList('ui-check')
 }
 const stillThere = await p.evaluate(name => [...document.querySelectorAll('.source-list button')].some(el => el.innerText.includes(name)), TEST_NAME)
 // 「没找到行」也算清理失败：那说明前面几步造出来的源还留在库里。
 check('自检临时源已清理', removed === 'selected' && stillThere === false, `${removed} / 残留=${stillThere}`)
+// 清理失败时把现场打出来，便于判"是没选中"还是"删了没生效"
+if (removed !== 'selected' || stillThere) {
+  const scene = await p.evaluate(name => ({
+    filter: document.querySelector('.source-filter input')?.value ?? '(无筛选框)',
+    rows: document.querySelectorAll('.source-list button').length,
+    rowTexts: [...document.querySelectorAll('.source-list button')].slice(0, 5).map(n => n.innerText.replace(/\s+/g, ' ').trim().slice(0, 24)),
+    titleActions: [...document.querySelectorAll('.page-title-actions button')].map(n => n.textContent.trim()),
+    hasTemp: document.body.innerText.includes(name),
+  }), TEST_NAME)
+  say(`ℹ 清理现场：${JSON.stringify(scene)}`)
+}
 
 check('页面运行无未捕获异常', errors.length === 0, errors.slice(0, 2).join(' | '))
 

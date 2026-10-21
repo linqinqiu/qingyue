@@ -8,10 +8,14 @@ import { HOST_VERSION, type FrontendPlugin } from '../../extensions/registry'
  *
  * 判定依据：换机器、重装才用；卸掉它，阅读器照常工作。
  * 提供独立浮层 `BackupModal` + 实验室条目两条入口。
+ *
+ * 浮层标题是「备份包」不是「备份与恢复」—— 用户 2026-09-30 的原话：
+ * 「手机恢复这个名词解释有些难听，咱们这是电脑啊」，主语是包，不是手机也不是动作。
+ * 判据 `source-editor-check` 盯着这个标题。
  */
 export function BackupModal({ onClose }: { onClose: () => void }) {
   return (
-    <PageDialog title="备份与恢复" onClose={onClose}>
+    <PageDialog title="备份包" onClose={onClose}>
       <BackupPage />
     </PageDialog>
   )

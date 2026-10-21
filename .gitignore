@@ -140,5 +140,10 @@ local-patches.diff
 !/tools/verify/desktop-check.mjs
 # 首次打开的用户协议门禁
 !/tools/verify/agreement-check.mjs
+!/tools/verify/cache-range-check.mjs
+!/tools/verify/explore-empty-check.mjs
+!/tools/verify/webview-ui-check.mjs
+!/tools/verify/webview-diagnostics-check.mjs
+!/tools/verify/retired/
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，
 # 不再含任何本机绝对路径，所以从忽略名单里放出来随仓库分发。

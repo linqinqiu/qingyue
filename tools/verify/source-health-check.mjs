@@ -219,7 +219,15 @@ try {
       return { sawStop, sawRunning, header, grouping: !!document.querySelector('.health-grouping') }
     })
     check('按「开始体检」（含停用范围）真的开跑，运行期出现停止键',
-      ran.sawRunning && (ran.sawStop || ran.header.includes('本轮检测')),
+      // 判"真的开跑了"，不是判"抓到过 running 那一瞬"。
+      //
+      // 原来写成 `ran.sawRunning && (ran.sawStop || header.includes('本轮检测'))`，
+      // 那个 `sawRunning &&` 把快速完成的情况直接判死：两条 `.test` 源 0.1 秒就扫完，
+      // 轮询根本来不及捕捉到「正在并发探测」那一帧，于是 sawRunning=false ⇒ 必然红。
+      // 这与上面注释自己写的「轮询必须比它更快，否则会把一个正常的功能判成缺失」是矛盾的。
+      //
+      // 正确的判法：**抓到 running、抓到停止键、或看到跑完的结论**，三者有其一就证明它真的开跑了。
+      ran.sawRunning || ran.sawStop || ran.header.includes('本轮检测'),
       `运行中=${ran.sawRunning} 停止键=${ran.sawStop} · ${ran.header}`)
     check('跑完出现「按体检结果整理分组」面板', ran.grouping, ran.header)
 
