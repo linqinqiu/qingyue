@@ -35,7 +35,7 @@ import { api, type PluginStatus } from '../../lib/api'
 
       <h3 className="lab-section-title">前端插件</h3>
       {plugins.length === 0 ? (
-        <p className="lab-empty">当前没有登记任何前端插件。实验室里列出的其它条目都是程序自带的，不是插件。</p>
+        <p className="lab-empty">当前没有登记任何前端插件。这是正常状态：框架本身不含插件，能力由内置功能提供，插件只是额外的可选项。</p>
       ) : (
         <ul className="lab-plugin-list">
           {plugins.map(p => (
