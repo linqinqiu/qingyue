@@ -27,7 +27,11 @@ import io.legado.model.TtsVoice
 class EdgeTtsService(
     private val client: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
-        .followRedirects(HttpClient.Redirect.NORMAL)
+        // 自定义 TTS 的地址由用户填，跟其它出站 client 一样不自动跟随重定向：
+        // NORMAL 会把请求跟到 Location 指向的任意地址（含内网/云元数据端点），
+        // 而事后检查 response.uri() 时请求已经发出去了。改由 followCustomTtsRedirects
+        // 手动逐跳跟随，每跳都重新校验协议。Edge TTS 自身的 WSS 不走这个 client。
+        .followRedirects(HttpClient.Redirect.NEVER)
         .build()
 ) {
     private val cache = ConcurrentHashMap<String, ByteArray>()
@@ -35,6 +39,8 @@ class EdgeTtsService(
 
     companion object {
         private const val MAX_CUSTOM_TTS_BYTES = 8 * 1024 * 1024
+        /** 自定义 TTS 最多跟几跳重定向；超过按失败处理，避免 A→B→A 把线程挂住。 */
+        private const val MAX_CUSTOM_TTS_REDIRECTS = 3
         /** 由 HttpClient 自行管理的请求头：用户填了也只会被丢掉，硬塞会抛 IllegalArgumentException。 */
         private val RESTRICTED_CUSTOM_HEADERS = setOf(
             "host", "content-length", "connection", "upgrade", "expect", "transfer-encoding", "te", "keep-alive",
@@ -325,13 +331,47 @@ class EdgeTtsService(
     /**
      * 自定义 TTS 的地址由用户在朗读设置里填，最常见的用法就是指向本机的自建合成服务，
      * 所以这里**不能**套用封面/书源抓取那套内网拦截。跨站风险由写操作的同源闸门挡住
-     * （`POST /api/tts/speak` 带外站 `Origin` 会被判 403，见 Guard.kt），这里只保证协议合法、体积可控、
-     * 并且重定向后仍然停留在 HTTP(S)。
+     * （`POST /api/tts/speak` 带外站 `Origin` 会被判 403，见 Guard.kt），这里只保证协议合法、体积可控。
+     *
+     * 注意：**放行内网是有意的，但重定向必须逐跳复查** —— 客户端配的是
+     * `Redirect.NORMAL`（见构造参数），它会把「用户填的公网地址」自动跟到 `Location`
+     * 指向的任意地址上，包括 `169.254.169.254` 这类云元数据端点，而事后检查
+     * `response.uri()` 时请求早就发出去了。所以 `followCustomTtsRedirects` 里手动跟跳，
+     * 每跳都回到这里过一遍。
      */
     private fun assertSafeTtsTarget(uri: URI) {
         require(uri.scheme.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()) {
             "自定义 TTS 只支持 HTTP(S) 地址"
         }
+    }
+
+    /**
+     * 手动跟随重定向，每跳都重新过 [assertSafeTtsTarget]。
+     *
+     * 客户端已改 `Redirect.NEVER`，所以 3xx 会原样返回；这里最多跟 [MAX_CUSTOM_TTS_REDIRECTS] 跳，
+     * 超过就报错（防止 A→B→A 的死循环把线程挂住）。`rebuild` 负责用新的 URI 重建请求，
+     * 因为 POST 的 body publisher 不能复用。
+     */
+    private fun <T> followCustomTtsRedirects(
+        initial: HttpRequest,
+        rebuild: (URI) -> HttpRequest,
+        handler: HttpResponse.BodyHandler<T>,
+    ): HttpResponse<T> {
+        var current = initial
+        var response = client.send(current, handler)
+        var hops = 0
+        while (response.statusCode() in 300..399 && hops < MAX_CUSTOM_TTS_REDIRECTS) {
+            val location = response.headers().firstValue("location").orElse(null) ?: break
+            val next = runCatching { current.uri().resolve(location) }.getOrNull() ?: break
+            assertSafeTtsTarget(next)
+            // 被丢弃的那一跳响应体必须关掉，否则流式响应会漏文件描述符。
+            runCatching { response.body()?.let { (it as? java.io.Closeable)?.close() } }
+            current = rebuild(next)
+            response = client.send(current, handler)
+            hops++
+        }
+        require(hops < MAX_CUSTOM_TTS_REDIRECTS) { "自定义 TTS 重定向超过 $MAX_CUSTOM_TTS_REDIRECTS 次" }
+        return response
     }
 
     private fun customTtsUri(raw: String): URI {
@@ -376,17 +416,17 @@ class EdgeTtsService(
             .replace("{{speakPitch}}", request.pitch.toString())
 
         val method = request.customMethod?.uppercase() ?: "GET"
+        // POST 的 body 在跟重定向时要重建，所以先算好放在外面（body publisher 不能复用）。
+        val resolvedBody = (request.customBody ?: "")
+            .replace("{{speakText}}", cleanText)
+            .replace("{{speakVoice}}", voice)
+            .replace("{{speakSpeed}}", speedMultiplier.toString())
+            .replace("{{speakPitch}}", request.pitch.toString())
         val reqBuilder = HttpRequest.newBuilder().timeout(Duration.ofSeconds(timeoutSeconds))
 
         customHeaders(request.customHeader).forEach { (name, value) -> reqBuilder.header(name, value) }
 
         if (method == "POST") {
-            val bodyTemplate = request.customBody ?: ""
-            val resolvedBody = bodyTemplate
-                .replace("{{speakText}}", cleanText)
-                .replace("{{speakVoice}}", voice)
-                .replace("{{speakSpeed}}", speedMultiplier.toString())
-                .replace("{{speakPitch}}", request.pitch.toString())
             reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.POST(HttpRequest.BodyPublishers.ofString(resolvedBody, StandardCharsets.UTF_8))
         } else {
@@ -394,7 +434,16 @@ class EdgeTtsService(
             reqBuilder.GET()
         }
 
-        val response = client.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofByteArray())
+        val response = followCustomTtsRedirects(reqBuilder.build(), { uri ->
+            val rebuilt = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(timeoutSeconds))
+            customHeaders(request.customHeader).forEach { (name, value) -> rebuilt.header(name, value) }
+            if (method == "POST") {
+                rebuilt.POST(HttpRequest.BodyPublishers.ofString(resolvedBody, StandardCharsets.UTF_8))
+            } else {
+                rebuilt.GET()
+            }
+            rebuilt.build()
+        }, HttpResponse.BodyHandlers.ofByteArray())
         assertSafeTtsTarget(response.uri())
         val bytes = response.body()
         require(bytes.size <= MAX_CUSTOM_TTS_BYTES) { "自定义 TTS 响应超过 ${MAX_CUSTOM_TTS_BYTES / 1024 / 1024}MB 上限" }
@@ -416,22 +465,32 @@ class EdgeTtsService(
             .replace("{{speakSpeed}}", speedMultiplier.toString())
             .replace("{{speakPitch}}", request.pitch.toString())
         val method = request.customMethod?.uppercase() ?: "GET"
+        // POST 的 body 在跟重定向时要重建，所以先算好放在外面（body publisher 不能复用）。
+        val resolvedBody = (request.customBody ?: "")
+            .replace("{{speakText}}", cleanText)
+            .replace("{{speakVoice}}", request.voice)
+            .replace("{{speakSpeed}}", speedMultiplier.toString())
+            .replace("{{speakPitch}}", request.pitch.toString())
         val reqBuilder = HttpRequest.newBuilder().timeout(Duration.ofSeconds(timeoutSeconds))
         customHeaders(request.customHeader).forEach { (name, value) -> reqBuilder.header(name, value) }
         if (method == "POST") {
-            val body = (request.customBody ?: "")
-                .replace("{{speakText}}", cleanText)
-                .replace("{{speakVoice}}", request.voice)
-                .replace("{{speakSpeed}}", speedMultiplier.toString())
-                .replace("{{speakPitch}}", request.pitch.toString())
             reqBuilder.uri(customTtsUri(resolvedUrl))
-            reqBuilder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+            reqBuilder.POST(HttpRequest.BodyPublishers.ofString(resolvedBody, StandardCharsets.UTF_8))
         } else {
             reqBuilder.uri(customTtsUri(resolvedUrl))
             reqBuilder.GET()
         }
 
-        val response = client.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofInputStream())
+        val response = followCustomTtsRedirects(reqBuilder.build(), { uri ->
+            val rebuilt = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(timeoutSeconds))
+            customHeaders(request.customHeader).forEach { (name, value) -> rebuilt.header(name, value) }
+            if (method == "POST") {
+                rebuilt.POST(HttpRequest.BodyPublishers.ofString(resolvedBody, StandardCharsets.UTF_8))
+            } else {
+                rebuilt.GET()
+            }
+            rebuilt.build()
+        }, HttpResponse.BodyHandlers.ofInputStream())
         assertSafeTtsTarget(response.uri())
         response.body().use { input ->
             if (response.statusCode() !in 200..299) {
