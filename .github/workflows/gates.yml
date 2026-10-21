@@ -1,0 +1,151 @@
+name: 真浏览器门禁（发布红线）
+
+# 把 tools/verify/ 下**真浏览器**的门禁接进 CI —— 它们是"现量"的：
+# 开真 Chrome 打开真界面、量版面/图层/交互，不打桩、不看快照。
+#
+# 为什么单独一个 workflow 而不是塞进 ci.yml：
+# - 它们慢（每个 10~60 秒，全跑 20 分钟以上），塞进 ci.yml 会让每次 push 都等；
+# - 它们需要真浏览器与服务在跑，环境要求比单测高；
+# - 失败时的排查方式不同（要看截图，不是看堆栈）。
+#
+# 所以：PR 只跑**冒烟三件套**（快、覆盖面大），
+# 全量门禁只在 main 推送 / 手动触发 / 发版前跑。
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: '跑全量门禁（默认只跑冒烟三件套）'
+        type: boolean
+        default: false
+  # 发版前必跑
+  release:
+    types: [ published ]
+
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: 冒烟三件套（版本 / 端到端 / 开源卫生）
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 安装依赖
+        run: |
+          npm --prefix web ci
+
+      - name: 装 Chrome（门禁要真浏览器）
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          echo "LEGADO_CHROME=$(which google-chrome-stable)" >> $GITHUB_ENV
+
+      - name: 构建前端与 jar
+        run: |
+          npm --prefix web run build
+          ./gradlew :server:fatJar --no-daemon
+
+      - name: 起服务
+        run: |
+          node start.mjs --no-open &
+          # 等到 /healthz 能答（最多 90 秒）
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:1234/healthz > /dev/null; then
+              echo "服务已就绪"
+              curl -s http://127.0.0.1:1234/healthz
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "服务 90 秒内没起来" >&2
+          tail -50 server.log 2>/dev/null || true
+          exit 1
+
+      - name: 门禁 1 —— 版本号单一来源 + 前端产物一致
+        run: node tools/verify/version-check.mjs
+
+      - name: 门禁 2 —— 端到端自检（搜索→详情→目录→正文→净化）
+        run: node tools/verify/selfcheck.mjs
+        # 这条会真的联网打书源站：CI 出口 IP 常被限流或墙掉，红了不代表产品坏。
+        # 所以不阻塞合并，但**必须看日志** —— 它红了要么是产品坏了，要么是网络不行，两者都要人判。
+        continue-on-error: true
+
+      - name: 门禁 3 —— 开源卫生（无个人路径 / 无说谎文档 / 端点不悬空）
+        run: node tools/verify/opensource-hygiene-check.mjs
+
+      - name: 上传截图（失败时排查用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-shots
+          path: tools/verify/out/shots
+          if-no-files-found: ignore
+          retention-days: 7
+
+  full:
+    name: 全量门禁
+    if: github.event_name == 'workflow_dispatch' && inputs.full || github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: 安装与构建
+        run: |
+          npm --prefix web ci
+          sudo apt-get update && sudo apt-get install -y google-chrome-stable
+          echo "LEGADO_CHROME=$(which google-chrome-stable)" >> $GITHUB_ENV
+          npm --prefix web run build
+          ./gradlew :server:fatJar --no-daemon
+      - name: 起服务
+        run: |
+          node start.mjs --no-open &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:1234/healthz > /dev/null && exit 0
+            sleep 3
+          done
+          exit 1
+      - name: 跑全部门禁（串行，失败继续跑完再汇总）
+        run: |
+          # 门禁一律串行：多个门禁会抢同一个 profile 与同一个实例的探针数据。
+          fail=0
+          for f in tools/verify/*-check.mjs tools/verify/selfcheck.mjs; do
+            case "$f" in
+              *census*|*snapshot*|*report*) continue ;;   # 普查类只产出数据，不是判据
+            esac
+            echo "──────── $f ────────"
+            node "$f" || { echo "FAILED: $f"; fail=1; }
+          done
+          exit $fail
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-shots-full
+          path: tools/verify/out/shots
+          if-no-files-found: ignore
+          retention-days: 14

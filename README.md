@@ -58,7 +58,7 @@ Kotlin JVM 17 + Ktor 3.4 + SQLite（WAL）。前端 React 19 + TypeScript + Vite
 - **本地书**：TXT / EPUB 导入，26 条分章规则可选、可新建、可编辑，也能让程序读文件头打分自动挑一条；已经在读的那本可以换规则重切目录。
 - **手机备份包**：见下面单独一节。
 - **写操作保护**：浏览器发出的跨站写请求一定带 `Origin`，与本机 Host 不一致就 403。抓取侧对重定向后的地址复验，拒绝内网与链路本地目标；正文进界面前做净化，图片走代理。
-- **AI 接入**：程序内部的 AI 网关（`/api/agent`）。**要先登记一个外部模型**（任何 openai-compatible 的地址：本机 Ollama、各家 API、自建网关都行）才能用；没登记就是明确报「未连接」，不会拿本地规则拼一段话冒充模型回答。接上之后它能做两类事，见下面单独一节。
+- **AI 接入**：程序内部的 AI 网关（8 个端点，`GET /api/agent/manifest` 可查能力清单）。**要先登记一个外部模型**（任何 openai-compatible 的地址：本机 Ollama、各家 API、自建网关都行）才能用；没登记就是明确报「未连接」，不会拿本地规则拼一段话冒充模型回答。接上之后它能做两类事，见下面单独一节。
 
 ## AI 能帮你做什么
 
@@ -241,7 +241,8 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 | 实验室 / AI / 插件 三类怎么分 | [docs/lab-ai-plugin.md](docs/lab-ai-plugin.md) |
 | **写一个插件**（加工具 / 协议 / 选择策略 / 钩子） | [docs/plugin-development-guide.md](docs/plugin-development-guide.md) |
 | **反代书源**（自有中转服务访问目标站） | [docs/reverse-proxy-source-guide.md](docs/reverse-proxy-source-guide.md) |
-| 前端命名与文件组织规范 | [`docs/frontend-conventions.md`](docs/frontend-conventions.md) |
+| 前端命名与文件组织规范 | [docs/frontend-conventions.md](docs/frontend-conventions.md) |
+| 门禁怎么跑、CI 里跑哪些 | [docs/gates-guide.md](docs/gates-guide.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
 
 

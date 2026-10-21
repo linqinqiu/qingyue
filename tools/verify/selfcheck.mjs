@@ -78,7 +78,14 @@ const apiRuleCount = JSON.parse((await raw('GET', '/api/replace-rules')).text).l
 ok('替换规则：读库与接口一致（导入备份会改条数，写死历史数字是替用户的数据下结论）',
   ruleStat.reduce((a, r) => a + r.n, 0) === apiRuleCount && apiRuleCount > 0,
   `库 ${ruleStat.reduce((a, r) => a + r.n, 0)} / 接口 ${apiRuleCount}｜${JSON.stringify(ruleStat.map((r) => `${r.is_enabled ? '启用' : '停用'}=${r.n}`))}`);
-ok('用户导入的本地书仍在书架（自检不碰用户数据）', shelf.some((b) => b.source_id === 'loc_book'), `书架 ${shelf.length} 本：${shelf.map((s) => s.name).join('、')}`);
+  // 只验"自检没动用户数据"，**不要求**书架上必须有本地书 ——
+  // 那取决于用户导没导入过，是环境状态不是产品事实。
+  // 从前这条写成 some(b => b.source_id === 'loc_book')，在没有本地书的库上必然红，
+  // 等于把"用户没导入过本地书"判成产品坏了。
+  const shelfAfterCheck = JSON.parse((await raw('GET', '/api/bookshelf')).text).length;
+  ok('自检全程没有增删书架条目（不碰用户数据）',
+    shelf.length === shelfAfterCheck,
+    `书架 ${shelf.length} 本：${shelf.map((s) => s.name).join('、')}`);
 
 // —— D 在线链路
 const sources = JSON.parse(anonGet.text);

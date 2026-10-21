@@ -146,9 +146,26 @@ const appSource = walkKotlin(kotlinRoot)
   .map(file => { try { return fs.readFileSync(file, 'utf8') } catch { return '' } }).join('\n')
 const readme = read('README.md')
 const declared = [...new Set([...readme.matchAll(/\/api\/[a-z0-9\-_/{}]+\w/gi)].map(m => m[0].replace(/\/$/, '')))]
+// 嵌套路由是**分段**写的：`route("agent") { get("/manifest") }` —— 源码里根本没有
+// 字符串 `"/agent/manifest"`。只找整串会把这些全判成悬空，等于让文档不敢写嵌套端点。
+// 所以另外按段拼一次：收集每层 route(...) 的段与每条 get/post/... 的路径，组合出真实端点。
+const routeSegs = []
+const verbPaths = []
+for (const m of appSource.matchAll(/\b(route|get|post|put|delete|patch|webSocket)\s*\(\s*"([^"]*)"/g)) {
+  if (m[1] === 'route') routeSegs.push(m[2])
+  else verbPaths.push(m[2])
+}
+const composed = new Set()
+for (const seg of routeSegs) {
+  const s = seg.replace(/^\//, '')
+  if (!s) continue
+  composed.add('/' + s)
+  for (const v of verbPaths) composed.add('/' + s + (v.startsWith('/') ? v : '/' + v))
+}
 const missing = declared.filter(entry => {
   const tail = entry.replace(/^\/api/, '')
-  return !(appSource.includes('"' + entry + '"') || appSource.includes('"' + tail + '"'))
+  if (appSource.includes('"' + entry + '"') || appSource.includes('"' + tail + '"')) return false
+  return !composed.has(tail)
 })
 check('README 里写到的每个 `/api/...` 都能在源码路由里找到（端点清单不许悬空）',
   missing.length === 0,
