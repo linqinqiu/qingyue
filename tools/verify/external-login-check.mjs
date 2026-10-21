@@ -8,11 +8,24 @@
  * 会真的弹出一个浏览器窗口，这是这个功能本来的样子；探针收尾会关掉它。
  */
 import http from 'node:http'
+import { BASE, requireService } from './env.mjs'
 
-const BASE = (process.env.LEGADO_BASE_URL ?? 'http://127.0.0.1:1234').replace(/\/$/, '')
 const PORT = Number(new URL(BASE).port || 80)
+/**
+ * 服务地址里的 host，不再写死 '127.0.0.1'。
+ *
+ * 原来只有 port 取自 BASE、host 是字面量 `'127.0.0.1'`，于是
+ * `LEGADO_BASE_URL=http://192.168.1.9:1235` 这种"对着隔离实例/别的机器跑"的场景，
+ * 端口对了、地址错了 —— 门禁会静默打到本机 127.0.0.1:1235 上，报出来的红是假的。
+ */
+const HOST = new URL(BASE).hostname
 const STAMP = new Date().toISOString().replace(/\D/g, '').slice(0, 14)
 const TOKEN = 'ext-' + STAMP
+
+// 前置：服务必须在跑。原来这里直接发请求，服务没起就是
+// `connect ECONNREFUSED` + 栈（而且是在打出几条 FAIL 之后才炸，看着像产品坏了）。
+// 范式同 stalled-client-check.mjs:105-109。
+await requireService('external-login-check')
 
 let pass = 0
 let fail = 0
@@ -51,7 +64,7 @@ function request(host, port, path, body, headers = {}) {
   })
 }
 
-const api = (method, path, body) => request('127.0.0.1', PORT, path, body, { method })
+const api = (method, path, body) => request(HOST, PORT, path, body, { method })
 
 // 本机探针页：Set-Cookie 带 HttpOnly —— 这正是 document.cookie 读不到、只有 CDP 拿得到的那类。
 function startCookieSite() {

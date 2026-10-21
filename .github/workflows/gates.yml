@@ -132,11 +132,17 @@ jobs:
       - name: 跑全部门禁（串行，失败继续跑完再汇总）
         run: |
           # 门禁一律串行：多个门禁会抢同一个 profile 与同一个实例的探针数据。
+          #
+          # 关于"产物类门禁"（package-check / desktop-check）：
+          #   这两个判的是**发版产物**，不是源码。full job 只跑 :app:fatJar，
+          #   不产 dist/qingyue-<版本>.zip，也不产桌面壳 dist/desktop/qingyue/qingyue.exe。
+          #   而产它们的两支脚本都是 Windows 专属（scripts/package.mjs:66,127 要求
+          #   runtime/bin/java.exe；scripts/package-desktop.mjs:101,116 要求 qingyue.exe），
+          #   在 ubuntu-latest 上必然 fail —— 所以这里**不补**打包步骤。
+          #   那两支门禁已改成"前置产物不存在 → NOTE + exit 0"（范式同 stalled-client-check），
+          #   让"没测到"与"测了但坏了"分开；产物真存在时它们照旧判 FAIL。
           fail=0
           for f in tools/verify/*-check.mjs tools/verify/selfcheck.mjs; do
-            case "$f" in
-              *census*|*snapshot*|*report*) continue ;;   # 普查类只产出数据，不是判据
-            esac
             echo "──────── $f ────────"
             node "$f" || { echo "FAILED: $f"; fail=1; }
           done

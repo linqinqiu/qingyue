@@ -112,6 +112,35 @@ export const BASE = (process.env.LEGADO_BASE_URL || 'http://127.0.0.1:1234').rep
 export const DB = process.env.LEGADO_DB || path.join(ROOT, 'data/legado.sqlite')
 
 /**
+ * 前置预检：服务在不在跑。**在不在跑是环境，不是产品**，所以不许裸抛栈。
+ *
+ * 为什么要有这个：`version-check` / `external-login-check` / `webview-diagnostics-check`
+ * 原来服务没起时直接 `fetch` → `TypeError: fetch failed` / `ECONNREFUSED` + 一大段栈，
+ * 连自己的汇总行都打不出来（version-check 实测 stdout 0 行，`:174-183` 的汇总永远走不到）。
+ * 栈只会让人去翻"是不是脚本坏了"，而真相是"1234 没在跑"。
+ *
+ * 口径与 `stalled-client-check.mjs:105-109` 一致：前置不满足 → 一行说清楚 + exit 1，
+ * 不做任何断言。注意退出码仍是 1（不是 0）：没验成不能算绿。
+ *
+ * @param {string} name 脚本名，用于输出前缀
+ * @param {string} [base] 默认用 BASE
+ * @returns {Promise<Response|null>} 通了返回 /healthz 的 Response（调用方常要复用），没通直接 exit
+ */
+export async function requireService(name, base = BASE) {
+  const url = `${base}/healthz`
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return response
+  } catch (error) {
+    console.log(`${name}: 前置不满足（服务没在跑），不做任何断言`)
+    console.log(`      ${url} → ${String(error?.cause?.message ?? error?.message ?? error)}`)
+    console.log('      先起服务（node start.mjs --no-open），或用 LEGADO_BASE_URL 指到在跑的实例。')
+    process.exit(1)
+  }
+}
+
+/**
  * 把首次运行的「用户协议与免责声明」标记成已同意（0.6.46 引入）。
  *
  * 门禁每次都用清空的 profile（`gateProfile` 会删掉 `Default/Local Storage`），所以那层全屏浮层

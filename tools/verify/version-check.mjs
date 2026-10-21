@@ -19,7 +19,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { createRequire } from 'node:module'
-import { ROOT, BASE, launchOptions } from './env.mjs'
+import { ROOT, BASE, launchOptions, requireService } from './env.mjs'
 
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
@@ -28,6 +28,11 @@ const results = []
 const check = (name, condition, detail = '') => results.push({ name, ok: !!condition, detail })
 const fail = (name, detail) => results.push({ name, ok: false, detail })
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+// 前置：服务必须在跑。没跑就一行说清楚并退出，不要等到 :113 的 page.goto 才裸抛栈
+// （那样 stdout 是 0 行，下面 :174-183 的汇总永远走不到，红得看不出原因）。
+// 退出码仍为 1：没验成不能算绿。范式同 stalled-client-check.mjs:105-109。
+await requireService('version-check')
 
 /** 只要 MANIFEST.MF，所以自带一个最小 zip 读取，不额外拉依赖。 */
 function manifestOf(jarPath) {

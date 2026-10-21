@@ -10,7 +10,10 @@ import { createRequire } from 'node:module'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
-const { chromePath, OUT } = await import('./env.mjs')
+const { chromePath, OUT, BASE, requireService } = await import('./env.mjs')
+
+// 前置：服务必须在跑（下面要导航到真界面）。范式同 stalled-client-check.mjs:105-109。
+await requireService('webview-ui-check')
 
 const b = await puppeteer.launch({ executablePath: chromePath(), headless: true, userDataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'lg-wvui-')), args: ['--no-sandbox', '--disable-gpu'] })
 const p = await b.newPage()
@@ -18,7 +21,9 @@ await p.setViewport({ width: 1440, height: 900 })
 const errors = []
 p.on('pageerror', e => errors.push(String(e.message).slice(0, 120)))
 
-await p.goto('http://127.0.0.1:1234/#sources', { waitUntil: 'domcontentloaded', timeout: 40000 })
+// 用 BASE 而不是写死的 http://127.0.0.1:1234 —— 否则 LEGADO_BASE_URL 指到隔离实例时，
+// 这条门禁会静默打本机 1234（没起就是 ERR_CONNECTION_REFUSED，起了就是验错实例）。
+await p.goto(`${BASE}/#sources`, { waitUntil: 'domcontentloaded', timeout: 40000 })
 await p.waitForSelector('.source-list button', { timeout: 20000 })
 await new Promise(r => setTimeout(r, 1500))
 await p.type('.source-filter input', '番茄')

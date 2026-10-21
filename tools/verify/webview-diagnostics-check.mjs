@@ -10,7 +10,11 @@ import { createRequire } from 'node:module'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const require = createRequire(path.join(ROOT, 'web/package.json'))
 const puppeteer = require('puppeteer-core')
-const { BASE, chromePath, OUT } = await import('./env.mjs')
+const { BASE, chromePath, OUT, requireService } = await import('./env.mjs')
+
+// 前置：服务必须在跑。原来这里第 16 行直接 fetch，服务没起就是
+// `TypeError: fetch failed` + 栈 —— 前置不满足被报成脚本坏了。范式同 stalled-client-check.mjs:105-109。
+await requireService('webview-diagnostics-check')
 
 const id = encodeURIComponent('https://www.fanqienovel.com')
 const session = await fetch(BASE + '/healthz')

@@ -33,7 +33,27 @@ const SMOKE = hasFlag('--smoke')
 const port = Number(arg('--port', '1234')) + 40
 
 const exe = arg('--exe') || path.join(ROOT, 'dist', 'desktop', 'qingyue', 'qingyue.exe')
-if (!fs.existsSync(exe)) fail(`找不到 ${exe} —— 先 node scripts/package-desktop.mjs`)
+
+/**
+ * 前置产物不存在时判 **NOTE（前置不满足）** 而不是 FAIL。
+ *
+ * 为什么改：这条门禁判的是**桌面壳产物** `dist/desktop/qingyue/qingyue.exe`，
+ * 而它是 jpackage 在 Windows 上打出来的 app-image（`scripts/package-desktop.mjs:101,116`
+ * 要求 `qingyue.exe` 与 `runtime/bin/java.exe`）。CI 的 full job 跑在 `ubuntu-latest`，
+ * 只 `./gradlew :app:fatJar`，既不产桌面壳、也不可能产 .exe —— 于是这条门禁在 CI 里
+ * **每次必红**，把"全量门禁"永久染红，绿/红信号失去意义。
+ *
+ * 与 `stalled-client-check.mjs:105-109` 同一条口径：前置不满足不是产品坏了，
+ * 让"没测到"与"测了但坏了"分开。产物真存在时，下面所有断言照旧判 FAIL。
+ */
+if (!fs.existsSync(exe)) {
+  console.log(`NOTE  前置不满足：找不到桌面壳产物 ${exe}`)
+  console.log('      这条门禁判的是**桌面壳产物**，不是源码：先在 Windows 上 node scripts/package-desktop.mjs。')
+  console.log(`      当前平台 ${process.platform}：jpackage 的 app-image（qingyue.exe）只有 Windows 构建才有，`)
+  console.log('      所以这里判 NOTE 而不是 FAIL —— 详见本文件开头的前置说明。')
+  console.log('\ndesktop-check: NOTE 前置不满足（没有桌面壳产物），不做任何断言')
+  process.exit(0)
+}
 
 // 主实例用一次性临时数据目录（跑完清掉，不污染真书架）。
 const tmpDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qingyue-desktop-'))

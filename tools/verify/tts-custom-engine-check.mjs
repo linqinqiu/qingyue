@@ -16,6 +16,14 @@ import path from 'node:path'
 import { BASE, OUT } from './env.mjs'
 
 const STAMP = new Date().toISOString().replace(/[-:]/g, '').slice(0, 13)
+/**
+ * 服务地址里的 host，不再写死 '127.0.0.1'。
+ *
+ * 原来 `request()` 只有 port 取自 BASE、host 是字面量，于是
+ * `LEGADO_BASE_URL=http://192.168.1.9:1235` 这种"对着隔离实例/别的机器跑"的场景，
+ * 端口对了、地址错了 —— 门禁静默打到本机，报出来的红是假的。
+ */
+const HOST = new URL(BASE).hostname
 const results = []
 const check = (name, ok, detail = '') => results.push({ name, ok: !!ok, detail })
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -28,7 +36,7 @@ function request(port, method, pathName, body, headers = {}) {
       h['content-type'] = h['content-type'] || 'application/json'
       h['content-length'] = String(payload.length)
     }
-    const req = http.request({ host: '127.0.0.1', port, path: pathName, method, headers: h }, res => {
+    const req = http.request({ host: HOST, port, path: pathName, method, headers: h }, res => {
       const chunks = []
       res.on('data', c => chunks.push(c))
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: Buffer.concat(chunks).toString('utf8'), bytes: Buffer.concat(chunks) }))
