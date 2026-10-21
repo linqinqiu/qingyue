@@ -86,6 +86,19 @@ test('换源的晚到响应不许把上一轮的书写回屏幕（§4.1 那条 P
   assert.ok(choose, 'chooseSource 的实现要还在（换了写法就同步改这条）')
   assert.match(choose[0], /const gen = this\.openGroupGen/, '入口要记下这一轮的代次')
   assert.match(choose[1], /if \(gen !== this\.openGroupGen\) return/, 'await 回来之后要判过期再写屏')
+  // 上面两条只钉了「入口记代次 / 回来判过期」的形状，**钉不住代次有没有真的推进**：
+  // 原来 chooseSource 写的是 `const gen = this.openGroupGen`（只读不自增），两次并发换源
+  // 拿到同一个 gen，两道守卫全放行，慢的响应后到就覆盖了用户当前打开的书。
+  // 这条判据补的就是那个缺口 —— 入口必须在取 gen 之前/同时推进代次。
+  //
+  // 必须**先剥注释再判**：注释里为了说明会写到 `++this.openGroupGen`，不剥的话
+  // 把自增删掉判据仍然是绿的（这条最初就写错过，靠"临时改回 bug 写法看它红不红"发现）。
+  const codeOnly = choose[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\r\n]*/g, '')
+  assert.match(
+    codeOnly,
+    /this\.openGroupGen \+= 1|this\.openGroupGen\+\+|(?:\+\+)this\.openGroupGen/,
+    '入口必须推进代次（++this.openGroupGen 或 this.openGroupGen += 1），只读不自增 = 竞态没修',
+  )
 })
 
 /**
