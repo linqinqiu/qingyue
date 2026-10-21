@@ -65,8 +65,7 @@ class OpenAiCompatibleProvider : LlmProvider {
         messages: List<LlmMessage>,
         tools: List<ToolMeta>?,
     ): LlmReply? {
-        val base = profile.baseUrl?.trim()?.removeSuffix("/") ?: return null
-        val url = if (base.endsWith("/v1")) base + "/chat/completions" else base + "/v1/chat/completions"
+        val url = endpointUrl(profile) ?: return null
         val body = json.encodeToString(
             ChatRequest(
                 model = profile.model ?: "gpt-3.5-turbo",
@@ -105,9 +104,31 @@ class OpenAiCompatibleProvider : LlmProvider {
         return runCatching { parseReply(resp.body()) }.getOrNull()
     }
 
+    /**
+     * 拼出 `chat/completions` 的完整地址。
+     *
+     * 抽成独立函数是为了可测：这段的边界（baseUrl 带不带 `/v1`、带不带尾斜杠、
+     * 为 null）是最容易错的地方，埋在 `post()` 里时没法单独验。
+     *
+     * @return null 表示 baseUrl 缺失**或为空**（调用方据此返回 null，上层报 upstream_unreachable）
+     */
+    internal fun endpointUrl(profile: AgentProfileStore.Profile): String? {
+        // 注意 `removeSuffix("/")` 之后还要判空：空串会一路拼成 "/v1/chat/completions"，
+        // 那是个没有 host 的地址 —— URI.create 能过、HttpClient.send 才炸，
+        // 表现为"AI 连不上"而不是"baseUrl 没配"，排查会绕远路。
+        val base = profile.baseUrl?.trim()?.removeSuffix("/")?.takeIf { it.isNotEmpty() } ?: return null
+        return if (base.endsWith("/v1")) base + "/chat/completions" else base + "/v1/chat/completions"
+    }
+
     /** 解析 OpenAI 响应：取 content，以及 tool_calls（如果有）。 */
-    private fun parseReply(body: String): LlmReply {
-        val root = json.parseToJsonElement(body) as? JsonObject ?: return LlmReply(content = body)
+    internal fun parseReply(body: String): LlmReply {
+        // `parseToJsonElement` 遇到非 JSON 会**抛异常**（JsonDecodingException），
+        // 不是返回 null —— 原来这里直接调它，于是"非 JSON 响应退回原文"这条兜底
+        // 实际上走不到：异常会一路冒到 `post()` 的 runCatching 变成 null，
+        // 表现为"模型没回答"，而真相是"上游返回了非 JSON（可能是 502 页面/HTML 错误页）"。
+        // 包一层 runCatching，让兜底真正生效。
+        val root = runCatching { json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+            ?: return LlmReply(content = body)
         val choices = root["choices"] as? JsonArray
         val first = choices?.firstOrNull() as? JsonObject
         val message = first?.get("message") as? JsonObject
@@ -128,7 +149,7 @@ class OpenAiCompatibleProvider : LlmProvider {
     }
 
     /** 把模型给的 arguments 字符串解析成扁平键值。解析不了就当空参，不抛。 */
-    private fun parseArgs(raw: String): Map<String, Any?> = runCatching {
+    internal fun parseArgs(raw: String): Map<String, Any?> = runCatching {
         val el = json.parseToJsonElement(raw)
         (el as? JsonObject)?.entries?.associate { (k, v) ->
             k to when (v) {
