@@ -63,7 +63,7 @@ test('接线：「我的」菜单有「阅读记录」入口，且开的是同�
   const main = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
   // 「阅读记录」是**插件**（plugins/），可独立卸载。
   // 入口直接开对应浮层，接线形态是 setOpenModal。
-  assert.match(main, /setOpenModal\('reading-log'\)/, '入口要开阅读记录浮层')
+  assert.match(main, /openModalDirect\('reading-log'\)/, '入口要开阅读记录浮层')
   const panel = fs.readFileSync(path.resolve(import.meta.dirname, '../src/plugins/reading-log/ReadingLogModal.tsx'), 'utf8')
   assert.match(panel, /<ReadingLogPage \/>/, '浮层里要真的渲染这一页，不是挂个空组件')
 })

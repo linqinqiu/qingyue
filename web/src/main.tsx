@@ -159,6 +159,48 @@ function App() {
    * 收成一个字符串状态：同一时刻只可能开一个，加新弹窗只需往 union 里加一个字面量。
    */
   const [openModal, setOpenModal] = useState<AppModal | null>(null)
+
+  /**
+   * 浮层的**返回栈**：从一个浮层跳到另一个浮层时，记下从哪儿来的。
+   *
+   * 为什么需要它（真机门禁 `ui-shell-check` 抓到的）：
+   * 「关于」页上有「更新日志」「快捷键」两个按钮。点了之后 `openModal` 变成目标浮层，
+   * 关于就被卸载了 —— 再关掉目标浮层，`openModal` 变 null，用户被**扔回主界面**，
+   * 而不是回到刚才那个「关于」。真机路径：
+   *   关于 → 快捷键 → 关闭 → 期望回到关于，实际回到书架。
+   *
+   * 所以这里记一层"从哪来的"，关闭时若有来源就先回来源。只记一层：
+   * 浮层套浮层再深就该改用真正的路由了，那超出这个单例状态该管的范围。
+   */
+  const [modalBackTo, setModalBackTo] = useState<AppModal | null>(null)
+
+  /** 打开一个浮层，并记下来源（用于关闭时回退）。 */
+  const openModalFrom = (next: AppModal, from: AppModal) => {
+    setModalBackTo(from)
+    setOpenModal(next)
+  }
+
+  /**
+   * 从**主界面**直接打开一个浮层（顶栏、设置页、深链都走这条）。
+   *
+   * 必须清空返回栈：否则上一次"关于 → 快捷键"留下的来源会粘住，
+   * 导致这次从设置页打开的快捷键，关掉后跳回「关于」—— 那是凭空冒出来的。
+   */
+  const openModalDirect = (next: AppModal) => {
+    setModalBackTo(null)
+    setOpenModal(next)
+  }
+
+  /** 关闭当前浮层：有来源就回来源，否则全关。 */
+  const closeModal = () => {
+    if (modalBackTo) {
+      const back = modalBackTo
+      setModalBackTo(null)
+      setOpenModal(back)
+    } else {
+      setOpenModal(null)
+    }
+  }
   /**
    * 「实验室」（Lab）：悬浮式框架容器，承载还没进主界面的能力。
    * AI 接入是它目前登记的第一条实验条目 —— 实验室本身不认识 AI。
@@ -253,6 +295,7 @@ function App() {
       if (modalDeepLink) {
         setPageDialog(null)
         setShowLab(false)
+        setModalBackTo(null)
         setOpenModal(modalDeepLink)
         return
       }
@@ -310,11 +353,14 @@ function App() {
         if (focusSearch()) event.preventDefault()
       } else if (hit.action === 'help') {
         event.preventDefault()
+        setModalBackTo(null)
         setOpenModal(value => (value === 'shortcuts' ? null : 'shortcuts'))
       } else if (hit.action === 'close-help') {
+        setModalBackTo(null)
         setOpenModal(value => (value === 'shortcuts' ? null : value))
       } else if (hit.action === 'logs') {
         event.preventDefault()
+        setModalBackTo(null)
         setOpenModal('logs')
       } else if (hit.page) {
         event.preventDefault()
@@ -493,16 +539,16 @@ function App() {
     selected,
     settings,
     settingsSections: buildSettingsSections({
-      openShortcuts: () => setOpenModal('shortcuts'),
-      openOfflineCache: () => setOpenModal('offline-cache'),
-      openCustomize: () => setOpenModal('customize'),
+      openShortcuts: () => openModalDirect('shortcuts'),
+      openOfflineCache: () => openModalDirect('offline-cache'),
+      openCustomize: () => openModalDirect('customize'),
       openReplaceRules: () => setPageDialog('rules'),
       openTocRules: () => setTocRulesSignal(value => value + 1),
-      openBackup: () => setOpenModal('backup'),
-      openLogs: () => setOpenModal('logs'),
-      openServerPort: () => setOpenModal('server-port'),
-      openAiConnections: () => setOpenModal('ai'),
-      openPlugins: () => setOpenModal('plugins'),
+      openBackup: () => openModalDirect('backup'),
+      openLogs: () => openModalDirect('logs'),
+      openServerPort: () => openModalDirect('server-port'),
+      openAiConnections: () => openModalDirect('ai'),
+      openPlugins: () => openModalDirect('plugins'),
       openLab: () => setShowLab(true),
     }),
     // 插件贡献的设置分区：宿主只负责摆位置与搜索，不解释内容。
@@ -535,10 +581,10 @@ function App() {
         searching={search.loading}
         onSettingsChange={setSettings}
         onNavigate={navigate}
-        onOpenChangelog={() => setOpenModal('changelog')}
-        onOpenAbout={() => setOpenModal('about')}
-        onOpenReadingLog={() => setOpenModal('reading-log')}
-        onOpenCustomize={() => setOpenModal('customize')}
+        onOpenChangelog={() => openModalDirect('changelog')}
+        onOpenAbout={() => openModalDirect('about')}
+        onOpenReadingLog={() => openModalDirect('reading-log')}
+        onOpenCustomize={() => openModalDirect('customize')}
         version={serverVersion}
       />
       {renderPage(page, pageContext)}
@@ -564,32 +610,32 @@ function App() {
       />
 
       {/* 单例弹窗：同一时刻只开一个。加新弹窗往 AppModal 加字面量，不必再添 useState。 */}
-      {openModal === 'offline-cache' && <OfflineCacheModal onClose={() => setOpenModal(null)} />}
-      {openModal === 'logs' && <LogsModal onClose={() => setOpenModal(null)} />}
-      {openModal === 'shortcuts' && <ShortcutHelp onClose={() => setOpenModal(null)} />}
+      {openModal === 'offline-cache' && <OfflineCacheModal onClose={closeModal} />}
+      {openModal === 'logs' && <LogsModal onClose={closeModal} />}
+      {openModal === 'shortcuts' && <ShortcutHelp onClose={closeModal} />}
       {openModal === 'customize' && (
-        <CustomizeModal settings={settings} onChange={setSettings} onClose={() => setOpenModal(null)} />
+        <CustomizeModal settings={settings} onChange={setSettings} onClose={closeModal} />
       )}
-      {openModal === 'server-port' && <ServerPortModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'server-port' && <ServerPortModal onClose={closeModal} />}
 
       {/* —— 成熟功能浮层（已定型、低频、不占导航）。它们**不是**实验室条目。 —— */}
       {openModal === 'changelog' && (
-        <ChangelogModal onClose={() => setOpenModal(null)} serverVersion={serverVersion} />
+        <ChangelogModal onClose={closeModal} serverVersion={serverVersion} />
       )}
-      {openModal === 'backup' && <BackupModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'backup' && <BackupModal onClose={closeModal} />}
       {openModal === 'about' && (
         <AboutModal
-          onClose={() => setOpenModal(null)}
-          onOpenChangelog={() => setOpenModal('changelog')}
-          onOpenShortcuts={() => setOpenModal('shortcuts')}
+          onClose={closeModal}
+          onOpenChangelog={() => openModalFrom('changelog', 'about')}
+          onOpenShortcuts={() => openModalFrom('shortcuts', 'about')}
         />
       )}
-      {openModal === 'reading-log' && <ReadingLogModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'reading-log' && <ReadingLogModal onClose={closeModal} />}
       {openModal === 'source-health' && (
         <SourceHealthEntryModal
           sources={sources}
           sourcesState={sources.length > 0 ? 'ready' : 'loading'}
-          onClose={() => setOpenModal(null)}
+          onClose={closeModal}
           onSourcesChange={refreshSources}
           onToast={(message: string) => toast.info(message)}
         />
@@ -597,11 +643,11 @@ function App() {
 
       {/* —— AI 接入：**独立一类**（不是实验室、不是插件） —— */}
       {openModal === 'ai' && (
-        <AiModal onClose={() => setOpenModal(null)} uiContext={currentUiContext} />
+        <AiModal onClose={closeModal} uiContext={currentUiContext} />
       )}
 
       {/* —— 插件：**独立一类**（查看当前装了哪些插件） —— */}
-      {openModal === 'plugins' && <PluginsModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'plugins' && <PluginsModal onClose={closeModal} />}
 
       {/* —— 实验室：只放"待定、准备加入基础框架"的功能 + 插件贡献的条目 —— */}
       {showLab && (
@@ -612,8 +658,8 @@ function App() {
           initialEntryId={labEntryId}
           actions={{
             // 插件要"做某事"时用：实验室只转发，不解释这些 key 是什么。
-            openChangelog: () => setOpenModal('changelog'),
-            openShortcuts: () => setOpenModal('shortcuts'),
+            openChangelog: () => openModalDirect('changelog'),
+            openShortcuts: () => openModalDirect('shortcuts'),
             closeLab: () => { setShowLab(false); setLabEntryId(undefined) },
             refreshSources,
             toast: (message: string) => toast.info(message),

@@ -542,3 +542,60 @@ test('web/src 里每颗粒复选框都要有可访问名字', () => {
   assert.ok(total >= 13, `全站复选框只扫到 ${total} 处，太少说明扫描器没跟上新代码`)
   assert.deepEqual(unnamed, [], `这些复选框读屏念得出"复选框"却念不出它是干什么的：${unnamed.join('、')}`)
 })
+
+/**
+ * 浮层之间跳转后**关得回去**（真机门禁 `ui-shell-check` 抓到的回归）。
+ *
+ * 场景：「关于」页上有「更新日志」「快捷键」两个按钮。点进去之后 `openModal` 变成目标浮层，
+ * 关于被卸载；再关掉目标浮层时，如果只做 `setOpenModal(null)`，用户被**扔回主界面** ——
+ * 而不是回到刚才那个「关于」。
+ *
+ * 实测路径（`ui-shell-check` 的 ③ 段）：
+ *   关于 → 快捷键 → 关闭 → 期望回到关于，实际 `.about-actions` 已经没了 → 后续点「更新日志」失败。
+ *
+ * 判据：从浮层内部跳到另一个浮层必须走 `openModalFrom`（记来源），
+ * 且关闭统一走 `closeModal`（有来源先回来源），不能再用 `setOpenModal(null)`。
+ */
+test('浮层内跳转要记来源，关闭要能回到上一层的浮层', () => {
+  const main = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
+
+  // 1) 必须存在"记来源"与"回退"这两个函数
+  assert.match(main, /const openModalFrom = \(next: AppModal, from: AppModal\)/, '缺少 openModalFrom（浮层内跳转要记来源）')
+  assert.match(main, /const closeModal = \(\) =>/, '缺少 closeModal（关闭时要能回退）')
+
+  // 2) closeModal 必须有"有来源先回来源"的分支，不能直接 setOpenModal(null)
+  const closeBody = /const closeModal = \(\) => \{([\s\S]*?)\n  \}/.exec(main)?.[1] ?? ''
+  assert.ok(closeBody.length > 40, '取不到 closeModal 的函数体（取空串下面断言对什么都成立）')
+  assert.match(closeBody, /if \(modalBackTo\)/, 'closeModal 必须先判有没有来源')
+  assert.match(closeBody, /setOpenModal\(back\)/, 'closeModal 有来源时要回到来源浮层')
+
+  // 3) 关于浮层里的两个跳转必须走 openModalFrom，而不是直接 setOpenModal
+  assert.match(main, /onOpenChangelog=\{\(\) => openModalFrom\('changelog', 'about'\)\}/,
+    '关于 → 更新日志 必须记来源')
+  assert.match(main, /onOpenShortcuts=\{\(\) => openModalFrom\('shortcuts', 'about'\)\}/,
+    '关于 → 快捷键 必须记来源')
+
+  // 4) 所有浮层的 onClose 统一走 closeModal —— 留一个 setOpenModal(null) 就是留一个"回不去"的坑
+  const rawNullCloses = [...main.matchAll(/onClose=\{\(\) => setOpenModal\(null\)\}/g)]
+  assert.deepEqual(rawNullCloses.map(m => m[0]), [],
+    '这些浮层关闭时没走 closeModal，从别的浮层跳进来就回不去了')
+})
+
+/**
+ * 从**主界面**打开浮层必须清空返回栈。
+ *
+ * 反例：上一次"关于 → 快捷键"留下 `modalBackTo = 'about'`；用户关掉后回到主界面，
+ * 再从设置页打开快捷键 —— 若不清空，关掉时会凭空跳回「关于」。
+ */
+test('从主界面打开浮层要清空返回栈（否则会凭空跳回上一次的来源）', () => {
+  const main = fs.readFileSync(path.resolve(import.meta.dirname, '../src/main.tsx'), 'utf8')
+  assert.match(main, /const openModalDirect = \(next: AppModal\) =>/, '缺少 openModalDirect')
+  const body = /const openModalDirect = \(next: AppModal\) => \{([\s\S]*?)\n  \}/.exec(main)?.[1] ?? ''
+  assert.match(body, /setModalBackTo\(null\)/, 'openModalDirect 必须先清空返回栈')
+
+  // 设置页/顶栏那些入口都该走 openModalDirect
+  for (const entry of ['openShortcuts', 'openOfflineCache', 'openCustomize', 'openBackup', 'openLogs', 'openServerPort', 'openAiConnections', 'openPlugins']) {
+    assert.match(main, new RegExp(`${entry}: \\(\\) => openModalDirect\\('`),
+      `${entry} 应从主界面打开（走 openModalDirect 清空返回栈）`)
+  }
+})

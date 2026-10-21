@@ -110,7 +110,7 @@ test('「我的」菜单不再重复列「更新日志」「快捷键」，这�
   assert.match(aboutModal, /onOpenShortcuts=\{onOpenShortcuts\}/,
     '关于浮层要把快捷键按钮接到宿主回调上')
   // 同一轮把 5 个弹窗布尔收成一个 openModal，写法从 setShowShortcuts(true) 变成 setOpenModal('shortcuts')。
-  assert.match(read('../src/main.tsx'), /openShortcuts: \(\) => setOpenModal\('shortcuts'\)/,
+  assert.match(read('../src/main.tsx'), /openShortcuts: \(\) => openModalDirect\('shortcuts'\)/,
     '宿主那边要真的把 openShortcuts 接上，不是摆个死按钮')
   const header = read('../src/components/AppHeader.tsx')
   assert.doesNotMatch(header, /<span>快捷键<\/span>/, '菜单里那条已经收进「关于」')

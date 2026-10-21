@@ -65,7 +65,7 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   assert.ok(!new RegExp(`\\{ key: 'rules'`).test(table), 'rules 不该占顶栏')
   assert.ok(app.includes(`setPageDialog('rules')`), 'rules 的悬浮层没接线')
   assert.ok(!new RegExp(`\\{ key: 'backup'`).test(table), 'backup 不该占顶栏')
-  assert.ok(app.includes("setOpenModal('backup')"), 'backup 的入口要接到备份浮层')
+  assert.ok(app.includes("openModalDirect('backup')"), 'backup 的入口要接到备份浮层')
   assert.match(read('../src/plugins/backup/BackupModal.tsx'), /<BackupPage \/>/,
     '备份浮层里要真的渲染这一页，不是挂个空组件')
   assert.doesNotMatch(app, /showReplaceRules/,
@@ -90,9 +90,9 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   // 但"必须接到某一份真实现"这条不变（不接就是死按钮）。
   // 同一轮把 5 个独立布尔收成一个 openModal：弹窗类动作的期望值从 setShowXxx(true) 变成 setOpenModal('xxx')，
   // 语义完全等价（同一时刻只开一个），判据跟着换写法而不是放宽要求。
-  for (const call of ["setOpenModal('shortcuts')", "setOpenModal('offline-cache')", "setOpenModal('customize')",
-    "setPageDialog('rules')", 'setTocRulesSignal(value => value + 1)', "setOpenModal('backup')",
-    "setOpenModal('logs')", "setOpenModal('server-port')"]) {
+  for (const call of ["openModalDirect('shortcuts')", "openModalDirect('offline-cache')", "openModalDirect('customize')",
+    "setPageDialog('rules')", 'setTocRulesSignal(value => value + 1)', "openModalDirect('backup')",
+    "openModalDirect('logs')", "openModalDirect('server-port')"]) {
     assert.ok(wiredBlock.includes(call), `设置页的动作没接到 ${call}（悬浮层/弹窗/浮层那一份）`)
   }
   const sectionsBody = /export function buildSettingsSections[\s\S]*$/m.exec(sectionsFile)?.[0] ?? ''
