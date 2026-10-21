@@ -284,6 +284,44 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         migrateBookshelf(db)
         migrateSourceTable(db)
         migrateLegacyCookieJars(db)
+        reclaimFreePages(db)
+    }
+
+    /**
+     * 回收空闲页（SQLite 的 `auto_vacuum=0` 是默认值：删掉的行腾出的页**不归还文件**，
+     * 只进 freelist 等下次复用）。本机实测 216.6 MB 的库里 freelist 占 135.9 MB（62.7%），
+     * 而真正在用的只有 80.7 MB —— 用户删书、清缓存、日志按 5000 行滚动淘汰，腾出的空间
+     * 全部滞留在文件里，看起来像"库莫名其妙这么大"。
+     *
+     * 这里不改成 `auto_vacuum=INCREMENTAL`（那要一次性全量 VACUUM 迁移，且会让每次删除
+     * 都多一次页移动），而是启动时按碎片率判断：超过 [VACUUM_THRESHOLD] 才跑一次全量
+     * VACUUM，一次把文件缩回去。碎片率低时什么都不做，不给启动加负担。
+     *
+     * 注意：VACUUM 不能在事务里跑，也不能有其他连接在读 —— 此时刚 initialize，只有写连接。
+     */
+    private fun reclaimFreePages(db: Connection) {
+        runCatching {
+            val pageCount = db.createStatement().use { st ->
+                st.executeQuery("pragma page_count").use { if (it.next()) it.getLong(1) else 0L }
+            }
+            val freePages = db.createStatement().use { st ->
+                st.executeQuery("pragma freelist_count").use { if (it.next()) it.getLong(1) else 0L }
+            }
+            if (pageCount <= 0 || freePages <= 0) return@runCatching
+            val ratio = freePages.toDouble() / pageCount
+            if (ratio < VACUUM_THRESHOLD) return@runCatching
+            // VACUUM 会重写整库，WAL 模式下必须先落盘再切回来；失败也只是没省下空间，不影响功能。
+            db.createStatement().use { it.execute("VACUUM") }
+            db.createStatement().use { it.execute("pragma optimize") }
+            System.err.println(
+                "数据库碎片回收：空闲页 ${freePages}/${pageCount}（${(ratio * 100).toInt()}%）已 VACUUM 压缩",
+            )
+        }
+    }
+
+    companion object {
+        /** 空闲页占比超过这个值就在启动时压缩一次；低于则不动（避免每次启动都重写 200MB）。 */
+        private const val VACUUM_THRESHOLD = 0.25
     }
 
 

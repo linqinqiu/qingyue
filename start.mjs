@@ -188,6 +188,16 @@ probe.listen(runtime.port, runtime.host, () => {
       '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8',
       // 不指定的话 JVM 临时目录是 C:\Users\<用户>\AppData\Local\Temp，装到哪都会往系统盘写。
       `-Djava.io.tmpdir=${runtime.tmpDir}`,
+      // 堆上限：不写就是「物理内存的 1/4」。服务本身一直没 OOM 过（server.log 无记录），
+      // 但一台机器上常常同时跑着门禁（headless Chrome），默认值会让两者抢内存。
+      // 给一个明确上限，并用 LEGADO_MAX_HEAP 留出调大/调小的口子。
+      `-Xmx${process.env.LEGADO_MAX_HEAP || '1g'}`,
+      // OOM 时直接退出而不是让 JVM 半死不活：启动脚本能据此报错，比留一个半死的进程可诊断。
+      '-XX:+ExitOnOutOfMemoryError',
+      // 崩溃日志跟着运行日志走，而不是当前工作目录。注：仓库根那 30 份 hs_err 全部来自
+      // Gradle 构建链（见 gradle.properties 的 jvmargs 注释），与服务进程无关；这一行是
+      // 防止将来服务真崩时又往 cwd 里散文件。
+      `-XX:ErrorFile=${path.join(path.dirname(runtime.logFile), 'hs_err_pid%p.log')}`,
     ];
     // CDS 类归档（tools/make-cds.mjs 生成）：冷启动实测 ~8.3s → ~5.3s。
     // 归档是跟这一份 jar 绑定的 —— 过期/缺失就不带它（这次慢一点），起完在后台重建给下次用。

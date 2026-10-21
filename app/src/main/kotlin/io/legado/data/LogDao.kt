@@ -13,6 +13,18 @@ import kotlinx.serialization.json.Json
 private val LOG_RETENTION = 5000
 
 /**
+ * 单条堆栈的字符上限。
+ *
+ * 按**行数**保留 5000 条对纯文本日志够用，但这条日志带堆栈：本机实测 5000 行里
+ * `message` 只占 0.06 MB、`context` 0.68 MB，而 `stack_trace` 独占 8.15 MB（约 90%），
+ * 单条最长 4 KB。也就是说「留 5000 条」实际等于「留最多 20 MB 堆栈」。
+ *
+ * 堆栈的价值在前十几帧（谁抛的、谁调的），后面基本是框架递归和重复的 Caused by。
+ * 截到 2000 字符仍能定位问题，同时把最坏情况压到 5000 × 2000 ≈ 10 MB 字符量级以内。
+ */
+private const val MAX_STACK_TRACE_CHARS = 2000
+
+/**
  * 写一条日志入库；context 以 JSON 存，读回时再还原成 Map。裁剪在同一次写事务里做，避免额外一趟。
  *
  * 返回 rowid，给 [bumpLogRepeat] 用 —— 同类日志在合并窗口里不再插新行，
@@ -20,12 +32,17 @@ private val LOG_RETENTION = 5000
  */
 fun Database.insertLog(entry: LogEntry, ts: Long): Long = write { db ->
     val ctx = if (entry.context.isEmpty()) null else runCatching { Json.encodeToString(entry.context) }.getOrNull()
+    // 堆栈只留前面一段：完整堆栈的尾部是框架递归与重复的 Caused by，对定位没有增量信息。
+    val stack = entry.stackTrace?.takeIf { it.isNotBlank() }?.let { raw ->
+        if (raw.length <= MAX_STACK_TRACE_CHARS) raw
+        else raw.take(MAX_STACK_TRACE_CHARS) + "\n…（已截断，原文 ${raw.length} 字符）"
+    }
     db.prepareStatement(
         "insert into log_entry(ts,category,level,message,context,stack_trace,repeat_count) values(?,?,?,?,?,?,?)",
         java.sql.Statement.RETURN_GENERATED_KEYS,
     ).use {
         it.setLong(1, ts); it.setString(2, entry.category); it.setString(3, entry.level); it.setString(4, entry.message)
-        it.setString(5, ctx); it.setString(6, entry.stackTrace); it.setInt(7, entry.count.coerceAtLeast(1))
+        it.setString(5, ctx); it.setString(6, stack); it.setInt(7, entry.count.coerceAtLeast(1))
         it.executeUpdate()
         it.generatedKeys.use { keys -> if (keys.next()) keys.getLong(1) else 0L }
     }.also {
