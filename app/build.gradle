@@ -188,13 +188,13 @@ processResources {
 }
 
 dependencies {
-    implementation "io.ktor:ktor-server-cio:3.4.3"
-    implementation "io.ktor:ktor-server-core:3.4.3"
-    implementation "io.ktor:ktor-server-content-negotiation:3.4.3"
-    implementation "io.ktor:ktor-serialization-kotlinx-json:3.4.3"
-    implementation "io.ktor:ktor-server-sessions:3.4.3"
-    implementation "io.ktor:ktor-server-websockets:3.4.3"
-    implementation "io.ktor:ktor-server-status-pages:3.4.3"
+    implementation "io.ktor:ktor-server-cio:3.6.0"
+    implementation "io.ktor:ktor-server-core:3.6.0"
+    implementation "io.ktor:ktor-server-content-negotiation:3.6.0"
+    implementation "io.ktor:ktor-serialization-kotlinx-json:3.6.0"
+    implementation "io.ktor:ktor-server-sessions:3.6.0"
+    implementation "io.ktor:ktor-server-websockets:3.6.0"
+    implementation "io.ktor:ktor-server-status-pages:3.6.0"
     implementation "org.xerial:sqlite-jdbc:3.49.1.0"
     implementation "org.jsoup:jsoup:1.18.3"
     // 规则引擎的 @xpath 方言支持（与 Legado 同款 xpath-on-jsoup），本地已有缓存版本 2.5.1
@@ -202,8 +202,8 @@ dependencies {
     implementation "com.jayway.jsonpath:json-path:2.9.0"
     implementation "org.mozilla:rhino:1.8.0"
     implementation "org.slf4j:slf4j-simple:2.0.16"
-    testImplementation "io.ktor:ktor-server-test-host:3.4.3"
-    testImplementation "io.ktor:ktor-client-content-negotiation:3.4.3"
+    testImplementation "io.ktor:ktor-server-test-host:3.6.0"
+    testImplementation "io.ktor:ktor-client-content-negotiation:3.6.0"
     testImplementation libs.junit
 }
 
