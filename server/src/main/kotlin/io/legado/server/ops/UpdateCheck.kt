@@ -78,6 +78,53 @@ object UpdateCheck {
         return false
     }
 
+    /**
+     * 从 `/releases` 的 JSON 原文里挑出"最新版本发布"与"最新滚动构建"。
+     *
+     * **抽成独立函数是为了可测**：原来这段逻辑埋在 `check()` 里，而 `check()` 里硬编码了
+     * GitHub 地址、`client` 又是 `private val` —— 没法注入假响应，于是这 35 行
+     * （整个"哪个算新版本"的判定）长期零覆盖。
+     *
+     * 它的判定规则是这块最容易错的地方，值得单独钉住：
+     * - **草稿跳过**（`draft: true` 不是发布）；
+     * - **空 tag 跳过**；
+     * - 标签形如 `v1.2.3` → 版本号发布，用 [isNewer] 取最大的那个；
+     * - 标签不是版本号（如 `latest`）→ 滚动构建，按 `published_at` 取最新的，
+     *   **不硬判新旧**（本机只知道自己版本号，不知道自己的构建时间）。
+     *
+     * @return `null` 表示"一条可用的发布都没有"（调用方回 `not_found`）
+     */
+    internal fun parseReleases(body: String): Releases? {
+        val releases = runCatching { json.parseToJsonElement(body).jsonArray }.getOrNull() ?: return null
+        var bestVersioned: Map<String, String>? = null
+        var rolling: Map<String, String>? = null
+        for (element in releases) {
+            val obj = runCatching { element.jsonObject }.getOrNull() ?: continue
+            if (obj["draft"]?.jsonPrimitive?.content == "true") continue
+            val tag = obj["tag_name"]?.jsonPrimitive?.content?.trim().orEmpty()
+            if (tag.isBlank()) continue
+            val info = mapOf(
+                "tag" to tag,
+                "url" to (obj["html_url"]?.jsonPrimitive?.content.orEmpty()),
+                "publishedAt" to (obj["published_at"]?.jsonPrimitive?.content.orEmpty()),
+            )
+            if (versionTag.matches(tag)) {
+                if (bestVersioned == null || isNewer(tag, bestVersioned["tag"].orEmpty())) bestVersioned = info
+            } else {
+                // 滚动构建：按发布时间取最新的一条（通常就是 `latest`）
+                if (rolling == null || info["publishedAt"].orEmpty() > rolling["publishedAt"].orEmpty()) rolling = info
+            }
+        }
+        if (bestVersioned == null && rolling == null) return null
+        return Releases(bestVersioned = bestVersioned, rolling = rolling)
+    }
+
+    /** [parseReleases] 的结果：两类发布各自取最优的那条。 */
+    internal data class Releases(
+        val bestVersioned: Map<String, String>?,
+        val rolling: Map<String, String>?,
+    )
+
     fun check(current: String): UpdateCheckResult {
         if (repository.isBlank()) {
             return UpdateCheckResult(current, repository = "", status = "not_configured",
@@ -96,30 +143,11 @@ object UpdateCheck {
                 return UpdateCheckResult(current, repository = repository, status = "not_found",
                     message = "发布页返回 ${response.statusCode()}（这个仓库可能还没有发过版本）")
             }
-            val releases = json.parseToJsonElement(response.body()).jsonArray
-            var bestVersioned: Map<String, String>? = null
-            var rolling: Map<String, String>? = null
-            for (element in releases) {
-                val obj = element.jsonObject
-                if (obj["draft"]?.jsonPrimitive?.content == "true") continue
-                val tag = obj["tag_name"]?.jsonPrimitive?.content?.trim().orEmpty()
-                if (tag.isBlank()) continue
-                val info = mapOf(
-                    "tag" to tag,
-                    "url" to (obj["html_url"]?.jsonPrimitive?.content.orEmpty()),
-                    "publishedAt" to (obj["published_at"]?.jsonPrimitive?.content.orEmpty()),
-                )
-                if (versionTag.matches(tag)) {
-                    if (bestVersioned == null || isNewer(tag, bestVersioned["tag"].orEmpty())) bestVersioned = info
-                } else {
-                    // 滚动构建：按发布时间取最新的一条（通常就是 `latest`）
-                    if (rolling == null || info["publishedAt"].orEmpty() > rolling["publishedAt"].orEmpty()) rolling = info
-                }
-            }
-            if (bestVersioned == null && rolling == null) {
-                return UpdateCheckResult(current, repository = repository, status = "not_found",
+            val parsed = parseReleases(response.body())
+                ?: return UpdateCheckResult(current, repository = repository, status = "not_found",
                     message = "这个仓库还没有发过版本")
-            }
+            val bestVersioned = parsed.bestVersioned
+            val rolling = parsed.rolling
             val bestTag = bestVersioned?.get("tag").orEmpty()
             UpdateCheckResult(
                 current = current,

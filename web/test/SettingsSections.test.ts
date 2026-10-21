@@ -1,0 +1,142 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  buildSettingsSections,
+  filterSettingsSections,
+  type SettingsActions,
+  type SettingsSection,
+} from '../src/settings/settingsSections.ts'
+
+/**
+ * 「设置」分区表的**行为**判据。
+ *
+ * 现有 `SettingsPage.test.ts` 只读源码字符串（正则匹配 `main.tsx` 里有没有接上动作），
+ * 那能证明"接线没断"，但**从没真正调用过** `buildSettingsSections` —— 于是这个文件
+ * 长期只有 32% 行覆盖，主体（33-134 行）一行都没执行过。
+ *
+ * 这一份补上"真的调一次"：给一套假的 actions，看它产出什么。
+ * 判的是**结构不变量**（不是逐字文案，否则改一句话就红）：
+ * - 分组不空、每行都有 title/hint/action/onClick；
+ * - 每个动作都被真的接到对应行上（点下去调到的是那个回调，不是死按钮）；
+ * - 分区顺序稳定（用户靠位置记东西）。
+ */
+
+/** 一套会记录调用的假动作。 */
+function fakeActions(): { actions: SettingsActions; called: string[] } {
+  const called: string[] = []
+  const make = (name: string) => () => { called.push(name) }
+  const actions: SettingsActions = {
+    openShortcuts: make('openShortcuts'),
+    openOfflineCache: make('openOfflineCache'),
+    openCustomize: make('openCustomize'),
+    openReplaceRules: make('openReplaceRules'),
+    openTocRules: make('openTocRules'),
+    openBackup: make('openBackup'),
+    openLogs: make('openLogs'),
+    openServerPort: make('openServerPort'),
+    openAiConnections: make('openAiConnections'),
+    openPlugins: make('openPlugins'),
+    openLab: make('openLab'),
+  }
+  return { actions, called }
+}
+
+const allRows = (sections: SettingsSection[]) => sections.flatMap(s => s.rows)
+
+test('产出非空，且分组顺序稳定（用户靠位置记东西）', () => {
+  const { actions } = fakeActions()
+  const sections = buildSettingsSections(actions)
+  assert.ok(sections.length >= 3, `至少 3 个分组，实际 ${sections.length}`)
+  const titles = sections.map(s => s.title)
+  // 顺序是刻意的：阅读在前（最常用），系统在后（最少用）
+  assert.equal(titles[0], '阅读', `第一组应是「阅读」，实际 ${titles[0]}`)
+  assert.equal(titles[titles.length - 1], '实验室与扩展', `最后一组应是「实验室与扩展」，实际 ${titles[titles.length - 1]}`)
+  // 分组标题不许重复（重复意味着有人顺手加了一组同名的）
+  assert.equal(new Set(titles).size, titles.length, `分组标题重复：${titles}`)
+})
+
+test('每一行都有完整的四件套：标题 / 说明 / 动作名 / 回调', () => {
+  const { actions } = fakeActions()
+  const rows = allRows(buildSettingsSections(actions))
+  assert.ok(rows.length >= 8, `至少 8 行，实际 ${rows.length}`)
+  for (const row of rows) {
+    assert.ok(row.title && row.title.trim().length > 0, `行缺标题：${JSON.stringify(row)}`)
+    assert.ok(row.hint && row.hint.trim().length > 0, `「${row.title}」缺说明`)
+    assert.ok(row.action && row.action.trim().length > 0, `「${row.title}」缺动作名`)
+    assert.equal(typeof row.onClick, 'function', `「${row.title}」的 onClick 不是函数`)
+  }
+})
+
+test('每一行的 onClick 真的调到对应回调（不是死按钮）', () => {
+  const { actions, called } = fakeActions()
+  const rows = allRows(buildSettingsSections(actions))
+
+  // 逐个点一遍：每次点完，"被调用过"的集合应恰好增加一项
+  for (const row of rows) {
+    const before = new Set(called)
+    row.onClick()
+    const added = called.filter(c => !before.has(c))
+    assert.equal(added.length, 1, `点「${row.title}」应恰好触发 1 个动作，实际触发 ${added.length} 个：${added}`)
+  }
+  // 全部点完后，11 个动作每个都被点到过至少一次（没有哪一行是摆设）
+  assert.equal(new Set(called).size, 11, `应有 11 个不同动作被触发，实际 ${new Set(called).size}：${[...new Set(called)]}`)
+})
+
+test('三类入口分开：实验室 / AI 接入 / 插件各自一行，不合并', () => {
+  const { actions } = fakeActions()
+  const rows = allRows(buildSettingsSections(actions))
+  const titles = rows.map(r => r.title)
+  // 用户口径：这三类是三种东西，不该混成一行
+  assert.ok(titles.includes('实验室'), `应有一行「实验室」，实际 ${titles}`)
+  assert.ok(titles.includes('AI 接入'), `应有一行「AI 接入」，实际 ${titles}`)
+  assert.ok(titles.includes('插件'), `应有一行「插件」，实际 ${titles}`)
+})
+
+test('页内搜索：命中留整档，不命中收整档，空查询原样返回', () => {
+  const { actions } = fakeActions()
+  const sections = buildSettingsSections(actions)
+
+  // 空查询 = 原样返回（同一个引用即可，不必深比较）
+  assert.equal(filterSettingsSections(sections, ''), sections, '空查询应原样返回')
+  assert.equal(filterSettingsSections(sections, '   '), sections, '纯空白查询应原样返回')
+
+  // 搜一个必然存在的词：命中的行留着、其它行没了
+  const hit = filterSettingsSections(sections, '快捷键')
+  const hitRows = allRows(hit)
+  assert.ok(hitRows.length > 0, '搜「快捷键」应有结果')
+  assert.ok(hitRows.every(r => (r.title + r.hint).includes('快捷键')),
+    `命中行里混进了不含关键词的行：${hitRows.map(r => r.title)}`)
+
+  // 搜一个必然不存在的词：整档收起来
+  assert.deepEqual(filterSettingsSections(sections, '这个词肯定不存在zzz'), [],
+    '搜不到时应返回空数组（整档收起）')
+})
+
+test('搜索大小写不敏感，且能搜到 hint 里的词', () => {
+  const { actions } = fakeActions()
+  const sections = buildSettingsSections(actions)
+  // 用 hint 里的一个词搜（证明不只搜标题）
+  const byHint = filterSettingsSections(sections, '按键表')
+  assert.ok(allRows(byHint).length > 0, '应能搜到 hint 里的「按键表」')
+  // 大小写：搜 CSS 与 css 结果一致
+  const upper = allRows(filterSettingsSections(sections, 'CSS')).length
+  const lower = allRows(filterSettingsSections(sections, 'css')).length
+  assert.equal(upper, lower, `大小写应不敏感：CSS=${upper} / css=${lower}`)
+})
+
+test('反向对照：把搜索改成"只搜标题"必须被这条判据逮住', () => {
+  const { actions } = fakeActions()
+  const sections = buildSettingsSections(actions)
+  // 找一个只出现在 hint、不出现在任何 title 里的词
+  const titles = new Set(allRows(sections).map(r => r.title))
+  const rows = allRows(sections)
+  const hintOnly = rows
+    .map(r => r.hint)
+    .flatMap(h => h.match(/[\u4e00-\u9fa5]{2,4}/g) ?? [])
+    .find(word => ![...titles].some(t => t.includes(word)) && rows.some(r => r.hint.includes(word)))
+  assert.ok(hintOnly, '找不到只出现在 hint 里的词 —— 这条反向对照失去意义，应换一个词')
+
+  const hit = filterSettingsSections(sections, hintOnly)
+  assert.ok(allRows(hit).length > 0,
+    `「${hintOnly}」只出现在 hint 里，若搜索只看标题这里就会是空 —— 说明搜索范围退化了`)
+})
