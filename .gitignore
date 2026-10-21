@@ -42,6 +42,8 @@ tools/verify/out/
 .worktrees/
 coverage/
 web/coverage/
+# 覆盖率总报告（scripts/coverage-report.mjs 生成，可随时重跑，不入库）
+/coverage-report/
 
 
 .pptr-profile/

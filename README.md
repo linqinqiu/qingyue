@@ -243,6 +243,7 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 | **反代书源**（自有中转服务访问目标站） | [docs/reverse-proxy-source-guide.md](docs/reverse-proxy-source-guide.md) |
 | 前端命名与文件组织规范 | [docs/frontend-conventions.md](docs/frontend-conventions.md) |
 | 门禁怎么跑、CI 里跑哪些 | [docs/gates-guide.md](docs/gates-guide.md) |
+| **覆盖率怎么看、先补哪里** | [docs/coverage-guide.md](docs/coverage-guide.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
 
 
@@ -253,6 +254,8 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 npm --prefix web test              # 前端：静态判据 + 组件渲染，一条命令跑全部
 node tools/verify/selfcheck.mjs    # 对着跑着的服务过一遍：搜索 → 详情 → 目录 → 正文 → 净化
 ```
+
+覆盖率一条命令出总报告：`npm run coverage`（前端 c8 + 后端 JaCoCo 合并），见 [`docs/coverage-guide.md`](docs/coverage-guide.md)。
 
 `tools/verify/` 下还有按功能划分的门禁（`toc-rule-check`、`source-health-check`、`shelf-layout-check`、`reader-flow-check`、`version-check` 等），都是开真浏览器量，不打桩。判据口径以 `web/test/` 与 `tools/verify/` 的现有实现为准。
 

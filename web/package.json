@@ -19,6 +19,7 @@
     "check": "tsc -b --pretty false",
     "check:test": "tsc -p tsconfig.test.json --pretty false",
     "test": "tsx test/run-all.ts",
+    "test:coverage": "c8 --reporter=text --reporter=text-summary --reporter=html --reporter=lcov --reporter=json-summary --include='src/**/*.ts' --include='src/**/*.tsx' --exclude='src/**/*.d.ts' --exclude='src/reader/dict/**' --all=false tsx test/run-all.ts",
     "test:e2e": "tsx test/e2e-browser-stress.ts"
   },
   "dependencies": {
