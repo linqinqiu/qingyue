@@ -98,7 +98,16 @@ class SubscriptionService(private val database: Database, private val log: (Stri
         throw IllegalArgumentException("订阅重定向次数超过限制")
     }
 
-    private fun parseSources(body: String): List<String> {
+    /**
+     * 解析订阅源内容。
+     *
+     * 订阅地址吐出来的形状很不统一：裸数组、`{data:[…]}`、`{sources:[…]}`、
+     * `{bookSources:[…]}`、`{list:[…]}` 都见过。这里全认，并把每个元素**原样序列化**
+     * 成字符串（下游按字符串存库，不在这里重新建模 —— 认不出的字段才不会丢）。
+     *
+     * 抽成 internal 是为了可测：这五种形状的判定是最容易漏的地方。
+     */
+    internal fun parseSources(body: String): List<String> {
         val cleanBody = body.trim().removePrefix("\uFEFF")
         val element = try { Json.parseToJsonElement(cleanBody) } catch (_: Exception) { throw IllegalArgumentException("订阅内容不是有效 JSON") }
         val values = when (element) {
