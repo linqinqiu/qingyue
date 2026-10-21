@@ -362,6 +362,22 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
   }
 
+  /**
+   * 阅读器是否还挂着。`syncCacheStatus` 是 async，且被 1.2s 轮询反复调用：
+   * 用户关掉阅读器时在途那一趟回来，原本照样 setCachedChapterUrls / setShelfTocRule /
+   * setCacheStatus，还会把「离线缓存完成」的 toast 弹到已经关掉的界面上（那次请求可能
+   * 挂了十几秒——正是大书缓存到尾声的时刻）。同文件里 :498 / :1093 / :1146 用局部
+   * `alive` 变量的写法对付同一类问题，这里因为要跨两个 effect 共享，改用 ref。
+   */
+  const syncCacheAliveRef = useRef(false)
+  useEffect(() => {
+    syncCacheAliveRef.current = true
+    return () => { syncCacheAliveRef.current = false }
+  }, [])
+  /** cacheStatus.state 的镜像：给 syncCacheStatus 判"上一轮是不是 caching"用，不参与依赖。 */
+  const cacheStateRef = useRef(cacheStatus.state)
+  cacheStateRef.current = cacheStatus.state
+
   // Sync cache status with bookshelf and local IndexedDB
   const syncCacheStatus = useCallback(async () => {
     try {
@@ -370,6 +386,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         api.getCachedChapters(currentBook.details.sourceId, currentBook.bookUrl).catch(() => null),
         getOfflineChaptersSet(currentBook.details.sourceId, currentBook.bookUrl).catch(() => new Set<string>()),
       ])
+
+      // 三个 await 都回来了才知道阅读器还在不在：期间可能已经关掉或换了书。
+      if (!syncCacheAliveRef.current) return
 
       const mergedSet = new Set<string>(localOfflineSet)
       if (cachedUrlsRes?.cachedChapterUrls) {
@@ -384,19 +403,25 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       setShelfTocRule(item?.tocRule ?? null)
       if (item) {
         setInShelf(true)
-        setCacheStatus(prev => {
-          // If state changed to ready or failed, show notification
-          if (prev.state === 'caching' && item.cacheState === 'ready') {
-            toast.success(`《${bookName}》离线缓存完成（共 ${item.cachedChapters} 章）`)
-          } else if (prev.state === 'caching' && item.cacheState === 'failed') {
-            toast.warning(`《${bookName}》缓存中断：${item.cacheError || '部分章节未下载'}`)
-          }
-          return {
-            state: item.cacheState,
-            cached: Math.max(item.cachedChapters, mergedSet.size),
-            total: item.totalChapters || currentBook.chapters.length,
-            error: item.cacheError,
-          }
+        // 「缓存完成 / 中断」只在**从 caching 变成终态**那一趟报一次。
+        // 以前这条 toast 写在 setCacheStatus 的 updater 里 —— updater 必须纯，
+        // React 可能重复调用它（并发渲染下重复弹 toast），而且它挡不住"界面已关"。
+        // 判据读 ref 而不是 cacheStatus.state：把 state 写进 useCallback 依赖会让这个
+        // 回调每次状态变化就换一个身份，从而把下面两个 effect 反复重置（轮询永远重头计时）。
+        //
+        // 判完立刻把 ref 推到新状态：这个函数可能重叠执行（3s 一拍，而一次要拉整份书架，
+        // 慢的时候上一拍还没回来），两拍都读到 caching 就会各弹一次。
+        if (cacheStateRef.current === 'caching' && item.cacheState === 'ready') {
+          toast.success(`《${bookName}》离线缓存完成（共 ${item.cachedChapters} 章）`)
+        } else if (cacheStateRef.current === 'caching' && item.cacheState === 'failed') {
+          toast.warning(`《${bookName}》缓存中断：${item.cacheError || '部分章节未下载'}`)
+        }
+        cacheStateRef.current = item.cacheState
+        setCacheStatus({
+          state: item.cacheState,
+          cached: Math.max(item.cachedChapters, mergedSet.size),
+          total: item.totalChapters || currentBook.chapters.length,
+          error: item.cacheError,
         })
       } else {
         setInShelf(false)
@@ -412,7 +437,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
 
   useEffect(() => {
     if (cacheStatus.state !== 'caching') return
-    const timer = window.setInterval(syncCacheStatus, 1200)
+    // 1200ms → 3000ms：每一拍都要 api.bookshelf() 拉整份书架（几千本时是 MB 级），
+    // 缓存进度条不需要 1.2s 的精度。卸载时 clearInterval（本 effect 的 cleanup 已覆盖）。
+    const timer = window.setInterval(syncCacheStatus, 3000)
     return () => window.clearInterval(timer)
   }, [cacheStatus.state, syncCacheStatus])
 

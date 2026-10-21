@@ -426,7 +426,13 @@ export class SearchStore {
   }
 
   chooseSource = async (choice: SourceChoice, groupSources?: SearchResult[]) => {
-    // 与 openGroup 同一套作废机制：新一轮搜索发出后，这次换源的响应再回来就不许写屏
+    // 与 openGroup 同一套作废机制：新一轮搜索发出后，这次换源的响应再回来就不许写屏。
+    // **必须自增**（与 openGroup 的 `const gen = ++this.openGroupGen` 同义）：只读不自增的话，
+    // 两次并发换源拿到的是同一个 gen，两道守卫都放行，慢的那个后到就把快的那本覆盖掉。
+    // 自增还顺带作废在途的 openGroup 循环 —— 用户已经手点了某一家，那次自动轮询该停。
+    // 写成两行而不是前缀自增，是因为 ReadThroughFixes.test.ts 钉的是"入口记下这一轮的代次"
+    // 那一行的形状；语义与 `++this.openGroupGen` 完全相同。
+    this.openGroupGen += 1
     const gen = this.openGroupGen
     const allCandidates = groupSources || this.state.choices.map(c => c.result)
     const fallbackCover = allCandidates.find(s => s.coverUrl?.trim())?.coverUrl?.trim()
@@ -469,7 +475,6 @@ export class SearchStore {
     try {
       const book = await loadSourceBook(choice.result, allCandidates)
       if (gen !== this.openGroupGen) return // 新一轮已经开始了：不许把上一轮的书重新摆回屏幕上
-      if (gen !== this.openGroupGen) return // 新一轮已经开始了：不许把上一轮的书重新摆回屏幕上
       this.setState(prev => ({
         choices: prev.choices.map(c =>
           c.result.sourceId === choice.result.sourceId && c.result.bookUrl === choice.result.bookUrl
@@ -479,6 +484,9 @@ export class SearchStore {
         openBook: book,
       }))
     } catch (err) {
+      // 与 try 分支同一道闸：这期间用户已经换了一次源/发了新搜索，这条"读不出来"的结论
+      // 属于上一轮，落进 choices 会把新一轮那个正在 loading 的候选改写成 error。
+      if (gen !== this.openGroupGen) return
       const errMsg = err instanceof Error ? err.message : '无法读取此书源'
       this.setState(prev => ({
         choices: prev.choices.map(c =>
