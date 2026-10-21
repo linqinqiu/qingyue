@@ -53,7 +53,7 @@ npm run coverage:report-only  # 不跑测试，只用现有数据重出报告
 
 | 包 | 行覆盖 | 为什么低 |
 |---|---:|---|
-| `io.legado.server`（根） | 33.3% | `Application.kt` / `DesktopLauncher.kt` 启动装配难单测 |
+| `io.legado`（根） | 33.3% | `Application.kt` / `DesktopLauncher.kt` 启动装配难单测 |
 | `http` | 43.5% | 路由层大量 handler 只在 E2E 里跑，单测没覆盖 |
 | `subscription` | 49.2% | 订阅更新是网络任务，已补到纯逻辑部分 |
 | `tts` | 49.2% | Edge-TTS 要真实 WebSocket 连接 |
@@ -185,7 +185,7 @@ npm run coverage:report-only  # 不跑测试，只用现有数据重出报告
 JaCoCo 会把 Kotlin 的匿名类列成独立类，名字长这样：
 
 ```
-io.legado.server.tts.EdgeTtsService.synthesize.listener.new WebSocket.Listener() {...}
+io.legado.tts.EdgeTtsService.synthesize.listener.new WebSocket.Listener() {...}
 ```
 
 它们没有独立名字、也没法单独写测试。实测前 15 名里 11 个是这种 ——

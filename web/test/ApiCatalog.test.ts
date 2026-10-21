@@ -12,7 +12,7 @@ import path from 'node:path'
  * 判据因此是**双向**的：目录里不许有代码中没有的端点，代码里的书源端点也不许从目录里漏掉。
  */
 const ROOT = path.resolve(import.meta.dirname, '../..')
-const HTTP_DIR = path.join(ROOT, 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http')
+const HTTP_DIR = path.join(ROOT, 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'http')
 const CATALOG = path.join(ROOT, 'server', 'src', 'main', 'resources', 'agent-api.json')
 const DOC = path.join(ROOT, 'docs', 'AI-AGENT.md')
 

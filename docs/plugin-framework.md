@@ -10,7 +10,7 @@
 
 | 半边 | 位置 | 能扩展什么 |
 |---|---|---|
-| 后端插件 | `server/src/main/kotlin/io/legado/server/plugin/` | 工具、**LLM 协议**、工具调用钩子 |
+| 后端插件 | `server/src/main/kotlin/io/legado/plugin/` | 工具、**LLM 协议**、工具调用钩子 |
 | 前端插件 | `web/src/extensions/registry.ts` | 实验室条目、设置分区 |
 
 **目录分层（重要）**：
@@ -34,9 +34,9 @@
 
 | 目录 | 身份 | 是否可含内容 | 路由 |
 |---|---|---|---|
-| `server/src/main/kotlin/io/legado/server/plugin/` | **纯框架容器**：`Plugin` / `PluginManager` / `EventBus` / `AppEvents` | **绝不**含任何业务 | 0 条 |
-| `server/src/main/kotlin/io/legado/server/ai/` | **内置 AI 接入**（类比 `features/`）：默认 provider / 默认工具 / 默认选择器 | 可含**可覆盖**的默认内容 | 0 条 |
-| `server/src/main/kotlin/io/legado/server/http/` | 路由装配点 | 仅装配 | 139 条（唯一的路由来源） |
+| `server/src/main/kotlin/io/legado/plugin/` | **纯框架容器**：`Plugin` / `PluginManager` / `EventBus` / `AppEvents` | **绝不**含任何业务 | 0 条 |
+| `server/src/main/kotlin/io/legado/ai/` | **内置 AI 接入**（类比 `features/`）：默认 provider / 默认工具 / 默认选择器 | 可含**可覆盖**的默认内容 | 0 条 |
+| `server/src/main/kotlin/io/legado/http/` | 路由装配点 | 仅装配 | 139 条（唯一的路由来源） |
 
 要点：
 

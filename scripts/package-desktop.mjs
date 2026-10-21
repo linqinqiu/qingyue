@@ -83,7 +83,7 @@ const jpkgArgs = [
   '--app-version', version,
   '--input', staging,
   '--main-jar', jarName,
-  '--main-class', 'io.legado.server.DesktopLauncherKt',
+  '--main-class', 'io.legado.DesktopLauncherKt',
   '--runtime-image', runtimeDir,
   '--dest', destDir,
   // 编码统一（2026-10-12）：只给 file.encoding 的话，JDK 17 的控制台输出仍落回系统 ANSI（GBK）。

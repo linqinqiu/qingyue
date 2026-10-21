@@ -37,8 +37,8 @@ tasks.register('verifyFramework', Test) {
     // 所以这里**不能**写 useJUnitPlatform / includeTags —— 那会让任务找不到任何用例。
     // 收口靠类过滤：只跑这两个守门类。
     filter {
-        includeTestsMatching 'io.legado.server.PluginFrameworkHasNoContentTest'
-        includeTestsMatching 'io.legado.server.FrameworkContractTest'
+        includeTestsMatching 'io.legado.PluginFrameworkHasNoContentTest'
+        includeTestsMatching 'io.legado.FrameworkContractTest'
     }
 }
 
@@ -130,7 +130,7 @@ application {
     // 嵌套 settings.gradle 删除后（A 档）子项目名回落成 'server'，installDist 产物会漂成
     // install/server/bin/server，容器里既拷不到也起不来（issue #11 修复时发现）。
     applicationName = 'legado-server'
-    mainClass = 'io.legado.server.ApplicationKt'
+    mainClass = 'io.legado.ApplicationKt'
 }
 
 // 普通 jar（installDist / 发行版用它）也要带版本号：BuildInfo 读的是
@@ -138,7 +138,7 @@ application {
 tasks.named('jar', Jar) {
     manifest {
         attributes(
-            'Main-Class': 'io.legado.server.ApplicationKt',
+            'Main-Class': 'io.legado.ApplicationKt',
             'Implementation-Title': 'Legado Server',
             'Implementation-Version': project.version
         )
@@ -159,7 +159,7 @@ tasks.register('fatJar', Jar) {
     }
     manifest {
         attributes(
-            'Main-Class': 'io.legado.server.ApplicationKt',
+            'Main-Class': 'io.legado.ApplicationKt',
             'Implementation-Title': 'Legado Server',
             'Implementation-Version': project.version
         )

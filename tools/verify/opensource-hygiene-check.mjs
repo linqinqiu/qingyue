@@ -133,7 +133,7 @@ for (const rule of rules) {
 // 而不是要求整串出现 —— 否则 `/api/backup/import` 这种明明存在的端点会被判成悬空。
 //
 // 2026-10-11 修：这里原来是 `readdirSync` **只读一层**，而后端在 e982890 拆过包
-// （`Routes.kt` 从 `io/legado/server/` 挪进了 `io/legado/server/http/`），
+// （`Routes.kt` 从 `io/legado/` 挪进了 `io/legado/http/`），
 // 于是这个函数读到的一串全是目录名、`read()` 全抛、拼出来基本是空串 ——
 // 端点这条断言从那次重构起就**一直是瞎的**，它现在报"悬空"纯粹是因为看不清。
 // 改成递归走整棵 kotlin 树。

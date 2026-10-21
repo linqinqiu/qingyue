@@ -25,7 +25,7 @@
 ## 1. 包结构
 
 ```
-server/src/main/kotlin/io/legado/server/ai/
+server/src/main/kotlin/io/legado/ai/
 ├── AgentContext.kt   // 把服务装进一个"连接"对象，作为所有工具的共享环境
 ├── Agent.kt          // 编排：能力清单 / 执行单工具 / 规划 / LLM 钩子占位
 ├── AgentCatalog.kt   // 读 agent-api.json，生成给 AI 看的能力说明
@@ -221,7 +221,7 @@ val conn = AgentModule.connect(database, runner, coverCache, subscriptions, regi
 ### 验证（已在 server/src/test）
 
 - `AgentFrameworkTest.kt`（5 例）、`AgentConnectionTest.kt`（5 例）覆盖读/写/护栏/能力面。
-- 运行：`$env:GRADLE_OPTS='-Xmx1g -Xms256m'; .\gradlew.bat :server:test --tests "io.legado.server.AgentConnectionTest"`
+- 运行：`$env:GRADLE_OPTS='-Xmx1g -Xms256m'; .\gradlew.bat :server:test --tests "io.legado.AgentConnectionTest"`
 
 1. **单元测试**：在 `server/src/test` 里构造 `Agent` 跑端到端断言（改源 → 读回 → 校验）。（旧式入口，已被 AgentConnection 取代）
 2. **`main` 守卫调试入口**：在启动代码里用 `if (System.getProperty("ai.debug") != null)` 包住一段

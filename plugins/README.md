@@ -1,12 +1,12 @@
 # plugins/ —— 外部插件目录
 
-把实现了 `io.legado.server.plugin.Plugin` 的 jar 放进这里，青阅启动时可以扫描装载。
+把实现了 `io.legado.plugin.Plugin` 的 jar 放进这里，青阅启动时可以扫描装载。
 **本目录默认是空的**：框架不含任何插件，装什么完全由你决定。
 
 ## 一个插件 jar 需要什么
 
 1. 实现 `Plugin` 接口（见 `docs/plugin-framework.md`）
-2. 在 jar 里放 `META-INF/services/io.legado.server.plugin.Plugin`，
+2. 在 jar 里放 `META-INF/services/io.legado.plugin.Plugin`，
    内容是实现类的全限定名（一行一个）：
 
 ```

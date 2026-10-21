@@ -21,11 +21,11 @@
 ```kotlin
 package com.example
 
-import io.legado.server.ai.AgentResult
-import io.legado.server.ai.Tool
-import io.legado.server.ai.ToolMeta
-import io.legado.server.plugin.Plugin
-import io.legado.server.plugin.PluginMetadata
+import io.legado.ai.AgentResult
+import io.legado.ai.Tool
+import io.legado.ai.ToolMeta
+import io.legado.plugin.Plugin
+import io.legado.plugin.PluginMetadata
 
 class HelloPlugin : Plugin {
     override val metadata = PluginMetadata(
@@ -49,8 +49,8 @@ class HelloPlugin : Plugin {
 ```kotlin
 package com.example
 
-import io.legado.server.ai.*
-import io.legado.server.plugin.*
+import io.legado.ai.*
+import io.legado.plugin.*
 
 class BookshelfStatsPlugin : Plugin {
 
@@ -184,7 +184,7 @@ dependencies {
 ### 6.2 声明服务
 
 在 `src/main/resources/META-INF/services/` 下建文件
-`io.legado.server.plugin.Plugin`，内容是实现类全限定名：
+`io.legado.plugin.Plugin`，内容是实现类全限定名：
 
 ```
 com.example.BookshelfStatsPlugin
@@ -237,7 +237,7 @@ curl -s http://127.0.0.1:1234/api/plugins | jq
 
 ## 9. 完整参考
 
-- 接口定义：`server/src/main/kotlin/io/legado/server/plugin/Plugin.kt`
+- 接口定义：`server/src/main/kotlin/io/legado/plugin/Plugin.kt`
 - 框架实现：`plugin/PluginManager.kt`、`ai/ToolRegistry.kt`
 - 判据：`PluginFrameworkTest`、`PluginFrameworkHasNoContentTest`、`FrameworkContractTest`
 - AI 侧怎么用这些工具：`docs/agent-guide.md`

@@ -24,7 +24,7 @@
 | 主键是**剥掉 `#` / `##` 注解后的域名**；带注解导入与不带注解导入落到同一条记录 | `source/SourceCodec.kt` 的 `normalizeSourceId`，前端同口径 `web/src/sources/bookSourceFields.ts` + `SourceEditorPanel.tsx` 的 `declaredSourceId` |
 | **UTF-8 BOM 要先剥**，否则整份 JSON 解析失败 | `source/SourceCodec.kt` 的 `parse()` / `parseRss()`（`removePrefix("\uFEFF")`） |
 | 外层包装认 `data` / `sources` / `bookSources` / 裸数组四种；单条坏 JSON 退到逐行解析 | `web/src/sources/sourceImport.ts`（前端侧），服务端另有一条同口径路径 |
-| 一个源能存能改，靠的是**原样存 payload**而不是重新序列化模型 —— 未识别字段不会因为"我们没有这个属性"而丢 | `server/src/main/kotlin/io/legado/server/data/Database.kt` 的 `source` 表存 `payload`；编辑走 `SourceCodec` |
+| 一个源能存能改，靠的是**原样存 payload**而不是重新序列化模型 —— 未识别字段不会因为"我们没有这个属性"而丢 | `server/src/main/kotlin/io/legado/data/Database.kt` 的 `source` 表存 `payload`；编辑走 `SourceCodec` |
 
 ## 3. 执行期支持哪些规则写法
 
@@ -89,7 +89,7 @@
 # ① 某个字段服务端到底读不读
 git grep -rn "<字段名>" server/src/main/kotlin | wc -l
 # ② 体检档位是怎么定的（不发请求就定档的那一段）
-grep -n "explore_only\|no_search" server/src/main/kotlin/io/legado/server/source/SourceHealth.kt
+grep -n "explore_only\|no_search" server/src/main/kotlin/io/legado/source/SourceHealth.kt
 # ③ 前端判据（本文每条差异都有对应测试）
 npx tsx web/test/run-all.ts
 ```

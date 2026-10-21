@@ -89,7 +89,7 @@ test('仓库 CHANGELOG 能解析，且最新一条就是当前版本号', () => 
 
 /** 接口层：读不到就 404，绝不能 200 + 空文本（前端会把"包里没有"念成"没有更新"）。 */
 test('服务端 /changelog 读不到时报 404，不报"空日志"', () => {
-  const routes = read('..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'server', 'http', 'Routes.kt')
+  const routes = read('..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'http', 'Routes.kt')
   assert.match(routes, /get\("\/changelog"\)/, '要有 GET /api/changelog 这一条路由')
   assert.match(routes, /meta\/changelog\.md/, '它读的是随包的 meta/changelog.md（打进 jar 才谈得上"随包"）')
   assert.match(routes, /changelog_missing/, '读不到时给一个明确的错误码')

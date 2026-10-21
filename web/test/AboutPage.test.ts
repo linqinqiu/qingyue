@@ -47,14 +47,14 @@ test('版本与仓库都来自服务端，界面不写死', () => {
 
 test('检查更新是点了才打，且地址不接受用户输入', () => {
   assert.match(read('../src/lib/api.ts'), /checkUpdate: \(\) => request<UpdateCheckResult>\('\/api\/about\/update-check', \{ method: 'POST' \}\)/)
-  const server = read('../../server/src/main/kotlin/io/legado/server/ops/UpdateCheck.kt')
+  const server = read('../../server/src/main/kotlin/io/legado/ops/UpdateCheck.kt')
   assert.match(server, /System\.getenv\("LEGADO_REPO"\)/, '仓库 slug 只有一个可覆盖的来源')
   assert.doesNotMatch(server, /call\.request\.queryParameters/, '检查更新不许从请求参数里拼 URL —— 那是开在本机上的 SSRF 门')
   assert.match(server, /connectTimeout/, '外网请求必须有超时，不然「检查更新」能把页面钉死')
   // 要列发布列表，不能只取 /releases/latest：CI 每推一次 main 就把滚动构建发成标签 `latest`，
   // `/releases/latest` 于是永远返回 `tag_name="latest"`，版本比较把它当"有新版本"（用户 2026-10-11）。
   assert.match(server, /releases\?per_page/, '要列全部发布，从里面分出「版本号发布」与「滚动构建」')
-  assert.match(read('../../server/src/main/kotlin/io/legado/server/http/Routes.kt'), /post\("\/about\/update-check"\)[\s\S]*?requireSameOriginWrite/)
+  assert.match(read('../../server/src/main/kotlin/io/legado/http/Routes.kt'), /post\("\/about\/update-check"\)[\s\S]*?requireSameOriginWrite/)
 })
 
 test('许可那一栏说的是真话：运行时依赖与协议都列出来', () => {
@@ -83,7 +83,7 @@ test('开发者那一格不许兜底成别人的仓库，也不把配置项说�
   assert.doesNotMatch(shown, /lukelzlz/)
   // 界面上不该出现 LEGADO_REPO 这种开发者配置项（用户 2026-10-11「检查更新不当」）
   assert.doesNotMatch(shown, /LEGADO_REPO/)
-  const server = withoutComments(read('../../server/src/main/kotlin/io/legado/server/ops/UpdateCheck.kt'))
+  const server = withoutComments(read('../../server/src/main/kotlin/io/legado/ops/UpdateCheck.kt'))
   assert.doesNotMatch(server, /lukelzlz\/legado-server/)
   // 默认回本项目自己的仓库 —— 于是「检查更新」出厂就能用，不再永远回 not_configured
   assert.match(server, /DEFAULT_REPOSITORY\s*=\s*"linqinqiu\/qingyue"/)

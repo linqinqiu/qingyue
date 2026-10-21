@@ -10,8 +10,8 @@
 
 这组接口**不再另写一份 AI 逻辑**，全部收口到进程内的网关对象：
 
-- `io.legado.server.ai.AgentConnection` —— **网关句柄**（用户说的「我的网关」）。它不额外开端口、不注册任何 HTTP 路由，纯进程内。
-- `io.legado.server.ai.Agent` —— 网关的实现：能力清单（`manifest`）、外呼切换（`comprehend`）、工具分发（`call`）都在这里。
+- `io.legado.ai.AgentConnection` —— **网关句柄**（用户说的「我的网关」）。它不额外开端口、不注册任何 HTTP 路由，纯进程内。
+- `io.legado.ai.Agent` —— 网关的实现：能力清单（`manifest`）、外呼切换（`comprehend`）、工具分发（`call`）都在这里。
 - `AgentRoutes.kt` 里的 `agentManifest` / `agentComprehend` 等**只是薄收口**：解析 HTTP 入参 → 委派 `agentConnection.` 上的对应方法 → 把 `AgentResult` / `ComprehendOutcome` 包成 HTTP 响应。**任何外部模型切换、超时、失败语义都不在 HTTP 层，只在 `Agent` 里**。
 
 所以「更新网关」= 改 `Agent` / `AgentConnection`；`/api/agent/*` 的路由只负责把请求转发过去，保持路由登记与 agent-api.json 数量一致即可（见 §6）。
@@ -196,7 +196,7 @@ BuildInfo::class.java.`package`?.implementationVersion?.takeIf { it.isNotBlank()
 tasks.named('jar', Jar) {
     manifest {
         attributes(
-            'Main-Class': 'io.legado.server.ApplicationKt',
+            'Main-Class': 'io.legado.ApplicationKt',
             'Implementation-Title': 'Legado Server',
             'Implementation-Version': project.version
         )
@@ -224,7 +224,7 @@ qingyue-dist-v0.8.2/
 - `jlink --add-modules java.base,java.logging,java.net.http,java.sql,java.naming,java.management,java.security.jgss,java.desktop,java.xml,jdk.crypto.ec,jdk.unsupported,jdk.zipfs,jdk.localedata,java.instrument,jdk.management --strip-debug --no-header-files --no-man-pages --compress=2 --include-locales=en,zh`
   - ⚠️ JDK17 **不支持** `--compress=zip-6`（JDK21+ 才有），只能用 `--compress=2`。
 - `data` 用 junction 指向真实库，避免复制 216MB，也避免"数据全没了"的错觉；要独立可拷走的版本就把 junction 换成真实目录 + 复制 `legado.sqlite`。
-- 启动命令：`runtime\bin\java.exe -Dfile.encoding=UTF-8 -cp "app\lib\*" io.legado.server.ApplicationKt`
+- 启动命令：`runtime\bin\java.exe -Dfile.encoding=UTF-8 -cp "app\lib\*" io.legado.ApplicationKt`
 - PowerShell 里传 `-Dfile.encoding=UTF-8` 必须加引号（`'-Dfile.encoding=UTF-8'`），否则会被按 `.` 拆开报 `ClassNotFoundException: /encoding=UTF-8`。
 
 已实测（端口 1235 独立实例，验证完已关闭）：`/healthz` → `version:"0.8.2"`；`/api/sources` → 5574 条；SPA 正常；`/api/agent/connections` 含 mock-gpt；`/api/agent/chat` → `engine:"external:mock-gpt"`；`/agent.html` → 404。

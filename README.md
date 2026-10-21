@@ -191,7 +191,7 @@ cd web && npm install && npm run dev     # 前端开发服务器（热重载）
 
 ```text
 server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
-  src/main/kotlin/io/legado/server/
+  src/main/kotlin/io/legado/
     Application.kt          启动入口与 Ktor 特性装配
     ServerConfig.kt · AppConfig.kt   环境变量到默认值
     StaticWeb.kt            界面静态资源挂载（同端口的 `/` 与 `/next`）

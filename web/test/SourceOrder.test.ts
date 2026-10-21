@@ -22,7 +22,7 @@ test('顺序只有一个来源：服务端排，客户端只做原位回填', ()
   assert.match(main, /if \(!rank\.has\(item\.id\)\) return item/, '没在这一列里的源保持原位，不跟着重排')
   assert.match(main, /items: visibleSources,\s*\n\s*onReorder: applySourceOrder/, '拖的是屏幕上这一列，写的也是这一列')
   // 0.8.2 DAO 拆组：这条 SQL 住在 SourcesDao.kt（Database.kt 只剩连接/建表/迁移）
-  const server = read('../../server/src/main/kotlin/io/legado/server/data/SourcesDao.kt')
+  const server = read('../../server/src/main/kotlin/io/legado/data/SourcesDao.kt')
   assert.match(server, /order by sort_order is null, sort_order, name collate nocase/,
     '排过序的在前、没排过的按名称跟在后面（全 NULL 时等价于原来的按名称排）')
 })
@@ -47,7 +47,7 @@ test('有位置才给"清除自定义顺序"，并且说的是条数', () => {
 
 test('路由注册在 /sources/{id} 之前，PUT /sources/order 不会被当成某个源', () => {
   // 0.8.2 拆组：order 与 {id} 两条同住 SourcesRoutes.kt，先后关系仍然当场可证
-  const routes = read('../../server/src/main/kotlin/io/legado/server/http/SourcesRoutes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/http/SourcesRoutes.kt')
   const order = routes.indexOf('put("/sources/order")')
   const parameterized = routes.indexOf('route("/sources/{id}")')
   assert.ok(order > 0, '要有这条路由')

@@ -56,7 +56,7 @@ test('默认规则长在书架的导入动作旁边，不在「自定义」里',
   const backup = read('../src/pages/BackupPage.tsx')
   assert.match(backup, /api\.applyTocRulesFromBackup\(\)/, '备份页对这条有真的套用动作')
   assert.match(backup, /TXT 分章规则/, '「原样收下的条目」清单里说得出它能套用')
-  const store = read('../../server/src/main/kotlin/io/legado/server/backup/BackupStore.kt')
+  const store = read('../../server/src/main/kotlin/io/legado/backup/BackupStore.kt')
   assert.match(store, /APPLYABLE_NAMES = listOf\([^)]*"txtTocRule\.json"/, '服务端也把这条标成可套用（界面上的按钮按它出现）')
 })
 
@@ -93,12 +93,12 @@ test('分章规则可新建可编辑：接口、就地编辑、删除键的可�
   assert.match(api, /removable\?: boolean/, '清单要报得出"这条能不能删"，界面不能猜')
 
   // 0.8.2 拆组：分章规则面住在 TocRulesRoutes.kt
-  const routes = read('../../server/src/main/kotlin/io/legado/server/http/TocRulesRoutes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/http/TocRulesRoutes.kt')
   assert.match(routes, /post\("\/books\/toc-rules\/save"\)/)
   assert.match(routes, /post\("\/books\/toc-rules\/delete"\)/)
   assert.match(routes, /rule_uncompilable/, '编不出来的正则回 400 并说清原因，而不是存进去')
   assert.match(routes, /packaged_rule/, '删随包那条要回一句"删不掉，可以取消勾选"')
-  const model = read('../../server/src/main/kotlin/io/legado/server/localbook/TxtTocRule.kt')
+  const model = read('../../server/src/main/kotlin/io/legado/localbook/TxtTocRule.kt')
   assert.match(model, /fun patternUsable\(pattern: String\): Boolean/, '保存前自己编译一遍，不依赖解析层的静默跳过')
   assert.match(model, /fun removable\(id: Int\): Boolean = all\.any \{ it\.id == id \} && packaged\.none/,
     '可删 = 在表里 且 不是随包那条')
@@ -118,12 +118,12 @@ test('分章规则可新建可编辑：接口、就地编辑、删除键的可�
  * 既看不见也选不了，而界面上根本没有启用开关。
  */
 test('手动可选 与 参与自动打分 是两件事，界面和服务端都按两件事做', () => {
-  const routes = read('../../server/src/main/kotlin/io/legado/server/http/TocRulesRoutes.kt')
+  const routes = read('../../server/src/main/kotlin/io/legado/http/TocRulesRoutes.kt')
   assert.match(routes, /TocRules\.all\.map/, '清单发的是全表，不再是 candidates')
   assert.doesNotMatch(routes, /options = listOf\([\s\S]{0,220}\+ TocRules\.candidates\.map/,
     'candidates 只能用于自动打分，拿它当选择清单就是把 12 条规则藏起来')
   assert.match(routes, /post\("\/books\/toc-rules\/toggle"\)/, '有开关这条规则的入口')
-  const model = read('../../server/src/main/kotlin/io/legado/server/localbook/TxtTocRule.kt')
+  const model = read('../../server/src/main/kotlin/io/legado/localbook/TxtTocRule.kt')
   assert.match(model, /val selectable: List<TxtTocRule> get\(\) = all\.filter \{ compiles\(it\.id\) \}/,
     '可选只看用不用得了，不看 enable')
   assert.match(model, /fun compiles\(id: Int\): Boolean = id == PACKAGED_BUILTIN_ID \|\| compile\(id\) != null/,
