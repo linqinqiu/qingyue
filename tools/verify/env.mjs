@@ -10,6 +10,13 @@ export const OUT = process.env.LEGADO_VERIFY_OUT || path.join(ROOT, 'tools/verif
 export const SHOTS = path.join(OUT, 'shots')
 export const TMP = process.env.LEGADO_VERIFY_TMP || fs.mkdtempSync(path.join(os.tmpdir(), 'legado-'))
 
+// out/ 与 out/shots 在这里统一建好。
+// 此前 17 个门禁脚本会 screenshot({ path: join(SHOTS, ...) }) 却从不 mkdirSync：
+// 本机因为历史遗留 out/shots 恰好存在所以一直没炸，而干净 clone（CI）上
+// puppeteer 截图到不存在的目录会直接 ENOENT 崩 —— 门禁变成"只有本机能跑"。
+// 统一在共享入口建，新增脚本不必各自记得。
+fs.mkdirSync(SHOTS, { recursive: true })
+
 const CHROME_CANDIDATES = [
   process.env.LEGADO_CHROME,
   process.env.CHROME_PATH,
