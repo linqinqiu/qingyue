@@ -32,6 +32,10 @@ export default defineConfig({
       // 表现就是「服务端改了、界面永远是旧的」。autoUpdate 让新 SW 自动 skipWaiting+claim，
       // 刷新即生效，从根上消掉这类「改了看不到」的假死。
       registerType: 'autoUpdate',
+      // 注册由 PwaManager 手动做（它要拿 registration 做周期 update 与空闲刷新）。
+      // 不让插件再注入一份 /registerSW.js —— 同一 scope 会去重，但两个注册入口、
+      // 两条更新检查路径并存只会让人误判"到底谁在管更新"。
+      injectRegister: null,
       includeAssets: ['favicon.svg', 'pwa-192x192.svg', 'pwa-512x512.svg', 'maskable-icon-512x512.svg'],
       manifest: {
         name: '青阅',

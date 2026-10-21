@@ -28,8 +28,6 @@ fun Route.staticWeb() {
 
     get("/sw.js") { respondNoCache(call, "static/sw.js", ContentType.parse("application/javascript")) }
     head("/sw.js") { respondNoCache(call, "static/sw.js", ContentType.parse("application/javascript")) }
-    get("/registerSW.js") { respondNoCache(call, "static/registerSW.js", ContentType.parse("application/javascript")) }
-    head("/registerSW.js") { respondNoCache(call, "static/registerSW.js", ContentType.parse("application/javascript")) }
     get("/manifest.webmanifest") { respondNoCache(call, "static/manifest.webmanifest", ContentType.parse("application/manifest+json")) }
     head("/manifest.webmanifest") { respondNoCache(call, "static/manifest.webmanifest", ContentType.parse("application/manifest+json")) }
     get("/manifest.json") { respondNoCache(call, "static/manifest.webmanifest", ContentType.parse("application/manifest+json")) }

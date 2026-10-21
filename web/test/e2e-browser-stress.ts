@@ -173,13 +173,17 @@ async function runPwaAndManifestSuite() {
     assert.ok(metaTags.themeColor, 'Theme-color meta tag must be present')
     assert.ok(metaTags.viewport?.includes('viewport-fit=cover'), 'Viewport must contain viewport-fit=cover for safe-area')
 
-    // 4. Verify PWA Manager & Update Banner in DOM
-    const pwaManagerMounted = await page.evaluate(`
+    // 4. Verify PWA wiring is present (install banner is transient; don't key off it)
+    const pwaWiring = await page.evaluate(`
       (function() {
-        return document.querySelector('.pwa-update-toast') !== undefined;
+        return {
+          manifest: !!document.querySelector('link[rel="manifest"]'),
+          serviceWorker: 'serviceWorker' in navigator,
+        };
       })()
     `)
-    assert.ok(pwaManagerMounted !== undefined, 'PwaManager should be mounted cleanly')
+    assert.ok(pwaWiring.manifest, 'PWA manifest link should be present')
+    assert.ok(pwaWiring.serviceWorker, 'Service Worker API should be available')
   })
 }
 

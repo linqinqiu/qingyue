@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
 import { Logo } from './Logo'
+import { registerServiceWorkerOnce } from '../lib/swRegistration'
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[]
@@ -55,11 +56,12 @@ export function PwaManager() {
       return false
     }
   })
-  const [needRefresh, setNeedRefresh] = useState(false)
-  const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    let onControllerChange: (() => void) | null = null
+
     // 1. Listen for install prompt
     const handleBeforeInstallPrompt = (e: BeforeInstallPromptEvent) => {
       e.preventDefault()
@@ -81,23 +83,9 @@ export function PwaManager() {
     let checkForUpdate: (() => void) | null = null
     let updateTimer = 0
     if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
+      registerServiceWorkerOnce((url, options) => navigator.serviceWorker.register(url, options)).then(reg => {
+        if (cancelled) return
         registrationRef.current = reg
-        setRegistration(reg)
-
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                setNeedRefresh(true)
-              }
-            })
-          }
-        })
-
-        // 旧版 Service Worker 已装好并处于等待态时（例如上次错过了更新提示），立即给出提示
-        if (reg.waiting && navigator.serviceWorker.controller) setNeedRefresh(true)
 
         // 浏览器默认只在导航时检查更新，这里补一次立即检查
         void reg.update().catch(() => undefined)
@@ -113,6 +101,8 @@ export function PwaManager() {
 
       let refreshing = false
       // `registerType: 'autoUpdate'` 生成的 SW 会 skipWaiting + clientsClaim，
+      // 所以更新是"新 SW 直接接管"，没有 waiting 态、也没有"点一下才更新"的提示：
+      // 接管后等页面空闲（不在输入、不在搜索）再刷新一次。
       // 于是**第一次访问**（页面本来没有 controller）装好 SW 的那一刻也会报 controllerchange。
       // 原来这里无条件 reload，表现是"用户刚点搜索/正在翻页，页面自己刷了一下"：
       // 搜索请求被丢掉，界面上什么都没发生（书库指定书源搜索打不开就是这个），
@@ -134,16 +124,18 @@ export function PwaManager() {
         refreshing = true
         window.location.reload()
       }
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
+      onControllerChange = () => {
         if (!hadController) {
           hadController = !!navigator.serviceWorker.controller
           return
         }
         reloadWhenIdle()
-      })
+      }
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
     }
 
     return () => {
+      cancelled = true
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
       window.removeEventListener('appinstalled', handleAppInstalled)
       if (checkForUpdate) {
@@ -151,6 +143,7 @@ export function PwaManager() {
         document.removeEventListener('visibilitychange', checkForUpdate)
       }
       if (updateTimer) window.clearInterval(updateTimer)
+      if (onControllerChange) navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
     }
   }, [])
 
@@ -170,39 +163,10 @@ export function PwaManager() {
     }
   }
 
-  const handleUpdate = () => {
-    if (registration && registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' })
-    } else {
-      window.location.reload()
-    }
-  }
-
   const showBanner = canInstall && !dismissedBanner && !isPwaStandalone()
 
   return (
     <>
-      {/* PWA New Version Update Toast */}
-      {needRefresh && (
-        <div className="pwa-update-toast" role="alert">
-          <div className="pwa-update-content">
-            <span className="pwa-update-dot" />
-            <div className="pwa-update-text">
-              <strong>发现新版本</strong>
-              <small>服务端功能已更新，点击即刻生效</small>
-            </div>
-          </div>
-          <div className="pwa-update-actions">
-            <button type="button" className="primary-button pwa-update-btn" onClick={handleUpdate}>
-              立即更新
-            </button>
-            <button type="button" className="subtle-button pwa-close-btn" onClick={() => setNeedRefresh(false)}>
-              <Icon name="close" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* PWA Install Bottom Banner */}
       {showBanner && (
         <div className="pwa-install-banner" role="region" aria-label="安装应用提示">

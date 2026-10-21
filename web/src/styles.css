@@ -2887,11 +2887,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   background: var(--surface);
 }
 
-/* PWA Install Banner & Update Toast */
-/* 这两条浮层的层级（999/1000）压过弹窗遮罩（100）：整屏登录时它们正好盖在页面底部，
+/* PWA Install Banner */
+/* 这层浮层的层级（999）压过弹窗遮罩（100）：整屏登录时它正好盖在页面底部，
    移动站的提交按钮十有八九就在那个位置 —— 有弹窗时干脆让路。 */
-body:has(.overlay-backdrop) .pwa-install-banner,
-body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
+body:has(.overlay-backdrop) .pwa-install-banner { display: none; }
 
 .pwa-install-banner {
   position: fixed;
@@ -2965,73 +2964,6 @@ body:has(.overlay-backdrop) .pwa-update-toast { display: none; }
   background: transparent;
   border-radius: 6px;
 }
-.pwa-update-toast {
-  position: fixed;
-  top: max(16px, var(--safe-top));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  background: var(--surface);
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: min(440px, calc(100vw - 32px));
-  animation: pwa-banner-slide-down .3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-@keyframes pwa-banner-slide-down {
-  from { transform: translate(-50%, -40px); opacity: 0; }
-  to { transform: translate(-50%, 0); opacity: 1; }
-}
-.pwa-update-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.pwa-update-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: nav-search-pulse 1.2s infinite;
-}
-.pwa-update-text strong {
-  display: block;
-  font-size: 13px;
-  color: var(--ink);
-}
-.pwa-update-text small {
-  font-size: 11px;
-  color: var(--muted);
-}
-.pwa-update-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.pwa-update-btn {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
-  background: var(--accent);
-  color: #ffffff;
-  border-radius: 6px;
-}
-.pwa-close-btn {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: var(--muted);
-  background: transparent;
-}
-
 /* Offline Storage Modal */
 /* 离线缓存 / 运行日志 / 快捷键这三张弹窗的宽高与页头都并进了 `.dialog-shell` + `.dialog-head`（W2）：
    离线缓存 size-s、快捷键 size-m、运行日志 size-l（消息与时间在两列里要横向空间）。
