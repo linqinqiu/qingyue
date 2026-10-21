@@ -64,6 +64,6 @@ test('接线：「我的」菜单有「阅读记录」入口，且开的是同�
   // 「阅读记录」是**成熟功能浮层**（features/modal/），不是实验室条目。
   // 入口直接开对应浮层，接线形态是 setOpenModal。
   assert.match(main, /setOpenModal\('reading-log'\)/, '入口要开阅读记录浮层')
-  const panel = fs.readFileSync(path.resolve(import.meta.dirname, '../src/features/modal/readingLogPanel.tsx'), 'utf8')
+  const panel = fs.readFileSync(path.resolve(import.meta.dirname, '../src/features/modal/ReadingLogModal.tsx'), 'utf8')
   assert.match(panel, /<ReadingLogPage \/>/, '浮层里要真的渲染这一页，不是挂个空组件')
 })

@@ -91,9 +91,9 @@ test('开发者那一格不许兜底成别人的仓库，也不把配置项说�
 
 test('路由与样式都接上了', () => {
   // 「关于」是**成熟功能浮层**（features/modal/），不是实验室条目。
-  // 深链映射到对应浮层，页面本身在 features/modal/aboutPanel.tsx 里渲染。
+  // 深链映射到对应浮层，页面本身在 features/modal/AboutModal.tsx 里渲染。
   assert.match(read('../src/main.tsx'), /'#about': 'about'/, '旧深链要映射到「关于」浮层')
-  assert.match(read('../src/features/modal/aboutPanel.tsx'), /<AboutPage[\s\S]{0,300}onOpenChangelog=\{/)
+  assert.match(read('../src/features/modal/AboutModal.tsx'), /<AboutPage[\s\S]{0,300}onOpenChangelog=\{/)
   assert.match(read('../src/components/AppHeader.tsx'), /<span>关于<\/span>/)
   assert.match(read('../src/styles.css'), /\.about-page \{/)
 })
@@ -106,7 +106,7 @@ test('「我的」菜单不再重复列「更新日志」「快捷键」，这�
   assert.match(page, /onOpenShortcuts/, '关于页要有快捷键的入口')
   assert.match(page, /<button type="button" className="ghost-button" onClick=\{onOpenShortcuts\}>快捷键<\/button>/)
   // 「关于」现在是独立浮层：它拿到的是宿主传进来的回调，不是实验室的 actions 表。
-  const aboutModal = read('../src/features/modal/aboutPanel.tsx')
+  const aboutModal = read('../src/features/modal/AboutModal.tsx')
   assert.match(aboutModal, /onOpenShortcuts=\{onOpenShortcuts\}/,
     '关于浮层要把快捷键按钮接到宿主回调上')
   // 同一轮把 5 个弹窗布尔收成一个 openModal，写法从 setShowShortcuts(true) 变成 setOpenModal('shortcuts')。

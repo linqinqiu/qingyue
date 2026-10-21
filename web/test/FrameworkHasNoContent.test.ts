@@ -83,7 +83,7 @@ test('框架容器 Lab.tsx 不含具体业务字样（它只该是容器）', ()
 
 test('框架装配点在内容目录 plugins/ 里，且不含硬编码的条目', () => {
   const hostFile = path.join(PLUGINS_DIR, 'labHost.tsx')
-  assert.ok(fs.existsSync(hostFile), '装配点应在 plugins/labHost.tsx')
+  assert.ok(fs.existsSync(hostFile), '装配点应在 plugins/LabHost.tsx')
   const src = fs.readFileSync(hostFile, 'utf8')
   assert.ok(!/title:\s*['"]/.test(src), '装配点里出现了硬编码的 title —— 条目应来自清单')
   assert.ok(!/description:\s*['"]/.test(src), '装配点里出现了硬编码的 description —— 条目应来自清单')
@@ -151,11 +151,11 @@ test('内置插件清单为空：产品自带的功能不再冒充插件', () =>
 test('成熟功能各有独立浮层，不再挂在实验室下', () => {
   // 这 5 个是已定型的成熟功能，必须是独立组件（导出 XxxModal），不是 LabEntry。
   const expected: [string, string][] = [
-    ['changelogPanel.tsx', 'ChangelogModal'],
-    ['backupPanel.tsx', 'BackupModal'],
-    ['aboutPanel.tsx', 'AboutModal'],
-    ['readingLogPanel.tsx', 'ReadingLogModal'],
-    ['sourceHealthPanel.tsx', 'SourceHealthEntryModal'],
+    ['ChangelogModal.tsx', 'ChangelogModal'],
+    ['BackupModal.tsx', 'BackupModal'],
+    ['AboutModal.tsx', 'AboutModal'],
+    ['ReadingLogModal.tsx', 'ReadingLogModal'],
+    ['SourceHealthModalEntry.tsx', 'SourceHealthEntryModal'],
   ]
   for (const [file, exportName] of expected) {
     const full = path.join(FEATURES_DIR, 'modal', file)

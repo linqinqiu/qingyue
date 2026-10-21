@@ -66,7 +66,7 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   assert.ok(app.includes(`setPageDialog('rules')`), 'rules 的悬浮层没接线')
   assert.ok(!new RegExp(`\\{ key: 'backup'`).test(table), 'backup 不该占顶栏')
   assert.ok(app.includes("setOpenModal('backup')"), 'backup 的入口要接到备份浮层')
-  assert.match(read('../src/features/modal/backupPanel.tsx'), /<BackupPage \/>/,
+  assert.match(read('../src/features/modal/BackupModal.tsx'), /<BackupPage \/>/,
     '备份浮层里要真的渲染这一页，不是挂个空组件')
   assert.doesNotMatch(app, /showReplaceRules/,
     '「规则开没开」只有 pageDialog 一个出处；再留一份布尔旗标就是两处状态互相顶（设置页改走 pageDialog 后它已无人置真）')

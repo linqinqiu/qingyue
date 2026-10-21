@@ -58,6 +58,43 @@ Kotlin JVM 17 + Ktor 3.4 + SQLite（WAL）。前端 React 19 + TypeScript + Vite
 - **本地书**：TXT / EPUB 导入，26 条分章规则可选、可新建、可编辑，也能让程序读文件头打分自动挑一条；已经在读的那本可以换规则重切目录。
 - **手机备份包**：见下面单独一节。
 - **写操作保护**：浏览器发出的跨站写请求一定带 `Origin`，与本机 Host 不一致就 403。抓取侧对重定向后的地址复验，拒绝内网与链路本地目标；正文进界面前做净化，图片走代理。
+- **AI 接入**：程序内部的 AI 网关（`/api/agent`）。**要先登记一个外部模型**（任何 openai-compatible 的地址：本机 Ollama、各家 API、自建网关都行）才能用；没登记就是明确报「未连接」，不会拿本地规则拼一段话冒充模型回答。接上之后它能做两类事，见下面单独一节。
+
+## AI 能帮你做什么
+
+先说清楚它**是什么**：一个**进程内**的 AI 网关，不是外挂的聊天框。
+它拿到的服务和界面用的是同一批 —— 所以它知道你在哪一页、在看哪本书、读到第几章，
+也能调用程序自己的 39 个能力（查书源、搜书、改净化规则、读正文……）。
+
+**用法**：设置 → 实验室与扩展 → AI 接入 → 登记一个 openai-compatible 连接。
+登记完输入框才可用；面板顶部有两个状态，别混：「已连接」说的是**配没配**，
+「实测可达」说的是**此刻通不通** —— 只有实测 ok 才代表真能对话。
+
+### 能做的事（都是真的，不是设想）
+
+| 你想问的 | 它会怎么做 |
+|---|---|
+| 「这本书讲了什么」 | 从界面上下文知道是哪本书，用工具去取目录与正文，再回答 —— 不是凭空猜 |
+| 「这个书源为什么搜不出书」 | 调 `source.debug` 逐阶段跑（结构/搜索/详情/目录/正文），告诉你坏在哪一步 |
+| 「帮我看看哪些书源已经废了」 | 调 `source.health` 实跑体检，按结果分档 |
+| 「把正文里那些广告行去掉」 | 调 `replace.list` / `replace.save` 直接改净化规则，改完你可以在设置里看到 |
+| 「搜一下《×××》」 | 调 `search.run` 真去各书源搜，把结果带回来 |
+
+它**不会**做的事：不联网查资料、不生成图片、不碰书架之外的文件。
+所有写操作都过护栏（批量删除要显式确认），失败时明确报错而不是编一个结果。
+
+### 没有外部模型时
+
+AI 面板显示「未连接外部模型，AI 不可用」，输入框禁用。
+**这是设计如此**：0.8.3 删掉了「本地关键词抽取兜底」——
+拿正则抽出来的东西冒充模型回答，会让人分不清哪句是真模型说的。宁可明确说不可用。
+
+### 接别的模型 / 给 AI 加能力
+
+- 想接 Anthropic、Ollama、自建服务：实现 `LlmProvider` 注册进 `providerRegistry`，见 [`docs/plugin-framework.md`](docs/plugin-framework.md)。
+- 想给 AI 加自己的工具：往 `ToolRegistry` 注册，AI 立刻能调 —— 不用改框架。
+- 多连接时默认只走**第一个**，不自动顺延（这是已确认的行为，不是 bug）。
+- 完整接入说明见 [`AGENTS.md`](AGENTS.md) 与 [`docs/AI-AGENT.md`](docs/AI-AGENT.md)。
 
 ## 环境要求
 
@@ -199,7 +236,10 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 | 整体架构与模块边界 | [`docs/architecture.md`](docs/architecture.md) |
 | 部署（jar / Docker / Compose / 桌面程序） | [`docs/deploy.md`](docs/deploy.md) |
 | 让 AI 或脚本接进来（管书源、批量整理、走登录） | [`docs/AI-AGENT.md`](docs/AI-AGENT.md) · 机器可读的那份是 `GET /api/catalog` |
+| **AI 具体能干什么、怎么接一个模型、怎么给它加能力** | [`docs/agent-guide.md`](docs/agent-guide.md) |
 | 自定义接入面 `/api/agent/*`（外接模型、书源新建/校验、阅读理解） | [`AGENTS.md`](./AGENTS.md) |
+| 实验室 / AI / 插件 / 成熟功能 四类怎么分 | [`docs/lab-ai-plugin.md`](docs/lab-ai-plugin.md) |
+| 前端命名与文件组织规范 | [`docs/frontend-conventions.md`](docs/frontend-conventions.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
 
 

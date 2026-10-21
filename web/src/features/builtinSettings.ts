@@ -1,5 +1,5 @@
 import type { PluginSettingsSection } from '../extensions/registry'
-import { windowPrefsSection } from './settings/windowPrefsPanel'
+import { windowPrefsSection } from './settings/WindowPrefsSection'
 
 /**
  * **产品自带**功能贡献的设置分区。
