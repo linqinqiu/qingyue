@@ -177,7 +177,8 @@ class AuditPlugin : Plugin {
 
 ```groovy
 dependencies {
-    compileOnly files("../legado/build/libs/legado-0.8.3-all.jar")
+    // 通配匹配，不必每次发版改这里；路径是仓库内的 app/build/libs/
+    compileOnly files("../app/build/libs/legado-*-all.jar")
 }
 ```
 

@@ -24,7 +24,7 @@
 ```jsonc
 {
   "service": "青阅",
-  "version": "0.8.3",          // 当前真正在跑的构建号，由服务端在响应时盖上
+  "version": "0.8.4",          // 当前真正在跑的构建号，由服务端在响应时盖上
   "scope": "全量：代码里注册的每一条端点都在这里，按 group 归面",
   "howToConnect": { "baseUrl": "…", "auth": "…", "errors": "…", "response": "…" },
   "workflow": [ "…" ],

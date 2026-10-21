@@ -14,6 +14,26 @@
 
 版本号用「小更新计数」（2026-10-12 起）：三段号 = 档位.小更新序号，每发一次小更新第三段 +1，满 10 进一次级（0.7.9 之后再发 → 0.8.0）；一版一条，不再按天合并。
 
+## [0.8.4] - 2026-10-21
+
+### 修复
+
+- **Docker 镜像又能构建了。** 上一版把后端目录从 `server/` 改名为 `app/` 时漏改了 `Dockerfile`
+  里的构建命令与 jar 路径，`docker build` 会直接失败。现已对齐：`:app:installDist`、
+  `app/build/install/legado/lib/legado-*.jar`、`/app/bin/legado`。
+- **`npm run coverage` 又能用了。** 同一个改名漏掉了覆盖率报告的读取路径与 Gradle 任务名，
+  命令会报错。现已指向 `app/build/reports/jacoco/...` 与 `:app:testCoverageReport`。
+
+### 变更
+
+- **接口文档里的 query 与请求体参数说明补全了。** `docs/API-REFERENCE.md` 里有 89 处
+  `[object Object]` —— 该显示「`q`=可选：按名称或地址子串筛」的地方只显示了一句
+  JavaScript 的对象占位符，接进来的人根本不知道该传什么。现已由随包的端点契约
+  （`app/src/main/resources/agent-api.json`）重新生成，每条都给出参数名与含义。
+- **仓库行尾统一为 LF。** 新增 `.gitattributes`：源码、配置、文档一律 LF，Windows 批处理
+  （`.bat` / `.cmd`）保留 CRLF，图片与 jar 等二进制不做转换。此前同一份文件在 Windows 与
+  Linux 之间检出会整篇翻转，diff 里看不出真正改了什么。
+
 ## [0.8.3] - 2026-10-20
 
 ### 新增

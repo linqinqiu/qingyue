@@ -147,7 +147,7 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/connections \
 
 ## 6. 一致性闸门（给维护者）
 
-`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（当前全量契约：139 条端点 / 19 组，其中本组 8 条属于 `AI 自定义接入` 组；版本号见 `app/build.gradle` 的 `version = '0.8.3'`）。
+`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（当前全量契约：139 条端点 / 19 组，其中本组 8 条属于 `AI 自定义接入` 组；版本号见 `app/build.gradle` 的 `version`）。
 **改动 `/api/agent/*` 时禁止动既有路由数量、路径、分组**；新增端点要同时在两处登记。运行：
 
 ```bash

@@ -255,6 +255,7 @@ Dockerfile           多阶段构建（前端 + 服务端）
 | **覆盖率怎么看、先补哪里** | [docs/coverage-guide.md](docs/coverage-guide.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
 | 改完端点怎么同步文档 | `npm run docs:api` 重新生成；`npm run docs:api-check` 只比对（CI 会跑） |
+| 某个改动当初为什么那样定、量到了什么 | [docs/sessions/](docs/sessions/) 工程日志（一版一份，命名与骨架见其 README） |
 
 
 ## 测试
