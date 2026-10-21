@@ -148,5 +148,28 @@ local-patches.diff
 !/tools/verify/webview-ui-check.mjs
 !/tools/verify/webview-diagnostics-check.mjs
 !/tools/verify/retired/
+# ── 2026-10-21：白名单从「逐条列文件」改成「按模式放行 + 明确排除」─────────────
+# 逐条列的方式漏了 12 个文件，其中 offline-login-check.mjs 是 45 个门禁之一：
+# 它只在本地磁盘上、CI checkout 后不存在 ⇒ 「本地跑 45 个 / CI 跑 44 个」，
+# 而没有任何机制会发现这个差集。另外 4 个漏掉的脚本里写死了 E:/legado/legado
+# 与本机 Chrome 路径，因为没入库，opensource-hygiene-check（只扫 git ls-files）
+# 也永远扫不到它们 —— 正是它声称要防的那类 bug。
+# 改成模式放行后，新增门禁脚本不必再记得回来加一行。
+!/tools/verify/*.mjs
+!/tools/verify/baselines/
+!/tools/verify/retired/
+# 例外：这几个是一次性本机探针/产物脚本，含本机绝对路径或写本机图标/快捷方式，
+# 按 docs/STRUCTURE.md「产物出库」不入库（真要用就本地留着）。
+/tools/verify/webview-diagnose.mjs
+/tools/verify/webview-sandbox-probe.mjs
+/tools/verify/webview-ui-diagnostics.mjs
+/tools/verify/make-ico.mjs
+/tools/verify/render-icons.mjs
+/tools/verify/zip-inspect.mjs
+/tools/verify/extract-failures.mjs
+/tools/verify/test-failure-detail.mjs
+/tools/verify/options-e2e-probe.mjs
+/tools/verify/commit-pending-waves.mjs
+/tools/verify/healthcheck.mjs
 # start.mjs / stop.mjs 已改为「以自身目录为安装根 + 全部位置可环境变量覆盖」，
 # 不再含任何本机绝对路径，所以从忽略名单里放出来随仓库分发。
