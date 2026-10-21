@@ -310,7 +310,20 @@ class Agent(
                 // 工具结果本来就是给人/模型看的（List/Map/String），toString 足够；
                 // 不走 kotlinx 序列化 —— Any? 没有序列化器，硬塞会编译不过。
                 val raw = result.data.toString()
-                append("｜数据：").append(if (raw.length <= MAX_TOOL_DATA) raw else raw.take(MAX_TOOL_DATA) + "…（已截断）")
+                if (raw.length <= MAX_TOOL_DATA) {
+                    append("｜数据：").append(raw)
+                } else {
+                    // **截断必须说清"这是截断"**。原来只写「…（已截断）」，模型会把
+                    // 截断后能看到的条数当成总数 —— 实测问「库里多少书源」，5596 条的
+                    // 列表被截到 4000 字符（约 21 条），模型就答了「21」。
+                    // 现在明确给出总长度与元素个数，让模型知道该说"数据太长，只看到前一部分"。
+                    val total = (result.data as? Collection<*>)?.size
+                    append("｜数据（**已截断**，")
+                    append("完整内容共 ").append(raw.length).append(" 字符")
+                    if (total != null) append("、").append(total).append(" 条")
+                    append("，下面只给出前 ").append(MAX_TOOL_DATA).append(" 字符，**不是全部**）：")
+                    append(raw.take(MAX_TOOL_DATA)).append("…")
+                }
             }
         }
         return body

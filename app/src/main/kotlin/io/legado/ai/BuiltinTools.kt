@@ -103,8 +103,25 @@ object BuiltinTools {
 
     val sourceList = Tool { ctx, args ->
         val q = string(args, "q").takeIf { it.isNotBlank() }
-        AgentResult("ok", data = ctx.database.listSources(q))
-    }.also { it.meta = ToolMeta("source.list", "sources", "列出书源（可按 q 过滤）。", writes = false) }
+        val all = ctx.database.listSources(q)
+        // 列表可能上万条（本机实测 5596），全量塞给模型既超上下文又会被截断，
+        // 而截断后模型会把"能看到的条数"当成总数（实测问多少书源，答了 21）。
+        // 所以：默认只给**总数 + 前 limit 条的摘要**，并明确说明是部分。
+        // limit=0 时只回总数（问"有多少个"这种问题用它）。
+        // 默认 20：每条摘要约 80~120 字符，20 条约 2 KB，安全落在 MAX_TOOL_DATA(4000) 内。
+        // 实测 50 条约 4.3 KB 会被截断，模型就只能看到「truncated=true 但 items 是空的」。
+        val limit = (string(args, "limit").toIntOrNull() ?: 20).coerceIn(0, 100)
+        val head = if (limit == 0) emptyList() else all.take(limit)
+        AgentResult(
+            "ok",
+            data = mapOf(
+                "total" to all.size,
+                "returned" to head.size,
+                "truncated" to (head.size < all.size),
+                "items" to head.map { mapOf("id" to it.id, "name" to it.name, "group" to it.group, "enabled" to it.enabled) },
+            ),
+        )
+    }.also { it.meta = ToolMeta("source.list", "sources", "列出书源（可按 q 过滤）。返回 total 总数与最多 limit 条摘要（默认 20，limit=0 只回总数）。", writes = false) }
 
     val sourceGet = Tool { ctx, args ->
         val id = string(args, "id")
