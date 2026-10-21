@@ -17,7 +17,7 @@ import type { UiContext } from '../lib/uiContext'
  * | `features/labEntries.ts` | **待定功能**（准备加入基础框架、还没定下来的） | `'lab'` |
  * | `plugins/index.ts` | 用户自定义插件贡献的条目 | `'plugin'` |
  *
- * **已定型的成熟功能不在这里**（更新日志/备份/关于/阅读记录/书源体检 → `features/modal/`，
+ * **已定型的成熟功能不在这里**（更新日志/备份/关于/阅读记录/书源体检 → `plugins/`，
  * 各自独立浮层），**AI 接入也不在这里**（单独一类，`features/ai/`）。
  *
  * 合并后各自保留 origin，由 `Lab` 分两区展示。

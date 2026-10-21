@@ -14,7 +14,7 @@ import type { LabEntry } from '../lab/Lab'
  *
  * | 东西 | 该去哪 | 为什么 |
  * |---|---|---|
- * | 已定型的成熟功能（更新日志/备份/关于/阅读记录/书源体检） | `features/modal/`，独立浮层 | 已定型，不是"待定" |
+ * | 已定型的成熟功能（更新日志/备份/关于/阅读记录/书源体检） | `plugins/`，做成插件 | 已定型，不是"待定" |
  * | AI 接入 | `features/ai/`，独立浮层 | 单独一类：已定型、产品决定要有的 |
  * | 插件 | `plugins/` + `extensions/` | 用户自定义扩展，不是产品功能 |
  *
@@ -27,6 +27,6 @@ import type { LabEntry } from '../lab/Lab'
  *
  * 1. 在这里加一个 `LabEntry`，`origin` 填 `'lab'`；
  * 2. 条目要有明确的"待定什么"—— 实验目的、验收标准、什么时候算定下来；
- * 3. 定下来之后：迁到 `features/modal/`（或一级导航），并从本文件删掉。
+ * 3. 定下来之后：迁到 `plugins/`（做成插件）或一级导航，并从本文件删掉。
  */
 export const pendingLabEntries: LabEntry[] = []

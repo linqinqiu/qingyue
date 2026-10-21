@@ -1,4 +1,4 @@
-# 实验室 / AI 接入 / 插件 / 成熟功能 —— 四类东西，各有各的家
+# 实验室 / AI 接入 / 插件 —— 三类东西，各有各的家
 
 > 用户口径（定稿）：
 > **实验室**是准备在基础框架上加入的功能；**插件**是用户自定义；
@@ -7,104 +7,113 @@
 
 ## 一句话区分
 
-| 名字 | 是什么 | 谁决定要有它 | 位置 | 当前状态 |
-|---|---|---|---|---|
-| **实验室** | 孵化位：放"准备加入基础框架、但还没定下来"的功能 | 产品（待定） | `web/src/lab/` 容器 + `features/labEntries.ts` 清单 | **空**（没有待定功能） |
-| **AI 接入** | 独立一类：进程内 AI 网关的前端面板 | 产品 | `features/ai/` | 已定型 |
-| **插件** | 用户自定义扩展，可装可卸 | 用户 / 第三方 | `plugins/`（机制）+ `extensions/`（契约） | 空（等第三方） |
-| **成熟功能** | 已定型、低频、不占导航的功能 | 产品 | `features/modal/` | 已定型 |
+| 名字 | 判定标准 | 位置 | 当前 |
+|---|---|---|---|
+| **实验室** | 准备加入基础框架、**但还没定下来**的功能 | `lab/` 容器 + `features/labEntries.ts` | **空** |
+| **AI 接入** | 单独一类：已定型、产品决定要有，但不是"可卸的扩展" | `features/ai/` | 已实现 |
+| **插件** | **能独立卸载而不影响核心阅读流程** | `plugins/` | 6 个内置 + 第三方可加 |
 
-## 二、实验室是孵化器，不是"功能收纳间"
+**核心阅读流程** = 书架 / 搜索 / 阅读 / 书源 / 规则引擎 / 路由 / 写门 / SSRF。
+不在其中的功能，卸掉也能读书 ⇒ 就是插件。
 
-这是最容易搞错的一点。实验室**只放待定功能** —— 一条功能进实验室，意思是
-"我们在试它，还没决定要不要正式进基础框架"。
+## 二、判定标准怎么用
 
-**不该进实验室的**：
+用户给的判据是**可执行的**，比"是否待定"这种主观状态好用：
 
-| 东西 | 该去哪 | 为什么 |
-|---|---|---|
-| 更新日志 / 备份 / 关于 / 阅读记录 / 书源体检 | `features/modal/` | 已定型的成熟功能，不是"待定" |
-| AI 接入 | `features/ai/` | 单独一类，已定型 |
-| 插件 | `plugins/` | 用户自定义，不是产品功能 |
+```
+这个功能能独立卸载吗？
+├─ 不能（卸了就搜不了书 / 读不了 / 起不来） → 核心框架，留在 server/ 或 pages/
+└─ 能（卸了照常读书）
+   ├─ 是"准备加入基础框架的待定项" → 实验室
+   └─ 是"已定型的独立功能"        → 插件
+```
 
-**现在实验室为什么是空的**：因为**目前没有任何待定功能**。这不是"没做完"，
-是如实状态。之前挤在这里的 7 条全是已完成的成熟功能，身份放错了地方，已各自归位。
+按这个标准，下面 6 个都是插件：
 
-界面上打开实验室会看到「还没有登记任何实验条目。」—— 这是正确的显示，不是坏了。
+| 插件 | 卸掉会怎样 |
+|---|---|
+| 更新日志 | 只是看不到版本变更 |
+| 备份与恢复 | 只是不能导入导出 |
+| 关于 | 只是看不到许可信息 |
+| 阅读记录 | 只是没有阅读统计 |
+| 书源体检 | 只是不能批量检查源 |
+| 插件面板 | 只是看不到装了哪些插件 |
 
 ## 三、代码结构
 
 ```
 web/src/
-├── lab/                  纯容器。只有 Lab.tsx + FloatingWindow.tsx
+├── lab/                  纯容器。Lab.tsx + FloatingWindow.tsx
 │                         不认识 AI、不认识插件、不认识任何具体功能
 ├── extensions/           插件**契约**。registry.ts 定义 FrontendPlugin 长什么样
-├── plugins/              插件**机制**。index.ts + labHost.tsx
-│                         BUILTIN_PLUGINS 为空
+├── plugins/              插件（能独立卸载的都在这里）
+│   ├── index.ts            清单：删一行 = 卸掉一个插件
+│   ├── LabHost.tsx         装配点（把条目交给实验室容器）
+│   ├── changelog/          更新日志
+│   ├── backup/             备份与恢复
+│   ├── about/              关于
+│   ├── reading-log/        阅读记录
+│   ├── source-health/      书源体检
+│   └── plugin-intro/       插件面板
 └── features/
-    ├── modal/            成熟功能浮层（5 个）：更新日志/备份/关于/阅读记录/书源体检
-    ├── ai/               AI 接入 —— 单独一类（AiModal.tsx + AiConnectionsModal.tsx）
-    ├── plugins/          插件查看面板 —— 单独一类（PluginsModal + PluginListPanel）
-    ├── settings/         产品自带的设置分区（界面偏好）
-    ├── labEntries.ts     实验室**待定功能**清单（当前空数组）
-    └── builtinSettings.ts 产品自带设置分区的汇总
+    ├── ai/               AI 接入 —— 单独一类
+    ├── settings/         产品自带的设置分区
+    └── labEntries.ts     实验室**待定功能**清单（当前空）
 ```
 
 **依赖方向只能是 内容 → 框架**：`lab/` 与 `extensions/` 不许 import `plugins/` 或 `features/`。
-判据 `FrameworkHasNoContent.test.ts` 盯着。
 
-## 四、入口在哪
+## 四、插件同时给两处入口
 
-设置 → **实验室与扩展**，三行三个入口，互不混淆：
+一个插件可以提供：
 
-| 行 | 打开什么 | 里面是什么 |
+1. **实验室条目**（`labEntries`）—— 在实验室窗口里点开；
+2. **独立浮层**（导出 `XxxModal`）—— 从顶栏、设置页、深链直达。
+
+内置的 6 个都是两样都给：既能从「我的」菜单直接开浮层，也能在实验室里找到。
+
+## 五、AI 为什么不算插件
+
+它符合"能独立卸载"吗？——**不符合**。
+
+AI 接入不是"可选扩展"，它是产品决定要有的能力面（`/api/agent/*` 8 个端点 + 39 个工具）。
+卸掉它，`/api/catalog` 的契约就变了。所以它单独一类，住 `features/ai/`。
+
+> 对比：插件卸掉不影响端点计数（插件不注册 HTTP 路由）。
+
+## 六、实验室为什么是空的
+
+因为**目前没有任何"准备加入基础框架但还没定下来"的功能**。
+之前挤在这里的 7 条全是已定型的独立功能 —— 按新标准判定，它们都是插件，已各自归位。
+
+界面上打开实验室会看到「还没有登记任何实验条目。」—— 这是如实状态，不是坏了。
+插件贡献的条目会出现在实验室里（与待定功能分两区展示）。
+
+## 七、加东西时放哪：速查表
+
+| 你要加的东西 | 放哪 | 判定 |
 |---|---|---|
-| 实验室 | 悬浮窗 | 待定功能（当前空）+ 插件贡献的条目 |
-| AI 接入 | 独立浮层 | AI 网关面板（必须先登记外部模型） |
-| 插件 | 独立浮层 | 当前装了哪些插件、贡献了什么、有没有装载失败 |
+| 能独立卸载的功能 | `plugins/<name>/` + 加进 `plugins/index.ts` | 插件 |
+| 还在试、没定下来的功能 | `features/labEntries.ts`，`origin: 'lab'` | 实验室 |
+| AI 相关能力 | 加**工具**到 `ToolRegistry`，不改框架 | AI 扩展 |
+| 改不动就搜不了书的东西 | `server/` 或 `pages/` | 核心 |
+| 产品自带的设置项 | `features/builtinSettings.ts` | 核心 |
 
-成熟功能不在这里：它们从顶栏（版本号→更新日志）、「我的」菜单、RSS 页等处直接开浮层，
-也支持老深链（`#changelog` / `#backup` / `#about` / `#reading-log`）。
+## 八、判据（`FrameworkHasNoContent.test.ts`，10 条）
 
-## 五、来源分类在类型上就是强制的
-
-实验室条目（`LabEntry`）必须声明 `origin`：
-
-```ts
-export type LabEntry = {
-  id: string
-  title: string
-  description: string
-  render: (host: LabHostContext) => React.ReactNode
-  origin: 'lab' | 'plugin'   // ← 必填，不给默认值
-  badge?: string              // 纯展示，不承担分类职责
-}
-```
-
-- 待定功能：`origin: 'lab'`。
-- 插件贡献的：注册表**强制**打上 `origin: 'plugin'`，插件声明类型被
-  `Omit<LabEntry, 'origin'>` —— **从类型上就不许插件自己声明来源**。
-
-## 六、判据（`FrameworkHasNoContent.test.ts`）
-
-12 条，钉住四类的边界：
-
-- `lab/`、`extensions/` 不许 import `plugins/`、`features/`（依赖方向）
-- `Lab.tsx` 不含任何具体业务词（容器不认识功能）
-- `features/{modal,ai,plugins,settings}` 里不许出现 `LabEntry`（它们不是实验室条目）
-- 实验室清单必须为空数组，且写明"目前没有待定功能"
+- `lab/`、`extensions/` 不许 import `plugins/`、`features/`
+- `Lab.tsx` 不含任何具体业务词
+- 插件清单非空，且每个 import 的插件都真的导出 `FrontendPlugin`
+- 可独立卸载的 5 个功能必须在 `plugins/` 下，`features/modal/` 不许存在
 - AI 不许实现 `FrontendPlugin`、不许登记进插件注册表
-- 插件面板不许是 `LabEntry`
-- 注册表必须强制 `origin: 'plugin'`，插件类型必须 `Omit` 掉 origin
-- `BUILTIN_PLUGINS` 必须为空
-- 5 个成熟功能必须各自导出独立浮层组件（`XxxModal`）
+- 注册表强制 `origin: 'plugin'`，插件类型 `Omit` 掉 origin
+- 实验室清单为空数组且写明原因
 
-## 七、加东西时放哪：一张速查表
+## 九、相关文档
 
-| 你要加的东西 | 放哪 | 判据会检查什么 |
-|---|---|---|
-| 一个**还在试**的功能 | `features/labEntries.ts` 加一条，`origin: 'lab'` | 必须写明"待定什么、什么时候算定下来" |
-| 一个**已定型**的低频功能 | `features/modal/`，导出 `XxxModal` + 在 `AppModal` 加字面量 | 不许是 LabEntry |
-| **AI 相关**的东西 | `features/ai/` | 不许碰插件注册表 |
-| **插件**（第三方扩展） | `plugins/index.ts` 的 `BUILTIN_PLUGINS`，或运行时 `register` | 不许 import features |
-| 一个**设置分区** | 产品自带 → `features/builtinSettings.ts`；插件 → `settingsSections` | — |
+| 想看什么 | 看哪 |
+|---|---|
+| 怎么写一个插件 | [`plugin-development-guide.md`](plugin-development-guide.md) |
+| AI 能干什么、怎么接模型 | [`agent-guide.md`](agent-guide.md) |
+| 反代书源怎么做 | [`reverse-proxy-source-guide.md`](reverse-proxy-source-guide.md) |
+| 前端命名规范 | [`frontend-conventions.md`](frontend-conventions.md) |

@@ -12,16 +12,20 @@ import path from 'node:path'
  * ## 四层目录，职责不同
  *
  * ```
- * lab/         容器（不认识插件、功能、扩展）
- * extensions/  插件契约与注册表（不认识具体插件/功能）
- * plugins/     插件装配点与清单（当前不含任何插件内容）
- * features/    产品自带的内容：
- *              ├── modal/   已定型的成熟功能（更新日志/备份/关于/阅读记录/书源体检）
- *              ├── ai/      AI 接入 —— 单独一类
- *              ├── plugins/ 插件查看面板 —— 单独一类
+ * lab/         容器（可悬浮窗口）—— 不认识任何具体功能
+ * extensions/  插件契约与注册表 —— 不认识具体插件/功能
+ * plugins/     插件（**能独立卸载、不影响核心阅读流程的功能**）
+ * features/    产品自带内容：
+ *              ├── ai/       AI 接入 —— 单独一类（已定型，不是可卸的扩展）
  *              ├── settings/ 产品自带的设置分区
  *              └── labEntries.ts  实验室**待定功能**清单（当前为空）
  * ```
+ *
+ * ## 判定标准（用户口径）
+ *
+ * - **插件** = 能独立卸载而不影响核心阅读流程（书架/搜索/阅读/书源/规则引擎/路由/写门/SSRF）
+ * - **实验室** = 准备加入基础框架、但还没定下来的功能
+ * - **AI 接入** = 单独一类
  *
  * ## 判的是依赖方向（比"有没有某个词"更本质）
  *
@@ -35,20 +39,24 @@ const EXTENSIONS_DIR = path.join(SRC, 'extensions')
 const PLUGINS_DIR = path.join(SRC, 'plugins')
 const FEATURES_DIR = path.join(SRC, 'features')
 
+function walk(dir: string, out: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return out
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) walk(full, out)
+    else out.push(full)
+  }
+  return out
+}
+
 function filesIn(dir: string): string[] {
-  if (!fs.existsSync(dir)) return []
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter(e => e.isFile())
-    .map(e => path.join(dir, e.name))
+  return walk(dir).filter(f => f.endsWith('.ts') || f.endsWith('.tsx'))
 }
 
 function offendersIn(dir: string, pattern: RegExp): string[] {
-  const offenders: string[] = []
-  for (const file of filesIn(dir)) {
-    const src = fs.readFileSync(file, 'utf8')
-    if (pattern.test(src)) offenders.push(path.basename(file))
-  }
-  return offenders
+  return filesIn(dir)
+    .filter(f => pattern.test(fs.readFileSync(f, 'utf8')))
+    .map(f => path.basename(f))
 }
 
 test('框架目录 lab/ 只放容器：不许 import 插件/功能/扩展', () => {
@@ -63,49 +71,48 @@ test('扩展契约 extensions/ 不许依赖具体插件或功能', () => {
     `extensions/ 只定义契约，不许依赖具体插件/功能。这些文件违反了：${offenders.join(', ')}`)
 })
 
-test('内容目录 plugins/ 存在且可被框架侧按清单装载', () => {
-  const files = filesIn(PLUGINS_DIR)
-  assert.ok(files.length > 0, 'plugins/ 应有装配点与清单')
-  const indexFile = files.find(f => path.basename(f) === 'index.ts')
-  assert.ok(indexFile, 'plugins/ 应有 index.ts 作为装载清单')
-})
-
 test('框架容器 Lab.tsx 不含具体业务字样（它只该是容器）', () => {
   const labFile = path.join(LAB_DIR, 'Lab.tsx')
   assert.ok(fs.existsSync(labFile), 'Lab.tsx 应存在')
   const src = fs.readFileSync(labFile, 'utf8')
-  // 容器里不该出现具体功能的名字 —— 出现就说明它在夹带内容
   for (const word of ['AiConnections', 'openai', 'api/agent', '书源', '朗读', '备份', '更新日志']) {
     assert.ok(!src.includes(word),
       `Lab.tsx 里出现了「${word}」—— 实验室容器不该知道任何具体功能`)
   }
 })
 
-test('框架装配点在内容目录 plugins/ 里，且不含硬编码的条目', () => {
-  const hostFile = path.join(PLUGINS_DIR, 'labHost.tsx')
+test('框架装配点在 plugins/ 里，且不含硬编码的条目', () => {
+  const hostFile = path.join(PLUGINS_DIR, 'LabHost.tsx')
   assert.ok(fs.existsSync(hostFile), '装配点应在 plugins/LabHost.tsx')
   const src = fs.readFileSync(hostFile, 'utf8')
   assert.ok(!/title:\s*['"]/.test(src), '装配点里出现了硬编码的 title —— 条目应来自清单')
   assert.ok(!/description:\s*['"]/.test(src), '装配点里出现了硬编码的 description —— 条目应来自清单')
-  // 条目来源：待定功能（features/labEntries）+ 插件（plugins）。两段合起来才是完整清单。
   assert.match(src, /pendingLabEntries/, '装配点要合并待定功能条目')
   assert.match(src, /getPluginLabEntries\(\)/, '装配点要向插件清单入口取条目')
-  const indexFile = path.join(PLUGINS_DIR, 'index.ts')
-  assert.match(fs.readFileSync(indexFile, 'utf8'), /frontendPlugins\.labEntries\(\)/,
-    '插件清单入口要向注册表要条目 —— 不能自己写死')
 })
 
-test('实验室只放待定功能：成熟功能与 AI、插件面板都不许是 LabEntry', () => {
-  // 成熟功能（更新日志/备份/关于/阅读记录/书源体检）、AI 接入、插件面板
-  // 都已定型或属于别的类别，不该出现在实验室条目清单里。
-  for (const sub of ['modal', 'ai', 'plugins', 'settings']) {
-    const dir = path.join(FEATURES_DIR, sub)
-    if (!fs.existsSync(dir)) continue
-    for (const name of fs.readdirSync(dir)) {
-      if (!name.endsWith('.tsx') && !name.endsWith('.ts')) continue
-      const src = fs.readFileSync(path.join(dir, name), 'utf8')
+test('插件清单非空，且每个插件都真的导出 FrontendPlugin', () => {
+  const src = fs.readFileSync(path.join(PLUGINS_DIR, 'index.ts'), 'utf8')
+  // 判定标准写进注释，别让后来人再猜一遍
+  assert.match(src, /能独立卸载/, '清单里要写明"能独立卸载 → 插件"这条标准')
+  const imported = [...src.matchAll(/import \{ (\w+Plugin) \} from '\.\/([^']+)'/g)]
+  assert.ok(imported.length >= 5, `插件清单应至少 5 个，实际 ${imported.length}`)
+  for (const [, exportName, relPath] of imported) {
+    const full = path.join(PLUGINS_DIR, relPath + '.tsx')
+    assert.ok(fs.existsSync(full), `插件文件不存在：plugins/${relPath}.tsx`)
+    const body = fs.readFileSync(full, 'utf8')
+    assert.ok(body.includes(`export const ${exportName}: FrontendPlugin`),
+      `plugins/${relPath}.tsx 应导出 ${exportName}: FrontendPlugin`)
+  }
+})
+
+test('实验室只放待定功能：AI 与插件都不许是 LabEntry', () => {
+  // AI 接入（features/ai）与插件（plugins/）都不是实验室条目。
+  for (const dir of [path.join(FEATURES_DIR, 'ai'), path.join(FEATURES_DIR, 'settings')]) {
+    for (const f of filesIn(dir)) {
+      const src = fs.readFileSync(f, 'utf8')
       assert.ok(!/LabOwnedEntry|LabEntry/.test(src),
-        `features/${sub}/${name} 不该是实验室条目 —— 它已定型，或属于别的类别`)
+        `${path.relative(SRC, f)} 不该是实验室条目 —— 它已定型，或属于别的类别`)
     }
   }
 })
@@ -126,13 +133,6 @@ test('AI 接入独立成类：不是实验室条目、不是插件', () => {
   assert.ok(!src.includes('LabOwnedEntry'), 'AI 不是实验室条目')
 })
 
-test('插件独立成类：有独立的查看面板，不占实验室条目位', () => {
-  const file = path.join(FEATURES_DIR, 'plugins', 'PluginListPanel.tsx')
-  assert.ok(fs.existsSync(file), 'features/plugins/PluginListPanel.tsx 应存在')
-  const src = fs.readFileSync(file, 'utf8')
-  assert.ok(!src.includes('LabOwnedEntry'), '插件面板不是实验室条目')
-})
-
 test('插件贡献的条目由注册表强制打 origin=plugin，插件自己写不算', () => {
   const src = fs.readFileSync(path.join(EXTENSIONS_DIR, 'registry.ts'), 'utf8')
   assert.match(src, /origin:\s*'plugin' as const/,
@@ -141,27 +141,14 @@ test('插件贡献的条目由注册表强制打 origin=plugin，插件自己写
     '插件声明条目的类型要 Omit 掉 origin —— 从类型上就不许它自己声明')
 })
 
-test('内置插件清单为空：产品自带的功能不再冒充插件', () => {
-  const src = fs.readFileSync(path.join(PLUGINS_DIR, 'index.ts'), 'utf8')
-  assert.match(src, /const BUILTIN_PLUGINS: FrontendPlugin\[\] = \[\]/,
-    'BUILTIN_PLUGINS 应为空 —— 产品功能不该叫插件')
-  assert.ok(!/from\s+['"][^'"]*features\//.test(src), '插件清单不该 import 产品功能')
-})
-
-test('成熟功能各有独立浮层，不再挂在实验室下', () => {
-  // 这 5 个是已定型的成熟功能，必须是独立组件（导出 XxxModal），不是 LabEntry。
-  const expected: [string, string][] = [
-    ['ChangelogModal.tsx', 'ChangelogModal'],
-    ['BackupModal.tsx', 'BackupModal'],
-    ['AboutModal.tsx', 'AboutModal'],
-    ['ReadingLogModal.tsx', 'ReadingLogModal'],
-    ['SourceHealthModalEntry.tsx', 'SourceHealthEntryModal'],
-  ]
-  for (const [file, exportName] of expected) {
-    const full = path.join(FEATURES_DIR, 'modal', file)
-    assert.ok(fs.existsSync(full), `features/modal/${file} 应存在`)
-    const src = fs.readFileSync(full, 'utf8')
-    assert.ok(src.includes(`export function ${exportName}`),
-      `${file} 应导出 ${exportName}（独立浮层组件）`)
+test('可独立卸载的功能都在 plugins/ 下，不在 features/', () => {
+  // 判定标准落地：这 5 个能独立卸载，必须是插件。
+  const expected = ['changelog', 'backup', 'about', 'reading-log', 'source-health']
+  for (const name of expected) {
+    const dir = path.join(PLUGINS_DIR, name)
+    assert.ok(fs.existsSync(dir), `plugins/${name}/ 应存在（能独立卸载 → 插件）`)
   }
+  // 反向：features/ 下不该再有这些功能的副本
+  assert.ok(!fs.existsSync(path.join(FEATURES_DIR, 'modal')),
+    'features/modal/ 不该再存在 —— 那些功能已判定为插件')
 })

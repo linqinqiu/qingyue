@@ -59,17 +59,23 @@ test('hooks 文件以 use 开头，且导出同名函数', () => {
 })
 
 test('features/ 下的目录职责与文档一致', () => {
-  // 四个目录各自代表一类东西，别混（详见 docs/lab-ai-plugin.md）。
-  const expected = ['modal', 'ai', 'plugins', 'settings']
+  // features/ 只放"产品自带、不可卸载"的内容。
+  // 能独立卸载的功能已判定为插件，住 plugins/（详见 docs/lab-ai-plugin.md）。
+  const expected = ['ai', 'settings']
   for (const d of expected) {
     assert.ok(fs.existsSync(path.join(SRC, 'features', d)),
-      `features/${d}/ 应存在（四类分家的一部分）`)
+      `features/${d}/ 应存在（产品自带内容）`)
   }
+  // 反向：能卸载的功能不该再留在 features/ 里
+  assert.ok(!fs.existsSync(path.join(SRC, 'features', 'modal')),
+    'features/modal/ 不该存在 —— 那些功能已判定为插件')
+  assert.ok(!fs.existsSync(path.join(SRC, 'features', 'plugins')),
+    'features/plugins/ 不该存在 —— 插件住 plugins/')
 })
 
 test('AI 与插件不冒充实验室条目', () => {
   // 这两类已独立，不该再出现 LabEntry（详细边界见 FrameworkHasNoContent.test.ts）。
-  for (const d of ['ai', 'plugins', 'modal']) {
+  for (const d of ['ai', 'settings']) {
     const dir = path.join(SRC, 'features', d)
     if (!fs.existsSync(dir)) continue
     for (const f of walk(dir)) {

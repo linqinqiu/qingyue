@@ -60,13 +60,13 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
   // 书源已回到顶栏：它必须是一级入口，且不再出现在收编清单里
   assert.ok(/\{ key: 'sources'/.test(table), '书源要回到顶栏一级表里')
   // 规则 / 备份 仍从「设置」页进：规则是悬浮层（PageDialog），备份是**成熟功能浮层**
-  // （features/modal/），不是实验室条目。两者都不占顶栏、不占路由，但入口必须真的接上。
+  // （plugins/），可独立卸载。两者都不占顶栏、不占路由，但入口必须真的接上。
   const app = read('../src/main.tsx')
   assert.ok(!new RegExp(`\\{ key: 'rules'`).test(table), 'rules 不该占顶栏')
   assert.ok(app.includes(`setPageDialog('rules')`), 'rules 的悬浮层没接线')
   assert.ok(!new RegExp(`\\{ key: 'backup'`).test(table), 'backup 不该占顶栏')
   assert.ok(app.includes("setOpenModal('backup')"), 'backup 的入口要接到备份浮层')
-  assert.match(read('../src/features/modal/BackupModal.tsx'), /<BackupPage \/>/,
+  assert.match(read('../src/plugins/backup/BackupModal.tsx'), /<BackupPage \/>/,
     '备份浮层里要真的渲染这一页，不是挂个空组件')
   assert.doesNotMatch(app, /showReplaceRules/,
     '「规则开没开」只有 pageDialog 一个出处；再留一份布尔旗标就是两处状态互相顶（设置页改走 pageDialog 后它已无人置真）')
@@ -86,7 +86,7 @@ test('一级目的地只在顶栏列一次；规则/备份 收在「设置」页
     assert.match(wiredBlock, new RegExp(`^\\s+${name}: \\(\\) =>`, 'm'), `${name} 在 main.tsx 里没接上动作`)
   }
   // 接的都是原来那一份实现，不是第二套：逐个点名。
-  // 「备份」是成熟功能浮层（features/modal/），动作是开对应浮层 —— 期望值跟着换，
+  // 「备份」是插件（plugins/），动作是开对应浮层 —— 期望值跟着换，
   // 但"必须接到某一份真实现"这条不变（不接就是死按钮）。
   // 同一轮把 5 个独立布尔收成一个 openModal：弹窗类动作的期望值从 setShowXxx(true) 变成 setOpenModal('xxx')，
   // 语义完全等价（同一时刻只开一个），判据跟着换写法而不是放宽要求。

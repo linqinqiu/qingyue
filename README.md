@@ -238,7 +238,9 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 | 让 AI 或脚本接进来（管书源、批量整理、走登录） | [`docs/AI-AGENT.md`](docs/AI-AGENT.md) · 机器可读的那份是 `GET /api/catalog` |
 | **AI 具体能干什么、怎么接一个模型、怎么给它加能力** | [`docs/agent-guide.md`](docs/agent-guide.md) |
 | 自定义接入面 `/api/agent/*`（外接模型、书源新建/校验、阅读理解） | [`AGENTS.md`](./AGENTS.md) |
-| 实验室 / AI / 插件 / 成熟功能 四类怎么分 | [`docs/lab-ai-plugin.md`](docs/lab-ai-plugin.md) |
+| 实验室 / AI / 插件 三类怎么分 | [docs/lab-ai-plugin.md](docs/lab-ai-plugin.md) |
+| **写一个插件**（加工具 / 协议 / 选择策略 / 钩子） | [docs/plugin-development-guide.md](docs/plugin-development-guide.md) |
+| **反代书源**（自有中转服务访问目标站） | [docs/reverse-proxy-source-guide.md](docs/reverse-proxy-source-guide.md) |
 | 前端命名与文件组织规范 | [`docs/frontend-conventions.md`](docs/frontend-conventions.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
 
