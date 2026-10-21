@@ -35,12 +35,16 @@ node stop.mjs                # 停掉本项目在端口上的那个 java 进程
 ## 提交前
 
 - `npm run check` 与 `npm test` 都要过。
+- 改动了框架层（`plugin/` 容器、端点计数、AI 接入注册表）还要先跑后端守门：
+  `./gradlew :server:verifyFramework`（钉死"框架不夹带内容 + 139/19/8 端点契约"）。
+  PR 合并前由 CI 的 `contract.yml` 自动跑这道，但本地先红比等 CI 红更省事。
 - 改了服务端就打一次 `npm run build`，确认 fatJar 能出。
 - 版本号只有一个来源（`server/build.gradle` 的 `version`）。**发版前**升一档，并在
   `CHANGELOG.md` 顶部补一条（日期写发版那天，不是动手那天）；一天里无论改了几次只占一个版本号。
-  `tools/verify/version-check.mjs` 会判六处是否同号。
+  `tools/verify/version-check.mjs` 会判五处是否同号（gradle / jar 清单 / `/healthz` / 顶栏 / CHANGELOG）。
 - 改行为的，补 / 改用例。这个仓库的判据口径是"能离线跑、能红能绿"，不是"页面上看着有字" ——
-  具体怎么写见 [`AGENTS.md`](AGENTS.md)（前端另见 [`web/AGENTS.md`](web/AGENTS.md)）。
+  具体怎么写见 [`AGENTS.md`](AGENTS.md)；前端判据的写法看 `web/test/` 下现成的用例
+  （框架纪律那几条的判据清单见 [`docs/plugin-framework.md`](docs/plugin-framework.md) §6「验证」）。
 
 ## 分支与 PR
 

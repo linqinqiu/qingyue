@@ -24,7 +24,7 @@
 ```jsonc
 {
   "service": "青阅",
-  "version": "0.8.2",          // 当前真正在跑的构建号，由服务端在响应时盖上
+  "version": "0.8.3",          // 当前真正在跑的构建号，由服务端在响应时盖上
   "scope": "全量：代码里注册的每一条端点都在这里，按 group 归面",
   "howToConnect": { "baseUrl": "…", "auth": "…", "errors": "…", "response": "…" },
   "workflow": [ "…" ],
@@ -46,9 +46,9 @@
 （这一条是拿真接口打出来的：目录给 `GET /api/logs` 列了 `stackTrace`，实际回包里那一项没有这个键。）
 
 `scope` 现在是**全量** —— `http/` 目录里注册的每一条都在这份目录里（0.8.2 起路由按面拆在
-`Routes.kt` 装配点与 `<组名>Routes.kt` 组文件里），共 138 条，按面分成：
-目录 / 书源 / 发现页 / 搜索 / 登录与凭据 / 内置浏览器 / 阅读 / 书架 / 离线缓存 / 分章规则 / 净化规则 /
-图片与媒体 / 进度与笔记 / 朗读 / RSS / 书源订阅 / 备份 / 系统。判据的要求是「目录条数 == 代码里的条数」，
+`Routes.kt` 装配点与 `<组名>Routes.kt` 组文件里），共 139 条，按面分成：
+目录 / 系统 / 书源 / 发现页 / 搜索 / 登录与凭据 / 内置浏览器 / 阅读 / 书架 / 离线缓存 / 分章规则 / 净化规则 /
+图片与媒体 / 进度与笔记 / 朗读 / RSS / 书源订阅 / 备份。判据的要求是「目录条数 == 代码里的条数」，
 所以新加一条端点而忘了写进契约，当天就会红 —— 以前只盯 `/api/sources…` 前缀，别的面漏了没人知道。
 
 `write` 这一栏要说准：它是"这条处理器**调没调**同源写门"，不是"这台客户端会不会被挡"。
@@ -106,28 +106,28 @@ AI 要"帮我修库"时，先让它给出分档统计，再决定动作，不要
 
 这一组是**「用户自定义接入」的承载面**：基础框架只在这里立下几个稳固的钩子，真正「接哪种模型、连哪个地址」
 完全交给用户——要么在 `agent-profiles.json`（与 `port.txt` 同级，随安装根目录）里预置，要么运行时 `POST` 注册。
-框架本身只认一个内置的本地 stub（`local`），**不默认联网**。
+**没有内置连接，也没有本地兜底**：不登记外部模型时 AI 功能明确不可用（409 `no_connection`）。
 
 > 设计边界：这一组**不改动基础框架的其它部分**。书源新建/校验只是把 `SourceCodec.parse/validate` 的同一路径
-> 透出来给外部程序用；阅读理解在没有外部连接时退回内置的抽取式摘要，只有在你注册了一个外部模型后才外呼。
+> 透出来给外部程序用；阅读理解与对话都必须外呼已登记的外部模型。
 
-- **`GET /api/agent/manifest`**（只读，无写门）：列出当前 AI 能力——工具名 / 分组 / 是否写库，以及是否启用了内部连接。
-  回 `{enabled, tools:[{id,group,description,writes}], builtinConnections:[…]}`。
-- **`GET /api/agent/connections`**（只读，无写门）：列出所有可接入的连接——内置 `local` 永远在，外加用户配的或运行时注册的外部连接。
-  回 `[{id,name,kind,builtin,model?}]`。
-- **`POST /api/agent/connections`**（写，需同源写门）：注册或更新一个外部连接（OpenAI 兼容等），落到 `agent-profiles.json`，重启仍生效。
-  体 `{id?,name,kind:"builtin-stub"|"openai-compatible",baseUrl?,apiKey?,model?,options?}`；
-  `kind` 不认回 400 `invalid_kind`，`id` 为 `local` 不允许覆盖，预置 `local` 不会写盘也删不掉。
-- **`DELETE /api/agent/connections/{id}`**（写，需同源写门）：删除一个用户连接（清掉对应 `agent-profiles.json` 记录）。
-  删内置回 400 `builtin_protected`，不存在回 404 `not_found`。
+- **`GET /api/agent/manifest`**（只读，无写门）：列出当前 AI 能力——工具名 / 分组 / 是否写库，以及是否登记了外部连接。
+  回 `{enabled, tools:[{id,group,description,writes}], builtinConnections:[]}`（后者恒为空，保留字段）。
+- **`GET /api/agent/connections`**（只读，无写门）：列出所有已登记的外部连接；没有就是空列表。
+  回 `[{id,name,kind,model?,baseUrl?}]`。
+- **`POST /api/agent/connections`**（写，需同源写门）：注册或更新一个外部连接（OpenAI 兼容），落到 `agent-profiles.json`，重启仍生效。
+  体 `{id?,name,kind:"openai-compatible",baseUrl?,apiKey?,model?,options?}`；`kind` 不认回 400 `invalid_kind`。
+- **`DELETE /api/agent/connections/{id}`**（写，需同源写门）：删除一个外部连接（清掉对应 `agent-profiles.json` 记录）。
+  不存在回 404 `not_found`。
 - **`POST /api/agent/sources`**（写，需同源写门）：新建或覆盖一份书源——`json` 是整份书源字符串，带 `version` 防并发覆盖。
   回 `{id,version,updatedAt}`；结构错 400 `invalid_source`，并发改写 409 `version_conflict`。
 - **`POST /api/agent/sources/validate`**（只读，无写门）：只校验书源合法性不落库（接入前的探针）。
   体 `{json}`，回 `{valid,errors[],warnings[]}`；结构错 400 `invalid_request`。
-- **`POST /api/agent/comprehend`**（只读，无写门）：文章阅读理解。若存在一个非 `builtin-stub` 的外部连接就走它，
-  否则用内置本地抽取（摘要 / 关键词 / 简易问答）。体 `{text,question?,summarySentences?,topKeywords?}`，
-  回 `{engine,summary,keywords[],answer?,sentencesCount,fallback?}`；`text` 空 400 `invalid_request`。
-  外部调用失败时自动退回本地并标 `fallback:true`，保证接口永远有结果。
+- **`POST /api/agent/comprehend`**（只读，无写门）：文章阅读理解，必须有外部模型连接。
+  体 `{text,question?,summarySentences?,topKeywords?}`，回 `{engine,summary,keywords[],answer?,sentencesCount}`；
+  `text` 空 400 `invalid_request`，无连接 409 `no_connection`，外呼失败 502 `upstream_unreachable`。
+- **`POST /api/agent/chat`**（只读，无写门）：多轮自由对话，必须有外部模型连接。
+  体 `{messages:[{role,content}]}`，回 `{engine,content,toolRounds?}`；无连接 409、外呼失败 502。
 
 > 注册 `openai-compatible` 连接时，`baseUrl` 填网关地址（末尾带不带 `/v1` 都行），本服务用 JDK 自带 `HttpClient`
 > 直连 `…/chat/completions`，不依赖任何外部 HTTP 客户端库。

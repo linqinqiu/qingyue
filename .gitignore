@@ -23,6 +23,9 @@ node_modules/
 server/src/main/resources/static/
 .env
 .data/
+# 外部模型连接档案：里面有 apiKey（用户填的密钥），与 .env 同级待遇，严禁入库。
+# 运行时由 AgentProfileStore 写在「安装根」和 .data/ 两处；.data/ 已被上面覆盖，这里锚住根目录那份。
+/agent-profiles.json
 # 本机部署的数据目录（SQLite + 封面 + WebDAV 落盘），含用户书架，严禁入库。
 # 必须锚住具体位置：不带 / 的 data/ 会连带吞掉 server/src/main/kotlin/io/legado/server/data/，
 # 那里新拆出来的 DAO 文件对 git 直接不可见（0.8.2 结构重排时抓到）。

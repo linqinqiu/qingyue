@@ -15,7 +15,7 @@
 - `SubscriptionService`：订阅更新
 - `CoverCache`：封面缓存
 
-这些对象就是 138 个 HTTP 端点背后那同一批实例。AI 调用它们 == 端点调用它们，
+这些对象就是 139 个 HTTP 端点背后那同一批实例。AI 调用它们 == 端点调用它们，
 **没有第二条实现路径**，也就不会出现「AI 能改、界面改不了」或反过来这种分裂。
 
 **关键约束（来自 `web/test/ApiCatalog.test.ts`）：** 那份判据逐条比对 `http/` 目录的路由文件与
@@ -36,6 +36,14 @@ server/src/main/kotlin/io/legado/server/ai/
 ├── AgentConnection.kt// ★ 程序内部"连接 API"句柄：call / manifest（同步，不增路由）
 └── AgentModule.kt    // ★ 把连接挂进进程的接线处：install 默认关闭，仅 -Dai.debug 自检
 ```
+
+> **内容 / 框架边界**：`ai/` 是「可覆盖的默认内容容器」（类比前端 `features/`），与 `plugin/`
+> （纯框架容器，内容无关）不同。两者都**不注册任何 HTTP 路由**（Ktor 路由只从 `http/` 装配），
+> 所以 139 端点计数不动。`ai/` 里的 `OpenAiCompatibleProvider` / `BuiltinTools` / `FirstProfileSelector`
+> 只是默认实现，全部可插拔（外部 provider / 工具 / 选择器用新 id 注册、`replace` 覆盖、`unregister`
+> 摘掉）。这条边界由 `FrameworkContractTest`（`@Tag("framework-contract")`，钉进 `verifyFramework`
+> 与 `check`）守住：默认只含 `openai-compatible` 与 `FirstProfileSelector`、重复 id 被拒、
+> 内置工具默认不可删、`agent-api.json` 契约 139/19/8。详见 `docs/plugin-framework.md` §0.1。
 
 ## 2. 核心类型（`AgentContext.kt`）
 
@@ -152,8 +160,9 @@ class Agent(
 - 其他 `Throwable` → `internal_error`（同时回调 `hooks.onError`，拿到的就是最终返回那个结果）
 - 钩子自己抛异常 → `hook_failed`，工具不执行
 
-**`callLlm` 已接通**：它会去 `AgentProfileStore` 找第一个非内置（openai-compatible）连接并真正发出
-HTTP 请求；找不到或调用失败返回 `null`，调用方据此走关键字路由或本地兜底。框架本身仍不绑定任何
+**`callLlm` 已接通**：它会去 `AgentProfileStore` 找第一个 openai-compatible 连接并真正发出
+HTTP 请求；找不到或调用失败返回 `null`，调用方据此返回明确的不可用错误（`409 no_connection` /
+`502 upstream_unreachable`），**不做本地兜底**。框架本身仍不绑定任何
 具体模型——接哪个地址完全由用户的 `agent-profiles.json` 决定。约束不变：模型只能从 `toolManifest`
 选工具、只能通过 `runTool` 落地，不能允许模型直接调私有方法绕过护栏。
 
@@ -219,7 +228,7 @@ val conn = AgentModule.connect(database, runner, coverCache, subscriptions, regi
    直接调用 `agent.runTool(...)` 的演示逻辑，仅供本地排查，不对外暴露。
 
 要让人/脚本以「AI 客户端」方式驱动这台服务，仍然走 `GET /api/catalog` 拿契约、
-走既有 138 个端点执行——进程内 `Agent` 是给"服务自己内嵌的自动化/智能体"用的同一条路径。
+走既有 139 个端点执行——进程内 `Agent` 是给"服务自己内嵌的自动化/智能体"用的同一条路径。
 
 ## 6.5 连接自己的配置（`options`）
 

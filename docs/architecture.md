@@ -11,7 +11,7 @@
    ▼
 一个 JVM 进程（Ktor CIO，默认只绑 127.0.0.1:1234）
    ├─ 规则引擎：RuleSplit → RuleValue → RuleRunner + JsSandbox(Rhino) + Jsoup / XPath / JsonPath
-   ├─ 数据：一个 SQLite 文件（WAL），17 张表
+   ├─ 数据：一个 SQLite 文件（WAL），代码建 16 张表
    └─ 出站：NetworkSecurity 闸门（拒内网 / 链路本地 / 保留段）
 ```
 
@@ -37,14 +37,19 @@
 
 ## 3. 数据模型
 
-库文件默认 `$LEGADO_DATA_DIR/legado.sqlite`（WAL，所以同级还有 `-wal` / `-shm`）。17 张表按归属分六组：
+库文件默认 `$LEGADO_DATA_DIR/legado.sqlite`（WAL，所以同级还有 `-wal` / `-shm`）。代码会建 16 张表，按归属分六组：
 
 - **书源与凭据**：`source`（整份书源 JSON 存 `payload`）、`source_login_state`、`cookie`。
 - **书架与进度**：`book_shelf`、`book_group`、`reading_progress`、`reading_log`。
-- **阅读标记**：`book_mark`、`book_note`。
+- **阅读标记**：`book_note`（划线 / 备注）。
 - **缓存**：`book_toc_cache`、`book_content_cache`、`book_cache_status`；封面字节走 `cover_cache` + 磁盘文件。
 - **内容与规则**：`replace_rule`、`source_subscription`、`rss_source`。
 - **诊断**：`log_entry`（含 `repeat_count` 合并同类、`host` 让界面说得出哪个站在失败）。
+
+> 注意"代码建的表"与"磁盘上的表"不是一回事：`Database.kt` 只建不删，早年版留下又已停用的表
+> （如书签功能 0.6.12 移除后遗留的 `book_mark`）仍会躺在老库里。数表数量要用
+> `sqlite_master` 查实际库，别按本文当断言；代码里的权威清单是 `Database.kt` 的
+> `create table if not exists`（当前 16 条）。
 
 **不在库里的两类东西**：TXT 分章规则是"随包 `server/src/main/resources/assets/txtTocRule.json` ∪ 本机覆盖文件"；
 备份包里"原样收下"的条目只是文件（`data/backup_kept/`），不给它们建表。
@@ -68,10 +73,11 @@
 
 ## 5. 前端模块
 
-入口是 `web/src/main.tsx`（0.8.2 结构重排后只剩路由 + 页面壳，约 490 行）。按职责分五块：
+入口是 `web/src/main.tsx`（0.8.2 结构重排后只剩应用状态与外壳；P2 起页面路由与渲染也搬了出去）。
 
-- **外壳与导航**：一级目的地只有一张表（`reader/shortcuts.ts` 的 `PRIMARY_PAGES` 同时喂顶栏、数字键、`Alt+←/→`）。
-  规则 / 备份 / 更新日志 / 关于是悬浮层（`PageDialog`），不占路由。
+- **外壳与导航**：一级目的地只有一张表（`app/pageMeta.ts` 的 `PAGES` 同时喂顶栏、数字键、`Alt+←/→` 与 hash 解析；
+  `app/pages.tsx` 只决定每页渲染什么）。加一页只改这两处，不再改 `main.tsx` 的三元链。
+  规则 / 备份 / 更新日志 / 关于是悬浮层（`PageDialog` / 实验室），不占路由。
 - **阅读器**：`reader/ReaderScreen.tsx` 只做编排，几何与翻页算术在 `reader/readerFlow.ts`、手势在
   `reader/readerInteractions.ts`、点击区域在 `reader/tapZones.ts` + `reader/TapZoneEditor.tsx`。
   0.8.2 结构重排又拆出四块：目录虚拟列表 `reader/VirtualChapterList.tsx`（窗口算式仍只有

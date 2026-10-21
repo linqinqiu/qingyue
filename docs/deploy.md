@@ -20,7 +20,7 @@
 
 ```bash
 npm --prefix web run build          # ① 前端产物 web/dist
-./gradlew :server:fatJar            # ② 把 ① 烤进 jar（server/build.gradle:74-77 的 processResources 拷 web/dist）
+./gradlew :server:fatJar            # ② 把 ① 烤进 jar（server/build.gradle 的 processResources 把 web/dist 拷进 static/）
 node tools/make-cds.mjs             # ③ 可选：CDS 类归档，冷启动 ~8.3s → ~5.3s
 node scripts/package.mjs            # ④ 可选：整合包
 node scripts/package-desktop.mjs    # ⑤ 可选：桌面包
@@ -79,10 +79,11 @@ start.cmd                      # 双击用：没跑就起、等就绪再开界�
 
 ## 6. 升级之后"界面还是旧版"
 
-九成是 Service Worker 预缓存：新版本 SW 停在 waiting 态，旧的 `navigateFallback` 还在发 `index.html` + 旧 bundle，
-于是用户看到"新增的入口根本不存在"，哪怕服务端已经返回了新资源。三层兜底都在 `web/src/components/PwaManager.tsx`：
-注册成功后立刻判 `reg.waiting && navigator.serviceWorker.controller` 并弹更新提示；页面 `focus` / `visibilitychange`
-与每 5 分钟主动 `registration.update()`；真更新时如果用户正在输入或搜索在飞，推迟到空闲再刷。
+九成是 Service Worker 预缓存。当前策略是 **autoUpdate**：新 SW 自己 `skipWaiting` + `clientsClaim`，
+不会停在 waiting 态，也没有"发现新版本 → 点立即更新"这一步；接管后页面在空闲时自动刷新。
+三层兜底都在 `web/src/components/PwaManager.tsx`：注册成功后立刻 `reg.update()`；页面 `focus` /
+`visibilitychange` 与每 5 分钟主动检查；`controllerchange` 时如果用户正在输入或搜索在飞，推迟到空闲再刷。
+注册只有 PwaManager 一个入口（VitePWA 的 `injectRegister: null`，不再注入 `/registerSW.js`）。
 
 自查三步：`curl -s http://127.0.0.1:<端口>/ | grep assets/index-` 看哈希 → 对一下 `web/dist/index.html` →
 不一致就是产物旧（回 §2 重打）；一致而界面还旧就是 SW，让用户 DevTools → Application → Service Workers → 注销 + 清站点数据，
