@@ -34,8 +34,13 @@ export type FrontendPlugin = {
   /** 作者，可空。 */
   author?: string
 
-  /** 往实验室加的实验条目。 */
-  labEntries?: LabEntry[]
+  /**
+   * 往实验室加的条目。
+   *
+   * **不要写 `origin`** —— 来源由注册表统一打上 `'plugin'`（见 [FrontendPluginRegistry.labEntries]）。
+   * 类型上把它 Omit 掉，插件就没法冒充"实验室决定要有的功能"。
+   */
+  labEntries?: Omit<LabEntry, 'origin'>[]
 
   /** 往设置页加的分区。 */
   settingsSections?: PluginSettingsSection[]
@@ -135,9 +140,17 @@ export class FrontendPluginRegistry {
     return [...this.failures]
   }
 
-  /** 所有插件贡献的实验室条目，按插件顺序拼起来。 */
+  /**
+   * 所有插件贡献的实验室条目，按插件顺序拼起来。
+   *
+   * 这里**强制打上 `origin: 'plugin'`**，不让插件自己声明来源：
+   * 来源是"谁把它放进来的"这个事实，由注册表说了算。插件若自己写
+   * `origin: 'lab'`，就会冒充成"实验室决定要有的功能"——那正是要防的。
+   */
   labEntries(): LabEntry[] {
-    return this.list().flatMap(p => p.labEntries ?? [])
+    return this.list().flatMap(p =>
+      (p.labEntries ?? []).map(entry => ({ ...entry, origin: 'plugin' as const })),
+    )
   }
 
   /** 所有插件贡献的设置分区。 */

@@ -13,6 +13,7 @@ import { ServerPortModal } from './components/ServerPortModal'
 import { LabModal } from './plugins/labHost'
 import { frontendPlugins } from './extensions/registry'
 import { installBuiltinPlugins } from './plugins'
+import { labOwnedSettingsSections } from './features/labSettings'
 import { LAB_ENTRY } from './app/destinations'
 import type { UiContext } from './lib/uiContext'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
@@ -390,21 +391,26 @@ function App() {
   }
 
   /**
-   * 插件贡献的设置分区。
+   * 设置页末尾的分区，来自两处（与实验室条目同一个分类逻辑）：
    *
-   * 从前 `frontendPlugins.settingsSections()` 有 getter 但**从没被调用** —— 插件注册了也不生效，
-   * 那是"承诺了却没实现"。现在接上：插件注册的分区会出现在设置页末尾。
+   * - `features/lab/` 里实验室功能自己贡献的分区（如「界面偏好」）—— 产品自带；
+   * - `frontendPlugins.settingsSections()` 插件贡献的分区 —— 用户装的。
    *
-   * 用 useMemo 缓存：`settingsSections()` 每次返回新数组，直接传给 SettingsPage 会让它每轮
-   * 都当成新 prop（虽然它不 memo，但少一次数组拼接也是少一次）。
+   * 从前 `settingsSections()` 有 getter 但**从没被调用**，插件注册了也不生效 ——
+   * 那是"承诺了却没实现"。现在两类都接上。
+   *
+   * 用 useMemo 缓存：getter 每次返回新数组，直接传给 SettingsPage 会让它每轮
+   * 都当成新 prop。
    */
   const pluginSettingsSections = useMemo(
-    () => frontendPlugins.settingsSections().map(s => ({
-      id: s.id,
-      title: s.title,
-      description: s.description,
-      render: s.render,
-    })),
+    () => [
+      ...labOwnedSettingsSections.map(s => ({
+        id: s.id, title: s.title, description: s.description, render: s.render,
+      })),
+      ...frontendPlugins.settingsSections().map(s => ({
+        id: s.id, title: s.title, description: s.description, render: s.render,
+      })),
+    ],
     [],
   )
   if (!ready) {

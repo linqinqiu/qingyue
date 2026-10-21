@@ -1,45 +1,33 @@
 import { frontendPlugins } from '../extensions/registry'
+import type { FrontendPlugin } from '../extensions/registry'
 import type { LabEntry } from '../lab/Lab'
-import { pluginIntroPlugin } from './pluginIntro'
-import { changelogPlugin } from './changelogPanel'
-import { readingLogPlugin } from './readingLogPanel'
-import { backupPlugin } from './backupPanel'
-import { aboutPlugin } from './aboutPanel'
-import { sourceHealthPlugin } from './sourceHealthPanel'
-import { windowPrefsPlugin } from './windowPrefsPanel'
 
 /**
- * 随包内置的前端插件清单 —— 框架启动时装载这些插件。
+ * **用户自定义**插件的装配清单。
  *
- * 注意目录含义：`plugins/` 是**插件**（内容），`extensions/` 是插件契约与注册表（框架），
- * `lab/` 只是容器。这个文件是"宿主装配清单"：它决定随程序一起发布哪些插件。
+ * 这里只放插件 —— 可装可卸、第三方可写的扩展。**程序自带的功能不在这里**：
+ * AI 接入、书源体检、更新日志、备份、关于、阅读记录、插件面板都由
+ * `features/labEntries.ts` 提供（那是"实验室决定要有的功能"）。
  *
- * **AI 接入不在这里**：它是功能（`features/ai/`），不是插件。功能条目由
- * `features/labEntries.ts` 提供，装配点把两者拼在一起。
+ * 两者的区别不是文件夹洁癖，是"谁决定要有它"：
+ * - 本文件里的东西：**用户/第三方**决定（可装可卸，不装不影响主程序）
+ * - `features/` 里的东西：**产品**决定（随程序发布，用户卸不掉）
  *
- * 想让第三方插件进来：把它写进这个数组，或在运行时调 `frontendPlugins.register(...)`。
- * 想把某个内置插件摘掉：从数组里删一行即可 —— 框架不依赖任何一条。
+ * 所以 `BUILTIN_PLUGINS` 现在是**空的** —— 从前把 7 个主程序功能搬进来"验证插件框架撑得住"，
+ * 那验证已经完成；它们本来就不是插件，现在归回 `features/lab`。
  *
- * 装载顺序 = 实验室里的条目顺序。插件条目排在功能条目之后。
+ * 想让第三方插件进来：写进下面这个数组，或在运行时调 `frontendPlugins.register(...)`。
  */
-const BUILTIN_PLUGINS = [
-  sourceHealthPlugin,
-  pluginIntroPlugin,
-  changelogPlugin,
-  readingLogPlugin,
-  backupPlugin,
-  aboutPlugin,
-  windowPrefsPlugin,
-]
+const BUILTIN_PLUGINS: FrontendPlugin[] = []
 
 let installed = false
 
 /**
  * 条目清单缓存。
  *
- * 从前每次渲染都调 `frontendPlugins.labEntries()` 现拼一个新数组 —— Lab 里为此
- * 不得不用 `entriesRef` 绕开依赖（"每次都是新引用"会让依赖失效）。那是**框架设计不够好**
- * 留下的痕迹：既然条目清单在运行期不变，就该在源头缓存一次，让下游能正常按引用比较。
+ * 条目清单在运行期不变，就该在源头缓存一次，让下游能正常按引用比较。
+ * 从前每次渲染都现拼一个新数组，Lab 里不得不用 `entriesRef` 绕开依赖 ——
+ * 那是框架设计不够好留下的痕迹。
  *
  * 运行期增删插件后要调 `invalidateLabEntries()` 清缓存（热重载路径）。
  */
@@ -50,15 +38,15 @@ export function invalidateLabEntries(): void {
   cachedEntries = null
 }
 
-/** 取实验室条目清单（缓存住；首次调用会先装内置插件）。 */
-export function getLabEntries(): LabEntry[] {
+/** 取**插件贡献**的实验室条目（缓存住；首次调用会先装内置插件）。 */
+export function getPluginLabEntries(): LabEntry[] {
   if (cachedEntries) return cachedEntries
   installBuiltinPlugins()
   cachedEntries = frontendPlugins.labEntries()
   return cachedEntries
 }
 
-/** 装载内置插件（幂等：重复调用不会重复登记）。 */
+/** 装载内置插件（幂等：重复调用不会重复登记）。当前清单为空，机制保留。 */
 export function installBuiltinPlugins(): void {
   if (installed) return
   installed = true

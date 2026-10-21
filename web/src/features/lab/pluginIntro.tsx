@@ -1,42 +1,23 @@
 import React, { useEffect, useState } from 'react'
-import { frontendPlugins } from '../extensions/registry'
-import { api, type PluginStatus } from '../lib/api'
-import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
+import { frontendPlugins } from '../../extensions/registry'
+import { api, type PluginStatus } from '../../lib/api'
+import type { LabOwnedEntry } from '../../lab/Lab'
 
 /**
- * 「插件与扩展」插件 —— 把插件系统自身的状态挂进实验室。
+ * 「插件」—— 实验室功能条目，**不是插件**（有点绕，但这是正确的位置）。
  *
- * 这也是一个**插件**，不是框架的一部分。它做的事：列出当前登记了哪些插件、
- * 各自贡献了什么、哪些登记失败了。框架的"能介绍自己"由这条插件呈现给用户，
- * 但框架本体（`lab/`）里不含这段界面。
+ * 它做的是：把"当前装了哪些插件"如实列出来。这条界面本身是产品自带的，
+ * 所以它属于实验室；被它列出来的那些才是插件。
  *
- * 换句话说：把这条插件删掉，实验室依然能用，只是没人告诉你装了哪些插件了。
+ * 框架的"能介绍自己"由这条呈现给用户，但框架本体（`lab/`、`extensions/`）里不含这段界面。
+ * 换句话说：把这条删掉，实验室依然能用，只是没人告诉你装了哪些插件了。
+ *
+ * 前端与后端两半都要看得见 —— 从前后端装载失败只打到服务端控制台，界面上完全看不到。
  */
-export const pluginIntroPlugin: FrontendPlugin = {
-  id: 'core.plugin-intro',
-  name: '插件与扩展',
-  version: HOST_VERSION,
-  description: '列出当前登记了哪些插件、各自贡献了什么、哪些登记失败了。',
-  author: '青阅',
-  labEntries: [
-    {
-      id: 'plugins',
-      title: '插件与扩展',
-      description:
-        '这里列出当前登记了哪些插件、各自贡献了什么。后端插件通过实现 Plugin 接口并放进插件目录加载；'
-        + '前端插件通过 frontendPlugins.register 登记实验条目与设置分区。',
-      badge: '框架',
-      render: () => <PluginIntro />,
-    },
-  ],
-}
-
-/** 插件自我介绍面板：把"装了什么、谁贡献的"如实列出来 —— 前后端两半都要看得见。 */
 function PluginIntro() {
   const plugins = frontendPlugins.list()
   const failures = frontendPlugins.loadFailures()
-  // 后端插件状态：从 /api/plugins 取。装没装上、为什么没装上，用户要看得见 ——
-  // 从前它只打到服务端控制台，界面上完全看不到，那是框架割裂的一处。
+  // 后端插件状态：从 /api/plugins 取。装没装上、为什么没装上，用户要看得见。
   const [backend, setBackend] = useState<PluginStatus | null>(null)
   const [backendError, setBackendError] = useState('')
   useEffect(() => {
@@ -50,12 +31,13 @@ function PluginIntro() {
   return (
     <div className="lab-plugin-intro">
       <p className="lab-desc">
-        框架本身不含功能：能力由插件提供。后端插件注册工具与协议，前端插件登记界面上的位置。
+        插件是**用户自定义**的扩展：可装可卸，不装也不影响主程序。
+        框架本身只立钩子；能力由插件注册进来 —— 后端插件注册工具与协议，前端插件登记界面位置。
       </p>
 
       <h3 className="lab-section-title">前端插件</h3>
       {plugins.length === 0 ? (
-        <p className="lab-empty">当前没有登记任何前端插件。</p>
+        <p className="lab-empty">当前没有登记任何前端插件。实验室里列出的其它条目都是程序自带的，不是插件。</p>
       ) : (
         <ul className="lab-plugin-list">
           {plugins.map(p => (
@@ -115,4 +97,21 @@ function PluginIntro() {
       )}
     </div>
   )
+}
+
+/**
+ * 「插件」条目：列的是插件，但它自己是实验室功能。
+ *
+ * 位置容易搞混，注释写死在这儿：这条**不**由插件注册表产生，
+ * 它和 AI 接入、书源体检一样，是产品自带的一条实验室条目。
+ */
+export const pluginIntroEntry: LabOwnedEntry = {
+  id: 'plugins',
+  origin: 'lab',
+  title: '插件',
+  description:
+    '当前装了哪些插件、各自贡献了什么、哪些装载失败了。插件是用户自定义的扩展，可装可卸；'
+    + '实验室里其它条目是程序自带的，不属于插件。',
+  badge: '扩展',
+  render: () => <PluginIntro />,
 }

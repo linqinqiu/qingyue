@@ -21,25 +21,53 @@ import { useEscapeClose } from '../lib/useEscapeClose'
  * 不引入拖拽库 —— 一个 mousedown/mousemove 循环够了，也省掉一个依赖。
  */
 
-/** 一条实验条目。实验室只认这个形状，不认具体内容。 */
+/**
+ * 实验室里的一条内容。
+ *
+ * **重要：这里有两类，来源不同，不要混为一谈。**
+ *
+ * - `origin: 'lab'` —— **实验室自己决定要有的功能**。随程序发布、与主程序同版本，
+ *   属于"框架在基础之上补齐的能力"（具体有哪些由 `features/labEntries.ts` 决定，
+ *   本文件**不认识**它们）。它们不是插件，用户也不能把它们卸掉。
+ * - `origin: 'plugin'` —— **用户自定义的扩展**。第三方写的、可装可卸、不装也不影响主程序。
+ *
+ * 两者能放进同一个窗口，是因为实验室是**容器**；但"谁决定要有它"完全不同：
+ * 前者是产品决定，后者是用户决定。界面上必须分开展示（见 [Lab] 的导航分区），
+ * 否则用户会以为某个自带功能是某个可卸载的插件。
+ *
+ * 判据 `FrameworkHasNoContent.test.ts` 盯着：`lab/` 目录本身不认识任何具体条目。
+ */
 export type LabEntry = {
-  /** 稳定 id，用于记住"上次停在哪个实验"。 */
+  /** 稳定 id，用于记住"上次停在哪个条目"。 */
   id: string
   /** 显示名。 */
   title: string
   /** 一句话说明这是什么、能干什么。 */
   description: string
   /**
-   * 渲染这个实验的内容。
+   * 渲染这个条目的内容。
    *
    * 参数是**宿主上下文**（[LabHostContext]）—— 由实验室的调用方提供，
    * 让条目能知道"用户此刻在哪个界面、在看什么"。实验室自己不认识这些字段，
    * 只是原样转发：框架不解释内容，只提供通道。
    */
   render: (host: LabHostContext) => React.ReactNode
-  /** 可选：条目标签，如 '实验' / '调试' / 'AI'。 */
+  /**
+   * 来源分类：`lab` = 实验室（框架）决定要有的功能；`plugin` = 用户自定义扩展。
+   *
+   * 这是**必填**的，不给默认值：让"这条到底是谁的东西"在类型层面就必须交代清楚。
+   * 从前靠 badge 文字（'实验' / '框架'）暗示，那是展示层的东西，靠不住。
+   */
+  origin: 'lab' | 'plugin'
+  /** 可选：条目标签，纯展示用（如 'AI' / '调试'）。不承担来源分类职责。 */
   badge?: string
 }
+
+/** 实验室自己决定要有的条目（不是插件，用户卸不掉）。 */
+export type LabOwnedEntry = LabEntry & { origin: 'lab' }
+
+/** 用户自定义扩展贡献的条目（可装可卸）。 */
+export type PluginOwnedEntry = LabEntry & { origin: 'plugin' }
 
 /**
  * 宿主上下文 —— 实验室向条目转发的"外面世界"。
@@ -130,18 +158,37 @@ export function Lab({
       actions={<Icon name="sliders" />}
     >
       <div className="lab-body">
+        {/*
+          导航按来源分两区，这是刻意的：实验室自己决定要有的功能（产品自带、卸不掉）
+          与用户自定义的插件（可装可卸）是两种东西。平铺成一张清单，用户会以为某个
+          自带功能也是能卸的插件。分区之后，"哪些是产品给的、哪些是我自己装的"一眼分得清。
+        */}
         <nav className="lab-nav" aria-label="实验条目">
-          {entries.map(entry => (
-            <button
-              key={entry.id}
-              type="button"
-              className={`lab-nav-item${entry.id === active?.id ? ' active' : ''}`}
-              onClick={() => setActiveId(entry.id)}
-            >
-              <span className="lab-nav-title">{entry.title}</span>
-              {entry.badge && <span className="lab-nav-badge">{entry.badge}</span>}
-            </button>
-          ))}
+          {(['lab', 'plugin'] as const).map(origin => {
+            const group = entries.filter(e => e.origin === origin)
+            if (group.length === 0) return null
+            return (
+              <div key={origin} className="lab-nav-group">
+                <p className="lab-nav-group-title">
+                  {origin === 'lab' ? '实验室' : '插件'}
+                  <span className="lab-nav-group-hint">
+                    {origin === 'lab' ? '程序自带' : '用户自定义 · 可装可卸'}
+                  </span>
+                </p>
+                {group.map(entry => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className={`lab-nav-item${entry.id === active?.id ? ' active' : ''}`}
+                    onClick={() => setActiveId(entry.id)}
+                  >
+                    <span className="lab-nav-title">{entry.title}</span>
+                    {entry.badge && <span className="lab-nav-badge">{entry.badge}</span>}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
           {entries.length === 0 && <p className="lab-empty">还没有登记任何实验条目。</p>}
         </nav>
 

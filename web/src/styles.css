@@ -5858,6 +5858,16 @@ input[type="checkbox"] {
 .lab-nav-item:hover { background: var(--surface-muted); }
 .lab-nav-item.active { background: var(--surface-muted); font-weight: 600; }
 .lab-nav-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 导航分区：实验室自带的功能 与 用户自定义的插件 分两组，组标题带一句来源说明。
+   分区是为了让"哪些是产品给的、哪些是我自己装的"一眼分得清。 */
+.lab-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.lab-nav-group + .lab-nav-group { margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.lab-nav-group-title {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2);
+  margin: 0 0 2px; padding: 0 10px;
+  font-size: var(--t-xs); font-weight: 600; color: var(--muted);
+}
+.lab-nav-group-hint { font-size: var(--t-xs); font-weight: 400; color: var(--muted); opacity: 0.75; }
 .lab-nav-badge {
   flex: none; padding: 1px 6px; border-radius: var(--r-1);
   background: var(--surface-muted); color: var(--muted); font-size: var(--t-xs);

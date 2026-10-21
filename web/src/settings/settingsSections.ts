@@ -100,9 +100,11 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
     {
       title: '实验室',
       rows: [{
-        title: 'AI 接入与扩展',
-        hint: '程序内部的 AI 网关（/api/agent）：登记一个 openai-compatible 模型后才能对话；'
-          + '没有连接时 AI 不可用，不做本地兜底。实验室同时列出已装载的插件与它们贡献的能力。',
+        // 这一行是整个实验室的入口，不是"AI 入口" —— 实验室里有 7 条自带功能 + 若干插件。
+        // 从前标题写「AI 接入与扩展」，第一次用的人不知道里面还有更新日志/备份/阅读记录。
+        title: '实验室',
+        hint: '一个可悬浮的窗口，放那些不该占一级导航的功能：AI 接入、书源体检、更新日志、'
+          + '阅读记录、备份与恢复、关于，以及你自己装的插件。自带功能与插件分两区列出。',
         action: '打开实验室',
         onClick: actions.openAiConnections,
       }],

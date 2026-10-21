@@ -1,8 +1,8 @@
 import React from 'react'
-import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
+import type { PluginSettingsSection } from '../../extensions/registry'
 
 /**
- * 「界面偏好」插件 —— 演示 `settingsSections` 能力：插件往设置页加自己的配置分区。
+ * 「界面偏好」—— 实验室功能的设置分区，**不是插件**。
  *
  * 用户要求："我希望各个功能的界面位置也可以自定义……悬浮窗的固定、大小样式，
  * 能否移动之类的细节方面照样支持。"
@@ -10,8 +10,8 @@ import { HOST_VERSION, type FrontendPlugin } from '../extensions/registry'
  * 这条把"窗口默认行为"做成可在设置页里调的项 —— 也就是把浮动窗口框架的能力
  * 暴露给用户，而不是只能拖一次记一次。
  *
- * 它是 `frontendPlugins.settingsSections()` 能力的第一个真实使用者：
- * 从前那个 getter 有、但没人调，插件注册了也不生效。
+ * 它贡献的是**设置分区**而不是实验室条目：这类配置属于设置页，不该塞进实验室窗口。
+ * 设置分区既可由实验室功能提供，也可由插件提供 —— 这条属于前者。
  */
 
 /** 窗口偏好的存储键（与 FloatingWindow 的 storageKey 无关 —— 那是每个窗口自己的几何）。 */
@@ -74,19 +74,11 @@ function WindowPrefsPanel() {
   )
 }
 
-export const windowPrefsPlugin: FrontendPlugin = {
-  id: 'core.window-prefs',
-  name: '界面偏好',
-  version: HOST_VERSION,
-  description: '浮动窗口的默认行为：是否默认钉住、是否默认收起。',
-  author: '青阅',
-  settingsSections: [
-    {
-      id: 'window-prefs',
-      title: '界面偏好',
-      description: '控制浮动窗口打开时的默认状态。位置与大小会自动记住，不用在这里配。',
-      render: () => <WindowPrefsPanel />,
-    },
-  ],
+/** 设置分区：实验室功能自己贡献的那一块。 */
+export const windowPrefsSection: PluginSettingsSection = {
+  id: 'window-prefs',
+  title: '界面偏好',
+  description: '控制浮动窗口打开时的默认状态。位置与大小会自动记住，不用在这里配。',
+  render: () => <WindowPrefsPanel />,
 }
 

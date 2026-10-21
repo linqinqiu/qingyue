@@ -72,31 +72,68 @@ test('框架容器 Lab.tsx 不含具体业务字样（它只该是容器）', ()
   }
 })
 
-test('框架装配点在内容目录 plugins/ 里，且不含硬编码的实验条目', () => {
+test('框架装配点在内容目录 plugins/ 里，且不含硬编码的条目', () => {
   // 装配 = "决定装哪些条目"，那是内容侧的决定，所以它属于 plugins/ 而不是 lab/。
   const hostFile = path.join(PLUGINS_DIR, 'labHost.tsx')
   assert.ok(fs.existsSync(hostFile), '装配点应在 plugins/labHost.tsx（内容侧决定装什么）')
   const src = fs.readFileSync(hostFile, 'utf8')
   assert.ok(!/title:\s*['"]/.test(src), '装配点里出现了硬编码的 title —— 条目应来自功能或插件')
   assert.ok(!/description:\s*['"]/.test(src), '装配点里出现了硬编码的 description —— 条目应来自功能或插件')
-  // 条目来源：功能条目 + 插件条目。两段合起来才是完整清单。
-  assert.match(src, /featureLabEntries/, '装配点要合并功能条目')
-  assert.match(src, /getLabEntries\(\)/, '装配点要向清单入口取插件条目')
+  // 条目来源：实验室自带（features）+ 插件（plugins）。两段合起来才是完整清单。
+  assert.match(src, /labOwnedEntries/, '装配点要合并实验室自带的条目')
+  assert.match(src, /getPluginLabEntries\(\)/, '装配点要向插件清单入口取条目')
   const indexFile = path.join(PLUGINS_DIR, 'index.ts')
   assert.match(fs.readFileSync(indexFile, 'utf8'), /frontendPlugins\.labEntries\(\)/,
-    '清单入口要向注册表要条目 —— 不能自己写死')
+    '插件清单入口要向注册表要条目 —— 不能自己写死')
 })
 
-test('AI 是功能不是插件：features/ai 不许把自己登记成 FrontendPlugin', () => {
+test('实验室自带条目与插件条目是两个类别：features 里不许出现插件契约', () => {
+  // features/lab/ 放的是"实验室决定要有的功能"，它们不是插件。
+  const labFeatureDir = path.join(FEATURES_DIR, 'lab')
+  assert.ok(fs.existsSync(labFeatureDir), 'features/lab/ 应存在（实验室自带的功能）')
+  for (const name of fs.readdirSync(labFeatureDir)) {
+    if (!name.endsWith('.tsx')) continue
+    const src = fs.readFileSync(path.join(labFeatureDir, name), 'utf8')
+    assert.ok(!src.includes('FrontendPlugin'), `features/lab/${name} 不该实现插件契约（它是实验室功能）`)
+    assert.ok(!src.includes('frontendPlugins.register'), `features/lab/${name} 不该往插件注册表登记`)
+  }
+})
+
+test('每条实验室条目必须显式声明 origin（lab 或 plugin）', () => {
+  // 来源不能靠 badge 文字暗示 —— 那是展示层的东西，靠不住。
+  const src = fs.readFileSync(path.join(FEATURES_DIR, 'labEntries.ts'), 'utf8')
+  assert.match(src, /labOwnedEntries/, '清单要叫 labOwnedEntries（实验室自带）')
+  // 自带的每一条都在 features/lab 或 features/ai 里，且必须写 origin: 'lab'
+  for (const dir of [path.join(FEATURES_DIR, 'lab'), path.join(FEATURES_DIR, 'ai')]) {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.tsx')) continue
+      const body = fs.readFileSync(path.join(dir, name), 'utf8')
+      if (!body.includes('LabOwnedEntry')) continue
+      assert.match(body, /origin:\s*'lab'/, `${name} 声明了 LabOwnedEntry 却没写 origin: 'lab'`)
+    }
+  }
+})
+
+test('插件贡献的条目由注册表强制打 origin=plugin，插件自己写不算', () => {
+  const src = fs.readFileSync(path.join(EXTENSIONS_DIR, 'registry.ts'), 'utf8')
+  assert.match(src, /origin:\s*'plugin' as const/,
+    '注册表要强制打 origin=plugin —— 否则插件能冒充成实验室自带功能')
+  assert.match(src, /Omit<LabEntry, 'origin'>/,
+    '插件声明条目的类型要 Omit 掉 origin —— 从类型上就不许它自己声明')
+})
+
+test('AI 是实验室功能，不是插件', () => {
   const file = path.join(FEATURES_DIR, 'ai', 'labEntry.tsx')
   assert.ok(fs.existsSync(file), 'features/ai/labEntry.tsx 应存在')
   const src = fs.readFileSync(file, 'utf8')
   assert.ok(!src.includes('FrontendPlugin'), 'AI 条目不该实现插件契约')
   assert.ok(!src.includes('frontendPlugins'), 'AI 条目不该往插件注册表里登记')
+  assert.match(src, /origin:\s*'lab'/, 'AI 接入是实验室自带功能')
 })
 
-test('内置插件清单不含 AI（AI 走功能条目）', () => {
+test('内置插件清单为空：产品自带的功能不再冒充插件', () => {
   const src = fs.readFileSync(path.join(PLUGINS_DIR, 'index.ts'), 'utf8')
-  assert.ok(!src.includes('aiPanel'), 'AI 已从插件清单移出')
-  assert.ok(!/from\s+['"][^'"]*features\/ai/.test(src), '插件清单不该 import AI 功能')
+  assert.match(src, /const BUILTIN_PLUGINS: FrontendPlugin\[\] = \[\]/,
+    'BUILTIN_PLUGINS 应为空 —— 7 个主程序功能已归回 features/lab')
+  assert.ok(!/from\s+['"][^'"]*features\//.test(src), '插件清单不该 import 实验室功能')
 })

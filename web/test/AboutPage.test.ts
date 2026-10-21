@@ -93,7 +93,7 @@ test('路由与样式都接上了', () => {
   // 0.8.3 起「关于」下沉成插件（住实验室里）：深链映射到实验室条目，
   // 页面本身在 plugins/aboutPanel.tsx 里渲染。断言仍是"接上了"，只是读取面跟着搬家。
   assert.match(read('../src/main.tsx'), /'#about': LAB_ENTRY\.about/, '旧深链要映射到实验室条目')
-  assert.match(read('../src/plugins/aboutPanel.tsx'), /<AboutPage[\s\S]{0,200}onOpenChangelog=\{/)
+  assert.match(read('../src/features/lab/aboutPanel.tsx'), /<AboutPage[\s\S]{0,200}onOpenChangelog=\{/)
   assert.match(read('../src/components/AppHeader.tsx'), /<span>关于<\/span>/)
   assert.match(read('../src/styles.css'), /\.about-page \{/)
 })
@@ -107,7 +107,7 @@ test('「我的」菜单不再重复列「更新日志」「快捷键」，这�
   assert.match(page, /<button type="button" className="ghost-button" onClick=\{onOpenShortcuts\}>快捷键<\/button>/)
   // 0.8.3 起「关于」住插件里：它不能直接改宿主状态，走 LabHostContext.actions 那张动作表。
   // 判据仍然要求"点它真的开那张表，不是死按钮" —— 只是要顺着插件→宿主两段一起看。
-  const aboutPlugin = read('../src/plugins/aboutPanel.tsx')
+  const aboutPlugin = read('../src/features/lab/aboutPanel.tsx')
   assert.match(aboutPlugin, /onOpenShortcuts=\{\(\) => actions\.openShortcuts\?\.\(\)\}/,
     '插件要把按钮接到宿主动作表上')
   // 同一轮把 5 个弹窗布尔收成一个 openModal，写法从 setShowShortcuts(true) 变成 setOpenModal('shortcuts')。
