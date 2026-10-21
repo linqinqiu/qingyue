@@ -147,6 +147,13 @@ test('目录里每一条都真存在，代码里的端点一条不漏', () => {
   assert.ok(Array.isArray(catalog.endpoints) && catalog.endpoints.length === routes.length,
     `目录有 ${catalog.endpoints?.length ?? 0} 条，代码里注册了 ${routes.length} 条 —— 这两个数必须相等，全量覆盖是这份契约的全部意义`)
   assert.deepEqual(auditCatalog(routes, catalog), [], '端点目录与代码对不上')
+  // 绝对计数钉死：139 条 / 19 组 / 系统组 8 条是当前青阅的权威契约（见 docs/RESEARCH-NOTES §7）。
+  // 双向相等只防「漂移」，不防「两边一起错」——重排架构时若这两个数真要变，
+  // 必须同步改这里并说明，而不是让漂移悄悄发生。
+  assert.equal(catalog.endpoints.length, 139, `端点总数必须为 139，现在是 ${catalog.endpoints.length}（重排时同步改此断言并说明）`)
+  assert.equal(new Set(catalog.endpoints.map((e: { group: string }) => e.group)).size, 19, '分组数应为 19')
+  const systemGroup = catalog.endpoints.filter((e: { group: string }) => e.group === '系统')
+  assert.equal(systemGroup.length, 8, `系统组必须为 8 条（含 /api/plugins），现在是 ${systemGroup.length}`)
   const keys = catalog.endpoints.map((e: { method: string; path: string }) => `${e.method} ${e.path}`)
   for (const must of ['POST /api/search', 'PUT /api/sources/{id}', 'GET /api/sources/{id}/debug',
     'GET /api/sources/{id}/browser/res', 'WS /api/search/stream', 'POST /api/books/content',
