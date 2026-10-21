@@ -20,17 +20,20 @@ node_modules/
 .cxx
 .vscode
 # local E2E runtime web bundle (copied from web/dist)
-server/src/main/resources/static/
+app/src/main/resources/static/
 .env
 .data/
 # 外部模型连接档案：里面有 apiKey（用户填的密钥），与 .env 同级待遇，严禁入库。
 # 运行时由 AgentProfileStore 写在「安装根」和 .data/ 两处；.data/ 已被上面覆盖，这里锚住根目录那份。
 /agent-profiles.json
 # 本机部署的数据目录（SQLite + 封面 + WebDAV 落盘），含用户书架，严禁入库。
-# 必须锚住具体位置：不带 / 的 data/ 会连带吞掉 server/src/main/kotlin/io/legado/server/data/，
+# 必须锚住具体位置：不带 / 的 data/ 会连带吞掉 app/src/main/kotlin/io/legado/data/，
 # 那里新拆出来的 DAO 文件对 git 直接不可见（0.8.2 结构重排时抓到）。
+# 0.8.3 目录重排（server/ → app/）后，实际部署目录变成了 app/data/；旧的
+# /data/ 与 /server/data/ 两条规则一并保留，避免漏放历史路径。
 /data/
 /server/data/
+/app/data/
 *.log
 tools/verify/out/
 .agents/
@@ -53,7 +56,7 @@ web/coverage/
 /assets/
 
 # 本机 2026-09-22 的整份本地差异快照（99 个文件），只作历史留档；
-# 里面的东西要么已进提交历史（如 JDK 17 toolchain 已在 server/build.gradle），要么早已作废，
+# 里面的东西要么已进提交历史（如 JDK 17 toolchain 已在 app/build.gradle），要么早已作废，
 # 所以不随仓库分发，也不许在文档里当"现行依据"引用。
 local-patches.diff
 

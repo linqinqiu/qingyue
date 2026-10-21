@@ -29,7 +29,9 @@
     "dev": "npm --prefix web run dev",
     "start": "node start.mjs",
     "coverage": "node scripts/coverage-report.mjs",
-    "coverage:report-only": "node scripts/coverage-report.mjs --skip-run --json"
+    "coverage:report-only": "node scripts/coverage-report.mjs --skip-run --json",
+    "docs:api": "node scripts/gen-api-reference.mjs",
+    "docs:api-check": "node scripts/gen-api-reference.mjs --check"
   },
   "repository": {
     "type": "git",

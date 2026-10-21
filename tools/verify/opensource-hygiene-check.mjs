@@ -72,7 +72,7 @@ const rules = [
   {
     name: '可分发的"教程式"面不许提已删的认证（README / 配置 / 部署模板 / 脚本）',
     pattern: /ADMIN_PASSWORD|adminPassword|reset-password|LEGADO_SECURE_COOKIES|\/api\/auth|legado_session|X-CSRF-Token/i,
-    only: /^(README\.md|\.env\.example|compose\.server\.yml|Dockerfile\.server|\.github\/|computenest\/|scripts\/)/,
+    only: /^(README\.md|\.env\.example|compose\.yml|Dockerfile|\.github\/|computenest\/|scripts\/)/,
   },
   {
     name: '代码与配置里没有 WebDAV 残留（`/webdav`、`WebDav`、`webdav`）',

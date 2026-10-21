@@ -6,7 +6,7 @@ import path from 'node:path'
 /**
  * 「下一页」这颗按钮不许挂在不吃页码的栏目上（PROPOSAL-022 P1）。
  *
- * 判定在服务端一处（`server/…/rules/PagingRule.kt`：只看规则写法，绝不执行书源 JS），
+ * 判定在服务端一处（`app/…/rules/PagingRule.kt`：只看规则写法，绝不执行书源 JS），
  * 界面只消费 `tab.supportsPaging`。本机 25,290 条静态栏目地址里有 **4,368 条（17%）**
  * 不含任何翻页写法 —— 以前每一击都是一次白发请求，然后靠"第二页全是重复"事后算到底。
  */

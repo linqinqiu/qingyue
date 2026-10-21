@@ -22,7 +22,7 @@
 
 ```
 这个功能能独立卸载吗？
-├─ 不能（卸了就搜不了书 / 读不了 / 起不来） → 核心框架，留在 server/ 或 pages/
+├─ 不能（卸了就搜不了书 / 读不了 / 起不来） → 核心框架，留在 app/ 或 pages/
 └─ 能（卸了照常读书）
    ├─ 是"准备加入基础框架的待定项" → 实验室
    └─ 是"已定型的独立功能"        → 插件
@@ -96,7 +96,7 @@ AI 接入不是"可选扩展"，它是产品决定要有的能力面（`/api/age
 | 能独立卸载的功能 | `plugins/<name>/` + 加进 `plugins/index.ts` | 插件 |
 | 还在试、没定下来的功能 | `features/labEntries.ts`，`origin: 'lab'` | 实验室 |
 | AI 相关能力 | 加**工具**到 `ToolRegistry`，不改框架 | AI 扩展 |
-| 改不动就搜不了书的东西 | `server/` 或 `pages/` | 核心 |
+| 改不动就搜不了书的东西 | `app/` 或 `pages/` | 核心 |
 | 产品自带的设置项 | `features/builtinSettings.ts` | 核心 |
 
 ## 八、判据（`FrameworkHasNoContent.test.ts`，10 条）

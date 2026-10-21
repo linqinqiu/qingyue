@@ -37,8 +37,8 @@ const args = process.argv.slice(2)
 const skipRun = args.includes('--skip-run')
 const wantJson = args.includes('--json')
 
-const BACKEND_CSV = path.join(ROOT, 'server/build/reports/jacoco/testCoverage/jacocoTestReport.csv')
-const BACKEND_HTML = path.join(ROOT, 'server/build/reports/jacoco/testCoverage/html/index.html')
+const BACKEND_CSV = path.join(ROOT, 'app/build/reports/jacoco/testCoverage/jacocoTestReport.csv')
+const BACKEND_HTML = path.join(ROOT, 'app/build/reports/jacoco/testCoverage/html/index.html')
 const FRONTEND_SUMMARY = path.join(ROOT, 'web/coverage/coverage-summary.json')
 const FRONTEND_HTML = path.join(ROOT, 'web/coverage/index.html')
 
@@ -286,7 +286,7 @@ ${combined ? `<div class="big">
 
 ${backend ? `<h2>后端 · 按包（${backend.totals.lines.pct}% 行 / ${backend.totals.branches.pct}% 分支）</h2>
 <p class="meta">从低到高排 —— 最上面就是最该补的。<a href="${backend.html}">完整 JaCoCo 报告 →</a></p>
-${table(backendRows)}` : '<h2>后端</h2><p class="meta">没有数据（先跑 <code>./gradlew :server:testCoverageReport</code>）</p>'}
+${table(backendRows)}` : '<h2>后端</h2><p class="meta">没有数据（先跑 <code>./gradlew :app:testCoverageReport</code>）</p>'}
 
 ${backend ? `<h2>后端 · 最该补的 15 个类</h2>
 <p class="meta">只统计 ≥20 行的类 —— 一行的类没覆盖不代表问题。</p>
@@ -336,7 +336,7 @@ function writeSummary(backend, frontend, combined) {
 
 // ── 主流程 ───────────────────────────────────────────────────────────
 if (!skipRun) {
-  run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [':server:testCoverageReport', '--console=plain', '-q'], ROOT, '后端测试 + JaCoCo 覆盖率')
+  run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', [':app:testCoverageReport', '--console=plain', '-q'], ROOT, '后端测试 + JaCoCo 覆盖率')
   run('npm', ['--prefix', 'web', 'run', 'test:coverage'], ROOT, '前端测试 + c8 覆盖率')
 }
 

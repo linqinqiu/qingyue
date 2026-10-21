@@ -190,15 +190,15 @@ cd web && npm install && npm run dev     # 前端开发服务器（热重载）
 ## 目录结构
 
 ```text
-server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
+app/                        Ktor 服务端（Kotlin JVM，按职责拆包；Gradle 模块）
   src/main/kotlin/io/legado/
     Application.kt          启动入口与 Ktor 特性装配
     ServerConfig.kt · AppConfig.kt   环境变量到默认值
     StaticWeb.kt            界面静态资源挂载（同端口的 `/` 与 `/next`）
     BuildInfo.kt · DesktopLauncher.kt  版本清单 · 桌面壳（探端口、开浏览器、托盘退出）
-    http/                   Guard.kt 写操作同源闸门 · NetworkSecurity.kt · Routes.kt 装配点 + 按面拆组的 <组>Routes.kt（REST 与 WebSocket）
-    rules/                  RuleRunner.kt 规则执行（Rhino + Jsoup + JsonPath + XPath）· JsSandbox.kt · JsGuard.kt · RuleSplit.kt · RuleValue.kt
-    data/                   Database.kt 连接与建表 · <面>Dao.kt 各数据面（同包扩展，0.8.2 拆出）
+    http/                   Guard.kt 写操作同源闸门 · NetworkSecurity.kt · Routes.kt 装配点 + 按面拆组的 <面>Routes.kt（REST 与 WebSocket）· RouteCatalog.kt 端点契约（与 /api/catalog 双向核对）
+    rules/                  RuleRunner.kt 规则执行（Rhino + Jsoup + JsonPath + XPath）· JsSandbox.kt · JsGuard.kt · RuleSplit.kt · RuleValue.kt · PagingRule.kt
+    data/                   Database.kt 连接与建表 · <面>Dao.kt 各数据面（同包扩展）
     source/                 SourceCodec.kt 书源编解码 · SourceHealth.kt 体检分档 · SourceDebugger.kt 分阶段调试 · WebViewProxy.kt 整站反代 · ExternalBrowserLogin.kt
     content/                ContentPipeline.kt · ContentProcessor.kt 正文净化 · LooseJson.kt 宽松 JSON
     cache/                  BookCacheService.kt 离线缓存调度 · CoverCache.kt 封面与防盗链代理
@@ -208,21 +208,30 @@ server/                     Ktor 服务端（Kotlin JVM，按职责拆包）
     subscription/           SubscriptionService.kt 订阅同步
     ops/                    LogService.kt · UpdateCheck.kt
     model/                  Models.kt 全部请求 / 响应体
+    ai/                     进程内 AI 网关：Agent.kt · AgentConnection.kt 句柄 · AgentRoutes.kt 薄收口 · LlmProvider.kt / ToolRegistry.kt / ConnectionSelector.kt 扩展点 · Guardrails.kt · BuiltinTools.kt · AgentCatalog.kt 契约
+    plugin/                 EventBus.kt · AppEvents.kt · Plugin.kt · PluginManager.kt 进程内插件框架
+  src/main/resources/       agent-api.json（`/api/agent/*` 组 8 条端点契约）· assets/txtTocRule.json
 web/                        前端（React 19 + TS + Vite，构建产物进同一个 jar）
-  src/main.tsx              应用外壳 + hash 路由 + 全局快捷键（0.8.2 起四个页面拆到 pages/，书源候选与详情弹窗拆到 components/）
+  src/main.tsx              应用外壳 + hash 路由 + 全局快捷键
+  src/app/                  destinations.ts 路由登记 · pageMeta.ts 页头元信息 · pages.tsx 页面装配
   src/reader/               阅读器与朗读：翻页与滚动几何、点击分区、分句、悬浮条位置、设置读写
-                            0.8.2 结构重排又拆出：VirtualChapterList.tsx（目录虚拟列表）、useReaderTts.ts（朗读集群）、
-                            contentImages.ts（图片预热）、paragraphs.ts（正文切段）、openBook.ts（传书合同）
+                             VirtualChapterList.tsx 目录虚拟列表 · useReaderTts.ts 朗读集群 · contentImages.ts 图片预热 · paragraphs.ts 正文切段 · openBook.ts 传书合同
+
   src/sources/              书源：结构化字段表、编辑、体检、换源、登录五条路、内置反代浏览器、批量
   src/lib/                  api 端点表、流式搜索 store、IndexedDB 离线库、结果清洗、报错翻译
   src/components/           浮层一档、下拉 / Toast / 右键菜单、日志、订阅 RSS、PWA 更新、皮肤、书源候选列表与书籍详情弹窗
   src/pages/                关于、更新日志、备份、发现、阅读记录、设置、订阅 RSS，与书库 / 书架 / 书源三个主页面
   src/shelf/                封面、空态引导、书架布局与拖动排序
+  src/settings/             settingsSections.ts 设置分组登记
+  src/features/             按业务面分的功能块（AI 接入面板、设置分区等）
+  src/plugins/              内置插件实装：about · backup · changelog · plugin-intro · reading-log · source-health
+  src/lab/                  实验室容器：只立钩子，不实现业务
+  src/extensions/           扩展契约（registry.ts）：插件与实验室的接口面
   src/icons.tsx · styles.css  全站单色图标 · 样式与皮肤令牌
   test/                     单元与静态判据，入口是 test/run-all.ts（它扫目录登记，新加测试文件不用改清单）
 
 tools/verify/               在真实浏览器和真实服务上跑的门禁脚本
-scripts/                    tasks.mjs（build / package / dev 单一入口）· runtime.mjs 启动运行时 · package-desktop.mjs 桌面打包
+scripts/                    tasks.mjs（build / package / dev 单一入口）· runtime.mjs 启动运行时 · package-desktop.mjs 桌面打包 · coverage-report.mjs 覆盖率汇总
 docs/                       见下面「文档」一节
 compose.yml          Docker Compose 编排
 Dockerfile           多阶段构建（前端 + 服务端）
@@ -245,6 +254,7 @@ Dockerfile           多阶段构建（前端 + 服务端）
 | 门禁怎么跑、CI 里跑哪些 | [docs/gates-guide.md](docs/gates-guide.md) |
 | **覆盖率怎么看、先补哪里** | [docs/coverage-guide.md](docs/coverage-guide.md) |
 | 对外接口的完整清单 | [`../docs/API-REFERENCE.md`](../docs/API-REFERENCE.md) 或 `GET /api/catalog` |
+| 改完端点怎么同步文档 | `npm run docs:api` 重新生成；`npm run docs:api-check` 只比对（CI 会跑） |
 
 
 ## 测试
@@ -253,6 +263,7 @@ Dockerfile           多阶段构建（前端 + 服务端）
 ./gradlew :app:test             # 服务端：规则解析、数据库生命周期、缓存并发、端到端链路
 npm --prefix web test              # 前端：静态判据 + 组件渲染，一条命令跑全部
 node tools/verify/selfcheck.mjs    # 对着跑着的服务过一遍：搜索 → 详情 → 目录 → 正文 → 净化
+npm run docs:api-check            # 接口文档与 agent-api.json 是否一致（CI 同款）
 ```
 
 覆盖率一条命令出总报告：`npm run coverage`（前端 c8 + 后端 JaCoCo 合并），见 [`docs/coverage-guide.md`](docs/coverage-guide.md)。

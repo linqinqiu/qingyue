@@ -12,32 +12,32 @@ COPY web/ ./
 RUN npm run build
 
 FROM ${DOCKER_REGISTRY}gradle:8.13-jdk17 AS server-build
-# 构建镜像必须自带 JDK 17：server/build.gradle 把 toolchain 钉在 17，容器里只有别的版本时
+# 构建镜像必须自带 JDK 17：app/build.gradle 把 toolchain 钉在 17，容器里只有别的版本时
 # Gradle 报 "Cannot find a Java installation ... languageVersion=17"（曾用 jdk21 镜像踩过）。
 WORKDIR /src
 COPY gradle/ gradle/
 COPY gradle/libs.versions.toml gradle/libs.versions.toml
-# 根三件套必须进容器：settings.gradle（include ':server' + foojay）是构建的根坐标，
+# 根三件套必须进容器：settings.gradle（include ':app' + foojay）是构建的根坐标，
 # 根 build.gradle 声明 kotlin 插件 alias(apply false)，gradle.properties 带内存与编码配置。
-# 少了它们，`gradle -p server` 会把 server/ 当构建根，版本目录（<根>/gradle/）解析不到，
+# 少了它们，`gradle -p app` 会把 app/ 当构建根，版本目录（<根>/gradle/）解析不到，
 # plugins 块两个 alias 直接编译失败（issue #11，6 秒即死）。
 COPY settings.gradle gradle.properties build.gradle ./
-COPY server/ server/
-COPY --from=web-build /src/web/dist/ server/src/main/resources/static/
-# 从仓库根跑任务路径（不再 -p server）：构建根 = /src，settings.gradle 生效。
-RUN --mount=type=cache,target=/home/gradle/.gradle gradle :server:clean :server:installDist --no-daemon --no-build-cache \
-    && jar uf "$(ls server/build/install/legado-server/lib/legado-server-*.jar)" -C server/src/main/resources static
+COPY app/ app/
+COPY --from=web-build /src/web/dist/ app/src/main/resources/static/
+# 从仓库根跑任务路径（不再 -p app）：构建根 = /src，settings.gradle 生效。
+RUN --mount=type=cache,target=/home/gradle/.gradle gradle :app:clean :app:installDist --no-daemon --no-build-cache \
+    && jar uf "$(ls app/build/install/legado/lib/legado-*.jar)" -C app/src/main/resources static
 
 FROM ${DOCKER_REGISTRY}eclipse-temurin:17-jre-jammy
 RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/* \
     && groupadd --system legado && useradd --system --gid legado legado
 WORKDIR /app
-COPY --from=server-build /src/server/build/install/legado-server/ ./
-COPY server/docker-entrypoint.sh /app/entrypoint.sh
+COPY --from=server-build /src/app/build/install/legado/ ./
+COPY app/docker-entrypoint.sh /app/entrypoint.sh
 RUN chmod 755 /app/entrypoint.sh
 # 容器内需绑 0.0.0.0，才能被宿主发布的端口访问；对外的安全边界由部署方
 # （如 compose 的 127.0.0.1:8080 映射、反代鉴权、安全组白名单）负责。
 ENV LEGADO_DATA_DIR=/data LEGADO_PORT=8080 LEGADO_HOST=0.0.0.0
 EXPOSE 8080
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["/app/bin/legado-server"]
+CMD ["/app/bin/legado"]

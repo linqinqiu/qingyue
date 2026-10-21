@@ -5,7 +5,7 @@ package io.legado
  * 所以不设任何 env 时行为与现在完全一致；只有显式设置才改变。目的：把散落的
  * 魔数变成使用者可自定义的旋钮（开源「支持自定义」），不必改源码重编译。
  *
- * 全部项见 .env.example / server/README.md 的配置表。
+ * 全部项见 .env.example / app/README.md 的配置表。
  */
 object AppConfig {
     private val env: Map<String, String> = System.getenv()

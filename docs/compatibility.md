@@ -64,7 +64,7 @@
 
 | 内容 | 归属 | 依据 |
 | :--- | :--- | :--- |
-| `server/`、`web/` 全部代码 | **本项目自写**。上游是**语义参照**：规则 DSL 求值口径、`checkKeyWord` 体检方式、书源字段分组 | `README.md` 末段「不是 fork，代码全部自写」；参照基准 `github.com/gedoor/legado` |
+| `app/`、`web/` 全部代码 | **本项目自写**。上游是**语义参照**：规则 DSL 求值口径、`checkKeyWord` 体检方式、书源字段分组 | `README.md` 末段「不是 fork，代码全部自写」；参照基准 `github.com/gedoor/legado` |
 | **LICENSE = GPL-3.0-or-later** | 继承自上游规则生态的许可口径，**不是可选项**：本项目读的是 Legado 书源格式，README/package.json 的 license 字段与 LICENSE 文件三处必须同号（由 `tools/verify/opensource-hygiene-check.mjs` 核） | `LICENSE`、`package.json` |
 | 随包的 **26 条 TXT 分章规则**（`app/src/main/resources/assets/txtTocRule.json`） | **来自上游默认表**（不是我们写的），逐条按 Kotlin 侧语义对齐；用户自建的规则另存、可删 | `localbook/TxtTocRule.kt`（"内置那 26 条来自上游"）、`delete()`（随包那 26 条删不掉） |
 | 备份包加解密口径 | **逐字照上游** `help/storage/BackupAES.kt`：`AES/ECB/PKCS5Padding`，密钥 = 密码 MD5 的**小写十六进制串前 16 个字符**的 ASCII 字节（不是 16 字节摘要） | `backup/BackupImporter.kt` 的 `BackupAes`（`keyOf` / `decryptBase64`） |

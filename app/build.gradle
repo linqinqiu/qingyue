@@ -13,7 +13,7 @@ test {
     // 测试工作进程的堆上限。不写就按物理内存的一档去要（本机 24GB → 要 6GB 提交空间），
     // 而这台机器同时跑着服务本体 + 门禁的 headless Chrome，提交内存常常只剩几百 MB，
     // 表现是 `insufficient memory for the Java Runtime Environment … mmap failed to map 400556032 bytes`
-    // —— 红的是 JVM 起不来，不是任何一条用例失败（实测过一次，崩溃日志落在 server/ 下）。
+    // —— 红的是 JVM 起不来，不是任何一条用例失败（实测过一次，崩溃日志落在 app/ 下）。
     maxHeapSize = '768m'
     // 测试库都是 `Files.createTempFile` 建的（落在 java.io.tmpdir）。某些开发环境（沙箱/杀软）
     // 会对系统临时目录里的 sqlite 文件上锁，表现为大面积「另一个程序正在使用此文件」假失败；
@@ -128,7 +128,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 application {
     // 名字钉死 legado：Docker 运行层拷 install/legado、启动 bin/legado。
     // 嵌套 settings.gradle 删除后（A 档）子项目名回落成 'server'，installDist 产物会漂成
-    // install/server/bin/server，容器里既拷不到也起不来（issue #11 修复时发现）。
+    // install/legado/bin/legado，容器里既拷不到也起不来（issue #11 修复时发现）。
     applicationName = 'legado'
     mainClass = 'io.legado.ApplicationKt'
 }

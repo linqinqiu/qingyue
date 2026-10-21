@@ -98,7 +98,7 @@
 
 ## 7. 改动边界
 
-- 后端与规则引擎：`server/`
+- 后端与规则引擎：`app/`
 - 内置 Web UI：`web/`
 - 文档：`docs/`
 - 版本号唯一来源：`app/build.gradle`
