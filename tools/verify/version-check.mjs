@@ -4,7 +4,7 @@
 // 光加个显示不算做完：真正的风险是**四处各写一个版本号然后互相漂移** ——
 // gradle 里改了版本、界面还显示旧的，或者 CHANGELOG 写着 0.3.0 而 jar 是 0.2.0。
 // 所以这里把五个位置逐个读出来比对，任何一处不一致就红：
-//   ① server/build.gradle 的 version        （唯一书写处）
+//   ① app/build.gradle 的 version        （唯一书写处）
 //   ② 打出来的 fatJar 清单 Implementation-Version
 //   ③ 运行中的服务 /healthz 报回的 version
 //   ④ 顶栏功能菜单里显示给用户看的那串字符
@@ -62,12 +62,12 @@ function manifestOf(jarPath) {
 const read = file => fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
 
 // ── ① gradle：唯一书写处 ──────────────────────────────────
-const gradle = read(path.join(ROOT, 'server/build.gradle'))
+const gradle = read(path.join(ROOT, 'app/build.gradle'))
 const gradleVersion = /^\s*version\s*=\s*'([^']+)'/m.exec(gradle)?.[1] ?? ''
-check('server/build.gradle 里写了版本号（它是唯一的书写处）', /^\d+\.\d+\.\d+$/.test(gradleVersion), gradleVersion || '没匹配到 version = 行')
+check('app/build.gradle 里写了版本号（它是唯一的书写处）', /^\d+\.\d+\.\d+$/.test(gradleVersion), gradleVersion || '没匹配到 version = 行')
 
 // ── ② fatJar 清单 ────────────────────────────────────────
-const jarDir = path.join(ROOT, 'server/build/libs')
+const jarDir = path.join(ROOT, 'app/build/libs')
 // 与 start.mjs 同一条挑选规则（字典序取最后一个 *-all.jar）：验的必须真是被启动的那只，
 // 而不是版本升上去之后留在 build/libs 里的旧包。
 const jars = (fs.existsSync(jarDir) ? fs.readdirSync(jarDir).filter(name => name.endsWith('-all.jar')) : []).sort()
@@ -81,7 +81,7 @@ if (jar) {
     jars.filter(name => !name.startsWith(`${gradleVersion}-`) && !name.includes(`-${gradleVersion}-`)).length === 0,
     jars.join(', '))
 } else {
-  results.push({ name: '产物版本可查', ok: false, detail: 'server/build/libs 下没有 *-all.jar：先跑 :server:fatJar' })
+  results.push({ name: '产物版本可查', ok: false, detail: 'app/build/libs 下没有 *-all.jar：先跑 :app:fatJar' })
 }
 
 // ── ③ /healthz ───────────────────────────────────────────

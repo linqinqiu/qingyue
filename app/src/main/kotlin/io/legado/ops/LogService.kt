@@ -63,7 +63,7 @@ object LogService {
         database?.let { db -> runCatching { db.ensureLogTable() } }
         val dir = File(logDirectory)
         if (!dir.exists()) dir.mkdirs()
-        logFile = File(dir, "legado-server-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))}.log")
+        logFile = File(dir, "legado-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))}.log")
     }
 
     fun log(

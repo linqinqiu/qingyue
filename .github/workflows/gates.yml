@@ -61,7 +61,7 @@ jobs:
       - name: 构建前端与 jar
         run: |
           npm --prefix web run build
-          ./gradlew :server:fatJar --no-daemon
+          ./gradlew :app:fatJar --no-daemon
 
       - name: 起服务
         run: |
@@ -120,7 +120,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y google-chrome-stable
           echo "LEGADO_CHROME=$(which google-chrome-stable)" >> $GITHUB_ENV
           npm --prefix web run build
-          ./gradlew :server:fatJar --no-daemon
+          ./gradlew :app:fatJar --no-daemon
       - name: 起服务
         run: |
           node start.mjs --no-open &

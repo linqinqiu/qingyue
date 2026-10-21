@@ -1,5 +1,5 @@
 name: "🐛 Bug 报告 / Bug Report"
-description: "提交 legado-server 服务端或 Web 客户端的缺陷与异常"
+description: "提交 legado 服务端或 Web 客户端的缺陷与异常"
 title: "[Bug]: "
 labels: ["bug"]
 body:

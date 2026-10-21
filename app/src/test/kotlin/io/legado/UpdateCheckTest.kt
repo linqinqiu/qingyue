@@ -45,7 +45,7 @@ class UpdateCheckTest {
     @Test
     fun `默认仓库是本项目自己的，不是空也不是别人家的`() {
         // 出厂状态就该能检查更新（用户 2026-10-11「检查更新不当」）。之前默认是空 → 永远
-        // not_configured；再之前硬编码别人家仓库（`lukelzlz/legado-server`，代码 clone 来的地方），
+        // not_configured；再之前硬编码别人家仓库（`lukelzlz/legado`，代码 clone 来的地方），
         // 用户 2026-10-05 明确不许把仓库放到别人手里。
         assertTrue("默认仓库不能是空的，否则检查更新出厂即死", UpdateCheck.repository.isNotBlank())
         assertFalse("默认仓库不许是 clone 来的别人家仓库", UpdateCheck.repository.contains("lukelzlz"))

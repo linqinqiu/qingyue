@@ -47,7 +47,7 @@ jobs:
       - name: 后端测试 + JaCoCo
         # 用 testCoverageReport 而不是 test：它 ignoreFailures，
         # 已知失败基线（E2EScenariosTest）不会挡住报告生成。
-        run: ./gradlew :server:testCoverageReport --no-daemon --console=plain
+        run: ./gradlew :app:testCoverageReport --no-daemon --console=plain
         env:
           LEGADO_TEST_TMP: ${{ runner.temp }}/legado-test
 
@@ -73,7 +73,7 @@ jobs:
           name: coverage-report
           path: |
             coverage-report/
-            server/build/reports/jacoco/testCoverage/
+            app/build/reports/jacoco/testCoverage/
             web/coverage/
           retention-days: 30
 

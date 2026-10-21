@@ -147,7 +147,7 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/connections \
 
 ## 6. 一致性闸门（给维护者）
 
-`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（当前全量契约：139 条端点 / 19 组，其中本组 8 条属于 `AI 自定义接入` 组；版本号见 `server/build.gradle` 的 `version = '0.8.3'`）。
+`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（当前全量契约：139 条端点 / 19 组，其中本组 8 条属于 `AI 自定义接入` 组；版本号见 `app/build.gradle` 的 `version = '0.8.3'`）。
 **改动 `/api/agent/*` 时禁止动既有路由数量、路径、分组**；新增端点要同时在两处登记。运行：
 
 ```bash
@@ -157,7 +157,7 @@ npx tsx test/ApiCatalog.test.ts   # 期望 3/3 PASS
 
 ## 7. 本地验证（本会话已跑通）
 
-- 1234 服务：`gradlew :server:run`，环境变量 `LEGADO_HOST=127.0.0.1 LEGADO_PORT=1234 LEGADO_DATA_DIR=<数据目录> LEGADO_HOME=<dir>`，并加 `-Dai.debug`（或环境变量 `JAVA_OPTS=-Dai.debug`）启用外部网关句柄。
+- 1234 服务：`gradlew :app:run`，环境变量 `LEGADO_HOST=127.0.0.1 LEGADO_PORT=1234 LEGADO_DATA_DIR=<数据目录> LEGADO_HOME=<dir>`，并加 `-Dai.debug`（或环境变量 `JAVA_OPTS=-Dai.debug`）启用外部网关句柄。
 - **交互入口（已改版）**：设置 → 「AI 接入」→ 打开「AI 接入 · 对话助手」面板。主形态就是**对话**：在输入框说话，消息走 `POST /api/agent/chat`；**必须先登记外部模型（openai-compatible）**，没有连接时输入框禁用、状态显示「未连接外部模型，AI 不可用」。连接登记与书源只读校验收进同面板底部的「连接与工具」折叠区。**没有也不再有独立的 `agent.html` 页面**（已删除，仅保留 SPA 设置入口）。
 - 注意：根路径 `http://127.0.0.1:1234/` 是青阅**阅读器主应用**（书架/书源/阅读），与 `/api/agent/*` 这套 AI 接入无关；AI 接入的对话入口是上面设置面板里的「AI 接入」。
 - 端到端（已实测，三条路径全过）：
@@ -188,9 +188,9 @@ npx tsx test/ApiCatalog.test.ts   # 期望 3/3 PASS
 BuildInfo::class.java.`package`?.implementationVersion?.takeIf { it.isNotBlank() && it != "unknown" } ?: "dev"
 ```
 
-`gradlew :server:run` 跑的是 **classes 目录**（没有 manifest），所以开发态永远显示 `version=dev` —— 这不是 bug，是正常现象。
+`gradlew :app:run` 跑的是 **classes 目录**（没有 manifest），所以开发态永远显示 `version=dev` —— 这不是 bug，是正常现象。
 
-但 `installDist` / 发行版用的普通 `jar` task **原本没配 manifest**，导致发行版也显示 `dev`（"版本没有更新"的真正原因）。已在 `server/build.gradle` 里给 `jar` task 补上：
+但 `installDist` / 发行版用的普通 `jar` task **原本没配 manifest**，导致发行版也显示 `dev`（"版本没有更新"的真正原因）。已在 `app/build.gradle` 里给 `jar` task 补上：
 
 ```groovy
 tasks.named('jar', Jar) {
@@ -204,7 +204,7 @@ tasks.named('jar', Jar) {
 }
 ```
 
-改完 `gradlew :server:installDist` 后，发行版 `/healthz` 与启动日志都显示真实版本（`0.8.2`）。
+改完 `gradlew :app:installDist` 后，发行版 `/healthz` 与启动日志都显示真实版本（`0.8.2`）。
 
 ## 10. 便携发行测试版（`<仓库外>/legado-releases/qingyue-dist-v0.8.2`）
 
@@ -214,7 +214,7 @@ tasks.named('jar', Jar) {
 qingyue-dist-v0.8.2/
 ├─ start.bat          ← 双击启动
 ├─ runtime/           ← jlink 精简 JRE 17（~45MB，不依赖本机 Java）
-├─ app/lib/           ← legado-server-0.8.2.jar + 全部依赖
+├─ app/lib/           ← legado-0.8.2.jar + 全部依赖
 ├─ home/              ← agent-profiles.json（外部模型连接）
 └─ data/              ← junction → <仓库>/legado/data（真实书源库）
 ```

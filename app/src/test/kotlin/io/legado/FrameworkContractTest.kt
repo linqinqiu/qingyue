@@ -34,7 +34,7 @@ import kotlin.io.path.readText
  * 注意：本文件只断言「框架形状」，不绑定任何具体业务端点/工具 id；新增内置工具或 provider 时，
  * 只要不破坏上述不变量，本测试照常通过。
  *
- * 注：本仓库统一用 JUnit 4（`junit:junit:4.13.2`，见 `server/build.gradle`），
+ * 注：本仓库统一用 JUnit 4（`junit:junit:4.13.2`，见 `app/build.gradle`），
  * 所以这里用 `org.junit.Test` + `org.junit.Assert`，不用 JUnit 5 的 `@Tag`。
  * 只跑这一条时用 Gradle 的类过滤：`--tests "*FrameworkContractTest"`。
  */
@@ -233,7 +233,7 @@ class FrameworkContractTest {
                 val cur = Path.of(System.getProperty("user.dir"))
                 // 模块根：src/...
                 yield(cur.resolve(rel.joinToString("/")))
-                // 仓库根：server/src/...
+                // 仓库根：app/src/...
                 yield(cur.resolve((listOf("server") + rel).joinToString("/")))
                 var p: Path? = cur
                 while (p != null) {
@@ -243,7 +243,7 @@ class FrameworkContractTest {
                 }
             }
             return candidates.firstOrNull { Files.exists(it) && Files.isDirectory(it) }
-                ?: Path.of("server/src/main/kotlin/io/legado")
+                ?: Path.of("app/src/main/kotlin/io/legado")
         }
     }
 }

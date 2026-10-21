@@ -544,6 +544,6 @@ class DatabaseTest {
         }
     }
 
-    private fun temporaryDatabase(): String = Files.createTempFile("legado-server-test", ".sqlite").toString()
+    private fun temporaryDatabase(): String = Files.createTempFile("legado-test", ".sqlite").toString()
 }
 

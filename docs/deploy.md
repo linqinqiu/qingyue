@@ -8,19 +8,19 @@
 | 形态 | 怎么来 | 装了什么 Java | 默认端口 | 适合谁 |
 | :--- | :--- | :--- | :--- | :--- |
 | 桌面程序 `qingyue-desktop-<版本>.zip` | `node scripts/package-desktop.mjs`（需 `JAVA_HOME` 指向带 `jpackage`/`jlink` 的 JDK） | 自带 jlink 裁过的精简运行时，**用户机器不用装 Java** | `1234`（被占则顺延，见 §3） | 双击用的普通人 |
-| 整合包 `qingyue-<版本>.zip` | `node scripts/package.mjs`（先 `./gradlew :server:fatJar`） | 包内 `runtime/bin/java.exe`，同样免装 Java | `1234` | 想整个文件夹搬盘的人 |
-| 裸 jar `legado-server-<版本>-all.jar` | `./gradlew :server:fatJar` | 需要本机 Java 17+ | `8080` | 已经有 JVM 的人 |
-| Docker | `docker build -f Dockerfile.server -t qingyue .` | 三段构建：node 打前端 → gradle 打服务端 → `eclipse-temurin:17-jre` | 容器内 `8080`，`LEGADO_HOST=0.0.0.0` | 有 NAS / 服务器的人 |
-| 源码 | `cd web && npm install && npm run dev` + `./gradlew :server:run` | 本机 JDK | dev server 5174 代理到 1234（可用 `LEGADO_PROXY_TARGET` 换） | 改代码的人 |
+| 整合包 `qingyue-<版本>.zip` | `node scripts/package.mjs`（先 `./gradlew :app:fatJar`） | 包内 `runtime/bin/java.exe`，同样免装 Java | `1234` | 想整个文件夹搬盘的人 |
+| 裸 jar `legado-<版本>-all.jar` | `./gradlew :app:fatJar` | 需要本机 Java 17+ | `8080` | 已经有 JVM 的人 |
+| Docker | `docker build -f Dockerfile -t qingyue .` | 三段构建：node 打前端 → gradle 打服务端 → `eclipse-temurin:17-jre` | 容器内 `8080`，`LEGADO_HOST=0.0.0.0` | 有 NAS / 服务器的人 |
+| 源码 | `cd web && npm install && npm run dev` + `./gradlew :app:run` | 本机 JDK | dev server 5174 代理到 1234（可用 `LEGADO_PROXY_TARGET` 换） | 改代码的人 |
 
-**当前 Releases 上有的**：`latest`（流水线连续构建）给 `legado-server.jar` + `legado-server-dist.zip`；
+**当前 Releases 上有的**：`latest`（流水线连续构建）给 `legado.jar` + `legado-dist.zip`；
 按版本号打的 tag 给 `qingyue-<版本>.zip`。**桌面包还没上传**，所以现在要用桌面版只能自己打（`dist/qingyue-desktop-<版本>.zip`）。
 
 ## 2. 构建顺序不是可选的
 
 ```bash
 npm --prefix web run build          # ① 前端产物 web/dist
-./gradlew :server:fatJar            # ② 把 ① 烤进 jar（server/build.gradle 的 processResources 把 web/dist 拷进 static/）
+./gradlew :app:fatJar            # ② 把 ① 烤进 jar（app/build.gradle 的 processResources 把 web/dist 拷进 static/）
 node tools/make-cds.mjs             # ③ 可选：CDS 类归档，冷启动 ~8.3s → ~5.3s
 node scripts/package.mjs            # ④ 可选：整合包
 node scripts/package-desktop.mjs    # ⑤ 可选：桌面包
@@ -104,5 +104,5 @@ curl -s http://127.0.0.1:<端口>/healthz
 ## 8. Docker 的两件事实
 
 - 镜像**必须本地构建**，流水线里的镜像发布还没通（`docker.yml` 那条）。
-- 数据卷挂到 `/data`（`ENV LEGADO_DATA_DIR=/data`），宿主用 `./ls_data:/data`；`compose.server.yml` 里已经这么写。
+- 数据卷挂到 `/data`（`ENV LEGADO_DATA_DIR=/data`），宿主用 `./ls_data:/data`；`compose.yml` 里已经这么写。
   容器里 `LEGADO_HOST=0.0.0.0` 是必需的（否则宿主机映射接不上），也意味着容器网络里谁都能访问 —— 别直接把 8080 暴露到公网。

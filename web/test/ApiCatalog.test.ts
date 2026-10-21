@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 /**
- * 端点目录（`server/src/main/resources/agent-api.json`，对外经 `GET /api/catalog`）不许漂。
+ * 端点目录（`app/src/main/resources/agent-api.json`，对外经 `GET /api/catalog`）不许漂。
  *
  * 这份契约是给外部程序（脚本 / AI）用的：它照着调，不会先读 Routes.kt。
  * 所以"手抄一份清单"在这里是坏形状 —— 加一条接口而忘了同步，清单会一直绿着骗人
@@ -12,8 +12,8 @@ import path from 'node:path'
  * 判据因此是**双向**的：目录里不许有代码中没有的端点，代码里的书源端点也不许从目录里漏掉。
  */
 const ROOT = path.resolve(import.meta.dirname, '../..')
-const HTTP_DIR = path.join(ROOT, 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'http')
-const CATALOG = path.join(ROOT, 'server', 'src', 'main', 'resources', 'agent-api.json')
+const HTTP_DIR = path.join(ROOT, 'app', 'src', 'main', 'kotlin', 'io', 'legado', 'http')
+const CATALOG = path.join(ROOT, 'app', 'src', 'main', 'resources', 'agent-api.json')
 const DOC = path.join(ROOT, 'docs', 'AI-AGENT.md')
 
 /**
@@ -162,8 +162,8 @@ test('目录里每一条都真存在，代码里的端点一条不漏', () => {
   }
   // 随包那份 JSON 里的 version 只是给人翻仓库时看的（运行时由 RouteCatalog 盖成当前构建号），
   // 但它一旦停在旧号就没人会再去看 —— 所以让它跟 gradle 的版本号钉在一起，每次 bump 自动跟着走。
-  const gradle = /^\s*version\s*=\s*'([^']+)'/m.exec(fs.readFileSync(path.join(ROOT, 'server', 'build.gradle'), 'utf8'))
-  assert.ok(gradle, '没从 server/build.gradle 读到版本号')
+  const gradle = /^\s*version\s*=\s*'([^']+)'/m.exec(fs.readFileSync(path.join(ROOT, 'app', 'build.gradle'), 'utf8'))
+  assert.ok(gradle, '没从 app/build.gradle 读到版本号')
   assert.equal(catalog.version, gradle![1], `目录里写的版本是 ${catalog.version}，构建却是 ${gradle![1]}`)
 })
 

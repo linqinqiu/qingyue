@@ -154,7 +154,7 @@ for (const btn of await p.$$('...')) { if (...) { await btn.click(); break } }  
 **⑤ `webview-*-check`：写死绝对路径**
 
 ```js
-const require = createRequire('E:/legado/legado-server/web/package.json')   // 错
+const require = createRequire('E:/legado/legado/web/package.json')   // 错
 ```
 旧目录名 + 某台机器的盘符。换机器 / 改目录名就 `MODULE_NOT_FOUND`，门禁直接崩。
 改成从 `import.meta.url` 推仓库根。

@@ -1,12 +1,12 @@
 name: "📚 书源兼容性异常 / Book Source Issue"
-description: "反馈特定书源在 legado-server 服务端解析、搜索、换源或目录抓取失败"
+description: "反馈特定书源在 legado 服务端解析、搜索、换源或目录抓取失败"
 title: "[Source Issue]: "
 labels: ["book-source"]
 body:
   - type: markdown
     attributes:
       value: |
-        本模板专门用于反馈**特定书源**在 legado-server 中的解析异常或沙箱兼容性问题。
+        本模板专门用于反馈**特定书源**在 legado 中的解析异常或沙箱兼容性问题。
         请注意：部分书源可能依赖特定反爬或验证码，若原站已下线或封锁则属于源站问题。
 
   - type: checkboxes

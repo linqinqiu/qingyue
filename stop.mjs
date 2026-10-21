@@ -29,7 +29,7 @@ function pidsOnPort(target) {
  */
 function projectPids() {
   const out = execFileSync('powershell', ['-NoProfile', '-Command',
-    `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | Where-Object { $_.CommandLine -match 'legado-server-.*-all\\.jar' } | ForEach-Object { $_.ProcessId }`,
+    `Get-CimInstance Win32_Process -Filter "Name='java.exe'" | Where-Object { $_.CommandLine -match 'legado-.*-all\\.jar' } | ForEach-Object { $_.ProcessId }`,
   ], { encoding: 'utf8' });
   return [...new Set(out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))];
 }
@@ -47,7 +47,7 @@ for (const pid of pids) {
     `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" | Select-Object -First 1 | ForEach-Object { $_.Name + '|' + $_.CommandLine })`,
   ], { encoding: 'utf8' }).trim();
   const [name, cmd = ''] = info.split('|');
-  if (!/java\.exe/i.test(name || '') || !/legado-server-.*-all\.jar/.test(cmd)) {
+  if (!/java\.exe/i.test(name || '') || !/legado-.*-all\.jar/.test(cmd)) {
     console.log(`跳过 PID ${pid}：不是本项目的服务进程（${name || '未知'}）`);
     continue;
   }

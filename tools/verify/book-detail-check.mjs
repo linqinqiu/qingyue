@@ -6,7 +6,7 @@
 // 已停用"全都没露出来；而且行上没有任何管理入口，要改一个源得先跳去书源页再搜索。
 //
 // 断言打在界面上：认得出的名字、摊开的细节、右键菜单三项、跳到书源页真的带过去定位。
-// 只读：不点「停用/启用」（那是用户的启用位，见 project-legado-server-state），只核对菜单文案与当前状态一致。
+// 只读：不点「停用/启用」（那是用户的启用位，见 project-legado-state），只核对菜单文案与当前状态一致。
 //
 // 跑法：node tools/verify/book-detail-check.mjs
 import path from 'node:path'

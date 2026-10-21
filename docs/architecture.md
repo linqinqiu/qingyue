@@ -51,7 +51,7 @@
 > `sqlite_master` 查实际库，别按本文当断言；代码里的权威清单是 `Database.kt` 的
 > `create table if not exists`（当前 16 条）。
 
-**不在库里的两类东西**：TXT 分章规则是"随包 `server/src/main/resources/assets/txtTocRule.json` ∪ 本机覆盖文件"；
+**不在库里的两类东西**：TXT 分章规则是"随包 `app/src/main/resources/assets/txtTocRule.json` ∪ 本机覆盖文件"；
 备份包里"原样收下"的条目只是文件（`data/backup_kept/`），不给它们建表。
 
 ## 4. 一条开书链路
@@ -92,7 +92,7 @@
 
 | 档 | 命令 | 覆盖 | 注意 |
 | :--- | :--- | :--- | :--- |
-| 单测与静态判据 | `npm --prefix web test`、`./gradlew :server:test` | 纯算式、组件静态渲染、规则求值、库层 | Windows 上服务端有既有失败基线，**判回归比失败集合，不比数量** |
+| 单测与静态判据 | `npm --prefix web test`、`./gradlew :app:test` | 纯算式、组件静态渲染、规则求值、库层 | Windows 上服务端有既有失败基线，**判回归比失败集合，不比数量** |
 | 真浏览器门禁 | `node tools/verify/<name>-check.mjs` | 版面、图层、交互、端到端链路，全部现量 | 一律串行跑；判据等条件不 `sleep`；探针带本轮 STAMP 并自清 |
 | 部署后 | `node tools/verify/selfcheck.mjs`、`version-check.mjs` | 搜索→详情→目录→正文→净化，以及版本号一致 | jar 必须在 `web/dist` 之后打，否则烤进旧 bundle |
 
@@ -101,4 +101,4 @@
 - 后端与规则引擎：`server/`
 - 内置 Web UI：`web/`
 - 文档：`docs/`
-- 版本号唯一来源：`server/build.gradle`
+- 版本号唯一来源：`app/build.gradle`

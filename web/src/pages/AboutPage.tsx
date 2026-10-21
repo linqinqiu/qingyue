@@ -96,7 +96,7 @@ export function AboutPage({
           <div><dt>版本</dt><dd>{info?.version ?? (notice ? '没取到' : '载入中…')}</dd></div>
           <div><dt>运行位置</dt><dd>{window.location.host}</dd></div>
           {/* 「开发者」这一格原来印的是仓库 slug，而 slug 的兜底值硬写着别人家的仓库
-              （`lukelzlz/legado-server`，这份代码 clone 来的地方，不是本项目的归属）。
+              （`lukelzlz/legado`，这份代码 clone 来的地方，不是本项目的归属）。
               现在服务端默认回本项目自己的仓库（`linqinqiu/qingyue`），没取到才说没取到。 */}
           <div><dt>开发者</dt><dd>{repository || '未配置'}</dd></div>
         </dl>

@@ -22,7 +22,7 @@
 
 ## Windows 桌面程序
 
-桌面程序这一档**当前不在 Releases 上**（Releases 上现在只有 `legado-server.jar`、`legado-server-dist.zip` 与按版本号打的整合包 `qingyue-<版本>.zip`）。要桌面版就自己打一次：
+桌面程序这一档**当前不在 Releases 上**（Releases 上现在只有 `legado.jar`、`legado-dist.zip` 与按版本号打的整合包 `qingyue-<版本>.zip`）。要桌面版就自己打一次：
 
 ```bash
 node scripts/package-desktop.mjs   # 需要 JAVA_HOME 指向带 jpackage/jlink 的 JDK（Temurin 17 即可）
@@ -100,7 +100,7 @@ AI 面板显示「未连接外部模型，AI 不可用」，输入框禁用。
 
 | | 版本 | 说明 |
 | --- | --- | --- |
-| JDK | **17+** | `server/build.gradle` 的 toolchain 锁 17；CI 用 Temurin 21 也能编。只有「直接跑 jar / 从源码跑」需要，整合包与桌面版自带运行时 |
+| JDK | **17+** | `app/build.gradle` 的 toolchain 锁 17；CI 用 Temurin 21 也能编。只有「直接跑 jar / 从源码跑」需要，整合包与桌面版自带运行时 |
 | Node | **20+**（CI 用 22，见 `.nvmrc`） | 构建或跑前端时需要 |
 | Gradle | 用仓库自带的 `./gradlew` | 不用另装 |
 
@@ -117,20 +117,20 @@ Releases 下载 `qingyue-<版本>.zip`，解压后运行 `start.bat`（默认端
 ### 直接跑 jar（需要 Java 17+）
 
 ```bash
-java -jar legado-server-<版本>-all.jar
+java -jar legado-<版本>-all.jar
 ```
 
-（Releases 上那份被流水线改名成了 `legado-server.jar`，内容同一件东西。）浏览器打开 `http://127.0.0.1:8080`。数据落在当前目录的 `data/`。换端口或数据目录：
+（Releases 上那份被流水线改名成了 `legado.jar`，内容同一件东西。）浏览器打开 `http://127.0.0.1:8080`。数据落在当前目录的 `data/`。换端口或数据目录：
 
 ```bash
-LEGADO_PORT=9000 LEGADO_DATA_DIR=/srv/qingyue/data java -jar legado-server-<版本>-all.jar
+LEGADO_PORT=9000 LEGADO_DATA_DIR=/srv/qingyue/data java -jar legado-<版本>-all.jar
 ```
 
 自己构建：
 
 ```bash
 npm --prefix web run build
-./gradlew :server:fatJar      # → server/build/libs/legado-server-<版本>-all.jar
+./gradlew :app:fatJar      # → app/build/libs/legado-<版本>-all.jar
 node tools/make-cds.mjs       # 可选：生成 CDS 归档，冷启动 ~8.3s → ~5.3s；过期时 start.mjs 会自动重建
 ```
 
@@ -139,18 +139,18 @@ node tools/make-cds.mjs       # 可选：生成 CDS 归档，冷启动 ~8.3s →
 镜像需本地构建（CI 的镜像发布还没通）：
 
 ```bash
-docker build -f Dockerfile.server -t qingyue .
+docker build -f Dockerfile -t qingyue .
 docker run -d --name qingyue --restart unless-stopped \
   -p 8080:8080 -v ./ls_data:/data qingyue
 ```
 
-容器内要把 `LEGADO_HOST` 设成 `0.0.0.0` 才接得住宿主机映射（Dockerfile 里已经这么设）。仓库带了一份 `compose.server.yml`。
+容器内要把 `LEGADO_HOST` 设成 `0.0.0.0` 才接得住宿主机映射（Dockerfile 里已经这么设）。仓库带了一份 `compose.yml`。
 
 ### 从源码跑
 
 ```bash
 cd web && npm install && npm run dev     # 前端开发服务器（热重载）
-./gradlew :server:run                    # 服务端
+./gradlew :app:run                    # 服务端
 ```
 
 ## 环境变量
@@ -224,8 +224,8 @@ web/                        前端（React 19 + TS + Vite，构建产物进同�
 tools/verify/               在真实浏览器和真实服务上跑的门禁脚本
 scripts/                    tasks.mjs（build / package / dev 单一入口）· runtime.mjs 启动运行时 · package-desktop.mjs 桌面打包
 docs/                       见下面「文档」一节
-compose.server.yml          Docker Compose 编排
-Dockerfile.server           多阶段构建（前端 + 服务端）
+compose.yml          Docker Compose 编排
+Dockerfile           多阶段构建（前端 + 服务端）
 ```
 
 ## 文档
@@ -250,7 +250,7 @@ Dockerfile.server           多阶段构建（前端 + 服务端）
 ## 测试
 
 ```bash
-./gradlew :server:test             # 服务端：规则解析、数据库生命周期、缓存并发、端到端链路
+./gradlew :app:test             # 服务端：规则解析、数据库生命周期、缓存并发、端到端链路
 npm --prefix web test              # 前端：静态判据 + 组件渲染，一条命令跑全部
 node tools/verify/selfcheck.mjs    # 对着跑着的服务过一遍：搜索 → 详情 → 目录 → 正文 → 净化
 ```

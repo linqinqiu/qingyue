@@ -10,7 +10,7 @@
 // 这里的命令全是本文件写死的常量，没有外部输入，但少一条警告总是好的。
 //
 // 用法（根 package.json 已转成这几条）：
-//   npm run build   # 前端 → web/dist，再 :server:fatJar（把 web/dist 烤进 jar）
+//   npm run build   # 前端 → web/dist，再 :app:fatJar（把 web/dist 烤进 jar）
 //   npm test        # 前端用例 + 服务端用例
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -23,11 +23,11 @@ const tasks = {
   // 顺序不能倒：processResources 是在 fatJar 那一步把 web/dist 拷进 jar 的。
   build: [
     ['1/2 前端 → web/dist', 'npm --prefix web run build'],
-    ['2/2 后端 fatJar（内嵌 web/dist）', `${gradle} :server:fatJar`],
+    ['2/2 后端 fatJar（内嵌 web/dist）', `${gradle} :app:fatJar`],
   ],
   test: [
     ['1/2 前端用例', 'npm --prefix web test'],
-    ['2/2 服务端用例', `${gradle} :server:test`],
+    ['2/2 服务端用例', `${gradle} :app:test`],
   ],
 };
 

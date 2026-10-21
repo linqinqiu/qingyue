@@ -49,18 +49,18 @@ jobs:
           # JSX 回落 classic 编译报 "React is not defined"，且 npx 会临时拉一个不匹配锁定版本的 tsx。
           npm --prefix web test
           chmod +x gradlew
-          ./gradlew :server:test --no-daemon
+          ./gradlew :app:test --no-daemon
 
       - name: Build Standalone Fat JAR & Distribution
         run: |
-          ./gradlew :server:fatJar :server:distZip --no-daemon
+          ./gradlew :app:fatJar :app:distZip --no-daemon
 
       - name: Prepare Artifacts
         run: |
           mkdir -p artifacts
-          cp server/build/libs/legado-server-*-all.jar artifacts/legado-server.jar
-          if ls server/build/distributions/*.zip 1> /dev/null 2>&1; then
-            cp server/build/distributions/*.zip artifacts/legado-server-dist.zip
+          cp app/build/libs/legado-*-all.jar artifacts/legado.jar
+          if ls app/build/distributions/*.zip 1> /dev/null 2>&1; then
+            cp app/build/distributions/*.zip artifacts/legado-dist.zip
           fi
           echo "=== Built Artifacts ==="
           ls -lh artifacts/
@@ -68,7 +68,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: legado-server-binaries
+          name: legado-binaries
           path: artifacts/*
           retention-days: 90
 
@@ -116,22 +116,22 @@ jobs:
             - **Build Time**: `${{ steps.release_meta.outputs.build_time }} (UTC+8)`
             
             ### 📦 二进制产物下载
-            - **`legado-server.jar`**：开箱即用独立 Fat JAR（内嵌完整 Web 前端与后端服务，支持单文件运行）
-            - **`legado-server-dist.zip`**：标准分发包（含 `bin/` 启动脚本与依赖库）
+            - **`legado.jar`**：开箱即用独立 Fat JAR（内嵌完整 Web 前端与后端服务，支持单文件运行）
+            - **`legado-dist.zip`**：标准分发包（含 `bin/` 启动脚本与依赖库）
             
             ### ☕ 快速启动
             ```bash
             # 极简启动 (Java 17+)
-            java -jar legado-server.jar
+            java -jar legado.jar
             
             # 自定义端口与数据目录
-            LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data java -jar legado-server.jar
+            LEGADO_PORT=8080 LEGADO_DATA_DIR=./ls_data java -jar legado.jar
             ```
           draft: false
           prerelease: false
           make_latest: true
           files: |
-            artifacts/legado-server.jar
-            artifacts/legado-server-dist.zip
+            artifacts/legado.jar
+            artifacts/legado-dist.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -33,7 +33,7 @@ import java.nio.file.Files
  * 2. [Agent] 集成：多连接下默认走第一个；换成自定义 selector 后走第二个——
  *    证明框架只立钩子，决定权真的能交给外部（这正是"只做框架"的落点）。
  *
- * 注：本仓库统一用 JUnit 4（`junit:junit:4.13.2`，见 `server/build.gradle`），
+ * 注：本仓库统一用 JUnit 4（`junit:junit:4.13.2`，见 `app/build.gradle`），
  * 断言的消息参数在**第一个**位置；测试名里也不能出现 `.` / `/` 这类字符。
  */
 class ConnectionSelectorTest {

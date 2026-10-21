@@ -3,7 +3,7 @@
 //
 // 为什么需要：本机到 Maven Central / plugins.gradle.org 的链路基本不可用（8s 超时都拉不完），
 //            而 `settings.gradle` 里声明的是官方仓库，开源分发时那份声明必须留着，不能改。
-// 怎么用：    显式传入，不在仓库里自动生效 ——  ./gradlew -I init-mirror.gradle :server:test
+// 怎么用：    显式传入，不在仓库里自动生效 ——  ./gradlew -I init-mirror.gradle :app:test
 //            （`--offline` 走本地缓存时它也不碍事；两者经常一起用）
 // 什么时候删：网络能正常到 Maven Central 的机器上直接不传这个参数即可；
 //            若哪天要彻底移除，删掉本文件就行 —— 它不参与编译产物，也不改变依赖版本。

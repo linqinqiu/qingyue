@@ -43,14 +43,27 @@ if (onlyList) {
   process.exit(0)
 }
 
+/**
+ * 单个门禁的超时上限。
+ *
+ * 原来写 300 秒，实测**不够**：`source-picker-check` 单独跑要 373 秒
+ * （它要起真浏览器、开书架、点右键菜单、验归组，步骤多），
+ * 于是被误判成"失败"——其实它 32/32 全过，只是被我掐断了。
+ *
+ * 300 秒 → 600 秒。这个上限的意义是"防止某个门禁卡死不返回"，
+ * 不是"给门禁定一个合理的运行时长"；定太紧只会制造假红。
+ * 实测最慢的几个：source-picker 373s / subscription 275s / source-editor 140s。
+ */
+const GATE_TIMEOUT_MS = 600_000
+
 /** 跑一个脚本，返回 { name, ok, ms, tail }。 */
 function runOne(name) {
   const started = Date.now()
   try {
     // 与 coverage-report 同一套平台处理：Windows 上 .cmd/.bat 必须经 shell。
     const out = process.platform === 'win32'
-      ? execSync(`node "tools/verify/${name}"`, { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', timeout: 300_000 })
-      : execFileSync('node', [`tools/verify/${name}`], { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', timeout: 300_000 })
+      ? execSync(`node "tools/verify/${name}"`, { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', timeout: GATE_TIMEOUT_MS })
+      : execFileSync('node', [`tools/verify/${name}`], { cwd: ROOT, encoding: 'utf8', stdio: 'pipe', timeout: GATE_TIMEOUT_MS })
     return { name, ok: true, ms: Date.now() - started, tail: lastLines(out, 3) }
   } catch (error) {
     const out = String(error.stdout ?? '') + String(error.stderr ?? '')

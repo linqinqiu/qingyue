@@ -49,7 +49,7 @@ object UpdateCheck {
      * 原来这里拼的是 `${BuildInfo.title}/版本`（「青阅/0.6.3」），于是「检查更新」每次抛
      * `invalid header value`，而那几行写在 runCatching 外面 → 接口 500 → 界面念成「检查请求没有发出去」。
      */
-    val userAgentPrefix: String = "legado-server/"
+    val userAgentPrefix: String = "legado/"
 
     private val json = Json { ignoreUnknownKeys = true }
 

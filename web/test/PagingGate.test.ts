@@ -15,7 +15,7 @@ const read = (...parts: string[]) => fs.readFileSync(path.resolve(import.meta.di
 test('旗标从服务端一路带到界面，只有一份判据', () => {
   const api = read('..', 'src', 'lib', 'api.ts')
   assert.ok(/ExploreTab = \{[^}]*supportsPaging\?: boolean/.test(api), 'ExploreTab 没带上 supportsPaging')
-  const models = read('..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'model', 'Models.kt')
+  const models = read('..', '..', 'app', 'src', 'main', 'kotlin', 'io', 'legado', 'model', 'Models.kt')
   assert.ok(/data class ExploreTab\([^)]*supportsPaging: Boolean = true/.test(models), '服务端 ExploreTab 没有这个字段')
   // 前端不许自己再写一份"能不能翻页"的判断
   for (const name of [path.join('pages', 'ExplorePage.tsx'), path.join('pages', 'RssPanel.tsx')]) {

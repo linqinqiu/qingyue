@@ -82,9 +82,9 @@ if (fs.existsSync(db)) {
 }
 
 // 版本号会变，写死就等于永远报"无 jar"。按形状找最新的那个。
-const jarDir = path.join(ROOT, 'server/build/libs');
+const jarDir = path.join(ROOT, 'app/build/libs');
 const jar = fs.existsSync(jarDir)
-  ? (fs.readdirSync(jarDir).filter(f => /^legado-server-.+-all.jar$/.test(f)).sort().pop() ?? '')
+  ? (fs.readdirSync(jarDir).filter(f => /^legado-.+-all.jar$/.test(f)).sort().pop() ?? '')
   : '';
 const jarPath = jar ? path.join(jarDir, jar) : '';
 const bundleDir = path.join(ROOT, 'web/dist/assets');

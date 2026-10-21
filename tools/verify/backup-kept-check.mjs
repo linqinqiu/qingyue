@@ -11,7 +11,7 @@
  * 只活几十秒的独立实例（同一个 fatJar），跑完杀进程、删临时目录，用户的 data/ 一个字节都不动
  * —— 收尾还专门复查一遍真数据目录没被碰。
  *
- * 跑法：node tools/verify/backup-kept-check.mjs   （需要已有 server/build/libs/*-all.jar）
+ * 跑法：node tools/verify/backup-kept-check.mjs   （需要已有 app/build/libs/*-all.jar）
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -30,11 +30,11 @@ const ok = (label, condition, detail = '') => {
   else { fail++; console.log(`  FAIL ${label}  — ${detail || '断言不成立'}`) }
 }
 
-const jars = fs.existsSync(path.join(ROOT, 'server/build/libs'))
-  ? fs.readdirSync(path.join(ROOT, 'server/build/libs')).filter(name => name.endsWith('-all.jar')).sort()
+const jars = fs.existsSync(path.join(ROOT, 'app/build/libs'))
+  ? fs.readdirSync(path.join(ROOT, 'app/build/libs')).filter(name => name.endsWith('-all.jar')).sort()
   : []
-if (!jars.length) { console.error('没有 server/build/libs/*-all.jar：先跑 gradle :server:fatJar'); process.exit(1) }
-const jar = path.join(ROOT, 'server/build/libs', jars[jars.length - 1])
+if (!jars.length) { console.error('没有 app/build/libs/*-all.jar：先跑 gradle :app:fatJar'); process.exit(1) }
+const jar = path.join(ROOT, 'app/build/libs', jars[jars.length - 1])
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'legado-kept-'))
 const dataDir = path.join(tmpRoot, 'data')

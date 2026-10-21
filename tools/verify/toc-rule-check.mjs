@@ -142,7 +142,7 @@ try {
   // 上游备份包带的是整张表（含手机上勾的启用/停用与自己加的规则）。
   // 之前我们只是"原样收下"，界面上看得见、用不上 —— 用户说的就是这件事。
   const packagedRules = JSON.parse(fs.readFileSync(
-    path.join(ROOT, 'server/src/main/resources/assets/txtTocRule.json'), 'utf8'))
+    path.join(ROOT, 'app/src/main/resources/assets/txtTocRule.json'), 'utf8'))
   const target = packagedRules.find(rule => rule.enable && rule.rule && rule.name)
   const backupPayload = JSON.stringify([
     // 同一条规则、手机上取消勾选：服务端要按 rule 字面匹配（备份里的 id 与本机对不上号）

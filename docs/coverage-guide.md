@@ -157,7 +157,7 @@ npm run coverage:report-only  # 不跑测试，只用现有数据重出报告
 `.github/workflows/coverage.yml`：
 
 - push to main / PR / 手动触发；
-- 后端 `:server:testCoverageReport`（**ignoreFailures**，已知失败基线不挡报告）；
+- 后端 `:app:testCoverageReport`（**ignoreFailures**，已知失败基线不挡报告）；
 - 前端 `npm run test:coverage`；
 - 合并成总报告，摘要贴进 Job Summary，HTML 作为 artifact 上传（保留 30 天）。
 
@@ -176,8 +176,8 @@ npm run coverage:report-only  # 不跑测试，只用现有数据重出报告
 测试照跑、执行数据照记，任务不中断，报告能正常出。
 
 ```bash
-./gradlew :server:testCoverageReport
-# 产物：server/build/reports/jacoco/testCoverage/html/index.html
+./gradlew :app:testCoverageReport
+# 产物：app/build/reports/jacoco/testCoverage/html/index.html
 ```
 
 ### 6.2 为什么过滤掉 JaCoCo 里的 lambda 类

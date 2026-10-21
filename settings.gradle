@@ -19,7 +19,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'legado-server'
+rootProject.name = 'legado'
 
-include ':server'
+include ':app'
 

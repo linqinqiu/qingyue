@@ -66,8 +66,8 @@ jacocoTestReport {
  * 所以这里复制一份 test 任务，唯一区别是 `ignoreFailures = true`：
  * 测试照跑、执行数据照样记录，但任务本身不因失败而中断，覆盖率报告能正常出。
  *
- * 用法：`./gradlew :server:testCoverageReport`
- * 产物：`server/build/reports/jacoco/testCoverage/html/index.html`
+ * 用法：`./gradlew :app:testCoverageReport`
+ * 产物：`app/build/reports/jacoco/testCoverage/html/index.html`
  */
 tasks.register('testCoverage', Test) {
     group = 'verification'
@@ -106,10 +106,10 @@ group = 'io.legado'
 version = '0.8.3'
 
 base {
-    // plain jar 与发行版统一叫 legado-server：Docker 构建层 `jar uf …/lib/legado-server-*.jar`
+    // plain jar 与发行版统一叫 legado：Docker 构建层 `jar uf …/lib/legado-*.jar`
     // 按这个名找（issue #11）。嵌套 settings.gradle 删除后子项目名回落 'server'，
     // plain jar 会漂成 server-<版本>.jar；fatJar 下面已显式 set 同名，不受影响。
-    archivesName = 'legado-server'
+    archivesName = 'legado'
 }
 
 java {
@@ -126,10 +126,10 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 }
 
 application {
-    // 名字钉死 legado-server：Docker 运行层拷 install/legado-server、启动 bin/legado-server。
+    // 名字钉死 legado：Docker 运行层拷 install/legado、启动 bin/legado。
     // 嵌套 settings.gradle 删除后（A 档）子项目名回落成 'server'，installDist 产物会漂成
     // install/server/bin/server，容器里既拷不到也起不来（issue #11 修复时发现）。
-    applicationName = 'legado-server'
+    applicationName = 'legado'
     mainClass = 'io.legado.ApplicationKt'
 }
 
@@ -146,12 +146,12 @@ tasks.named('jar', Jar) {
 }
 
 tasks.register('fatJar', Jar) {
-    archiveBaseName.set('legado-server')
+    archiveBaseName.set('legado')
     archiveClassifier.set('all')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     // web/dist 自 2026-10-11（B 档）起不再进版本库：干净检出里它不存在，而 processResources
     // 只在它存在时才拷进 jar —— 不在这里拦一道，就会得到一个"只有后端、没有界面"的包，
-    // 而且静默成功。注意只拦 fatJar：:server:test 不依赖界面产物，不能连带卡住。
+    // 而且静默成功。注意只拦 fatJar：:app:test 不依赖界面产物，不能连带卡住。
     doFirst {
         if (!file("${rootProject.projectDir}/web/dist/index.html").exists()) {
             throw new GradleException("web/dist is missing — run `npm run build` first (or `npm --prefix web run build`).\nweb/dist 里没有界面产物 —— 先跑 `npm run build` 再打 fatJar。")

@@ -28,7 +28,7 @@ import kotlin.io.path.name
  * 一旦有人在 `PluginManager` 之类里直接 `import io.legado.data.Database`
  * 或 `import io.legado.source.RuleRunner`（框架漏出内容），本判据即红。
  *
- * 注：本仓库统一用 JUnit 4（`junit:junit:4.13.2`，见 `server/build.gradle`），
+ * 注：本仓库统一用 JUnit 4（`junit:junit:4.13.2`，见 `app/build.gradle`），
  * 所以这里用 `org.junit.Test` + `org.junit.Assert`，不用 JUnit 5 的 `@Tag`。
  * 只跑这一条时用 Gradle 的类过滤：`--tests "*PluginFrameworkHasNoContentTest"`。
  */
@@ -90,11 +90,11 @@ class PluginFrameworkHasNoContentTest {
         /** 从多种可能的 cwd（模块根 / 仓库根）向上回溯，定位 plugin 源码目录。 */
         fun findPluginSourceDir(): Path {
             // 路径同样跟着包名走：io/legado/plugin → io/legado/plugin
-            val rel = listOf("server", "src", "main", "kotlin", "io", "legado", "plugin")
+            val rel = listOf("app", "src", "main", "kotlin", "io", "legado", "plugin")
             val candidates = sequence {
                 var cur = Path.of(System.getProperty("user.dir"))
                 yield(cur.resolve(rel.joinToString("/")))
-                // 仓库根：server/src/... ；server 模块根：src/...
+                // 仓库根：app/src/... ；server 模块根：src/...
                 yield(cur.resolve(rel.drop(1).joinToString("/")))
                 var p: Path? = cur
                 while (p != null) {
@@ -103,7 +103,7 @@ class PluginFrameworkHasNoContentTest {
                 }
             }
             return candidates.firstOrNull { Files.exists(it) && Files.isDirectory(it) }
-                ?: Path.of("server/src/main/kotlin/io/legado/plugin")
+                ?: Path.of("app/src/main/kotlin/io/legado/plugin")
         }
     }
 }

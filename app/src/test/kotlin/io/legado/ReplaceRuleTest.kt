@@ -89,7 +89,7 @@ class ReplaceRuleTest {
 
     @Test
     fun `database replace rules CRUD and import export`() {
-        val path = Files.createTempFile("legado-server-replace-rules-test", ".sqlite").toString()
+        val path = Files.createTempFile("legado-replace-rules-test", ".sqlite").toString()
         try {
             val db = Database(path)
             db.initialize()

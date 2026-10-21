@@ -1,5 +1,5 @@
 name: "💡 功能建议 / Feature Request"
-description: "为 legado-server 提出新功能建议或体验改进想法"
+description: "为 legado 提出新功能建议或体验改进想法"
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -15,7 +15,7 @@ body:
       options:
         - label: "已搜索现有 Issues 与 Discussions，未发现相似提案"
           required: true
-        - label: "该功能符合 legado-server 的无头服务端与 Web 阅读器定位"
+        - label: "该功能符合 legado 的无头服务端与 Web 阅读器定位"
           required: true
 
   - type: dropdown

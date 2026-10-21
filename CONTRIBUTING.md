@@ -9,7 +9,7 @@
 
 | | 版本 | 说明 |
 | --- | --- | --- |
-| JDK | **17+** | `server/build.gradle` 的 toolchain 锁 17；CI 用 Temurin 21 也能编 |
+| JDK | **17+** | `app/build.gradle` 的 toolchain 锁 17；CI 用 Temurin 21 也能编 |
 | Node | **20+**（CI 用 22，见 `.nvmrc`） | 只构建 / 跑前端时需要 |
 | Gradle | 用仓库自带的 `./gradlew` | 不用另装 |
 
@@ -23,7 +23,7 @@ npm --prefix web install     # 前端依赖
 npm run dev                  # 只起前端 dev server（热重载，不含后端）
 npm test                     # 全部用例：前端 node:test + 后端 JUnit
 npm run check                # 前端类型检查（tsc）
-npm run build                # 前端 → web/dist，再 :server:fatJar（把 web/dist 烤进 jar）
+npm run build                # 前端 → web/dist，再 :app:fatJar（把 web/dist 烤进 jar）
 
 node start.mjs               # 起服务并自动开浏览器（默认 127.0.0.1:1234）
 node stop.mjs                # 停掉本项目在端口上的那个 java 进程
@@ -36,10 +36,10 @@ node stop.mjs                # 停掉本项目在端口上的那个 java 进程
 
 - `npm run check` 与 `npm test` 都要过。
 - 改动了框架层（`plugin/` 容器、端点计数、AI 接入注册表）还要先跑后端守门：
-  `./gradlew :server:verifyFramework`（钉死"框架不夹带内容 + 139/19/8 端点契约"）。
+  `./gradlew :app:verifyFramework`（钉死"框架不夹带内容 + 139/19/8 端点契约"）。
   PR 合并前由 CI 的 `contract.yml` 自动跑这道，但本地先红比等 CI 红更省事。
 - 改了服务端就打一次 `npm run build`，确认 fatJar 能出。
-- 版本号只有一个来源（`server/build.gradle` 的 `version`）。**发版前**升一档，并在
+- 版本号只有一个来源（`app/build.gradle` 的 `version`）。**发版前**升一档，并在
   `CHANGELOG.md` 顶部补一条（日期写发版那天，不是动手那天）；一天里无论改了几次只占一个版本号。
   `tools/verify/version-check.mjs` 会判五处是否同号（gradle / jar 清单 / `/healthz` / 顶栏 / CHANGELOG）。
 - 改行为的，补 / 改用例。这个仓库的判据口径是"能离线跑、能红能绿"，不是"页面上看着有字" ——

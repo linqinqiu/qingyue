@@ -137,7 +137,7 @@ for (const rule of rules) {
 // 于是这个函数读到的一串全是目录名、`read()` 全抛、拼出来基本是空串 ——
 // 端点这条断言从那次重构起就**一直是瞎的**，它现在报"悬空"纯粹是因为看不清。
 // 改成递归走整棵 kotlin 树。
-const kotlinRoot = path.join(ROOT, 'server/src/main/kotlin')
+const kotlinRoot = path.join(ROOT, 'app/src/main/kotlin')
 const walkKotlin = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
   const full = path.join(dir, entry.name)
   return entry.isDirectory() ? walkKotlin(full) : [full]
@@ -184,9 +184,9 @@ check('package.json 的 license 与 LICENSE 一致',
   `package.json=${pkg.license} · LICENSE 头=${license.split('\n')[0] ?? ''}`)
 
 // ── 版本号单一来源不许在部署面写死（Dockerfile 里钉死旧 jar 名会让构建直接坏）──
-const dockerfile = fs.existsSync(path.join(ROOT, 'Dockerfile.server')) ? read('Dockerfile.server') : ''
-check('Dockerfile 不写死带版本号的 jar 名', !/legado-server-\d+\.\d+\.\d+[^"]*\.jar/.test(dockerfile),
-  (dockerfile.match(/legado-server-[^"\s]*jar/g) ?? []).join(' ') || '没有硬编码 jar 名')
+const dockerfile = fs.existsSync(path.join(ROOT, 'Dockerfile')) ? read('Dockerfile') : ''
+check('Dockerfile 不写死带版本号的 jar 名', !/legado-\d+\.\d+\.\d+[^"]*\.jar/.test(dockerfile),
+  (dockerfile.match(/legado-[^"\s]*jar/g) ?? []).join(' ') || '没有硬编码 jar 名')
 
 let pass = 0
 let fail = 0

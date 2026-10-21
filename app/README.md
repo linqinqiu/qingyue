@@ -8,8 +8,8 @@ Ktor + Kotlin JVM 的无头书源引擎与 HTTP 服务：解析并执行 Legado 
 
 ```bash
 npm --prefix web run build                       # 产出 web/dist
-./gradlew :server:fatJar                         # 产出 server/build/libs/legado-server-<版本>-all.jar
-java -jar server/build/libs/legado-server-<版本>-all.jar
+./gradlew :app:fatJar                         # 产出 app/build/libs/legado-<版本>-all.jar
+java -jar app/build/libs/legado-<版本>-all.jar
 ```
 
 打开 `http://127.0.0.1:1234`。环境变量（`ServerConfig.kt` 读取）：
@@ -34,7 +34,7 @@ java -jar server/build/libs/legado-server-<版本>-all.jar
 ## 测试
 
 ```bash
-./gradlew :server:test                                   # 单测（Windows 上有一批删不掉被占用 SQLite 的既有失败，判回归要比失败集合）
+./gradlew :app:test                                   # 单测（Windows 上有一批删不掉被占用 SQLite 的既有失败，判回归要比失败集合）
 node tools/verify/selfcheck.mjs                          # 部署后的端到端自检
 node tools/verify/version-check.mjs                      # 版本号单一来源与前端产物一致性
 ```

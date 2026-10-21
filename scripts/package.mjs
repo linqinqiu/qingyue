@@ -21,12 +21,12 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const fail = message => { console.error(`FAIL  ${message}`); process.exit(1) }
 
-const version = (fs.readFileSync(path.join(ROOT, 'server/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1]
-if (!version) fail('server/build.gradle 里找不到 version —— 版本号只有一个来源，别在脚本里补默认值')
+const version = (fs.readFileSync(path.join(ROOT, 'app/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1]
+if (!version) fail('app/build.gradle 里找不到 version —— 版本号只有一个来源，别在脚本里补默认值')
 
-const jarName = `legado-server-${version}-all.jar`
-const jar = path.join(ROOT, 'server/build/libs', jarName)
-if (!fs.existsSync(jar)) fail(`没有 ${path.relative(ROOT, jar)}，先跑 ./gradlew :server:fatJar`)
+const jarName = `legado-${version}-all.jar`
+const jar = path.join(ROOT, 'app/build/libs', jarName)
+if (!fs.existsSync(jar)) fail(`没有 ${path.relative(ROOT, jar)}，先跑 ./gradlew :app:fatJar`)
 
 const nextDir = path.join(ROOT, 'next')
 const nextIndex = path.join(nextDir, 'index.html')

@@ -26,8 +26,8 @@ const fail = message => { console.error(`FAIL  ${message}`); process.exit(1) }
 const arg = (flag, def = null) => { const i = process.argv.indexOf(flag); return i > 0 && i + 1 < process.argv.length ? process.argv[i + 1] : def }
 const hasFlag = flag => process.argv.includes(flag)
 
-const version = (fs.readFileSync(path.join(ROOT, 'server/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1]
-if (!version) fail('server/build.gradle 里找不到 version —— 版本号只有一个来源，别在脚本里补默认值')
+const version = (fs.readFileSync(path.join(ROOT, 'app/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1]
+if (!version) fail('app/build.gradle 里找不到 version —— 版本号只有一个来源，别在脚本里补默认值')
 
 const JAVA_HOME = process.env.JAVA_HOME || ''
 const jbin = p => path.join(JAVA_HOME, 'bin', process.platform === 'win32' ? `${p}.exe` : p)
@@ -42,9 +42,9 @@ if (!fs.existsSync(webDist)) {
 }
 
 // 2) fat jar：缺失就补构建（内存吃紧时给 gradle 限一下，避免 mmap 撞 errno=1455）。
-const jarName = `legado-server-${version}-all.jar`
-const jar = path.join(ROOT, 'server/build/libs', jarName)
-if (!fs.existsSync(jar)) fail(`没有 ${path.relative(ROOT, jar)}，先跑 ./gradlew :server:fatJar`)
+const jarName = `legado-${version}-all.jar`
+const jar = path.join(ROOT, 'app/build/libs', jarName)
+if (!fs.existsSync(jar)) fail(`没有 ${path.relative(ROOT, jar)}，先跑 ./gradlew :app:fatJar`)
 
 // 3) jlink 运行时（复用上一次，--jlink 才重裁）。
 const MODULES = 'java.base,java.datatransfer,java.xml,java.prefs,java.desktop,java.logging,java.management,' +
@@ -110,7 +110,7 @@ if (dataDir) {
   console.log(`NOTE  数据目录指向 ${dataDir}（镜像根 .env）`)
 }
 
-// 7) 校验产物布局（ADR-017 §5）：青阅.exe / app/legado-server-*-all.jar / runtime/bin/java.exe。
+// 7) 校验产物布局（ADR-017 §5）：青阅.exe / app/legado-*-all.jar / runtime/bin/java.exe。
 const appJar = fs.readdirSync(path.join(imageRoot, 'app')).find(n => n.endsWith('-all.jar'))
 if (!appJar) fail('app/ 里没有 fat jar —— stop.mjs 的 CommandLine 匹配会静默跳过它')
 if (!fs.existsSync(path.join(imageRoot, 'runtime', 'bin', 'java.exe'))) fail('runtime/bin/java.exe 缺失')

@@ -16,11 +16,11 @@ import zlib from 'node:zlib'
 const ROOT = path.resolve(import.meta.dirname, '../..')
 const BASE = (process.env.LEGADO_BASE_URL || 'http://127.0.0.1:1234').replace(/\/$/, '')
 /**
- * 默认包名从 `server/build.gradle` 的 version 推出来 —— 原来这里写死 `qingyue-0.6.0.zip`，
+ * 默认包名从 `app/build.gradle` 的 version 推出来 —— 原来这里写死 `qingyue-0.6.0.zip`，
  * 于是下一次发版若忘了带 `LEGADO_PACKAGE`，这条门禁会**去验上一版的包**并且照样全绿
  * （version-check 当年就是靠"build/libs 里留着旧号包"逮到人挑错包的，同一个入口）。
  */
-const PACKAGE_VERSION = (fs.readFileSync(path.join(ROOT, 'server/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1] ?? ''
+const PACKAGE_VERSION = (fs.readFileSync(path.join(ROOT, 'app/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1] ?? ''
 const ZIP = process.env.LEGADO_PACKAGE || path.join(ROOT, `dist/qingyue-${PACKAGE_VERSION}.zip`)
 
 const results = []
@@ -77,7 +77,7 @@ const byName = new Map(entries.map(entry => [entry.name.replace(/\\/g, '/'), ent
 const topDir = [...new Set(names.map(name => name.split('/')[0]))]
 console.log(`包 ${ZIP} · ${(buffer.length / 1024 / 1024).toFixed(1)} MB · ${entries.length} 条 · 顶层 ${topDir.join(', ')}`)
 
-const gradleVersion = (fs.readFileSync(path.join(ROOT, 'server/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1] ?? ''
+const gradleVersion = (fs.readFileSync(path.join(ROOT, 'app/build.gradle'), 'utf8').match(/^version = '([\d.]+)'/m) ?? [])[1] ?? ''
 const liveVersion = await fetch(`${BASE}/healthz`).then(response => response.json()).then(info => info.version).catch(() => '')
 // 只看包根上的 jar：runtime/lib/jrt-fs.jar 也是 .jar，把它算进来这条就永远在报"两个 jar"
 const jarEntries = names.filter(name => name.split('/').length === 2 && name.endsWith('.jar'))
@@ -94,8 +94,8 @@ check(`jar 在包里且版本号就是 gradle 的那一个（${gradleVersion}）
   jarEntries.length === 1 && jarEntries[0].includes(`-${gradleVersion}-all.jar`), jarEntries.join(','))
 check('包里的 jar 与刚验过的那一份字节数一致（不是上一次的旧包）',
   jarEntries.length === 1 && byName.get(jarEntries[0]).uncompSize ===
-    fs.statSync(path.join(ROOT, `server/build/libs/legado-server-${gradleVersion}-all.jar`)).size,
-  `${byName.get(jarEntries[0])?.uncompSize} vs ${fs.statSync(path.join(ROOT, `server/build/libs/legado-server-${gradleVersion}-all.jar`)).size}`)
+    fs.statSync(path.join(ROOT, `app/build/libs/legado-${gradleVersion}-all.jar`)).size,
+  `${byName.get(jarEntries[0])?.uncompSize} vs ${fs.statSync(path.join(ROOT, `app/build/libs/legado-${gradleVersion}-all.jar`)).size}`)
 check('运行时的 java.exe 在包里（没有它，双击就是一闪而过）',
   names.some(name => /\/runtime\/bin\/java\.exe$/.test(name)))
 check('服务在跑的端口号与包里的 gradle 同号（部署与交付是同一版）',
@@ -139,7 +139,7 @@ if (hasNext) {
  */
 if (process.argv.includes('--self-test')) {
   console.log('\n反向对照：注入两类脏包，判据必须变红')
-  const polluted = [...names, `${topDir[0]}/data/legado.sqlite`, `${topDir[0]}/logs/legado-server-20261004.log`]
+  const polluted = [...names, `${topDir[0]}/data/legado.sqlite`, `${topDir[0]}/logs/legado-20261004.log`]
   const caught = polluted.filter(name => FORBIDDEN.some(pattern => pattern.test(name)))
   check('注入 data/ 与 logs/ → 脏条目判据必须抓到', caught.length === 2, caught.join(' '))
   const leaked = `set LEGADO_DATA_DIR=E:\\Users\\someone\\reader\\data`

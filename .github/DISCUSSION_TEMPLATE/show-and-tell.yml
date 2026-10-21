@@ -9,7 +9,7 @@ body:
     attributes:
       label: "分享主题 / Topic"
       description: "简要介绍你分享的内容"
-      placeholder: "例如：我的 NAS 自动化追更 + Legado-Server 部署实践 / 分享自制的净化规则组"
+      placeholder: "例如：我的 NAS 自动化追更 + legado 部署实践 / 分享自制的净化规则组"
     validations:
       required: true
   - type: textarea

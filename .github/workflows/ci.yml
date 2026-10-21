@@ -35,7 +35,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Run Server Tests
-        run: ./gradlew :server:test
+        run: ./gradlew :app:test
 
   web-check:
     name: Frontend Typecheck & Build

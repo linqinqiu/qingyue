@@ -139,7 +139,7 @@ fun Route.apiRoutes(
             call.respond(HttpStatusCode.NoContent)
         }
         /**
-         * 更新日志：随包发出的 `CHANGELOG.md`（`server/build.gradle` 的 processResources 拷成
+         * 更新日志：随包发出的 `CHANGELOG.md`（`app/build.gradle` 的 processResources 拷成
          * `meta/changelog.md`）。界面上那张「更新日志」页读这里。
          *
          * 两个刻意的选择：

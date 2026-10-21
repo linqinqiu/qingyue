@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 // 用仓库内的相对位置解析 puppeteer-core，不写死绝对路径 ——
-// 原来这里写死 E:/legado/legado-server/web/package.json（旧目录名 + 某台机器的盘符），
+// 原来这里写死 E:/legado/legado/web/package.json（旧目录名 + 某台机器的盘符），
 // 换台机器 / 改过目录名就 MODULE_NOT_FOUND，门禁直接崩。
 // 从本文件位置推出仓库根，不依赖调用方的 cwd。
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')

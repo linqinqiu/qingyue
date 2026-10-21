@@ -46,7 +46,7 @@ if (args.port) runtime.port = args.port;
 if (args.host) runtime.host = args.host;
 
 const jars = readdirSync(runtime.libs).filter((name) => name.endsWith('-all.jar'));
-if (!jars.length) { console.error(`没有 ${runtime.libs}\\*-all.jar，先跑 gradle :server:fatJar`); process.exit(1); }
+if (!jars.length) { console.error(`没有 ${runtime.libs}\\*-all.jar，先跑 gradle :app:fatJar`); process.exit(1); }
 const jar = jars.sort().pop();
 const env = childEnvironment(runtime);
 ensureDirectories(runtime);
@@ -145,7 +145,7 @@ function staleRunningPids(target, jarPath) {
   for (const row of rows) {
     const [pid, ms, ...rest] = row.split('|');
     if (!portPids.includes(pid)) continue;
-    if (!/legado-server-.*-all\.jar/.test(rest.join('|'))) continue;
+    if (!/legado-.*-all\.jar/.test(rest.join('|'))) continue;
     const start = Number(ms);
     if (Number.isFinite(start) && start > 0 && start < jarMtime) stale.push(pid);
   }
@@ -191,7 +191,7 @@ probe.listen(runtime.port, runtime.host, () => {
     ];
     // CDS 类归档（tools/make-cds.mjs 生成）：冷启动实测 ~8.3s → ~5.3s。
     // 归档是跟这一份 jar 绑定的 —— 过期/缺失就不带它（这次慢一点），起完在后台重建给下次用。
-    const cdsArchive = path.join(runtime.root, 'server', 'build', 'cds', 'app.jsa');
+    const cdsArchive = path.join(runtime.root, 'app', 'build', 'cds', 'app.jsa');
     const jarPath = path.join(runtime.libs, jar);
     const cdsFresh = existsSync(cdsArchive) && statSync(cdsArchive).mtimeMs >= statSync(jarPath).mtimeMs;
     if (cdsFresh) jvmArgs.push(`-XX:SharedArchiveFile=${cdsArchive}`);

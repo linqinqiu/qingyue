@@ -74,27 +74,27 @@ test('parseChangelog - 只有 ## 不带方括号时不算版本（防止把正�
 /**
  * 仓库里的真 CHANGELOG：这一条同时钉住两件事 ——
  * ① 随包文本确实存在且能被同一个解析器读出结构；
- * ② 最上面那条版本号必须等于 `server/build.gradle` 里的版本（改版本忘写日志是常见漂移）。
+ * ② 最上面那条版本号必须等于 `app/build.gradle` 里的版本（改版本忘写日志是常见漂移）。
  */
 test('仓库 CHANGELOG 能解析，且最新一条就是当前版本号', () => {
   const text = read('..', '..', 'CHANGELOG.md')
   const releases = parseChangelog(text)
   assert.ok(releases.length >= 1, 'CHANGELOG.md 至少要有一个 `## [版本号]` 段')
-  const gradle = read('..', '..', 'server', 'build.gradle')
+  const gradle = read('..', '..', 'app', 'build.gradle')
   const version = /version\s*=\s*['"]([^'"]+)['"]/.exec(gradle)?.[1]
-  assert.ok(version, 'server/build.gradle 里要有 version = \'x.y.z\'（版本号唯一来源）')
+  assert.ok(version, 'app/build.gradle 里要有 version = \'x.y.z\'（版本号唯一来源）')
   assert.equal(releases[0].version, version, `CHANGELOG 最新一条是 ${releases[0].version}，但 gradle 报 ${version} —— 改了版本要补日志`)
   assert.ok(releases[0].groups.length > 0 || releases[0].preamble.length > 0, '当前版本这一条不许是空的')
 })
 
 /** 接口层：读不到就 404，绝不能 200 + 空文本（前端会把"包里没有"念成"没有更新"）。 */
 test('服务端 /changelog 读不到时报 404，不报"空日志"', () => {
-  const routes = read('..', '..', 'server', 'src', 'main', 'kotlin', 'io', 'legado', 'http', 'Routes.kt')
+  const routes = read('..', '..', 'app', 'src', 'main', 'kotlin', 'io', 'legado', 'http', 'Routes.kt')
   assert.match(routes, /get\("\/changelog"\)/, '要有 GET /api/changelog 这一条路由')
   assert.match(routes, /meta\/changelog\.md/, '它读的是随包的 meta/changelog.md（打进 jar 才谈得上"随包"）')
   assert.match(routes, /changelog_missing/, '读不到时给一个明确的错误码')
   assert.match(routes, /HttpStatusCode\.NotFound/, '读不到时必须是 404，不能 200 空字符串')
-  const gradle = read('..', '..', 'server', 'build.gradle')
+  const gradle = read('..', '..', 'app', 'build.gradle')
   assert.match(gradle, /changelog\.md/, '打包环节要把 CHANGELOG.md 拷进 meta/（否则运行时的包里没有它）')
 })
 

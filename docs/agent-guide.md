@@ -7,7 +7,7 @@
 
 青阅的 AI 是**进程内网关**，不是外挂服务：它和界面、脚本用的是同一批服务对象，
 所以它知道你在看什么，也能调程序自己的 39 个能力。
-入口是 `/api/agent/*`（8 个端点），核心实现在 `server/src/main/kotlin/io/legado/ai/`。
+入口是 `/api/agent/*`（8 个端点），核心实现在 `app/src/main/kotlin/io/legado/ai/`。
 
 ## 1. 三步接上
 

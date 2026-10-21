@@ -177,7 +177,7 @@ class AuditPlugin : Plugin {
 
 ```groovy
 dependencies {
-    compileOnly files("../legado-server/build/libs/legado-server-0.8.3-all.jar")
+    compileOnly files("../legado/build/libs/legado-0.8.3-all.jar")
 }
 ```
 
@@ -237,7 +237,7 @@ curl -s http://127.0.0.1:1234/api/plugins | jq
 
 ## 9. 完整参考
 
-- 接口定义：`server/src/main/kotlin/io/legado/plugin/Plugin.kt`
+- 接口定义：`app/src/main/kotlin/io/legado/plugin/Plugin.kt`
 - 框架实现：`plugin/PluginManager.kt`、`ai/ToolRegistry.kt`
 - 判据：`PluginFrameworkTest`、`PluginFrameworkHasNoContentTest`、`FrameworkContractTest`
 - AI 侧怎么用这些工具：`docs/agent-guide.md`

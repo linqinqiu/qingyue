@@ -10,7 +10,7 @@
 
 | 半边 | 位置 | 能扩展什么 |
 |---|---|---|
-| 后端插件 | `server/src/main/kotlin/io/legado/plugin/` | 工具、**LLM 协议**、工具调用钩子 |
+| 后端插件 | `app/src/main/kotlin/io/legado/plugin/` | 工具、**LLM 协议**、工具调用钩子 |
 | 前端插件 | `web/src/extensions/registry.ts` | 实验室条目、设置分区 |
 
 **目录分层（重要）**：
@@ -34,9 +34,9 @@
 
 | 目录 | 身份 | 是否可含内容 | 路由 |
 |---|---|---|---|
-| `server/src/main/kotlin/io/legado/plugin/` | **纯框架容器**：`Plugin` / `PluginManager` / `EventBus` / `AppEvents` | **绝不**含任何业务 | 0 条 |
-| `server/src/main/kotlin/io/legado/ai/` | **内置 AI 接入**（类比 `features/`）：默认 provider / 默认工具 / 默认选择器 | 可含**可覆盖**的默认内容 | 0 条 |
-| `server/src/main/kotlin/io/legado/http/` | 路由装配点 | 仅装配 | 139 条（唯一的路由来源） |
+| `app/src/main/kotlin/io/legado/plugin/` | **纯框架容器**：`Plugin` / `PluginManager` / `EventBus` / `AppEvents` | **绝不**含任何业务 | 0 条 |
+| `app/src/main/kotlin/io/legado/ai/` | **内置 AI 接入**（类比 `features/`）：默认 provider / 默认工具 / 默认选择器 | 可含**可覆盖**的默认内容 | 0 条 |
+| `app/src/main/kotlin/io/legado/http/` | 路由装配点 | 仅装配 | 139 条（唯一的路由来源） |
 
 要点：
 
@@ -328,22 +328,22 @@ frontendPlugins.register({
 ```bash
 # 后端插件框架（19 例）
 cd legado
-.\gradlew.bat :server:test --tests "*PluginFrameworkTest"
+.\gradlew.bat :app:test --tests "*PluginFrameworkTest"
 
 # LLM 协议可插拔（10 例）
-.\gradlew.bat :server:test --tests "*LlmProviderFrameworkTest"
+.\gradlew.bat :app:test --tests "*LlmProviderFrameworkTest"
 
 # "内置 AI 能力可由插件提供"的端到端证明（3 例）
-.\gradlew.bat :server:test --tests "*AiAsPluginTest"
+.\gradlew.bat :app:test --tests "*AiAsPluginTest"
 
 # 事件机制（14 例）与业务侧真发事件（5 例）
-.\gradlew.bat :server:test --tests "*EventBusTest" --tests "*BusinessEventsTest"
+.\gradlew.bat :app:test --tests "*EventBusTest" --tests "*BusinessEventsTest"
 
 # 框架不夹带内容：plugin/ 容器不得反向依赖具体功能包（后端版 FrameworkHasNoContent）
-.\gradlew.bat :server:test --tests "*PluginFrameworkHasNoContentTest"
+.\gradlew.bat :app:test --tests "*PluginFrameworkHasNoContentTest"
 
 # 连接选择策略可插拔（Gap 3：默认仍取第一个，自定义 selector 可替换默认）
-.\gradlew.bat :server:test --tests "*ConnectionSelectorTest"
+.\gradlew.bat :app:test --tests "*ConnectionSelectorTest"
 
 # 前端插件框架
 cd web

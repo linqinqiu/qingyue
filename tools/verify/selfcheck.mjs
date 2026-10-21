@@ -244,8 +244,8 @@ ok('局域网地址连不上', !res.some((x) => x.endsWith('OPEN!!')), res.join(
 
 const psOut = execSync('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name=\'java.exe\'\\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"', { encoding: 'utf8' }).trim();
 const javaProcs = JSON.parse(psOut.startsWith('[') ? psOut : `[${psOut}]`);
-const proc = javaProcs.filter((p) => /legado-server.*-all\.jar/.test(p.CommandLine ?? ''));
-ok('只有一个服务进程，且跑的是本地构建 jar', proc.length === 1, proc.map((p) => 'PID ' + p.ProcessId).join(',') || `java 进程 ${javaProcs.length} 个，无 legado-server`);
+const proc = javaProcs.filter((p) => /legado.*-all\.jar/.test(p.CommandLine ?? ''));
+ok('只有一个服务进程，且跑的是本地构建 jar', proc.length === 1, proc.map((p) => 'PID ' + p.ProcessId).join(',') || `java 进程 ${javaProcs.length} 个，无 legado`);
 
 const db3 = new DatabaseSync(path.join(ROOT, 'data/legado.sqlite'), { readOnly: true });
 const deadTables = db3.prepare("select name from sqlite_master where type = 'table' and name in ('session', 'app_user')").all();

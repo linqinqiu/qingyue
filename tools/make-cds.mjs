@@ -4,10 +4,10 @@
 // （JVM 自身只 ~0.4 秒）。CDS 把"这次运行加载过的类"存成一份归档，下次直接从归档映射，
 // 不再逐个从 jar 里读 + 校验。
 //
-// 归档是**跟这一份 jar 绑定的**：jar 一重建就得重新生成。所以每次 `:server:fatJar` 之后跑一次本脚本。
+// 归档是**跟这一份 jar 绑定的**：jar 一重建就得重新生成。所以每次 `:app:fatJar` 之后跑一次本脚本。
 //
 // 跑法：node tools/make-cds.mjs [--port N]
-//   产物：server/build/cds/app.jsa   （start.mjs / start.cmd 会自动带上它）
+//   产物：app/build/cds/app.jsa   （start.mjs / start.cmd 会自动带上它）
 //   `--port`：后台重建时用 —— 正在跑的服务占着默认端口，重建这一次得换一个。
 //
 // 生成时服务会真的起来一次（`--cds-dump`），脚本趁这 8 秒预热几个接口 —— 请求路径的类
@@ -33,11 +33,11 @@ const port = Number.isInteger(override) && override > 0 ? override : runtime.por
 
 const jars = readdirSync(runtime.libs).filter((name) => name.endsWith('-all.jar')).sort();
 if (!jars.length) {
-  console.error(`没有 ${runtime.libs}\\*-all.jar，先跑 gradle :server:fatJar`);
+  console.error(`没有 ${runtime.libs}\\*-all.jar，先跑 gradle :app:fatJar`);
   process.exit(1);
 }
 const jar = path.join(runtime.libs, jars.pop());
-const outDir = path.join(runtime.root, 'server', 'build', 'cds');
+const outDir = path.join(runtime.root, 'app', 'build', 'cds');
 mkdirSync(outDir, { recursive: true });
 const archive = path.join(outDir, 'app.jsa');
 

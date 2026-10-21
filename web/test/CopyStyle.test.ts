@@ -159,7 +159,7 @@ test('随包的更新日志里不出现装饰字形', () => {
 
 /** 服务端 `RuleRunner` 的调试轨迹直接显示在「书源调试」弹窗里，同样算界面文案。 */
 test('书源调试的轨迹标签不出现装饰字形', () => {
-  const file = path.resolve(import.meta.dirname, '../../server/src/main/kotlin/io/legado/rules/RuleRunner.kt')
+  const file = path.resolve(import.meta.dirname, '../../app/src/main/kotlin/io/legado/rules/RuleRunner.kt')
   const offenders: string[] = []
   fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach((line, index) => {
     if (!/DebugTrace\(/.test(line)) return

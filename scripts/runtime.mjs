@@ -37,7 +37,7 @@ export function resolveRuntime() {
   const port = portFromFile ?? Number(pick('LEGADO_PORT', '1234'));
   return {
     root,
-    libs: join(root, 'server', 'build', 'libs'),
+    libs: join(root, 'app', 'build', 'libs'),
     envFileUsed: process.env.LEGADO_ENV ?? join(root, '.env'),
     host: pick('LEGADO_HOST', '127.0.0.1'),
     port,
