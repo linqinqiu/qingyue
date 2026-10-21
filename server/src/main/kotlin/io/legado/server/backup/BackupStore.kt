@@ -65,13 +65,13 @@ class BackupStore(private val directory: Path) {
 
         /** 备份包里我们目前没有原生归宿、但值得原样收下的条目。 */
         val KEEP_NAMES = listOf(
-            "dictrule.json", "readconfig.json", "httpTTS.json", "httptts.json",
+            "dictrule.json", "readconfig.json", "httptts.json",
             "searchhistory.json", "txtTocRule.json", "bookmemo.json", "rssStar.json",
             "themeConfig.json", "style.json", "theme.json", "readRecord.json",
         )
 
         /** 前端能真的映射到自己设置上的那几类，界面上才给「套用」按钮。 */
-        val APPLYABLE_NAMES = listOf("readconfig.json", "httpTTS.json", "httptts.json", "txtTocRule.json")
+        val APPLYABLE_NAMES = listOf("readconfig.json", "httptts.json", "txtTocRule.json")
 
         val KEEP_LABELS = mapOf(
             "dictrule.json" to "字典规则",
