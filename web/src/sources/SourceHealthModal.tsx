@@ -305,13 +305,15 @@ export function SourceHealthModal({
           />
         </div>
 
-        {/* 重测后相对上一轮的"结论变化"提示：用户要的是重测能看出哪些源和上次不一样 */}
-        {run.finished === 'done' && run.baselineChanged > 0 && (
+        {/* 重测后相对上一轮的"结论变化"提示：用户要的是重测能看出哪些源和上次不一样。
+            边测边报 —— 全库五千多个源要跑一小时，不能等跑完才说。 */}
+        {run.baselineChanged > 0 && (
           <div className="health-baseline-note" role="status">
             <Icon name="activity" />
             <span>
               对比上一轮体检，<strong>{run.baselineChanged}</strong> 个源的结论变了
               {run.baselineWorse > 0 ? `（其中 ${run.baselineWorse} 个变差）` : ''}
+              {run.running ? '，还在继续测…' : ''}
             </span>
           </div>
         )}

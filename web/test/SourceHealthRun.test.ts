@@ -51,3 +51,38 @@ test('体检跑在弹窗组件之外：卸载不再顺手取消', () => {
   assert.match(store, /export function stopHealthRun/, '只有显式停止这一个入口')
   assert.match(store, /autoTagBatches/, '分组是在批次循环里做的，不是等跑完再补')
 })
+
+test('体检基线要合并写入，不能覆盖', () => {
+  // 只重测一个源时，这一轮的结果里就一条。若直接覆盖整份基线，
+  // 之前攒下的几千条结论会被抹掉，下一轮全库体检就再也比不出"结论变了"。
+  const store = read('../src/sources/sourceHealthRun.ts')
+  const fn = store.slice(store.indexOf('function saveBaseline'), store.indexOf('export type HealthRunState'))
+  assert.match(fn, /loadBaseline\(\)/, '写基线前必须先读回旧的，才能合并')
+  assert.match(fn, /map\[item\.id\] = item\.statusCategory/, '只更新这一轮真正测过的 id')
+  assert.doesNotMatch(fn, /const map: Record<string, string> = \{\}/,
+    '不许再从空对象开始写 —— 那就是覆盖，会把别的源的旧结论丢掉')
+})
+
+test('体检基线的键名与读取路径是跨会话的（不是只活在内存里）', () => {
+  const store = read('../src/sources/sourceHealthRun.ts')
+  assert.match(store, /localStorage\.getItem\(HEALTH_BASELINE_KEY\)/, '启动一轮体检时要能从 localStorage 读回上次基线')
+  assert.match(store, /localStorage\.setItem\(HEALTH_BASELINE_KEY/, '跑完要把本轮结论写回去')
+  assert.match(store, /legado\.health\.baseline/, '键名固定，换页面/重开浏览器还能接上')
+  // 有内存里的 previous 时优先用它（同一次打开、范围一致时最准），否则回退到 localStorage
+  assert.match(store, /if \(options\.previous && options\.previous\.length > 0\)[\s\S]{0,200}else\s*\{[\s\S]{0,120}loadBaseline\(\)/,
+    '优先用传入的 previous，没有才读跨会话基线')
+})
+
+test('结论变化要边测边算，不能等全库跑完', () => {
+  // 五千多个源跑一轮要一小时。如果只在收尾时算 diff，用户中途什么都看不到，
+  // 「哪些源结论变了」这个信息就永远晚到。判据：批次循环体里也要更新 baselineChanged。
+  const store = read('../src/sources/sourceHealthRun.ts')
+  const loop = store.slice(store.indexOf('for (let offset = 0'), store.indexOf('if (cancelled) return\n      autoTagged'))
+  assert.match(loop, /diffHealthTiers\(baseline/, '每一批结论落地就相对基线重算一次')
+  assert.match(loop, /baselineChanged/, '批次内的 replace 要带上变化数')
+
+  const modal = read('../src/sources/SourceHealthModal.tsx')
+  assert.doesNotMatch(modal, /run\.finished === 'done' && run\.baselineChanged > 0/,
+    '提示条不能只在跑完后才显示')
+  assert.match(modal, /run\.baselineChanged > 0/, '跑的过程中也要能看见变化')
+})

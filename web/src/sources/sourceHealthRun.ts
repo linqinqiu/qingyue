@@ -41,7 +41,10 @@ function loadBaseline(): Record<string, string> {
 function saveBaseline(results: SourceHealthCheckItem[]): void {
   try {
     if (typeof localStorage === 'undefined') return
-    const map: Record<string, string> = {}
+    // **合并而不是覆盖。** 只重测一个源时 `results` 里就一条；直接覆盖会把之前攒下的
+    // 五千多条结论整份抹掉，下一轮全库体检就比不出任何"变化"了（基线成了单条）。
+    // 所以先读回旧基线，只把这一轮真正测过的 id 更新进去。
+    const map = loadBaseline()
     for (const item of results) map[item.id] = item.statusCategory
     localStorage.setItem(HEALTH_BASELINE_KEY, JSON.stringify(map))
   } catch {
@@ -166,6 +169,12 @@ export function startHealthRun(options: HealthRunStart): void {
           results: Array.from(merged.values()),
           checked: Math.min(options.ids.length, offset + chunk.length),
           autoTagged,
+          // 边测边算：不能等全库跑完（5000+ 个源要一小时）才告诉用户"有源的结论变了"。
+          // 每批结论落地就相对基线重算一次，用户跑到一半也能看见变化。
+          ...(() => {
+            const partial = diffHealthTiers(baseline, Array.from(merged.values()))
+            return { baselineChanged: partial.changed, baselineWorse: partial.worse, baselineBetter: partial.better }
+          })(),
         })
       }
       if (cancelled) return
