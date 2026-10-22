@@ -377,7 +377,13 @@ class AgentInfrastructureTest {
                 assertEquals("ok", res.status)
                 assertTrue("经 conn.hooks 挂的钩子应真的被调用", audited)
             }
-            assertEquals("内置工具仍应在册", 39, conn.registry.builtinToolIds().size)
+            assertEquals("内置工具仍应在册", 42, conn.registry.builtinToolIds().size)
+            // 数量对不代表内容对：把"阅读侧必须有的几个"逐个点名，
+            // 以后谁把 book.info / shelf.get / progress.get 删了，这里会直接报是哪一个。
+            val ids = conn.registry.builtinToolIds()
+            for (required in listOf("book.info", "shelf.get", "progress.get", "search.run", "content.run")) {
+                assertTrue("内置工具里缺少 $required（AI 的阅读侧能力不许悄悄消失）", ids.contains(required))
+            }
             db.close()
         } finally {
             cleanup(path)

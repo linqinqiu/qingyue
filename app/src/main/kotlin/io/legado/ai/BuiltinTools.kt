@@ -6,6 +6,7 @@ import io.legado.data.deleteNote
 import io.legado.data.deleteReplaceRule
 import io.legado.data.deleteRssSource
 import io.legado.data.deleteSource
+import io.legado.data.getProgress
 import io.legado.data.getReplaceRule
 import io.legado.data.getRssSource
 import io.legado.data.getSource
@@ -86,16 +87,17 @@ object BuiltinTools {
         rssList, rssGet, rssSetEnabled, rssDelete,
 
         // —— 书架 bookshelf ——
-        shelfList, shelfAdd, shelfRemove, shelfSetCompleted, shelfInfoUpdate,
+        shelfList, shelfGet, shelfAdd, shelfRemove, shelfSetCompleted, shelfInfoUpdate,
 
         // —— 笔记/阅读 notes ——
         noteList, noteAdd, noteUpdate, noteDelete, readingLogAdd, readingLogList,
+        progressGet,
 
         // —— 订阅 subscriptions ——
         subList, subUpdateOne, subUpdateAll,
 
         // —— 发现/搜索/正文（只读探针，供 AI 探查内容）explore/search ——
-        exploreTabs, explore, search, chapters, content,
+        exploreTabs, explore, search, bookInfo, chapters, content,
         )
     }
 
@@ -296,6 +298,51 @@ object BuiltinTools {
     val shelfList = Tool { ctx, _ -> AgentResult("ok", data = ctx.database.listBookshelf()) }
         .also { it.meta = ToolMeta("shelf.list", "bookshelf", "列出书架。", writes = false) }
 
+    /**
+     * 单本书架项（含阅读进度与当前章节）。
+     *
+     * 以前只有 `shelf.list`：模型想知道"用户这本书读到哪了"就得把整份书架拉回来再自己筛，
+     * 书架几百本时既慢又容易挑错（同名书、同书不同源）。这个工具按 `sourceId + bookUrl`
+     * 精确定位一本，并把阅读进度一起带回来 —— 那是"这本书"最常被问到的部分。
+     */
+    val shelfGet = Tool { ctx, args ->
+        val sourceId = string(args, "sourceId")
+        val bookUrl = string(args, "bookUrl")
+        if (sourceId.isBlank() || bookUrl.isBlank()) {
+            return@Tool ctx.error("invalid_request", "缺少 sourceId 或 bookUrl")
+        }
+        val item = ctx.database.listBookshelf().firstOrNull { it.sourceId == sourceId && it.bookUrl == bookUrl }
+            ?: return@Tool ctx.error("not_found", "书架里没有这本书（sourceId=$sourceId, bookUrl=$bookUrl）")
+        // 进度是独立一张表：一起带回来，模型不用再调一次 progress.get
+        val progress = runCatching { ctx.database.getProgress(sourceId, bookUrl) }.getOrNull()
+        AgentResult("ok", data = mapOf("item" to item, "progress" to progress))
+    }.also {
+        it.meta = ToolMeta(
+            "shelf.get", "bookshelf",
+            "按 sourceId + bookUrl 读取书架里的单本书（含阅读进度 progress）。不知道是哪本时先用 shelf.list 或 search.run。",
+            writes = false,
+        )
+    }
+
+    /**
+     * 阅读进度读取。
+     *
+     * 用户常问"我上次读到哪了"。进度与书架项是两张表，`shelf.get` 会顺带返回，
+     * 但若手上只有 sourceId/bookUrl、书又不在书架里（搜到但没加），就需要这个。
+     */
+    val progressGet = Tool { ctx, args ->
+        val sourceId = string(args, "sourceId")
+        val bookUrl = string(args, "bookUrl")
+        if (sourceId.isBlank() || bookUrl.isBlank()) {
+            return@Tool ctx.error("invalid_request", "缺少 sourceId 或 bookUrl")
+        }
+        val progress = ctx.database.getProgress(sourceId, bookUrl)
+            ?: return@Tool ctx.error("not_found", "这本书还没有阅读进度")
+        AgentResult("ok", data = progress)
+    }.also {
+        it.meta = ToolMeta("progress.get", "notes", "读取某本书的阅读进度（读到哪一章、章节地址、滚动位置）。", writes = false)
+    }
+
     val shelfAdd = Tool { ctx, args ->
         val raw = string(args, "json")
         if (raw.isBlank()) return@Tool ctx.error("invalid_request", "缺少 json")
@@ -410,6 +457,27 @@ object BuiltinTools {
         runCatching { ctx.runner.search(raw, keyword) }
             .fold({ AgentResult("ok", data = it) }, { ctx.error("source_execution_failed", it.message ?: "搜索失败") })
     }.also { it.meta = ToolMeta("search.run", "search", "用某书源实跑一次关键词搜索。", writes = false) }
+
+    /**
+     * 书籍详情：按书源 JSON + bookUrl 取书名/作者/简介/封面/目录地址。
+     *
+     * 和 `chapters.run` 的区别：那个是"跑规则取目录"，这个是"这本书是什么"。
+     * 用户问"这本书讲什么"时，模型需要的是简介与元信息，不是章节列表。
+     */
+    val bookInfo = Tool { ctx, args ->
+        val raw = string(args, "json")
+        val bookUrl = string(args, "bookUrl")
+        if (raw.isBlank()) return@Tool ctx.error("invalid_request", "缺少 json（书源配置）")
+        if (bookUrl.isBlank()) return@Tool ctx.error("invalid_request", "缺少 bookUrl")
+        runCatching { ctx.runner.details(raw, bookUrl) }
+            .fold({ AgentResult("ok", data = it) }, { ctx.error("source_execution_failed", it.message ?: "取书籍详情失败") })
+    }.also {
+        it.meta = ToolMeta(
+            "book.info", "search",
+            "按书源 json + bookUrl 取书籍详情（书名/作者/简介/封面/目录地址）。问\"这本书讲什么\"时用它，不要用 chapters.run。",
+            writes = false,
+        )
+    }
 
     val chapters = Tool { ctx, args ->
         val raw = string(args, "json")
