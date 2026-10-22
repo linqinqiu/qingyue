@@ -7,7 +7,6 @@ import { HOST_VERSION, type FrontendPlugin } from '../../extensions/registry'
  * 「备份与恢复」—— **插件**（可独立卸载）。
  *
  * 判定依据：换机器、重装才用；卸掉它，阅读器照常工作。
- * 提供独立浮层 `BackupModal` + 实验室条目两条入口。
  *
  * 浮层标题是「备份包」不是「备份与恢复」—— 用户 2026-09-30 的原话：
  * 「手机恢复这个名词解释有些难听，咱们这是电脑啊」，主语是包，不是手机也不是动作。
@@ -27,13 +26,4 @@ export const backupPlugin: FrontendPlugin = {
   version: HOST_VERSION,
   description: '导出/导入书架、书源、规则、设置；也可以只恢复其中几样。低频页。',
   author: '青阅',
-  labEntries: [
-    {
-      id: 'backup',
-      title: '备份与恢复',
-      description: '把整个库导出成一个包，或从包里恢复。恢复时可以挑只恢复哪几样，不会一锅端。',
-      badge: '信息',
-      render: () => <BackupPage />,
-    },
-  ],
 }

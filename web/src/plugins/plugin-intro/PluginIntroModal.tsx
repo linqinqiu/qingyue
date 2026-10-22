@@ -24,14 +24,4 @@ export const pluginIntroPlugin: FrontendPlugin = {
   version: HOST_VERSION,
   description: '列出当前装了哪些插件、各自贡献了什么、哪些装载失败了。',
   author: '青阅',
-  labEntries: [
-    {
-      id: 'plugins',
-      title: '插件',
-      description:
-        '当前装了哪些插件、各自贡献了什么。插件可装可卸：从 plugins/index.ts 的清单里删一行就卸掉了。',
-      badge: '扩展',
-      render: () => <PluginListPanel />,
-    },
-  ],
 }

@@ -4,9 +4,8 @@
  * 设计红线（与后端 `plugin/` 同一条）：**本文件不含任何具体插件**。它只定义
  * "一个前端插件能往界面里加什么、怎么登记、怎么介绍自己"。加什么由外部决定。
  *
- * 一个前端插件当前能贡献两类东西（全部可选）：
- * 1. [LabEntry]    —— 实验室里的实验条目（最常用：新能力先在实验室里长）
- * 2. 设置分区      —— 往设置页加一块自己的配置
+ * 一个前端插件当前能贡献的东西（全部可选）：
+ * - 设置分区      —— 往设置页加一块自己的配置
  *
  * 约束：
  * - 插件**不直接改路由表**：一级页面与命令目前没有宿主实现，所以契约里也不提供 ——
@@ -15,7 +14,6 @@
  * - 登记是纯数据，不在这里执行副作用；渲染由宿主负责。
  */
 import type React from 'react'
-import type { LabEntry } from '../lab/Lab'
 
 /** 一个前端插件能贡献的东西。全部可选 —— 只做一件事的插件就只填一项。 */
 export type FrontendPlugin = {
@@ -33,14 +31,6 @@ export type FrontendPlugin = {
   description: string
   /** 作者，可空。 */
   author?: string
-
-  /**
-   * 往实验室加的条目。
-   *
-   * **不要写 `origin`** —— 来源由注册表统一打上 `'plugin'`（见 [FrontendPluginRegistry.labEntries]）。
-   * 类型上把它 Omit 掉，插件就没法冒充"实验室决定要有的功能"。
-   */
-  labEntries?: Omit<LabEntry, 'origin'>[]
 
   /** 往设置页加的分区。 */
   settingsSections?: PluginSettingsSection[]
@@ -140,19 +130,6 @@ export class FrontendPluginRegistry {
     return [...this.failures]
   }
 
-  /**
-   * 所有插件贡献的实验室条目，按插件顺序拼起来。
-   *
-   * 这里**强制打上 `origin: 'plugin'`**，不让插件自己声明来源：
-   * 来源是"谁把它放进来的"这个事实，由注册表说了算。插件若自己写
-   * `origin: 'lab'`，就会冒充成"实验室决定要有的功能"——那正是要防的。
-   */
-  labEntries(): LabEntry[] {
-    return this.list().flatMap(p =>
-      (p.labEntries ?? []).map(entry => ({ ...entry, origin: 'plugin' as const })),
-    )
-  }
-
   /** 所有插件贡献的设置分区。 */
   settingsSections(): PluginSettingsSection[] {
     return this.list().flatMap(p => p.settingsSections ?? [])
@@ -171,7 +148,6 @@ export class FrontendPluginRegistry {
     }
     for (const p of plugins) {
       const parts: string[] = []
-      if (p.labEntries?.length) parts.push(`实验条目 ${p.labEntries.length}`)
       if (p.settingsSections?.length) parts.push(`设置分区 ${p.settingsSections.length}`)
       lines.push(`· ${p.name}（${p.id}）v${this.resolveVersion(p.version)}：${p.description}`)
       if (parts.length) lines.push(`  贡献：${parts.join('、')}`)

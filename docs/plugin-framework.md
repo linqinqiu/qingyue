@@ -11,19 +11,19 @@
 | 半边 | 位置 | 能扩展什么 |
 |---|---|---|
 | 后端插件 | `app/src/main/kotlin/io/legado/plugin/` | 工具、**LLM 协议**、工具调用钩子 |
-| 前端插件 | `web/src/extensions/registry.ts` | 实验室条目、设置分区 |
+| 前端插件 | `web/src/extensions/registry.ts` | 设置分区（成熟的浮层入口各自独立，不经过统一容器） |
 
 **目录分层（重要）**：
 
 | 目录 | 是什么 | 允许依赖 |
 |---|---|---|
-| `web/src/lab/` | **容器**：`Lab.tsx` + `FloatingWindow.tsx` | 谁都不依赖 |
-| `web/src/extensions/` | **契约**：注册表与插件类型 | 只能依赖 `lab/` |
-| `web/src/plugins/` | **内容**：具体插件 + 装载清单 + 装配点 | 可以依赖 `lab/`、`extensions/` |
-| `web/src/features/` | **功能条目**：随程序发布、不是插件（目前是 AI 接入） | 可以依赖 `lab/`、`extensions/` |
+| `web/src/extensions/` | **契约**：注册表与插件类型 | 只依赖 `lib/` 等无 UI 模块 |
+| `web/src/plugins/` | **内容**：具体插件 + 装载清单 | 可以依赖 `extensions/` |
+| `web/src/features/` | **功能条目**：随程序发布、不是插件（目前是 AI 接入） | 可以依赖 `extensions/` |
 
-依赖方向必须是 **内容 → 框架**。`lab/` 或 `extensions/` 里出现任何 `import '../plugins/...'`
-都是夹带，判据 `FrameworkHasNoContent.test.ts` 会红。同理 `Lab.tsx` 里不许出现任何具体功能的名字。
+依赖方向必须是 **内容 → 框架**。`extensions/` 里出现任何 `import '../plugins/...'`
+都是夹带。前端没有统一实验容器，每个成熟功能（更新日志/备份/关于/阅读记录/书源体检/插件）
+各自是 `AppModal` 浮层（`features/modal` 约定），与插件并列。
 
 两边都**不注册 HTTP 路由**，所以 `/api/catalog` 的端点计数恒定（139 条），
 既有门禁不受影响。
@@ -217,22 +217,16 @@ frontendPlugins.register({
   name: '我的插件',
   version: '1.0.0',
   description: '做点什么',
-  labEntries: [{
-    id: 'mine',
-    title: '我的实验',
-    description: '一个实验条目',
-    render: () => <MyPanel />,
-  }],
 })
 ```
 
-登记后它就出现在**实验室**里。
+登记后它就参与插件系统（设置页分区、插件查看面板）。想给成熟功能加一个独立浮层入口，
+走 `AppModal` 约定，不进统一实验容器。
 
-### 2.2 能贡献两类东西
+### 2.2 能贡献的东西
 
 | 类型 | 落到哪 |
 |---|---|
-| `labEntries` | 实验室左侧的条目列表 |
 | `settingsSections` | 设置页的分区 |
 
 > 一级页面与命令目前**没有宿主实现**，所以契约里也不提供 —— 承诺一个渲染不出来的能力，
@@ -245,39 +239,22 @@ frontendPlugins.register({
 - 框架本身**不含任何插件**（`frontendPlugins.list()` 初始为空）
 - `frontendPlugins.describe()` 输出自我介绍
 
-## 3. 实验室（Lab）
+## 3. 扩展点之外：成熟功能各自独立
 
-实验室是**悬浮式框架容器**，本身不含功能：
+前端没有统一的实验容器。每个成熟功能（更新日志 / 备份 / 关于 / 阅读记录 / 书源体检 / 插件查看）
+各自是 `AppModal` 浮层，在 `main.tsx` 接好入口，与插件并列出现在设置页的「接入与扩展」分组。
 
-- 可拖拽（拖标题栏），位置记在 localStorage，双击标题栏复位
-- 可最小化成悬浮按钮，状态也记着
-- 左侧是实验条目列表，右侧是选中条目的内容
-- 接 Esc 关闭、`role="dialog"`、`.dialog-shell` 一档几何（与其它浮层同一套语义）
-
-**AI 接入是功能条目，不是插件** —— 它住在 `features/ai/labEntry.tsx`，由装配点直接合并进清单。
-实验室不认识 AI，只是有人往它里面放了一条 [LabEntry]。
-
-要让新东西进实验室，有两条路：
-- **功能**（随程序发布、不是插件）：在 `features/` 下导出一个 `LabEntry`，加进 `features/labEntries.ts`；
-- **插件**（可插拔）：在 `plugins/` 下写一个插件并加进 `plugins/index.ts` 的清单。
-
-两条路都**不要改 `lab/`**，那是容器目录。
-
-内置插件（都在 `plugins/` 里，不在框架目录）：
-- `plugins/pluginIntro.tsx` —— 插件与扩展（列出装了什么）
-- 其余：书源体检、更新日志、阅读记录、备份、关于、窗口偏好
-
-把 `features/labEntries.ts` 清空、`plugins/index.ts` 清单清空，实验室就是一个空的悬浮容器 ——
-那才是框架该有的样子，判据 `LabIsFrameworkOnly.test.ts` 与 `FrameworkHasNoContent.test.ts` 钉着这一点。
+- 这些功能**可独立卸载**：从 `plugins/index.ts` 的清单里删一行，主程序一行不用改。
+- 它们**不是实验条目**，也不经过任何框架式容器 —— 直接是产品自带内容或插件。
 
 ## 4. 为什么这样分
 
-- **框架零内容**：`plugin/`、`extensions/` 与 `lab/` 里没有一行业务逻辑，只有契约、注册表、容器。
+- **框架零内容**：`plugin/`、`extensions/` 里没有一行业务逻辑，只有契约、注册表。
   具体插件全部在 `plugins/`（前端）与外部 jar（后端），功能条目在 `features/`。
 - **依赖单向**：内容依赖框架，框架不依赖内容。判据守着这条。
 - **两半独立**：后端插件不需要前端存在，前端插件也不需要后端；各自可单独演进。
 - **可介绍**：两边都有 `describe()`，装了什么、谁装的、失败了几项，都说得清。
-- **不破坏既有门禁**：不注册路由 → 端点计数不变；实验室沿用 `.dialog-shell` → 浮层判据照过。
+- **不破坏既有门禁**：不注册路由 → 端点计数不变；各浮层沿用 `.dialog-shell` 一档几何 → 浮层判据照过。
 
 ## 5. AI 能完成插件级功能 + 识别界面内容
 
@@ -344,8 +321,4 @@ cd legado
 
 # 连接选择策略可插拔（Gap 3：默认仍取第一个，自定义 selector 可替换默认）
 .\gradlew.bat :app:test --tests "*ConnectionSelectorTest"
-
-# 前端插件框架
-cd web
-npx tsx --test test/LabPluginFramework.test.ts
 ```

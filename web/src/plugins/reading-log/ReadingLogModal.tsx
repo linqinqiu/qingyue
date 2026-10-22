@@ -22,13 +22,4 @@ export const readingLogPlugin: FrontendPlugin = {
   version: HOST_VERSION,
   description: '按天统计的阅读时长：哪天读了多久、读的哪本。低频信息页。',
   author: '青阅',
-  labEntries: [
-    {
-      id: 'reading-log',
-      title: '阅读记录',
-      description: '按天列出阅读时长与书目，只统计页面可见的时间。数据在本地库里。',
-      badge: '信息',
-      render: () => <ReadingLogPage />,
-    },
-  ],
 }

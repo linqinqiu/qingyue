@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api, type SourceHealthCheckItem } from '../lib/api'
-import { autoTagBatches, HEALTH_TAGS, tierCounts } from './sourceGrouping'
+import { autoTagBatches, diffHealthTiers, HEALTH_TAGS, tierCounts, type HealthTierDiff } from './sourceGrouping'
 
 /**
  * 书源体检的"跑在组件外面"的那一半（用户 2026-10-02：
@@ -20,6 +20,34 @@ import { autoTagBatches, HEALTH_TAGS, tierCounts } from './sourceGrouping'
 export const HEALTH_CHUNK = 128
 /** 攒够这么多待打标的源再写一次库：一个一个打会把手风琴拉成几千次请求。 */
 const TAG_FLUSH_AT = 200
+/**
+ * 上一次体检结论的基线，落在 localStorage：这样跨会话也能比"本次和上次的结论变没变"。
+ * 只存 id → statusCategory，体积可控（5,574 个源也就几十 KB 字符串），且不依赖组件/模块存活。
+ */
+const HEALTH_BASELINE_KEY = 'legado.health.baseline'
+
+function loadBaseline(): Record<string, string> {
+  try {
+    if (typeof localStorage === 'undefined') return {}
+    const raw = localStorage.getItem(HEALTH_BASELINE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveBaseline(results: SourceHealthCheckItem[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    const map: Record<string, string> = {}
+    for (const item of results) map[item.id] = item.statusCategory
+    localStorage.setItem(HEALTH_BASELINE_KEY, JSON.stringify(map))
+  } catch {
+    // 存不下（隐私模式/超额）就丢：基线只是"下次重测时的对比参照"，缺了顶多少一句变化提示
+  }
+}
 
 export type HealthRunState = {
   running: boolean
@@ -31,10 +59,15 @@ export type HealthRunState = {
   /** 体检过程中自动打上的标签条数 */
   autoTagged: number
   finished: 'done' | 'stopped' | null
+  /** 本轮相对上一次次体检基线的结论变化数（只在 finished==='done' 时有意义） */
+  baselineChanged: number
+  baselineWorse: number
+  baselineBetter: number
 }
 
 let state: HealthRunState = {
   running: false, total: 0, checked: 0, startedAt: 0, durationMs: 0, results: [], autoTagged: 0, finished: null,
+  baselineChanged: 0, baselineWorse: 0, baselineBetter: 0,
 }
 const listeners = new Set<() => void>()
 let timer: number | null = null
@@ -93,12 +126,21 @@ export type HealthRunStart = {
 export function startHealthRun(options: HealthRunStart): void {
   if (state.running) stopHealthRun()
   const merged = new Map((options.previous ?? []).map(item => [item.id, item]))
+  // 上一次体检的基线：优先用本次传入的 `previous`（同一次打开、范围一致时最准），
+  // 否则回退到 localStorage 里跨会话攒下的那一份（重开后再体检也能比变化）。
+  const baseline: Record<string, string> = {}
+  if (options.previous && options.previous.length > 0) {
+    for (const item of options.previous) baseline[item.id] = item.statusCategory
+  } else {
+    Object.assign(baseline, loadBaseline())
+  }
   cancelled = false
   if (timer) clearInterval(timer)
   const startedAt = Date.now()
   replace({
     ...state, running: true, finished: null, total: options.ids.length, checked: 0,
     startedAt, durationMs: 0, results: Array.from(merged.values()),
+    baselineChanged: 0, baselineWorse: 0, baselineBetter: 0,
   })
   timer = window.setInterval(() => {
     replace({ ...state, durationMs: Date.now() - startedAt })
@@ -128,18 +170,29 @@ export function startHealthRun(options: HealthRunStart): void {
       }
       if (cancelled) return
       autoTagged += await tagFailing(pendingTag, options.groupsOf, alreadyTagged, options.onSourcesChange)
+      const finalResults = Array.from(merged.values())
+      // 相对上一次基线比一比："哪些源这次结论和上次不一样"。新出现的源不算变。
+      const diff: HealthTierDiff = diffHealthTiers(baseline, finalResults)
+      // 把这一轮结论存成新的基线，供下次重测对比。
+      saveBaseline(finalResults)
       replace({
         ...state, running: false, finished: 'done', checked: options.ids.length, autoTagged,
         durationMs: Date.now() - startedAt,
-        results: Array.from(merged.values()),
+        results: finalResults,
+        baselineChanged: diff.changed, baselineWorse: diff.worse, baselineBetter: diff.better,
       })
       // 结论按本轮点到的那些源算（`merged` 里可能还留着上一轮别的范围的源）。
       // 不再用服务端的 failedCount：它等于 `!ok`，把"没配搜索"和"真连不上"混成一个数。
       const tiers = tierCounts(options.ids.map(id => merged.get(id)).filter(Boolean) as SourceHealthCheckItem[])
+      const changeNote = diff.changed > 0
+        ? `；对比上一轮体检，${diff.changed} 个源结论变了`
+          + (diff.worse > 0 ? `（其中 ${diff.worse} 个变差）` : '')
+        : ''
       options.onToast(
         `体检完成：${tiers.good} 个能搜到书，${tiers.bad} 个确认有问题，`
         + `${tiers.pending} 个待确认，${tiers.unconfigured} 个没配搜索地址（没发过请求，不算坏）`
-        + (autoTagged > 0 ? `；过程中已给 ${autoTagged} 个分好体检标签` : ''),
+        + (autoTagged > 0 ? `；过程中已给 ${autoTagged} 个分好体检标签` : '')
+        + changeNote,
         'info',
       )
     } catch (error) {
@@ -162,7 +215,7 @@ export function stopHealthRun(): void {
 /** 一轮跑完/停掉之后把结果清掉，让下次打开是干净的。正在跑的时候什么都不做。 */
 export function resetHealthRun(): void {
   if (state.running) return
-  replace({ running: false, total: 0, checked: 0, startedAt: 0, durationMs: 0, results: [], autoTagged: 0, finished: null })
+  replace({ running: false, total: 0, checked: 0, startedAt: 0, durationMs: 0, results: [], autoTagged: 0, finished: null, baselineChanged: 0, baselineWorse: 0, baselineBetter: 0 })
 }
 
 /**

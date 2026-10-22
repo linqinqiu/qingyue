@@ -77,7 +77,7 @@
 
 - **外壳与导航**：一级目的地只有一张表（`app/pageMeta.ts` 的 `PAGES` 同时喂顶栏、数字键、`Alt+←/→` 与 hash 解析；
   `app/pages.tsx` 只决定每页渲染什么）。加一页只改这两处，不再改 `main.tsx` 的三元链。
-  规则 / 备份 / 更新日志 / 关于是悬浮层（`PageDialog` / 实验室），不占路由。
+  规则 / 备份 / 更新日志 / 关于是悬浮层（`AppModal` / `PageDialog`），不占路由。
 - **阅读器**：`reader/ReaderScreen.tsx` 只做编排，几何与翻页算术在 `reader/readerFlow.ts`、手势在
   `reader/readerInteractions.ts`、点击区域在 `reader/tapZones.ts` + `reader/TapZoneEditor.tsx`。
   0.8.2 结构重排又拆出四块：目录虚拟列表 `reader/VirtualChapterList.tsx`（窗口算式仍只有

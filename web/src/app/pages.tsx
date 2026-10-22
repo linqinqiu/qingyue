@@ -40,8 +40,6 @@ export type PageContext = {
   openModal: (modal: AppModal) => void
   openPageDialog: (kind: PageDialogKind) => void
   openTocRules: () => void
-  /** 打开实验室：里面是"待定功能"与"插件条目"。成熟功能各有自己的浮层，不走这里。 */
-  openLab: () => void
 }
 
 export function renderPage(page: Page, ctx: PageContext): React.ReactNode {

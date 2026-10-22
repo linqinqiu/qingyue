@@ -60,7 +60,7 @@ test('hooks 文件以 use 开头，且导出同名函数', () => {
 
 test('features/ 下的目录职责与文档一致', () => {
   // features/ 只放"产品自带、不可卸载"的内容。
-  // 能独立卸载的功能已判定为插件，住 plugins/（详见 docs/lab-ai-plugin.md）。
+  // 能独立卸载的功能已判定为插件，住 plugins/。
   const expected = ['ai', 'settings']
   for (const d of expected) {
     assert.ok(fs.existsSync(path.join(SRC, 'features', d)),
@@ -71,17 +71,4 @@ test('features/ 下的目录职责与文档一致', () => {
     'features/modal/ 不该存在 —— 那些功能已判定为插件')
   assert.ok(!fs.existsSync(path.join(SRC, 'features', 'plugins')),
     'features/plugins/ 不该存在 —— 插件住 plugins/')
-})
-
-test('AI 与插件不冒充实验室条目', () => {
-  // 这两类已独立，不该再出现 LabEntry（详细边界见 FrameworkHasNoContent.test.ts）。
-  for (const d of ['ai', 'settings']) {
-    const dir = path.join(SRC, 'features', d)
-    if (!fs.existsSync(dir)) continue
-    for (const f of walk(dir)) {
-      const src = fs.readFileSync(f, 'utf8')
-      assert.ok(!/LabOwnedEntry|LabEntry/.test(src),
-        `${rel(f)} 不该是实验室条目`)
-    }
-  }
 })

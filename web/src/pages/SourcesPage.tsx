@@ -475,7 +475,7 @@ export function SourcesPage({ selected, onSelect, onSourcesChange }: { selected:
             // 窄屏是单列：这一档开在左栏下面，不滚一下就没有任何"打开了"的反馈。
             // 'nearest' 只在它真在视野外时才滚，宽屏两列时不会把编辑器顶走。
             if (opening) window.setTimeout(() => {
-              document.querySelector('.sources-content .subscription-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+              document.querySelector('.subscription-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
             }, 0)
           }}
         >
@@ -567,38 +567,45 @@ export function SourcesPage({ selected, onSelect, onSourcesChange }: { selected:
         </nav>
       </aside>
 
-      <section className="sources-content">
-        <header className="page-title">
-          <div>
-            <h1>书源管理</h1>
-            <p>导入、校验与维护你的阅读来源。</p>
-          </div>
-          <div className="page-title-actions">
-            {selected && (
-              <button type="button" className="danger-button" onClick={() => void remove()}>
-                删除书源
-              </button>
-            )}
-          </div>
-        </header>
-        {subsOpen && (
-          <SourceSubscriptionPanel onSourcesChange={() => void load()} onClose={() => setSubsOpen(false)} />
-        )}
-        <SourceEditor
-          selected={selected}
-          creating={creating}
-          summary={sourceStats}
-          onSaved={() => void load()}
-          onCreateCancel={() => setCreating(false)}
-          onCreated={source => {
-            setCreating(false)
-            onSelect(source)
-          }}
-          onOpenLogin={source => setLoginModalSource(source)}
-          onOpenDebug={source => setDebugModalSource(source)}
-          onSearchInLibrary={searchInLibrary}
-        />
-      </section>
+      <div className="sources-main">
+        {/* 页头 + 书源订阅：订阅的产物是书源，所以它长在书源页；但它不是编辑器的一部分，
+            单独成块放在编辑器之上，编辑器区块只承载 SourceEditor 本体。
+            这样「订阅地址」展开时不会把编辑表单挤进同一个区块，编辑器区不再显臃肿。 */}
+        <div className="editor-region">
+          <header className="page-title">
+            <div>
+              <h1>书源管理</h1>
+              <p>导入、校验与维护你的阅读来源。</p>
+            </div>
+            <div className="page-title-actions">
+              {selected && (
+                <button type="button" className="danger-button" onClick={() => void remove()}>
+                  删除书源
+                </button>
+              )}
+            </div>
+          </header>
+          {subsOpen && (
+            <SourceSubscriptionPanel onSourcesChange={() => void load()} onClose={() => setSubsOpen(false)} />
+          )}
+        </div>
+        <section className="sources-content">
+          <SourceEditor
+            selected={selected}
+            creating={creating}
+            summary={sourceStats}
+            onSaved={() => void load()}
+            onCreateCancel={() => setCreating(false)}
+            onCreated={source => {
+              setCreating(false)
+              onSelect(source)
+            }}
+            onOpenLogin={source => setLoginModalSource(source)}
+            onOpenDebug={source => setDebugModalSource(source)}
+            onSearchInLibrary={searchInLibrary}
+          />
+        </section>
+      </div>
 
       {/* Floating Batch Action Bar */}
       {isBatchMode && (

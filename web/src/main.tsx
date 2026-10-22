@@ -10,7 +10,6 @@ import { AppHeader } from './components/AppHeader'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
-import { LabModal } from './plugins/LabHost'
 import { frontendPlugins } from './extensions/registry'
 import { installBuiltinPlugins } from './plugins'
 import { builtinSettingsSections } from './features/builtinSettings'
@@ -202,13 +201,6 @@ function App() {
     }
   }
   /**
-   * 「实验室」（Lab）：悬浮式框架容器，承载还没进主界面的能力。
-   * AI 接入是它目前登记的第一条实验条目 —— 实验室本身不认识 AI。
-   */
-  const [showLab, setShowLab] = useState(false)
-  /** 实验室要直接打开哪个条目（点版本号进更新日志等）；空 = 第一条。 */
-  const [labEntryId, setLabEntryId] = useState<string | undefined>(undefined)
-  /**
    * 「设置 → TXT 分章规则」点下去的意图。规则弹窗连同它那颗「按这条导入本地书」都住在
    * 书架里（导书的动作在那边），所以这里只发一个"去开一下"的信号，不复制一份弹窗。
    */
@@ -294,7 +286,6 @@ function App() {
       const modalDeepLink = MODAL_DEEP_LINKS[location.hash]
       if (modalDeepLink) {
         setPageDialog(null)
-        setShowLab(false)
         setModalBackTo(null)
         setOpenModal(modalDeepLink)
         return
@@ -549,7 +540,6 @@ function App() {
       openServerPort: () => openModalDirect('server-port'),
       openAiConnections: () => openModalDirect('ai'),
       openPlugins: () => openModalDirect('plugins'),
-      openLab: () => setShowLab(true),
     }),
     // 插件贡献的设置分区：宿主只负责摆位置与搜索，不解释内容。
     pluginSections: pluginSettingsSections,
@@ -564,8 +554,6 @@ function App() {
     openModal: setOpenModal,
     openPageDialog: setPageDialog,
     openTocRules: () => setTocRulesSignal(value => value + 1),
-    /** 打开实验室（里面放待定功能与插件条目）。成熟功能不走这里，各有自己的浮层。 */
-    openLab: () => setShowLab(true),
   }
 
   return (
@@ -648,36 +636,11 @@ function App() {
 
       {/* —— 插件：**独立一类**（查看当前装了哪些插件） —— */}
       {openModal === 'plugins' && <PluginsModal onClose={closeModal} />}
-
-      {/* —— 实验室：只放"待定、准备加入基础框架"的功能 + 插件贡献的条目 —— */}
-      {showLab && (
-        <LabModal
-          onClose={() => { setShowLab(false); setLabEntryId(undefined) }}
-          uiContext={currentUiContext}
-          serverVersion={serverVersion}
-          initialEntryId={labEntryId}
-          actions={{
-            // 插件要"做某事"时用：实验室只转发，不解释这些 key 是什么。
-            openChangelog: () => openModalDirect('changelog'),
-            openShortcuts: () => openModalDirect('shortcuts'),
-            closeLab: () => { setShowLab(false); setLabEntryId(undefined) },
-            refreshSources,
-            toast: (message: string) => toast.info(message),
-          }}
-          data={{
-            // 插件要"读某个值"时用：渲染那一刻的快照，宿主重新渲染它就更新。
-            sources,
-            sourcesState: sources.length > 0 ? 'ready' : 'loading',
-          }}
-        />
-      )}
     </div>
   )
 }
 
-// 插件必须在**应用启动前**装载，不能等"打开实验室"时才装 ——
-// 设置页的插件分区、插件的页面/命令都要在首屏就能用。
-// （从前只有 getLabEntries() 里装，于是"没开过实验室"时插件等于不存在。）
+// 插件必须在**应用启动前**装载，设置页的插件分区、插件页面都要在首屏就能用。
 installBuiltinPlugins()
 
 // 根上这一层是最后兜底：连页面外壳自己抛错时，也不能剩一片白屏让人以为程序没了

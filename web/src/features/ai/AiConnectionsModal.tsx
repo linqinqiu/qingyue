@@ -17,19 +17,11 @@ import { EMPTY_UI_CONTEXT, uiContextMessage, type UiContext } from '../../lib/ui
  *
  * 写操作由服务端同源闸门把关（浏览器自动带 Origin），这里不注入令牌。
  *
- * [embedded]：0.8.2 起它被放进**实验室**（Lab），那一层已经提供了 overlay + dialog-shell +
- * 关闭键。再套一层就会出现"弹窗套弹窗"（两层遮罩、两颗关闭键），UiContract 的
- * "浮层只有一档"判据会红。embedded 时只渲染内容体，外壳交给实验室。
+ * 浮层形态自带 overlay + dialog-shell + 关闭键（一档浮层，见 UiContract 判据）。
+ * `AiModal` 直接复用这一形态，不再经实验室套壳。
  */
-export function AiConnectionsModal({ onClose, embedded = false, uiContext }: { onClose: () => void; embedded?: boolean; uiContext?: UiContext }) {
+export function AiConnectionsModal({ onClose, uiContext }: { onClose: () => void; uiContext?: UiContext }) {
   useEscapeClose(onClose)
-  if (embedded) {
-    return (
-      <div className="ai-connections" aria-label="AI 接入">
-        <AiConnectionsPanel uiContext={uiContext} />
-      </div>
-    )
-  }
   return (
     <div className="overlay-backdrop" onClick={onClose}>
       <div

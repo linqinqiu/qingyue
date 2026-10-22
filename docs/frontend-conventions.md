@@ -75,11 +75,9 @@
 ```
 web/src/
 ├── app/          路由表与页面分派（纯数据 + renderPage）
-├── lab/          实验室**容器**（可悬浮窗口）——不认识任何具体功能
 ├── extensions/   插件**契约**（FrontendPlugin 形状、注册表）
 ├── plugins/      插件**机制**（装配点、清单）
 ├── features/     产品自带内容
-│   ├── modal/      已定型的成熟功能浮层
 │   ├── ai/         AI 接入（独立一类）
 │   ├── plugins/    插件查看面板（独立一类）
 │   └── settings/   产品自带的设置分区
@@ -91,14 +89,12 @@ web/src/
 └── lib/          无 UI 的模块（api、store、工具函数）
 ```
 
-**依赖方向**：`lab/`、`extensions/` 不许 import `plugins/`、`features/`
-（判据 `FrameworkHasNoContent.test.ts` 盯着）。
+**依赖方向**：`extensions/` 不许 import `plugins/`、`features/`（插件契约不认识具体插件/功能）。
 
 ## 5. 判据（已经有的，别破坏）
 
 | 判据 | 守什么 |
 |---|---|
-| `FrameworkHasNoContent.test.ts` | 四层依赖方向、容器零内容、四类分家 |
 | `ApiCatalog.test.ts` | 端点契约 139/19 双向核对 |
 | `CopyStyle.test.ts` | 界面文案不许用装饰字形 |
 | `HeaderMenu.test.ts` | 前端不许出现字面量版本号 |
@@ -109,6 +105,6 @@ web/src/
 1. 含 JSX 吗？→ PascalCase；不含 → camelCase。
 2. 是 hook 吗？→ `useXxx.ts`。
 3. 用 named export 了吗？→ 必须。
-4. 放对目录了吗？→ 按 §4 与 `docs/lab-ai-plugin.md` 的速查表。
+4. 放对目录了吗？→ 按 §4 的目录职责表。
 5. 组件后缀对吗？→ 按 §3。
 6. 跑 `npm run check` 与 `npm test`。

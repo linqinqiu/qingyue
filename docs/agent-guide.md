@@ -22,7 +22,7 @@ npm start                 # 默认 127.0.0.1:1234
 任何 **openai-compatible** 地址都行 —— 本机 Ollama、各家云 API、自建网关。
 
 **方式 A：界面**（推荐，能立即实测通不通）
-设置 → 实验室与扩展 → **AI 接入** → 填连接 → 保存。
+设置 → 接入与扩展 → **AI 接入** → 填连接 → 保存。
 面板顶部两个状态：「已连接」= 配没配；「实测可达」= 此刻通不通。
 
 **方式 B：HTTP**
@@ -186,4 +186,4 @@ val handle = agentConnection.hooks.before { meta, args ->
 | 自定义接入面细节 | `AGENTS.md` |
 | AI 框架内部结构 | `docs/ai-framework.md` |
 | 插件怎么贡献工具/协议 | `docs/plugin-framework.md` |
-| 实验室 / AI / 插件 四类分家 | `docs/lab-ai-plugin.md` |
+| AI / 插件 两类分家 | `docs/plugin-framework.md` |

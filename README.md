@@ -66,7 +66,7 @@ Kotlin JVM 17 + Ktor 3.4 + SQLite（WAL）。前端 React 19 + TypeScript + Vite
 它拿到的服务和界面用的是同一批 —— 所以它知道你在哪一页、在看哪本书、读到第几章，
 也能调用程序自己的 39 个能力（查书源、搜书、改净化规则、读正文……）。
 
-**用法**：设置 → 实验室与扩展 → AI 接入 → 登记一个 openai-compatible 连接。
+**用法**：设置 → 接入与扩展 → AI 接入 → 登记一个 openai-compatible 连接。
 登记完输入框才可用；面板顶部有两个状态，别混：「已连接」说的是**配没配**，
 「实测可达」说的是**此刻通不通** —— 只有实测 ok 才代表真能对话。
 
@@ -225,8 +225,7 @@ web/                        前端（React 19 + TS + Vite，构建产物进同�
   src/settings/             settingsSections.ts 设置分组登记
   src/features/             按业务面分的功能块（AI 接入面板、设置分区等）
   src/plugins/              内置插件实装：about · backup · changelog · plugin-intro · reading-log · source-health
-  src/lab/                  实验室容器：只立钩子，不实现业务
-  src/extensions/           扩展契约（registry.ts）：插件与实验室的接口面
+  src/extensions/           扩展契约（registry.ts）：前端插件的接口面
   src/icons.tsx · styles.css  全站单色图标 · 样式与皮肤令牌
   test/                     单元与静态判据，入口是 test/run-all.ts（它扫目录登记，新加测试文件不用改清单）
 
@@ -247,7 +246,7 @@ Dockerfile           多阶段构建（前端 + 服务端）
 | 让 AI 或脚本接进来（管书源、批量整理、走登录） | [`docs/AI-AGENT.md`](docs/AI-AGENT.md) · 机器可读的那份是 `GET /api/catalog` |
 | **AI 具体能干什么、怎么接一个模型、怎么给它加能力** | [`docs/agent-guide.md`](docs/agent-guide.md) |
 | 自定义接入面 `/api/agent/*`（外接模型、书源新建/校验、阅读理解） | [`AGENTS.md`](./AGENTS.md) |
-| 实验室 / AI / 插件 三类怎么分 | [docs/lab-ai-plugin.md](docs/lab-ai-plugin.md) |
+| 插件 / 前端扩展契约 | [docs/plugin-framework.md](docs/plugin-framework.md) |
 | **写一个插件**（加工具 / 协议 / 选择策略 / 钩子） | [docs/plugin-development-guide.md](docs/plugin-development-guide.md) |
 | **反代书源**（自有中转服务访问目标站） | [docs/reverse-proxy-source-guide.md](docs/reverse-proxy-source-guide.md) |
 | 前端命名与文件组织规范 | [docs/frontend-conventions.md](docs/frontend-conventions.md) |

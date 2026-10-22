@@ -464,12 +464,15 @@ svg { width: 18px; height: 18px; flex: none; }
 .source-enable-switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); transition: left 0.15s ease; }
 .source-enable-switch.is-on .source-enable-switch-knob { left: 16px; }
 
-/* 书源页两栏各自滚动：整库导入时列表有数千条，撑高整页会让右栏编辑器随页面滚走。 */
+/* 书源页两栏各自滚动：整库导入时列表有数千条，撑高整页会让右栏编辑器随页面滚走。
+   右栏分两块：上面的 .editor-region（页头 + 书源订阅）不滚，下面的 .sources-content（编辑器本体）随页面滚。 */
 @media (min-width: 721px) {
   .sources-page { height: calc(100vh - 68px); }
   .sources-page .source-sidebar { min-height: 0; height: 100%; }
   .sources-page .source-list { flex: 1 1 auto; min-height: 0; }
-  .sources-page .sources-content { height: 100%; overflow-y: auto; align-content: start; }
+  .sources-main { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+  .sources-main > .editor-region { flex: 0 0 auto; padding: clamp(24px, 3.5vw, 44px) clamp(20px, 2.5vw, 40px) 0; }
+  .sources-page .sources-content { flex: 1 1 auto; height: 100%; overflow-y: auto; align-content: start; }
 }
 .source-sidebar footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .workspace-themes { display: flex; gap: 6px; }
@@ -4085,6 +4088,23 @@ body:has(.overlay-backdrop) .pwa-install-banner { display: none; }
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
   flex-wrap: wrap;
+}
+
+.health-baseline-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-line, var(--line));
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.health-baseline-note strong {
+  color: var(--accent, var(--text));
 }
 
 .health-tabs {

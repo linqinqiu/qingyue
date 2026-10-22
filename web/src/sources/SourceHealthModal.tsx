@@ -305,6 +305,17 @@ export function SourceHealthModal({
           />
         </div>
 
+        {/* 重测后相对上一轮的"结论变化"提示：用户要的是重测能看出哪些源和上次不一样 */}
+        {run.finished === 'done' && run.baselineChanged > 0 && (
+          <div className="health-baseline-note" role="status">
+            <Icon name="activity" />
+            <span>
+              对比上一轮体检，<strong>{run.baselineChanged}</strong> 个源的结论变了
+              {run.baselineWorse > 0 ? `（其中 ${run.baselineWorse} 个变差）` : ''}
+            </span>
+          </div>
+        )}
+
         {/* Stats and Filter Tabs */}
         <div className="health-stats-tabs">
           <div className="health-tabs">

@@ -36,7 +36,6 @@ function fakeActions(): { actions: SettingsActions; called: string[] } {
     openServerPort: make('openServerPort'),
     openAiConnections: make('openAiConnections'),
     openPlugins: make('openPlugins'),
-    openLab: make('openLab'),
   }
   return { actions, called }
 }
@@ -50,7 +49,7 @@ test('产出非空，且分组顺序稳定（用户靠位置记东西）', () =>
   const titles = sections.map(s => s.title)
   // 顺序是刻意的：阅读在前（最常用），系统在后（最少用）
   assert.equal(titles[0], '阅读', `第一组应是「阅读」，实际 ${titles[0]}`)
-  assert.equal(titles[titles.length - 1], '实验室与扩展', `最后一组应是「实验室与扩展」，实际 ${titles[titles.length - 1]}`)
+  assert.equal(titles[titles.length - 1], '接入与扩展', `最后一组应是「接入与扩展」，实际 ${titles[titles.length - 1]}`)
   // 分组标题不许重复（重复意味着有人顺手加了一组同名的）
   assert.equal(new Set(titles).size, titles.length, `分组标题重复：${titles}`)
 })
@@ -78,16 +77,15 @@ test('每一行的 onClick 真的调到对应回调（不是死按钮）', () =>
     const added = called.filter(c => !before.has(c))
     assert.equal(added.length, 1, `点「${row.title}」应恰好触发 1 个动作，实际触发 ${added.length} 个：${added}`)
   }
-  // 全部点完后，11 个动作每个都被点到过至少一次（没有哪一行是摆设）
-  assert.equal(new Set(called).size, 11, `应有 11 个不同动作被触发，实际 ${new Set(called).size}：${[...new Set(called)]}`)
+  // 全部点完后，10 个动作每个都被点到过至少一次（没有哪一行是摆设）
+  assert.equal(new Set(called).size, 10, `应有 10 个不同动作被触发，实际 ${new Set(called).size}：${[...new Set(called)]}`)
 })
 
-test('三类入口分开：实验室 / AI 接入 / 插件各自一行，不合并', () => {
+test('接入与扩展分组：AI 接入 / 插件各自一行，不合并', () => {
   const { actions } = fakeActions()
   const rows = allRows(buildSettingsSections(actions))
   const titles = rows.map(r => r.title)
-  // 用户口径：这三类是三种东西，不该混成一行
-  assert.ok(titles.includes('实验室'), `应有一行「实验室」，实际 ${titles}`)
+  // 用户口径：AI 接入与插件是两种东西，不该混成一行
   assert.ok(titles.includes('AI 接入'), `应有一行「AI 接入」，实际 ${titles}`)
   assert.ok(titles.includes('插件'), `应有一行「插件」，实际 ${titles}`)
 })

@@ -25,8 +25,6 @@ export type SettingsActions = {
   openAiConnections: () => void
   /** 插件 —— 独立一类，不是实验室条目 */
   openPlugins: () => void
-  /** 实验室 —— 只放"待定、准备加入基础框架"的功能 */
-  openLab: () => void
 }
 
 export function buildSettingsSections(actions: SettingsActions): SettingsSection[] {
@@ -103,17 +101,9 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
       }],
     },
     {
-      // 三类东西各有各的入口，不要合并成一行 ——
-      // 实验室（待定功能）/ AI 接入（独立一类）/ 插件（用户自定义）是三种不同的东西。
-      title: '实验室与扩展',
+      // AI 接入与插件是两类不同的东西，各有一行，不要合并。
+      title: '接入与扩展',
       rows: [
-        {
-          title: '实验室',
-          hint: '准备加入基础框架、但还没定下来的功能在这里试。目前没有待定功能，'
-            + '所以是空的 —— 空着是如实状态，不是坏了。',
-          action: '打开实验室',
-          onClick: actions.openLab,
-        },
         {
           title: 'AI 接入',
           hint: '程序内部的 AI 网关（/api/agent）。登记一个 openai-compatible 模型后才能对话；'

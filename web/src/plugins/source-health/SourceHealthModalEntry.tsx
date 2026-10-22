@@ -2,7 +2,6 @@ import React from 'react'
 import { SourceHealthModal } from '../../sources/SourceHealthModal'
 import type { SourceSummary } from '../../lib/api'
 import { HOST_VERSION, type FrontendPlugin } from '../../extensions/registry'
-import type { LabHostContext } from '../../lab/Lab'
 
 /**
  * 「书源体检」—— **插件**（可独立卸载）。
@@ -45,28 +44,4 @@ export const sourceHealthPlugin: FrontendPlugin = {
   version: HOST_VERSION,
   description: '批量检查书源是否还能用：搜索、详情、目录、正文逐项验，结果可筛选。',
   author: '青阅',
-  labEntries: [
-    {
-      id: 'source-health',
-      title: '书源体检',
-      description:
-        '把书源挨个跑一遍，看哪条坏了、坏在哪一步。体检在后台持续跑，关掉这个窗口也不会中断。',
-      badge: '主要',
-      render: (host: LabHostContext) => {
-        const actions = host.actions ?? {}
-        const data = host.data ?? {}
-        const sources = (data.sources as SourceSummary[] | undefined) ?? []
-        const sourcesState = (data.sourcesState as 'loading' | 'ready' | 'failed' | undefined) ?? 'ready'
-        return (
-          <SourceHealthModal
-            sources={sources}
-            sourcesState={sourcesState}
-            onClose={() => actions.closeLab?.()}
-            onSourcesChange={() => actions.refreshSources?.()}
-            onToast={message => actions.toast?.(message)}
-          />
-        )
-      },
-    },
-  ],
 }

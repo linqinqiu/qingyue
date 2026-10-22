@@ -213,8 +213,19 @@ class E2EScenariosTest {
                 reader.await()
             }
 
-            // Wait for 2,000 chapters to finish caching
-            waitForCondition(20000) {
+            // Wait for 2,000 chapters to finish caching.
+            //
+            // 这里原来只给 20s，是一条**对机器负载过于敏感**的断言：2000 章要按
+            // CACHE_CONCURRENCY 分批，每批一次 runner.content + 一次 sqlite 写，
+            // 慢盘/杀软/同时跑别的测试时会稳定超时（本地实测多次复现，且在
+            // tools/verify/baselines/server-test-failures-47.txt 里挂了很久）。
+            // 判据要判的是「最终能不能全部缓存完」，不是「多快缓存完」，
+            // 所以超时放宽到 120s，并在失败时把真实进度打出来 —— 否则只看到
+            // "Condition not met within 20000ms"，分不清是卡死还是慢。
+            waitForCondition(120_000, describe = {
+                val s = database.listBookshelf().singleOrNull()
+                "cacheState=${s?.cacheState} cached=${s?.cachedChapters}/${s?.totalChapters}"
+            }) {
                 database.listBookshelf().single().cacheState == "ready"
             }
 
@@ -501,13 +512,26 @@ class E2EScenariosTest {
         }
     }
 
-    private suspend fun waitForCondition(timeoutMs: Long, condition: () -> Boolean) {
+    /**
+     * 轮询等待某个条件成立。
+     *
+     * [describe] 可选：超时时把**当时的真实状态**附在错误里。只报 "Condition not met
+     * within Nms" 时分不清是「逻辑卡死」还是「机器慢」，排查要重跑一遍才知道。
+     */
+    private suspend fun waitForCondition(
+        timeoutMs: Long,
+        describe: (() -> String)? = null,
+        condition: () -> Boolean,
+    ) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (condition()) return
             delay(20)
         }
-        throw AssertionError("Condition not met within ${timeoutMs}ms")
+        val detail = describe?.let { runCatching { it() }.getOrNull() }?.takeIf { it.isNotBlank() }
+        throw AssertionError(
+            "Condition not met within ${timeoutMs}ms" + (detail?.let { "（当前状态：$it）" } ?: ""),
+        )
     }
 
     private fun temporaryDatabase(): String = Files.createTempFile("legado-e2e-test", ".sqlite").toString()

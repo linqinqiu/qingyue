@@ -150,6 +150,26 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             // Inject standard Legado 'java' bridge object
             ScriptableObject.putProperty(scope, "java", createJavaBridge(scope, context))
 
+            // Legado 全局 `Reload(url)`：从远端把一段 JS 抓回来当**字符串**返回，书源再用 `eval(String(Reload('…')))`
+            // 把它跑起来。社区漫画源（包子漫画、追樱漫画等）把 searchUrl / ruleSearch 整段都写在外站的
+            // qyyuapi.com JS 里，靠这个函数把脚本拉回本地执行。沙箱原来没实现它，于是 `eval(String(Reload(…)))`
+            // 抛 ReferenceError → 整条搜索地址算不出来（"searchUrl JS 计算未返回有效地址：在语句前面缺少 ';'"）。
+            // 这里直接复用 java.ajax 的抓取通道（同一套重定向/超时/Cookie 处理），只把结果当纯文本回传、
+            // 不执行，执行权仍然交给书源自己的 eval —— 满足"只导入信任书源"的安全前提。
+            ScriptableObject.putProperty(scope, "Reload", object : BaseFunction() {
+                override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
+                    val url = args.firstOrNull()?.toString() ?: return ""
+                    return runCatching {
+                        // 外站规则脚本托管（qyyuapi.com 等）会**按 User-Agent 拦**默认抓取的 `LegadoServer/0.1`，
+                        // 直接 403。这里走和 java.ajax 同一套抓取通道，但在 URL 尾巴挂上浏览器级 UA / Referer / Accept，
+                        // 让规则脚本能正常拉回。`splitUrlOptions` 已经支持 `,<json headers>` 这种写法，
+                        // 不在这里改 buildRequest，避免影响普通书源抓取的 UA 策略。
+                        val browserHeaders = """{"headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Referer":"$url","Accept":"*/*"}}"""
+                        runner?.fetch("$url,$browserHeaders", execContext?.sourceId, execContext?.database) ?: ""
+                    }.getOrDefault("")
+                }
+            })
+
             // Legado 书源的 jsLib 惯用 `new JavaImporter()` + `with(importer){ ... }` 组织工具函数库。
             // 沙箱禁用了真实 Java 反射，此处提供空实现的安全替身：只要不再抛 ReferenceError，
             // 整个 with 块就能正常完成函数定义，后续登录动作才可能执行。

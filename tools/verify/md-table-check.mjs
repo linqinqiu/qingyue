@@ -9,10 +9,33 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * （一行中文落在表格中间、环境变量表少一列），这份门禁当时只看着 `docs/实现说明.md`，
  * 所以那两份破损一直绿着（2026-10-03 重写 README 时才发现）。
  * 给一个路径参数就只查那一份。
+ *
+ * 2026-10-22：上面这句「默认扫全部」原来**没做到** —— 代码里是写死的 6 个文件名，
+ * 于是 `docs/README.md`、`docs/ARCHITECTURE.md`、`docs/gates-guide.md` 这些
+ * 真正会改出表格错误的文档全在覆盖之外，门禁绿着但没看它们。改成真的递归扫。
  */
 const targets = process.argv[2]
   ? [process.argv[2]]
-  : ['README.md', 'CHANGELOG.md', 'docs/architecture.md', 'docs/deploy.md', 'docs/compatibility.md', 'docs/AI-AGENT.md']
+  : listDistributedMarkdown()
+
+/** 递归列出仓库里会分发的 .md（跳过依赖/产物目录）。 */
+function listDistributedMarkdown() {
+  const SKIP = new Set(['node_modules', '.git', 'build', 'dist', 'tmp', '.gradle', '.data', 'coverage', 'out'])
+  const found = []
+  const walk = rel => {
+    const abs = path.join(ROOT, rel)
+    let entries
+    try { entries = fs.readdirSync(abs, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      if (SKIP.has(e.name)) continue
+      const childRel = rel ? path.join(rel, e.name) : e.name
+      if (e.isDirectory()) walk(childRel)
+      else if (e.name.endsWith('.md')) found.push(childRel)
+    }
+  }
+  walk('')
+  return found.sort()
+}
 
 const count = row => (row.match(/(?<!\\)\|/g) ?? []).length
 

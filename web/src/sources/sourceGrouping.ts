@@ -104,6 +104,56 @@ export function currentTiers(currentGroup: string | null | undefined): HealthTie
   return (Object.keys(HEALTH_TAGS) as HealthTier[]).filter(tier => tags.has(HEALTH_TAGS[tier]))
 }
 
+/**
+ * 档位严重度，从好到坏。用来判断"结论变了"是变差还是变好：
+ * 比的是档位而不是原始 statusCategory，因为同一档位内的细分（如 valid/slow 都是 good）不算变。
+ */
+const TIER_SEVERITY: Record<HealthTier, number> = {
+  good: 0,
+  unconfigured: 1,
+  pending: 2,
+  bad: 3,
+}
+
+export type HealthTierChange = { id: string; from: HealthTier; to: HealthTier }
+export type HealthTierDiff = {
+  /** 结论相对上次基线的变化数（只数"上次有结论"的源，新出现的源不算变） */
+  changed: number
+  worse: number
+  better: number
+  items: HealthTierChange[]
+}
+
+/**
+ * 把这一轮结论和上一轮基线比一比，挑出"结论变了"的源（用户要的是重测后知道哪些源和上次不一样）。
+ *
+ * 规则：
+ * - 只数比上次**有结论**的源：新出现的源（`previous` 里没有）不算"变了"，它只是第一次被看到；
+ * - 同一 `statusCategory` 自然同档，不算变；
+ * - 变差/变好用 `TIER_SEVERITY` 判，给 toast 一句"其中 M 个变差"用。
+ *
+ * 纯函数，不碰 DOM，方便单测。
+ */
+export function diffHealthTiers(
+  previous: Record<string, string>,
+  current: Array<{ id: string; statusCategory: string }>,
+): HealthTierDiff {
+  const items: HealthTierChange[] = []
+  let worse = 0
+  let better = 0
+  for (const row of current) {
+    const prevCat = previous[row.id]
+    if (prevCat === undefined) continue
+    if (prevCat === row.statusCategory) continue
+    const from = tierOf(prevCat)
+    const to = tierOf(row.statusCategory)
+    items.push({ id: row.id, from, to })
+    if (TIER_SEVERITY[to] > TIER_SEVERITY[from]) worse++
+    else if (TIER_SEVERITY[to] < TIER_SEVERITY[from]) better++
+  }
+  return { changed: items.length, worse, better, items }
+}
+
 export type GroupingRow = { id: string; name: string; statusCategory: string; latencyMs: number }
 export type GroupingPlan = {
   tier: HealthTier

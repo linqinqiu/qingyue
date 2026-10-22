@@ -7,13 +7,13 @@ import java.nio.file.Path
 import kotlin.io.path.name
 
 /**
- * 后端版「框架不夹带内容」守门，对应前端的 `web/test/FrameworkHasNoContent.test.ts`。
+ * 后端版「框架不夹带内容」守门（前端侧的同类判据已随 Lab 容器删除而移除）。
  *
- * 前端分层：
- *   `lab/` + `extensions/` 是**纯容器/契约**（谁都不依赖，或只依赖容器）；
- *   `plugins/` + `features/` 是**内容**（随程序发布的 AI 接入属于 `features/`）。
- *   判据 `FrameworkHasNoContent.test.ts` 钉死：容器里一旦出现 `import '../plugins/...'`
- *   之类的「反向依赖」就红。
+ * 前端契约分层：
+ *   `extensions/`   = **纯契约**（注册表与插件类型，只依赖无 UI 模块）；
+ *   `plugins/`      = **内容**（具体插件 + 装载清单）；
+ *   `features/`     = **功能条目**（随程序发布的 AI 接入等，不是插件）。
+ *   依赖方向严格单向：内容 → 框架，契约里不得 import `../plugins/...`。
  *
  * 后端一一对应：
  *   `plugin/`        = 纯框架容器（定义 `Plugin` 契约 + 注册表，只立钩子，零内容）；

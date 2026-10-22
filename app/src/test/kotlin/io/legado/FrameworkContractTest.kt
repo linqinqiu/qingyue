@@ -14,7 +14,7 @@ import kotlin.io.path.name
 import kotlin.io.path.readText
 
 /**
- * 框架契约测试 —— 与 `web/test/ApiCatalog.test.ts` + 前端 `FrameworkHasNoContent.test.ts` 互为双锁，
+ * 框架契约测试 —— 与 `web/test/ApiCatalog.test.ts` 互为双锁，
  * 并由 Gradle `verifyFramework` 任务钉进每次 `check`。
  *
  * 它要守住的几条「框架纪律」（不依赖具体实现，只钉形状与不变量）：

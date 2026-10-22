@@ -300,21 +300,38 @@ class Database(private val path: String) : Closeable, AutoCloseable {
      * 注意：VACUUM 不能在事务里跑，也不能有其他连接在读 —— 此时刚 initialize，只有写连接。
      */
     private fun reclaimFreePages(db: Connection) {
+        // 读碎片率这一步失败（老库/权限问题）静默跳过 —— 压缩是优化，不是功能前提。
+        val pageCount = runCatching {
+            db.createStatement().use { st -> st.executeQuery("pragma page_count").use { if (it.next()) it.getLong(1) else 0L } }
+        }.getOrNull() ?: return
+        val freePages = runCatching {
+            db.createStatement().use { st -> st.executeQuery("pragma freelist_count").use { if (it.next()) it.getLong(1) else 0L } }
+        }.getOrNull() ?: return
+        if (pageCount <= 0 || freePages <= 0) return
+        val ratio = freePages.toDouble() / pageCount
+        if (ratio < VACUUM_THRESHOLD) return
+
+        // **VACUUM 失败必须说出来。**
+        // 原来整段包在一个 runCatching 里，VACUUM 抛异常（磁盘满、库被别的进程锁着、
+        // WAL 未落盘）会被静默吞掉：用户只知道"库还是那么大"，日志里一个字都没有，
+        // 排查时连"它试过压缩、但失败了"都看不出来。失败不影响功能，但必须留痕。
+        val before = pageCount
         runCatching {
-            val pageCount = db.createStatement().use { st ->
-                st.executeQuery("pragma page_count").use { if (it.next()) it.getLong(1) else 0L }
-            }
-            val freePages = db.createStatement().use { st ->
-                st.executeQuery("pragma freelist_count").use { if (it.next()) it.getLong(1) else 0L }
-            }
-            if (pageCount <= 0 || freePages <= 0) return@runCatching
-            val ratio = freePages.toDouble() / pageCount
-            if (ratio < VACUUM_THRESHOLD) return@runCatching
-            // VACUUM 会重写整库，WAL 模式下必须先落盘再切回来；失败也只是没省下空间，不影响功能。
             db.createStatement().use { it.execute("VACUUM") }
+            // optimize 只在确实压过之后跑：它做的是 ANALYZE 与索引统计刷新。
             db.createStatement().use { it.execute("pragma optimize") }
+        }.onSuccess {
+            val after = runCatching {
+                db.createStatement().use { st -> st.executeQuery("pragma page_count").use { if (it.next()) it.getLong(1) else before } }
+            }.getOrDefault(before)
             System.err.println(
-                "数据库碎片回收：空闲页 ${freePages}/${pageCount}（${(ratio * 100).toInt()}%）已 VACUUM 压缩",
+                "数据库碎片回收：空闲页 $freePages/$pageCount（${(ratio * 100).toInt()}%）" +
+                    "已 VACUUM，${before} → $after 页",
+            )
+        }.onFailure { error ->
+            System.err.println(
+                "数据库碎片回收失败（空闲页 $freePages/$pageCount，${(ratio * 100).toInt()}%）：" +
+                    "${error.javaClass.simpleName}: ${error.message} —— 不影响功能，只是文件没缩回去",
             )
         }
     }

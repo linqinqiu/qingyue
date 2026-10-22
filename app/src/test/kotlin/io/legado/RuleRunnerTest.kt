@@ -754,6 +754,39 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `漫画源依赖的 Reload 远端 JS 全局可用`() {
+        // 包子漫画、追樱漫画等把 searchUrl / ruleSearch 整段写在外站 qyyuapi.com 的 JS 里，
+        // 靠 Legado 全局 `Reload(url)` 把脚本拉回本地、再用 `eval(String(Reload(…)))` 跑起来。
+        // 沙箱原来没实现 Reload → 这类漫画源搜索地址算不出、整个漫画源不可搜（"漫画源不能用"的根因之一）。
+        // 这里用 responseFetcher 把"远端脚本"与"搜索响应"两段都打桩，验证 Reload 能拿到脚本、eval 能跑出地址。
+        val remoteSearchUrlJs = "'https://baozi.example/search?k=' + key;"
+        val remoteRuleSearchJs = "[{name:'恋爱的包子',bookUrl:'https://baozi.example/b/1'}]"
+        val source = """{
+            "bookSourceUrl":"https://www.baozimh.com",
+            "bookSourceType":2,
+            "searchUrl":"<js>eval(String(Reload('https://qyyuapi.com/sy/js/包子漫画/searchUrl.js')));</js>",
+            "ruleSearch":{
+                "bookList":"<js>eval(String(Reload('https://qyyuapi.com/sy/js/包子漫画/ruleSearch.js')));</js>",
+                "name":"$.name","bookUrl":"$.bookUrl"
+            }
+        }"""
+        val runner = RuleRunner { url ->
+            when {
+                url.endsWith("searchUrl.js") -> remoteSearchUrlJs
+                url.endsWith("ruleSearch.js") -> remoteRuleSearchJs
+                url.contains("/search") -> """{"bookList":[{"name":"恋爱的包子","bookUrl":"https://baozi.example/b/1"}]}"""
+                else -> throw AssertionError("不该请求 $url")
+            }
+        }
+
+        val results = runner.search(source, "恋爱")
+        assertEquals("Reload 拉回的脚本该跑出搜索结果", 1, results.size)
+        assertEquals("恋爱的包子", results[0].name)
+        assertEquals("https://baozi.example/b/1", results[0].bookUrl)
+        assertEquals("type-2 漫画源该透出 sourceType=2", 2, results[0].sourceType)
+    }
+
+    @Test
     fun `nextTocUrl 返回 JSON 数组时逐页爬取`() {
         // 懒人听书的 `nextTocUrl` 是 `@js:` 拼出的分页数组，Rhino 的 NativeJSON.stringify 把它序列化成
         // 一行 `["url1","url2"]`；原来只按行拆 → 整个数组被当成**一个** URL 请求 → 「URL 格式无效或包含
