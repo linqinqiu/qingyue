@@ -24,12 +24,40 @@ const TAG_FLUSH_AT = 200
  * 上一次体检结论的基线，落在 localStorage：这样跨会话也能比"本次和上次的结论变没变"。
  * 只存 id → statusCategory，体积可控（5,574 个源也就几十 KB 字符串），且不依赖组件/模块存活。
  */
-const HEALTH_BASELINE_KEY = 'legado.health.baseline'
+export const HEALTH_BASELINE_KEY = 'legado.health.baseline'
 
-function loadBaseline(): Record<string, string> {
+/** 基线只需要 id → 档位这两个字段；用最小结构声明，测试里喂纯数据不用造整个 SourceHealthCheckItem。 */
+export type HealthBaselineEntry = { id: string; statusCategory: string }
+
+/**
+ * **合并而不是覆盖** —— 这是基线的核心语义，所以单独抽成纯函数，让判据能直接演它。
+ *
+ * 只重测一个源时 `results` 里就一条；直接覆盖会把之前攒下的五千多条结论整份抹掉，
+ * 下一轮全库体检就比不出任何"变化"了（基线退化成单条）。
+ * 所以：以旧基线为底，只把这一轮真正测过的 id 更新进去，没测过的原样留着。
+ */
+export function mergeBaseline(
+  previous: Record<string, string>,
+  results: readonly HealthBaselineEntry[],
+): Record<string, string> {
+  const merged: Record<string, string> = { ...previous }
+  for (const item of results) merged[item.id] = item.statusCategory
+  return merged
+}
+
+/**
+ * 读回跨会话基线。
+ *
+ * `storage` 可注入，只是为了**让判据能演"重开浏览器还能接上"**（node 里没有 localStorage）。
+ * 生产调用不传，走全局 localStorage —— 行为与改造前一致。
+ */
+export function loadBaseline(storage?: Storage | null): Record<string, string> {
   try {
-    if (typeof localStorage === 'undefined') return {}
-    const raw = localStorage.getItem(HEALTH_BASELINE_KEY)
+    const store = storage === undefined
+      ? (typeof localStorage === 'undefined' ? null : localStorage)
+      : storage
+    if (!store) return {}
+    const raw = store.getItem(HEALTH_BASELINE_KEY)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
@@ -38,15 +66,14 @@ function loadBaseline(): Record<string, string> {
   }
 }
 
-function saveBaseline(results: SourceHealthCheckItem[]): void {
+/** 把本轮结论并进基线写回。`storage` 同上，仅为可测性。 */
+export function saveBaseline(results: readonly HealthBaselineEntry[], storage?: Storage | null): void {
   try {
-    if (typeof localStorage === 'undefined') return
-    // **合并而不是覆盖。** 只重测一个源时 `results` 里就一条；直接覆盖会把之前攒下的
-    // 五千多条结论整份抹掉，下一轮全库体检就比不出任何"变化"了（基线成了单条）。
-    // 所以先读回旧基线，只把这一轮真正测过的 id 更新进去。
-    const map = loadBaseline()
-    for (const item of results) map[item.id] = item.statusCategory
-    localStorage.setItem(HEALTH_BASELINE_KEY, JSON.stringify(map))
+    const store = storage === undefined
+      ? (typeof localStorage === 'undefined' ? null : localStorage)
+      : storage
+    if (!store) return
+    store.setItem(HEALTH_BASELINE_KEY, JSON.stringify(mergeBaseline(loadBaseline(store), results)))
   } catch {
     // 存不下（隐私模式/超额）就丢：基线只是"下次重测时的对比参照"，缺了顶多少一句变化提示
   }
@@ -73,9 +100,23 @@ let state: HealthRunState = {
   baselineChanged: 0, baselineWorse: 0, baselineBetter: 0,
 }
 const listeners = new Set<() => void>()
-let timer: number | null = null
+/**
+ * 定时器句柄：浏览器里 `window.setInterval` 返回 number，node 里 `globalThis.setInterval`
+ * 返回 Timeout 对象 —— 两种都得能存、都能喂给 `clearInterval`，所以取并集。
+ */
+type IntervalHandle = ReturnType<typeof setInterval> | number
+let timer: IntervalHandle | null = null
 let cancelled = false
 
+/**
+ * 起一个周期定时器。
+ *
+ * 浏览器里就是 `window.setInterval`，与改造前逐字一致；`window` 不存在时（node 里跑判据）
+ * 退到 `globalThis.setInterval` —— 否则判据一调 `startHealthRun` 就 `window is not defined`，
+ * 想演"跑完一轮之后基线是什么"只能靠读源码，那正是这次要替掉的东西。
+ */
+const schedule = (fn: () => void, ms: number): IntervalHandle =>
+  typeof window === 'undefined' ? globalThis.setInterval(fn, ms) : window.setInterval(fn, ms)
 export const getHealthRun = () => state
 export function useHealthRun(): HealthRunState {
   return useSyncExternalStore(subscribeHealthRun, getHealthRun, getHealthRun)
@@ -123,10 +164,22 @@ export type HealthRunStart = {
   groupsOf: () => Record<string, string>
   onSourcesChange: () => void
   onToast: (message: string, type?: 'info' | 'success' | 'error') => void
+  /**
+   * 基线落到哪儿。生产不传 = 全局 localStorage；判据传一个 fake Storage 来演"跨会话读取"。
+   * 之所以做成注入而不是直接读全局：node 里没有 localStorage，不注入就**只能读源码**验证
+   * 基线逻辑，而源码断言正是这次要替掉的那类弱判据。
+   */
+  storage?: Storage | null
 }
 
-/** 发起一轮体检。已经在跑就先停掉旧的 —— 同时跑两轮只会互相把结果盖掉。 */
-export function startHealthRun(options: HealthRunStart): void {
+/**
+ * 发起一轮体检。已经在跑就先停掉旧的 —— 同时跑两轮只会互相把结果盖掉。
+ *
+ * 返回的 Promise 在**这一轮结束**（跑完 / 出错 / 被 stop）时 resolve —— 返回值只是给判据用的，
+ * 界面侧照旧 `startHealthRun({...})` 直接调用、不 await（它本来就是后台跑的）。
+ * 这样判据可以「喂 fake fetch → await 这一轮 → 断结果」，而不用靠 sleep 猜时序。
+ */
+export function startHealthRun(options: HealthRunStart): Promise<void> {
   if (state.running) stopHealthRun()
   const merged = new Map((options.previous ?? []).map(item => [item.id, item]))
   // 上一次体检的基线：优先用本次传入的 `previous`（同一次打开、范围一致时最准），
@@ -135,7 +188,7 @@ export function startHealthRun(options: HealthRunStart): void {
   if (options.previous && options.previous.length > 0) {
     for (const item of options.previous) baseline[item.id] = item.statusCategory
   } else {
-    Object.assign(baseline, loadBaseline())
+    Object.assign(baseline, loadBaseline(options.storage))
   }
   cancelled = false
   if (timer) clearInterval(timer)
@@ -145,11 +198,11 @@ export function startHealthRun(options: HealthRunStart): void {
     startedAt, durationMs: 0, results: Array.from(merged.values()),
     baselineChanged: 0, baselineWorse: 0, baselineBetter: 0,
   })
-  timer = window.setInterval(() => {
+  timer = schedule(() => {
     replace({ ...state, durationMs: Date.now() - startedAt })
   }, 500)
 
-  void (async () => {
+  return (async () => {
     const alreadyTagged = new Set<string>()
     let pendingTag: SourceHealthCheckItem[] = []
     let autoTagged = 0
@@ -183,7 +236,7 @@ export function startHealthRun(options: HealthRunStart): void {
       // 相对上一次基线比一比："哪些源这次结论和上次不一样"。新出现的源不算变。
       const diff: HealthTierDiff = diffHealthTiers(baseline, finalResults)
       // 把这一轮结论存成新的基线，供下次重测对比。
-      saveBaseline(finalResults)
+      saveBaseline(finalResults, options.storage)
       replace({
         ...state, running: false, finished: 'done', checked: options.ids.length, autoTagged,
         durationMs: Date.now() - startedAt,
