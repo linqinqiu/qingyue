@@ -10,7 +10,6 @@ import { SourceGroupModal } from '../sources/SourceGroupModal'
 import { SourceHealthModal } from '../sources/SourceHealthModal'
 import { SourceLoginModal } from '../sources/SourceLoginModal'
 import { SourceShareModal } from '../sources/SourceShareModal'
-import { SourceSubscriptionPanel } from '../sources/SourceSubscriptionPanel'
 import { SourceSummary, api } from '../lib/api'
 import { parseSourceJsonText } from '../sources/sourceImport'
 import { showContextMenu } from '../components/ContextMenu'
@@ -33,8 +32,6 @@ export function SourcesPage({ selected, onSelect, onSourcesChange }: { selected:
   const [groupFilter, setGroupFilter] = useState('')
   const [notice, setNotice] = useState('')
   const [importing, setImporting] = useState(false)
-  /** 「订阅地址」这一档开合：书源订阅的产物是书源，所以它长在书源页里，不在「订阅」页 */
-  const [subsOpen, setSubsOpen] = useState(false)
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showHealthModal, setShowHealthModal] = useState(false)
@@ -463,26 +460,6 @@ export function SourcesPage({ selected, onSelect, onSourcesChange }: { selected:
           />
         </label>
 
-        {/* 书源订阅与「新建」「导入」并列：三条都是把书源弄进这台服务的入口 */}
-        <button
-          type="button"
-          className={`subtle-button source-subscribe-btn ${subsOpen ? 'active-batch-btn' : ''}`}
-          aria-expanded={subsOpen}
-          title="订阅一个「返回书源 JSON 的直链」：每 6 小时自动同步一次，同一地址的书源整体覆盖更新。与顶栏「订阅」那一页的 RSS 源不是一回事。"
-          onClick={() => {
-            const opening = !subsOpen
-            setSubsOpen(opening)
-            // 窄屏是单列：这一档开在左栏下面，不滚一下就没有任何"打开了"的反馈。
-            // 'nearest' 只在它真在视野外时才滚，宽屏两列时不会把编辑器顶走。
-            if (opening) window.setTimeout(() => {
-              document.querySelector('.subscription-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-            }, 0)
-          }}
-        >
-          <Icon name="globe" />
-          <span>{subsOpen ? '收起订阅地址' : '订阅地址'}</span>
-        </button>
-
         {notice && <p className="sidebar-notice">{notice}</p>}
 
         <nav ref={sourceListRef} className={`source-list ${isBatchMode ? '' : 'source-list-sortable'}`} aria-label="书源列表">
@@ -568,9 +545,9 @@ export function SourcesPage({ selected, onSelect, onSourcesChange }: { selected:
       </aside>
 
       <div className="sources-main">
-        {/* 页头 + 书源订阅：订阅的产物是书源，所以它长在书源页；但它不是编辑器的一部分，
-            单独成块放在编辑器之上，编辑器区块只承载 SourceEditor 本体。
-            这样「订阅地址」展开时不会把编辑表单挤进同一个区块，编辑器区不再显臃肿。 */}
+        {/* 书源页只承载**书源本身**：页头 + 编辑器。
+            书源订阅（远程书源 JSON 直链）已搬到顶栏「订阅」页 —— 那里才是"订阅"这件事的家，
+            书源页不再挂任何订阅面板或「订阅地址」按钮，右栏因此只剩编辑区，不再被挤。 */}
         <div className="editor-region">
           <header className="page-title">
             <div>
@@ -585,9 +562,6 @@ export function SourcesPage({ selected, onSelect, onSourcesChange }: { selected:
               )}
             </div>
           </header>
-          {subsOpen && (
-            <SourceSubscriptionPanel onSourcesChange={() => void load()} onClose={() => setSubsOpen(false)} />
-          )}
         </div>
         <section className="sources-content">
           <SourceEditor

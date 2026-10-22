@@ -5460,6 +5460,11 @@ input[type="checkbox"] {
 .ai-tag-warn { color: color-mix(in srgb, var(--danger) 75%, var(--ink)); border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
 .ai-tag-testing { color: color-mix(in srgb, var(--warn, #b8860b) 75%, var(--ink)); border-color: color-mix(in srgb, var(--warn, #b8860b) 40%, var(--line)); }
 
+/* —— 订阅页：书源订阅 / RSS 文章源 两块并列 ——
+   以前书源订阅塞在书源页右栏里，把编辑器挤长；现在收到订阅页，两块各有自己的面板与标题。
+   这里只负责"两块之间留出呼吸、顺序清楚"，面板外观仍由 .subscription-panel 决定。 */
+.subscription-block + .subscription-block { margin-top: 28px; }
+
 /* —— AI 对话助手 —— */
 
 /* —— 全局 AI 悬浮球 ——

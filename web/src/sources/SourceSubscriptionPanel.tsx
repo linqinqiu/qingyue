@@ -12,9 +12,13 @@ import { EmptyGuide } from '../shelf/EmptyGuide'
  * 而「订阅」页那一栏是 `RssSource`（要读的文章），两者数据模型与用途都不同。
  * 以前它们焊在同一页的两个页签里，于是「订阅」这个词同时指两件事（PROPOSAL-021 §3）。
  */
+/**
+ * 书源订阅面板。现在长在顶栏「订阅」页里（书源订阅 / RSS 文章源 两块并列），
+ * 所以「收起」不再是它的职责 —— `onClose` 变成可选，只有宿主想提供收起时才传。
+ */
 export function SourceSubscriptionPanel({ onSourcesChange, onClose }: {
   onSourcesChange: () => void
-  onClose: () => void
+  onClose?: () => void
 }) {
   const [items, setItems] = useState<SourceSubscription[]>([])
   const [url, setUrl] = useState('')
@@ -94,7 +98,7 @@ export function SourceSubscriptionPanel({ onSourcesChange, onClose }: {
           <button className="subtle-button" onClick={() => void updateAll()} disabled={busy !== null || items.length === 0}>
             {busy === 'all' ? '同步中…' : '全部同步'}
           </button>
-          <button type="button" className="subtle-button" onClick={onClose}>收起</button>
+          {onClose && <button type="button" className="subtle-button" onClick={onClose}>收起</button>}
         </div>
       </header>
       <form onSubmit={add}>
@@ -110,7 +114,7 @@ export function SourceSubscriptionPanel({ onSourcesChange, onClose }: {
             body={<>填一个能直接打开书源 JSON 的地址即可开始同步；只想临时加几个源，用「导入 JSON」直接导一份也行。要读文章类的订阅源（RSS），在顶栏「订阅」那一页。</>}
             actions={[
               { label: '填一个订阅地址', onClick: focusInput, primary: true, icon: 'plus' },
-              { label: '收起这一档', onClick: onClose },
+              ...(onClose ? [{ label: '收起这一档', onClick: onClose }] : []),
             ]}
           />
         )}

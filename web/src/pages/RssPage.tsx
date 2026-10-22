@@ -1,13 +1,16 @@
 import React from 'react'
 import { RssPanel } from './RssPanel'
+import { SourceSubscriptionPanel } from '../sources/SourceSubscriptionPanel'
 
 /**
- * 「订阅」这一页只装 RSS 源（上游 `RssSource`：要**读**的文章源）。
+ * 「订阅」页 —— 这里放**两件不同的事**，各占一块、各有标题，不让用户猜：
  *
- * 书源订阅（远程书源 JSON 直链，上游 `RuleSub`）不在这 —— 它同步进来的产物是书源，
- * 所以长在「书源」页里（`sources/SourceSubscriptionPanel.tsx`）。
- * 以前两件事焊在同一页的两个页签里，「订阅」同时指两个数据模型，
- * 页签上还得各挂一个条数，为的就是让用户分清"我这条到底在哪张"。
+ * 1. **书源订阅**（上游 `RuleSub` / `sourceSub.json`）：一条「返回书源 JSON 的直链」，
+ *    每 6 小时同步一次，产物是**书源**。
+ * 2. **RSS 订阅源**（上游 `RssSource`）：一个站点或栏目的文章流，产物是**可读的文章**。
+ *
+ * 以前书源订阅挂在「书源」页里（因为它同步出来的东西是书源），结果是书源页右栏被订阅面板撑长、
+ * 用户也觉得「订阅地址」跑错了地方。现在统一收到「订阅」页：两件事并列，一眼能分清。
  */
 export function RssPage({ onOpenBackup }: { onOpenBackup: () => void }) {
   return (
@@ -15,10 +18,19 @@ export function RssPage({ onOpenBackup }: { onOpenBackup: () => void }) {
       <header className="page-title">
         <div>
           <h1>订阅</h1>
-          <p>读文章类的订阅源（RSS）：一条源是一个站点或一个栏目，点进去看它的条目。导入手机备份包后源会出现在这里。书源订阅（同步远程书源 JSON）在「书源」页。</p>
+          <p>两类订阅：书源订阅（同步远程书源 JSON，产物是书源）与 RSS 文章源（读文章，产物是文章）。</p>
         </div>
       </header>
-      <RssPanel onOpenBackup={onOpenBackup} />
+
+      {/* 一、书源订阅：产物是书源 */}
+      <section className="subscription-block" aria-label="书源订阅">
+        <SourceSubscriptionPanel onSourcesChange={() => undefined} />
+      </section>
+
+      {/* 二、RSS 文章源：产物是文章 */}
+      <section className="subscription-block" aria-label="RSS 文章源">
+        <RssPanel onOpenBackup={onOpenBackup} />
+      </section>
     </main>
   )
 }

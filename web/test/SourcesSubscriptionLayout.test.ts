@@ -4,15 +4,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 /**
- * 「书源订阅」要从编辑器本体里挪出去（P0.3）。
+ * 书源页的版面：**只剩页头 + 编辑器**（用户 2026-10-22 明确要求）。
  *
- * 以前 `<SourceSubscriptionPanel>` 直接贴在 `<section className="sources-content">` 内、
- * 紧挨着 `<SourceEditor>` 上面，于是「订阅地址」一展开就把编辑表单挤进同一个区块，
- * 编辑器区显得臃肿。现在的形状：右栏分两块 —— 上面的 `.editor-region` 只放页头 + 书源订阅，
- * 下面的 `<section className="sources-content">` 只承载 `SourceEditor` 本体。
+ * 演变过程：
+ * 1. 最初 `<SourceSubscriptionPanel>` 贴在编辑器 `<section>` 内，一展开就把编辑表单挤变形；
+ * 2. 后来把它挪到 `.editor-region`（与编辑器平级），书源页还是背着订阅；
+ * 3. 用户指出「书源界面的订阅和地址你还没有移除改掉」→ 订阅整体搬到顶栏「订阅」页，
+ *    书源页右栏只剩 `.editor-region`（页头）与 `.sources-content`（编辑器）。
  *
- * 这条测的是"订阅不再长在编辑器区块里"这个结构事实：订阅块在编辑器 <section> 之前、
- * 两者被包进同一个 `.sources-main`。措辞不管，结构改了才是事故。
+ * 这条测"书源页不再有任何订阅痕迹"这个结构事实。措辞不管，结构改了才是事故。
  */
 
 const SRC = path.resolve(import.meta.dirname, '../src')
@@ -26,44 +26,46 @@ function functionBody(text: string, name: string): string {
   return next < 0 ? rest : rest.slice(0, next)
 }
 
-const sourcesPage = () => functionBody(read('pages/SourcesPage.tsx'), 'SourcesPage')
+/** 去注释：注释里写"这里原来有订阅"是历史，不该让判据变红。 */
+const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 
-test('书源订阅不再嵌在编辑器区块内', () => {
+const sourcesPage = () => stripComments(functionBody(read('pages/SourcesPage.tsx'), 'SourcesPage'))
+
+test('书源页彻底没有订阅：不渲染面板、没有「订阅地址」按钮、没有开合状态', () => {
   const body = sourcesPage()
-  const subIdx = body.indexOf('<SourceSubscriptionPanel')
-  const contentIdx = body.indexOf('className="sources-content"')
-
-  assert.ok(subIdx >= 0, 'SourcesPage 里没有渲染 <SourceSubscriptionPanel')
-  assert.ok(contentIdx >= 0, 'SourcesPage 里没有 <section className="sources-content"> 编辑器区块')
-
-  // 订阅块必须出现在编辑器 <section> 之前 —— 即它落在上面的 .editor-region，而不是 section 内部
-  assert.ok(subIdx < contentIdx, '书源订阅又躲回编辑器 <section> 里了，把它挪到编辑器区块之前')
+  assert.ok(!body.includes('<SourceSubscriptionPanel'), 'SourcesPage 又在渲染订阅面板 —— 它该在「订阅」页')
+  assert.ok(!/\bsubsOpen\b/.test(body), 'SourcesPage 里还有 subsOpen 开合状态 —— 订阅那一档已经移走')
+  assert.ok(!body.includes('订阅地址'), 'SourcesPage 里还有「订阅地址」按钮 —— 已移到「订阅」页')
 })
 
-test('右栏被 .sources-main 包成两块：上面的 .editor-region 与下面的编辑器 <section>', () => {
+test('书源页右栏仍分两块：页头 .editor-region 与编辑器 .sources-content', () => {
   const body = sourcesPage()
-  // 包着页头/订阅与编辑器的外层容器
   assert.ok(body.includes('className="sources-main"'), '右栏缺少 .sources-main 包装容器')
-  // 页头 + 订阅所在的区块（与编辑器 <section> 平级，不滚，不挤编辑器）
-  assert.ok(body.includes('className="editor-region"'), '缺少 .editor-region：页头+订阅应单独成块，和编辑器平级')
+  assert.ok(body.includes('className="editor-region"'), '缺少 .editor-region（页头所在块）')
 
   const mainIdx = body.indexOf('<div className="sources-main">')
   const regionIdx = body.indexOf('<div className="editor-region">')
   const contentIdx = body.indexOf('<section className="sources-content">')
   assert.ok(regionIdx > mainIdx, '.editor-region 应包在 .sources-main 内')
   assert.ok(contentIdx > mainIdx, '编辑器 <section> 应包在 .sources-main 内')
-  // .editor-region（含订阅）在编辑器 <section> 之前
   assert.ok(regionIdx < contentIdx, '.editor-region 应排在编辑器 <section> 之前')
 })
 
-test('订阅展开时滚动目标仍是 .subscription-panel（不依赖 .sources-content 内嵌）', () => {
-  const body = sourcesPage()
-  assert.ok(
-    body.includes("querySelector('.subscription-panel')?.scrollIntoView"),
-    '订阅展开后的滚动手势仍要能定位到 .subscription-panel',
-  )
-  assert.ok(
-    !body.includes("querySelector('.sources-content .subscription-panel')"),
-    '滚动选择器还假定订阅嵌在 .sources-content 里 —— 订阅已移到外头，选择器要相应改掉',
-  )
+test('订阅页接管书源订阅：两块并列、各有分区容器', () => {
+  const rss = read('pages/RssPage.tsx')
+  assert.ok(rss.includes('<SourceSubscriptionPanel'), '「订阅」页要渲染书源订阅面板')
+  assert.ok(rss.includes('<RssPanel'), '「订阅」页要渲染 RSS 面板')
+  assert.ok(rss.includes('subscription-block'), '两块要有各自的分区容器，视觉上分得清')
+
+  // 书源订阅必须在 RSS 之前（产物是书源，是"更靠近书源"的那一类）
+  const srcIdx = rss.indexOf('<SourceSubscriptionPanel')
+  const rssIdx = rss.indexOf('<RssPanel')
+  assert.ok(srcIdx < rssIdx, '书源订阅应排在 RSS 之前')
+})
+
+test('书源订阅面板不再强制要求 onClose（订阅页里没有"收起这一档"）', () => {
+  const panel = read('sources/SourceSubscriptionPanel.tsx')
+  assert.match(panel, /onClose\?:/, 'onClose 应为可选参数')
+  // 只在传了 onClose 时才渲染收起按钮
+  assert.match(panel, /\{onClose &&/, '收起按钮要按 onClose 是否存在来决定')
 })
