@@ -787,6 +787,39 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `Reload 抓外站规则脚本时必须挂浏览器 UA`() {
+        // 外站规则脚本托管（qyyuapi.com 等）**按 User-Agent 拦**默认抓取的 `LegadoServer/0.1`，直接 403。
+        // 所以 Reload 不能朴素抓取，必须在 URL 尾巴挂浏览器级 UA / Referer。
+        //
+        // 为什么不在打桩通道上断言：`RuleRunner.fetch` 会先 `splitUrlOptions` 把 headers 拆走，
+        // 再调 `fetchUrl`；桩在 `fetchUrl` 里，看到的必然是**裸 URL**。所以在桩上断言永远测不到 UA。
+        // 唯一能钉住的位置是 `reloadFetchUrl`（Reload 拼给抓取通道的那串）。
+        val scriptUrl = "https://qyyuapi.com/sy/js/包子漫画/searchUrl.js"
+        val composed = io.legado.rules.reloadFetchUrl(scriptUrl)
+
+        assertTrue(
+            "Reload 的抓取地址必须在脚本 URL 后面拼上 headers JSON；实际=$composed",
+            composed.contains("\"headers\""),
+        )
+        assertTrue(
+            "Reload 必须挂浏览器级 UA（qyyuapi 等按 UA 拦 LegadoServer/0.1，会 403）；实际=$composed",
+            composed.contains("Mozilla/5.0"),
+        )
+        assertTrue("Reload 要带 Referer（部分站点校验来源）；实际=$composed", composed.contains("Referer"))
+
+        // 最要紧的一条：这段拼法必须能被生产解析器正确拆开，否则 headers 到不了真正的 HTTP 请求。
+        val runner = RuleRunner { "" }
+        val (bareUrl, options) = runner.splitUrlOptions(composed)
+        assertEquals("拆掉 options 后应是干净的外站脚本地址", scriptUrl, bareUrl)
+        assertNotNull("headers 尾巴必须能被 splitUrlOptions 解析成 UrlOptions；实际=$composed", options)
+        val ua = options!!.headers.entries.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }?.value
+        assertNotNull("解析出来的 headers 里要有 User-Agent", ua)
+        assertTrue("UA 必须是浏览器级，实际=$ua", ua!!.contains("Mozilla/5.0"))
+        val referer = options.headers.entries.firstOrNull { it.key.equals("Referer", ignoreCase = true) }?.value
+        assertEquals("Referer 应指回脚本自身地址", scriptUrl, referer)
+    }
+
+    @Test
     fun `nextTocUrl 返回 JSON 数组时逐页爬取`() {
         // 懒人听书的 `nextTocUrl` 是 `@js:` 拼出的分页数组，Rhino 的 NativeJSON.stringify 把它序列化成
         // 一行 `["url1","url2"]`；原来只按行拆 → 整个数组被当成**一个** URL 请求 → 「URL 格式无效或包含

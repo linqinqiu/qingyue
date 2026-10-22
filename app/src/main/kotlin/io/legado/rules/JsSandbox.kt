@@ -75,6 +75,22 @@ data class JsExecutionContext(
     val jsLib: String? = null,
 )
 
+/**
+ * `Reload(url)` 真正交给抓取通道的地址。
+ *
+ * 外站规则脚本托管（qyyuapi.com 等）会**按 User-Agent 拦**默认抓取的 `LegadoServer/0.1`，
+ * 直接回 403。所以不能朴素抓取，必须在 URL 尾巴挂上浏览器级 UA / Referer / Accept。
+ * `RuleRunner.splitUrlOptions` 已支持 `,<json headers>` 这种写法，所以这里只拼字符串，
+ * 不去改 `buildRequest`（那会影响普通书源抓取的 UA 策略）。
+ *
+ * 抽成顶层函数是为了能直接单测：抓取通道被 `fetch()` 里的 `splitUrlOptions` 拆过之后，
+ * 桩只会看到裸 URL，headers 在桩里不可见 —— 唯一能钉住"UA 到底挂没挂"的位置就是这里。
+ */
+internal fun reloadFetchUrl(url: String): String {
+    val browserHeaders = """{"headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Referer":"$url","Accept":"*/*"}}"""
+    return "$url,$browserHeaders"
+}
+
 class JsSandbox(private val runner: RuleRunner? = null) {
     private val sessionStore = ConcurrentHashMap<String, Any>()
 
@@ -160,12 +176,7 @@ class JsSandbox(private val runner: RuleRunner? = null) {
                 override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
                     val url = args.firstOrNull()?.toString() ?: return ""
                     return runCatching {
-                        // 外站规则脚本托管（qyyuapi.com 等）会**按 User-Agent 拦**默认抓取的 `LegadoServer/0.1`，
-                        // 直接 403。这里走和 java.ajax 同一套抓取通道，但在 URL 尾巴挂上浏览器级 UA / Referer / Accept，
-                        // 让规则脚本能正常拉回。`splitUrlOptions` 已经支持 `,<json headers>` 这种写法，
-                        // 不在这里改 buildRequest，避免影响普通书源抓取的 UA 策略。
-                        val browserHeaders = """{"headers":{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36","Referer":"$url","Accept":"*/*"}}"""
-                        runner?.fetch("$url,$browserHeaders", execContext?.sourceId, execContext?.database) ?: ""
+                        runner?.fetch(reloadFetchUrl(url), execContext?.sourceId, execContext?.database) ?: ""
                     }.getOrDefault("")
                 }
             })
