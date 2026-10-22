@@ -278,8 +278,10 @@ frontendPlugins.register({
 - **只给标识、不给正文**：正文让模型用工具去取 —— 这才是插件级功能的用法
 - **字段截断**：书源是用户导入的，字段长度不可信（判据 `UiContext.test.ts` 钉着）
 
-实验室是框架，**不认识 UiContext 的形状**：宿主通过 `LabHostContext` 传进来，
-实验室原样转发给条目，由 AI 插件自己解释。
+界面上下文由**宿主采集**后随对话发出，框架只负责透传：`AiConnectionsPanel` 接收
+`uiContext` 并交给 `uiContextMessage()` 拼成 `system` 消息，AI 面板自己解释它的含义。
+（0.8.4 起「实验室」悬浮窗口已下线，原先的 `LabHostContext` 转发层一并删除 —— 这段
+上下文现在直接由 AI 面板处理，不再经过一层中间宿主。）
 
 ### 5.2 AI 能执行插件注册的工具
 
