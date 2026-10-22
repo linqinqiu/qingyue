@@ -19,6 +19,7 @@ import { AboutModal } from './plugins/about/AboutModal'
 import { ReadingLogModal } from './plugins/reading-log/ReadingLogModal'
 import { SourceHealthEntryModal } from './plugins/source-health/SourceHealthModalEntry'
 import { AiModal } from './features/ai/AiModal'
+import { AiFloatingBall } from './features/ai/AiFloatingBall'
 import { PluginsModal } from './plugins/plugin-intro/PluginIntroModal'
 import type { UiContext } from './lib/uiContext'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
@@ -636,6 +637,13 @@ function App() {
 
       {/* —— 插件：**独立一类**（查看当前装了哪些插件） —— */}
       {openModal === 'plugins' && <PluginsModal onClose={closeModal} />}
+
+      {/* —— 全局 AI 悬浮球：挂在根上，**每个页面都在** ——
+          用户原话：「ai 功能太差，1 是位置问题，不能随时随地使用，不能在对应地点研究」。
+          以前只能从「设置 → AI 接入」开模态弹窗，人得离开正在看的书/书源走三层才能问一句。
+          现在它常驻右下角，带着当前页面的 uiContext（在阅读器就带这本书与章节，
+          在书源页就带这个源），问的就是眼前这个东西；对话历史跨页面/跨会话保留。 */}
+      <AiFloatingBall uiContext={currentUiContext} />
     </div>
   )
 }

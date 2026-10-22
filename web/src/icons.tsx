@@ -51,9 +51,11 @@ export type IconName =
   | 'stop'
   | 'clock'
   | 'activity'
+  | 'sparkles'
 
 const paths: Record<IconName, ReactNode> = {
   activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
+  sparkles: <><path d="M12 3l1.9 4.8L19 9.7l-5.1 1.9L12 16.4l-1.9-4.8L5 9.7l5.1-1.9L12 3Z" /><path d="M18.5 15.5l.9 2.2 2.1.8-2.1.8-.9 2.2-.9-2.2-2.1-.8 2.1-.8.9-2.2Z" /></>,
   arrowLeft: <path d="m15 18-6-6 6-6" />,
   arrowRight: <path d="m9 18 6-6-6-6" />,
   book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20" /></>,

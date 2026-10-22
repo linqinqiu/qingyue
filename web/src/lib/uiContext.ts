@@ -61,7 +61,9 @@ export function describeUiContext(ctx: UiContext): string {
   const lines: string[] = []
   lines.push(`当前界面：${pageLabel(ctx.page)}`)
   if (ctx.dialog) lines.push(`打开的浮层：${clip(ctx.dialog, 40)}`)
-  if (ctx.source) lines.push(`选中的书源：${clip(ctx.source.name)}（id=${clip(ctx.source.id, 200)}）`)
+  // 「选中的书源」只在书源页有意义：`selected` 是跨页面保留的 UI 状态，
+  // 切到订阅/书架页后它还在，但用户此刻不在看书源 —— 发给模型会把它引偏。
+  if (ctx.source && ctx.page === 'sources') lines.push(`选中的书源：${clip(ctx.source.name)}（id=${clip(ctx.source.id, 200)}）`)
   if (ctx.book) {
     const b = ctx.book
     const author = b.author ? `，作者 ${clip(b.author)}` : ''

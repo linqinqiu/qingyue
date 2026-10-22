@@ -5461,6 +5461,83 @@ input[type="checkbox"] {
 .ai-tag-testing { color: color-mix(in srgb, var(--warn, #b8860b) 75%, var(--ink)); border-color: color-mix(in srgb, var(--warn, #b8860b) 40%, var(--line)); }
 
 /* —— AI 对话助手 —— */
+
+/* —— 全局 AI 悬浮球 ——
+   以前 AI 只能从「设置 → AI 接入」打开模态弹窗，人得离开正在看的书/书源才能问一句。
+   现在常驻右下角：任意页面可唤起，面板带着当前页面的上下文，对话历史跨页面保留。
+   层级要高于正文、低于模态遮罩（模态打开时不该被球挡住）。 */
+.ai-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 900;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.ai-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 45%, transparent); }
+.ai-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ai-fab-open { background: var(--surface); color: var(--ink); border-color: var(--line); }
+
+.ai-fab-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 88px;
+  z-index: 901;
+  width: min(420px, calc(100vw - 32px));
+  /* 外壳几何（圆角/阴影/最大高度）**不在这一档重写** —— 那是 `.dialog-shell` 唯一的职责，
+     UiContract 判据盯着"不许再长出第 17 套外壳"。这里只摆位置与内部布局。 */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.ai-fab-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ai-fab-title { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; }
+.ai-fab-actions { display: flex; align-items: center; gap: 8px; }
+.ai-fab-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.ai-fab-ctx { color: var(--muted); font-size: 11px; }
+.ai-fab-system { width: 100%; resize: vertical; font-size: 12px; }
+
+.ai-fab-log {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+.ai-fab-empty { color: var(--muted); font-size: 13px; margin: 0; }
+.ai-fab-error { margin: 0; font-size: 12px; }
+.ai-fab-compose { display: flex; gap: 8px; align-items: flex-end; }
+.ai-fab-compose textarea { flex: 1; min-width: 0; resize: vertical; font-size: 13px; }
+.ai-fab-compose .primary-button { flex: 0 0 auto; height: 36px; }
+
+/* 窄屏：面板铺满，球稍微收进来，避免挡住底部操作条 */
+@media (max-width: 720px) {
+  .ai-fab { right: 14px; bottom: 14px; width: 46px; height: 46px; }
+  .ai-fab-panel {
+    right: 8px;
+    left: 8px;
+    bottom: 70px;
+    width: auto;
+    max-height: calc(100vh - 110px);
+  }
+}
 .ai-chat { display: grid; gap: 12px; }
 .ai-chat-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ai-status-sep { color: var(--muted); font-size: 11px; }
