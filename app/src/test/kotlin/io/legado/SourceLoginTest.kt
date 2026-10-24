@@ -210,7 +210,7 @@ class SourceLoginTest {
         val dbPath = Files.createTempFile("legado-routes-login-test", ".sqlite").toString()
         val tempDir = Files.createTempDirectory("legado-routes-login-covers")
         val config = ServerConfig(
-            host = "0.0.0.0", port = 8080, databasePath = dbPath,
+            host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
             coverCacheDirectory = tempDir
         )
 

@@ -37,7 +37,9 @@ COPY app/docker-entrypoint.sh /app/entrypoint.sh
 RUN chmod 755 /app/entrypoint.sh
 # 容器内需绑 0.0.0.0，才能被宿主发布的端口访问；对外的安全边界由部署方
 # （如 compose 的 127.0.0.1:8080 映射、反代鉴权、安全组白名单）负责。
-ENV LEGADO_DATA_DIR=/data LEGADO_PORT=8080 LEGADO_HOST=0.0.0.0
+# 绑非回环地址必须显式放行，否则服务启动即拒绝（见 http/Guard.kt 的 requireLoopbackBind）——
+# 这不是形式主义：它保证"把服务暴露出去"必须是有意识的动作，而不是改一个变量就悄悄发生。
+ENV LEGADO_DATA_DIR=/data LEGADO_PORT=8080 LEGADO_HOST=0.0.0.0 LEGADO_ALLOW_EXTERNAL_BIND=1
 EXPOSE 8080
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["/app/bin/legado"]

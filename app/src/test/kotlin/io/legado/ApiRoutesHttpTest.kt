@@ -48,7 +48,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -77,7 +77,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -194,7 +194,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -314,7 +314,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -372,7 +372,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -447,7 +447,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -506,7 +506,7 @@ class ApiRoutesHttpTest {
             val cachedCover = coverCache.cache("https://src.com/cached-cover.png")
 
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {
@@ -552,7 +552,7 @@ class ApiRoutesHttpTest {
         val tempDir = Files.createTempDirectory("legado-routes-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {

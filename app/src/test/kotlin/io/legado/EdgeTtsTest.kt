@@ -98,7 +98,7 @@ class EdgeTtsTest {
         val tempDir = Files.createTempDirectory("legado-tts-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0", port = 8080, databasePath = dbPath,
+                host = "0.0.0.0", port = 8080, databasePath = dbPath, allowExternalBind = true,
                 coverCacheDirectory = tempDir
             )
             application {

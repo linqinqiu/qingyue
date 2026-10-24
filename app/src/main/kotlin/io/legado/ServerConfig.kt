@@ -16,6 +16,13 @@ data class ServerConfig(
      * `LEGADO_HOME` 由启动器传（见 `scripts/runtime.mjs` 的 `childEnvironment`）；裸跑 jar 就取当前目录。
      */
     val homeDirectory: Path = Path.of("."),
+    /**
+     * 是否允许绑定到非回环地址。默认取 `LEGADO_ALLOW_EXTERNAL_BIND`（默认 false）。
+     *
+     * 放进配置对象而不是每次现读环境变量：这是**这次运行**的属性，测试要能显式声明
+     * 「我就是在验绑 0.0.0.0 时的行为」，而不是去改全局环境变量。
+     */
+    val allowExternalBind: Boolean = AppConfig.allowExternalBind,
 ) {
     companion object {
 
@@ -43,6 +50,7 @@ data class ServerConfig(
                 // 相对当前工作目录，与 data/ 同一套规矩：整合包解开在哪，就在哪找 next/
                 nextDirectory = Path.of(env["LEGADO_NEXT_DIR"] ?: "next"),
                 homeDirectory = Path.of(env["LEGADO_HOME"] ?: ".").toAbsolutePath(),
+                allowExternalBind = AppConfig.allowExternalBind,
             )
         }
     }

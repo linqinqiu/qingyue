@@ -23,6 +23,7 @@ import io.legado.data.getCookieForUrl
 import io.legado.http.SameOriginWriteGate
 import io.legado.http.ServerIdentity
 import io.legado.http.apiRoutes
+import io.legado.http.requireLoopbackBind
 import io.legado.model.HealthStatus
 import io.legado.ops.LogService
 import io.legado.ops.logSystem
@@ -74,11 +75,24 @@ fun main(args: Array<String>) {
 }
 
 fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnvironment(), cdsDump: Boolean = false) {
+    // 绑定闸门：非回环地址必须显式放行（LEGADO_ALLOW_EXTERNAL_BIND=1），否则直接拒绝启动。
+    // 放在最前面：一旦监听 0.0.0.0，整库就已经对局域网开放了，之后再拦请求没有意义。
+    val externalBind = requireLoopbackBind(config.host, config.allowExternalBind)
     // 同源闸门比对的是"服务自己是谁"，不是请求头里那个可被 DNS 重绑定摆布的 Host（见 Guard.kt）
     ServerIdentity.init(config.host, config.port)
     // 初始化结构化日志系统
     LogService.initialize(config.databasePath)
     logSystem("青阅服务器启动", mapOf("version" to BuildInfo.version, "host" to config.host, "port" to config.port.toString()))
+    if (externalBind) {
+        // 放行不等于安全：把"边界已经交给部署方"这句话写进日志，而不是静默运行。
+        logSystem(
+            "⚠️ 已按 LEGADO_ALLOW_EXTERNAL_BIND=1 绑定到非回环地址",
+            mapOf(
+                "host" to config.host,
+                "warning" to "这台服务不设身份；同源写门只能挡住浏览器跨站请求，挡不住局域网内直连的客户端",
+            ),
+        )
+    }
     
     val database = Database(config.databasePath)
     database.initialize()

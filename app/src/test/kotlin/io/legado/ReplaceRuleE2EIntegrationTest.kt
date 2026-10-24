@@ -31,7 +31,7 @@ class ReplaceRuleE2EIntegrationTest {
         val tempDir = Files.createTempDirectory("legado-e2e-covers")
         try {
             val config = ServerConfig(
-                host = "0.0.0.0",
+                host = "0.0.0.0", allowExternalBind = true,
                 port = 8080,
                 databasePath = dbPath,
                 coverCacheDirectory = tempDir,

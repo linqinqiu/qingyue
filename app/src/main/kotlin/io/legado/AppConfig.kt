@@ -129,6 +129,22 @@ object AppConfig {
         get() = flag("LEGADO_PLUGIN_JAR_SCAN") || flag("LEGADO_AI_PLUGIN_JAR_SCAN")
 
     /**
+     * 是否允许把服务绑定到**非回环**地址（默认 false）。
+     *
+     * 默认拒绝的理由：这台服务不设身份 —— 没有账号、没有 token，写操作唯一的保护是
+     * 「浏览器跨站会带 Origin」这一件事。一旦监听 `0.0.0.0`，局域网里任何能访问到这台机器的
+     * 东西都能直接读写整库、读走 `agent-profiles.json` 里的明文密钥。
+     *
+     * 但容器部署又必须绑 `0.0.0.0`（容器内的 127.0.0.1 宿主访问不到），所以留这个显式开关：
+     * `LEGADO_ALLOW_EXTERNAL_BIND=1`。打开时会打一条警告日志，把"安全边界已经交给部署方"
+     * 这句话说出来，而不是静默放行。
+     *
+     * 写成 `get()` 而不是 `val`：测试与嵌入式宿主会改环境变量缓存，计算属性才不会被冻住。
+     */
+    val allowExternalBind: Boolean
+        get() = flag("LEGADO_ALLOW_EXTERNAL_BIND")
+
+    /**
      * 是否允许 AI 连接的 `baseUrl` 指向**回环地址**（默认 false）。
      *
      * 为什么需要这个口子：这台软件只跑在本机，而想接的模型也常常就在本机 ——

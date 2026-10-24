@@ -9,6 +9,7 @@ import io.ktor.server.response.respond
 import java.net.URI
 import io.legado.ops.logGuard
 import io.legado.model.ApiError
+import io.legado.AppConfig
 
 /**
  * 这台服务不设身份：只绑回环、给一个人用，密码、登录页与会话在这里没有意义
@@ -108,6 +109,40 @@ suspend fun ApplicationCall.requireSameOriginWrite(extraAllowed: (ApplicationCal
     )
     respond(HttpStatusCode.Forbidden, ApiError("cross_origin", "这个页面不是青阅界面，已拒绝它代替你改动数据"))
     return false
+}
+
+/**
+ * 这个绑定地址是不是"只有本机能访问"（字面判据，不走 DNS）。
+ *
+ * `localhost` / `127.x` / `::1` / `[::1]` 算；`0.0.0.0`、`::`、局域网 IP、域名都不算。
+ * 注意 `0.0.0.0` 是「监听所有网卡」，不是"本机"——它是这里最需要拒绝的一个。
+ */
+fun isLoopbackBindHost(host: String): Boolean {
+    val normalized = host.trim().lowercase().trim('[', ']')
+    return normalized == "localhost" || normalized == "::1" || normalized == "0:0:0:0:0:0:0:1" ||
+        normalized.startsWith("127.")
+}
+
+/**
+ * 启动期绑定闸门：非回环地址必须显式放行，否则拒绝启动。
+ *
+ * 为什么放在**启动**而不是每次请求：一旦监听 `0.0.0.0`，整库就已经对局域网开放了，
+ * 这时候再拦请求已经晚了 —— 攻击者不需要经过同源写门（他不带 Origin 就放行）。
+ * 这道闸门的语义是"要么别开，要么开了就别假装安全"，所以做成启动失败 + 一条明确的话。
+ *
+ * 放行口：`LEGADO_ALLOW_EXTERNAL_BIND=1`（容器部署必须用它，见 AppConfig 的说明）。
+ *
+ * @return true 表示这是一次"显式放行的外部绑定"，调用方应把警告写进日志。
+ * @throws IllegalStateException 非回环且未放行
+ */
+fun requireLoopbackBind(host: String, allowExternal: Boolean = AppConfig.allowExternalBind): Boolean {
+    if (isLoopbackBindHost(host)) return false
+    if (allowExternal) return true
+    throw IllegalStateException(
+        "拒绝把服务绑定到 $host：这台服务不设身份（无账号、无 token），只应监听回环地址。" +
+            "确实要对外提供服务（例如容器部署）时，显式设置 LEGADO_ALLOW_EXTERNAL_BIND=1，" +
+            "并自行承担「整库对网络开放」的后果。",
+    )
 }
 
 /** Origin 的主机与端口都指向服务自己的绑定身份才算同源。 */
