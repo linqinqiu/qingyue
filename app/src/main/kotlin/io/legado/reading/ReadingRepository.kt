@@ -3,12 +3,14 @@ package io.legado.reading
 import io.legado.data.Database
 import io.legado.data.addNote
 import io.legado.data.addReadingLog
+import io.legado.data.cachedChapterUrls
 import io.legado.data.deleteNote
 import io.legado.data.getProgress
 import io.legado.data.listNotes
 import io.legado.data.listReadingLog
 import io.legado.data.saveProgress
 import io.legado.data.searchBookContent
+import io.legado.data.tocChapters
 import io.legado.data.updateNote
 import io.legado.model.BookNote
 import io.legado.model.BookNoteWrite
@@ -63,23 +65,48 @@ class ReadingRepository(private val database: Database) {
         database.searchBookContent(sourceId, bookUrl, query)
 
     /**
-     * 章节窗口（P2 占位）：当前章 ±N 章的章节边界与缓存正文摘要，供全局页索引 / 跨章翻页消费。
-     * 现在只留接口契约，返回空窗口；实现落在 P2-T1（章节滑动窗口 + 大章节分块）。
+     * 章节窗口（P2-T1）：当前章 ±N 章的章节摘要，供全局页索引 / 跨章翻页消费。
+     *
+     * 窗口按**章号区间**切，不是按目录数组下标切：目录里除了正文章还有卷分组行
+     * （`Chapter.isVolume`），两者共用同一套 index，按下标切会把卷头算进"前后各一章"里。
+     * 区间天然夹在目录两端，所以第一章要"前一章"时不会绕回书尾。
+     *
+     * `cached` 来自正文缓存表，是"这一章能不能离线读"的唯一判据；`anchor` 见 [ChapterWindowEntry]。
+     *
+     * 没有目录缓存（这本书从没取过目录）返回空列表 —— 窗口没有可描述的对象，
+     * 不该编一串假章节出来。
      */
-    // TODO P2-T1: 返回 [sourceId, bookUrl] 下 chapterIndex ± (before..after) 的章节摘要
-    // （章节号、标题、是否已缓存、首字符锚点），并随窗口滑动卸载窗口外内容。
     fun chapterWindow(
         sourceId: String,
         bookUrl: String,
         chapterIndex: Int,
         before: Int = 1,
         after: Int = 1,
-    ): List<ChapterWindowEntry> = emptyList()
+    ): List<ChapterWindowEntry> {
+        if (chapterIndex < 0 || before < 0 || after < 0) return emptyList()
+        val chapters = database.tocChapters(sourceId, bookUrl) ?: return emptyList()
+        if (chapters.isEmpty()) return emptyList()
+        val cached = database.cachedChapterUrls(sourceId, bookUrl)
+        val from = chapterIndex - before
+        val to = chapterIndex + after
+        return chapters
+            .filter { it.index in from..to }
+            .map { chapter ->
+                ChapterWindowEntry(
+                    chapterIndex = chapter.index,
+                    title = chapter.title,
+                    cached = chapter.url in cached,
+                )
+            }
+    }
 }
 
 /**
- * 章节窗口摘要（P2 占位类型，先于实现定下契约）。
- * [chapterIndex] 章节序号；[title] 章名；[cached] 正文是否已离线缓存；[anchor] 首字符逻辑锚点（可空）。
+ * 章节窗口摘要。
+ * [chapterIndex] 章节序号；[title] 章名；[cached] 正文是否已离线缓存；
+ * [anchor] 首字符逻辑锚点 —— **目前恒为 null**：`paragraphAnchor` 这一列前端还没有生成规则
+ * （只透传、不产出），后端不自己发明一种编码去填它。等 P3 批注锚点落地、锚点格式定下来再填，
+ * 那时窗口只需把这里接上，契约不变。
  */
 data class ChapterWindowEntry(
     val chapterIndex: Int,

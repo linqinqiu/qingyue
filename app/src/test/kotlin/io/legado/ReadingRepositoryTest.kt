@@ -188,4 +188,75 @@ class ReadingRepositoryTest {
             Files.deleteIfExists(java.nio.file.Path.of(path))
         }
     }
+
+    /** 五章目录 + 只缓存第二、三章；窗口的 `cached` 必须逐章如实。 */
+    private fun windowFixture(): Pair<Database, String> {
+        val path = temporaryDatabase()
+        val database = Database(path).also { it.initialize() }
+        database.saveTocCache(
+            "src",
+            "book",
+            (0..4).map { Chapter(it, "第${it + 1}章", "ch$it") },
+        )
+        database.cacheBookContent("src", "book", "ch1", ChapterContent(title = "第2章", content = "正文二"))
+        database.cacheBookContent("src", "book", "ch2", ChapterContent(title = "第3章", content = "正文三"))
+        return database to path
+    }
+
+    @Test
+    fun `chapterWindow returns the chapters around the current one with their cached flags`() {
+        val (database, path) = windowFixture()
+        try {
+            val window = ReadingRepository(database).chapterWindow("src", "book", 2)
+            assertEquals("默认前后各一章：1/2/3", listOf(1, 2, 3), window.map { it.chapterIndex })
+            // 缓存的正是第 2、3 章（ch1/ch2），所以窗口里 1/2 已缓存、3 没有。
+            assertEquals(listOf(true, true, false), window.map { it.cached })
+            assertEquals(listOf("第2章", "第3章", "第4章"), window.map { it.title })
+        } finally {
+            database.close()
+            Files.deleteIfExists(java.nio.file.Path.of(path))
+        }
+    }
+
+    @Test
+    fun `chapterWindow clamps at both ends instead of wrapping around`() {
+        val (database, path) = windowFixture()
+        try {
+            val repository = ReadingRepository(database)
+            assertEquals("第一章没有「前一章」，不该绕到书尾", listOf(0, 1), repository.chapterWindow("src", "book", 0).map { it.chapterIndex })
+            assertEquals("最后一章同理", listOf(3, 4), repository.chapterWindow("src", "book", 4).map { it.chapterIndex })
+        } finally {
+            database.close()
+            Files.deleteIfExists(java.nio.file.Path.of(path))
+        }
+    }
+
+    @Test
+    fun `chapterWindow honours the before and after sizes`() {
+        val (database, path) = windowFixture()
+        try {
+            val window = ReadingRepository(database).chapterWindow("src", "book", 2, before = 2, after = 0)
+            assertEquals(listOf(0, 1, 2), window.map { it.chapterIndex })
+        } finally {
+            database.close()
+            Files.deleteIfExists(java.nio.file.Path.of(path))
+        }
+    }
+
+    @Test
+    fun `chapterWindow returns empty when the book has no toc or the arguments are nonsense`() {
+        val path = temporaryDatabase()
+        val database = Database(path).also { it.initialize() }
+        try {
+            val repository = ReadingRepository(database)
+            assertTrue("没有目录缓存就不该编章节出来", repository.chapterWindow("src", "no-toc", 0).isEmpty())
+            database.saveTocCache("src", "book", (0..2).map { Chapter(it, "第${it + 1}章", "ch$it") })
+            assertTrue("负章号是无效输入", repository.chapterWindow("src", "book", -1).isEmpty())
+            assertTrue("负窗口宽度是无效输入", repository.chapterWindow("src", "book", 1, before = -1).isEmpty())
+            assertTrue("窗口落在目录之外（这本书只有 0..2）", repository.chapterWindow("src", "book", 99).isEmpty())
+        } finally {
+            database.close()
+            Files.deleteIfExists(java.nio.file.Path.of(path))
+        }
+    }
 }

@@ -20,6 +20,14 @@ fun Database.getTocCache(sourceId: String, tocUrl: String): List<Chapter>? = con
     readTocCache(db, sourceId, tocUrl)
 }
 
+/**
+ * 这本书的目录章节（调用方不必知道 toc_url 是哪个）。给「章节窗口」这类只读目录的用法；
+ * 没有目录缓存返回 null —— 别拿空列表冒充"这本书没有章节"。
+ */
+fun Database.tocChapters(sourceId: String, bookUrl: String): List<Chapter>? = connect { db ->
+    readTocChapters(db, sourceId, bookUrl)
+}
+
 /** 单条目录缓存的读取（不自己开连接：给已在事务里的调用方用，也避免嵌套连接）。 */
 private fun readTocCache(db: java.sql.Connection, sourceId: String, tocUrl: String): List<Chapter>? =
     db.prepareStatement("select chapters_json from book_toc_cache where source_id = ? and toc_url = ?").use { stmt ->
