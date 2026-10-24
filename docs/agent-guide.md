@@ -6,7 +6,7 @@
 ## 0. 一句话
 
 青阅的 AI 是**进程内网关**，不是外挂服务：它和界面、脚本用的是同一批服务对象，
-所以它知道你在看什么，也能调程序自己的 39 个能力。
+所以它知道你在看什么，也能调程序自己的 54 个能力。
 入口是 `/api/agent/*`（8 个端点），核心实现在 `app/src/main/kotlin/io/legado/ai/`。
 
 ## 1. 三步接上
@@ -19,7 +19,8 @@ npm start                 # 默认 127.0.0.1:1234
 
 ### 1.2 登记一个外部模型
 
-任何 **openai-compatible** 地址都行 —— 本机 Ollama、各家云 API、自建网关。
+任何 **openai-compatible** 地址都行 —— 各家云 API、自建网关、本机跑的 Ollama / LM Studio。
+接本机的那类需要显式开一下口子，见下面「接本机模型」那条。
 
 **方式 A：界面**（推荐，能立即实测通不通）
 设置 → 接入与扩展 → **AI 接入** → 填连接 → 保存。
@@ -32,8 +33,20 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/connections \
   -H 'Content-Type: application/json' \
   -H 'Origin: http://127.0.0.1:1234' \
   -d '{"name":"我的网关","kind":"openai-compatible",
-       "baseUrl":"http://127.0.0.1:5591/v1","model":"qwen2.5","apiKey":"sk-xxx"}'
+       "baseUrl":"https://api.example.com/v1","model":"gpt-4o","apiKey":"sk-xxx"}'
 ```
+
+> ⚠️ 出站闸门（`NetworkSecurity`）默认**拒绝内网与本机地址**：填 `192.168.*` / `10.*` /
+> `169.254.169.254` 这类一律返回 `400 invalid_request`，并把闸门那句原话带回 `message`。
+>
+> **接本机模型（Ollama / LM Studio，只有 `127.0.0.1` 可填）**：这台软件就跑在本机，
+> 一刀切拒回环等于把这批用户挡在 AI 功能外面。0.8.6 起服务侧设 `LEGADO_AI_ALLOW_LOOPBACK_BASEURL=1`
+> 放行，但守住两条 —— ① 只放回环（`localhost` / `127.*` / `::1`），私网段照旧拒；
+> ② **仍然硬拒指向这台服务自己的 host:port**。理由不是"防内网"：本服务对不带 Origin 的请求
+> 放行写操作，而 JDK `HttpClient` 发请求不带 Origin，一个能打到 1234 的 AI 连接等于绕过它唯一的写保护。
+>
+> 登记这一步不校验地址（只校验 name 与 kind），所以填错的回环地址会先返回 200，
+> 真正的拒绝发生在**外呼那一刻** —— 报 400 而不是从前那个让人去翻服务端日志的 500。
 
 **方式 C：配置文件**（`agent-profiles.json`，放在安装根）
 
@@ -75,22 +88,25 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/chat \
 所以「这本书讲了什么」它知道"这本书"是哪本。**只给标识与少量摘要，不给整本正文** ——
 正文由它自己用工具去取（这才是 Agent 的正确用法，也避免一次请求塞几十万字）。
 
-### 2.2 能调 39 个工具
+### 2.2 能调 54 个工具
 
 按面分组（`GET /api/agent/manifest` 可查全量）：
 
-| 组 | 工具举例 | 用途 |
+| 组 | 工具 | 用途 |
 |---|---|---|
-| `sources` | `source.list` / `get` / `upsert` / `delete` / `import` / `batch` / `order` | 管书源 |
-| `debug` | `source.debug` | 分阶段调试书源，告诉你坏在哪一步 |
-| `health` | `source.health` | 实跑体检 |
-| `search` | `search.run` / `chapters.run` / `content.run` | 搜书、取目录、取正文 |
-| `explore` | `explore.tabs` / `explore.run` | 发现页 |
-| `replace-rules` | `replace.list` / `save` / `toggle` / `delete` | 改净化规则 |
-| `bookshelf` | `shelf.list` / `add` / `remove` / `infoUpdate` | 书架 |
-| `notes` | `note.add` / `list` / `update` / `delete` / `readingLog.*` | 划线、阅读记录 |
-| `rss` | `rss.list` / `get` / `setEnabled` / `delete` | RSS |
-| `subscriptions` | `subscription.list` / `updateOne` / `updateAll` | 书源订阅 |
+| `source` (14) | `list` `get` `upsert` `delete` `validate` `import` `batch` `order` `debug` `health` `group.*` | 书源增删改查、分阶段调试、实跑体检、分组 |
+| `search` / `chapters` / `content` | `search.run` / `chapters.run` / `content.run` | 搜书、取目录、取正文 |
+| `explore` (2) | `explore.tabs` / `explore.run` | 发现页 |
+| `book` (1) | `book.info` | 单本详情 |
+| `shelf` (6) | `list` `get` `add` `remove` `infoUpdate` `setCompleted` | 书架 |
+| `note` (4) / `readingLog` (2) | `note.*` / `readingLog.*` | 笔记、阅读记录 |
+| `progress` (2) | `progress.get` / `progress.set` | 阅读进度 |
+| `replace` (6) | `list` `get` `save` `toggle` `delete` `import` | 净化规则 |
+| `rss` (4) | `list` `get` `setEnabled` `delete` | RSS |
+| `subscription` (3) | `list` `updateOne` `updateAll` | 书源订阅 |
+| `tts` (2) | `tts.speak` / `tts.voices` | 朗读 |
+| `ai` (3) | `ai.textClean` / `ai.textRewrite` / `ai.selectTextAction` | 选中文本处理 |
+| `backup` (2) | `backup.list` / `backup.get` | 备份导出 |
 
 ### 2.3 真实用例
 
@@ -172,6 +188,7 @@ val handle = agentConnection.hooks.before { meta, args ->
 | 现象 | 原因 | 解决 |
 |---|---|---|
 | `409 no_connection` | 没登记外部模型 | 按 §1.2 登记 |
+| `400 invalid_request` | `baseUrl` 指向本机 / 内网（回环也算） | 换成公网可达地址；本机模型需先暴露出去 |
 | `502 upstream_unreachable` | 模型地址连不上 / 非 2xx / 解析失败 | 查 baseUrl 与网络 |
 | 中文读成空 | 请求体不是无 BOM 的 UTF-8 | 用 UTF-8 无 BOM 发送 |
 | 换了地址不生效 | 多连接只走第一个 | 放第一条，或删掉其它 |

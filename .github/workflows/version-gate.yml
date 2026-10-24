@@ -1,0 +1,201 @@
+# version-gate.yml
+# ---------------------------------------------------------------------------
+# 青阅（QingYue）版本 / 变更日志治理门禁。
+# 仅约束治理动作，不修改任何应用源码。
+# 落点：应用仓库（含 Gradle 真源与 CI），发布类 job 只绑 main 与 v* Tag。
+#
+# 设计要点（详见 docs/version-log-governance.md）：
+#   - PR 门禁：代码路径变更时，要求 CHANGELOG 或 version 同时变更。
+#   - Tag/version 一致性：Tag 去掉 v 后必须 == Gradle version，否则中止发布。
+#   - 发布后冒烟：启动产物，断言 /healthz 返回的 version == Tag。
+#   - 第三方 Action 固定 SHA；Telegram 通知 continue-on-error；keystore 用 Secrets 注入。
+#
+# 自动化接入点（当前为骨架，未真正接外部 Action）：
+#   - CHANGELOG 生成：在 release 流程里接 release-please 或 git-cliff（见 §4）。
+#   - Unreleased 段由 CI 维护，发布时自动转版本段落。
+# ---------------------------------------------------------------------------
+
+name: 版本与变更日志门禁
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+# 发布类工作流只绑 main 与 v* Tag（见 §6.4）。canny_dev 等开发分支只跑 build+lint，
+# 不进入本工作流；其 build+lint 由各自专用 workflow 负责，不在本文件内重复。
+concurrency:
+  group: version-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # =========================================================================
+  # Job 1：PR 门禁 —— 代码路径变更时要求 CHANGELOG 或 version 变更
+  # =========================================================================
+  pr-gate:
+    name: PR 门禁（代码路径变更需 CHANGELOG/version 同行）
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出
+        # 第三方 Action 固定到 commit SHA（供应链安全，§6.4 / §9）
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          fetch-depth: 0
+
+      - name: 判定变更范围
+        id: scope
+        shell: bash
+        run: |
+          # 代码路径（触发版本/CHANGELOG 门禁）；按需增删
+          CODE_PATHS="app/ web/ server/ gradle/ build.gradle settings.gradle"
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD || git diff --name-only HEAD~1 HEAD)
+          echo "changed files:"
+          echo "$CHANGED"
+          echo "$CHANGED" | tr ' ' '\n' > /tmp/changed.txt
+
+          code_touched=0
+          for p in $CODE_PATHS; do
+            if grep -q "^$p" /tmp/changed.txt; then code_touched=1; break; fi
+          done
+          echo "code_touched=$code_touched" >> "$GITHUB_OUTPUT"
+
+          # 是否动了 CHANGELOG 或 version
+          changelog_touched=$(grep -c '^CHANGELOG.md$' /tmp/changed.txt || true)
+          version_touched=$(grep -c 'app/build.gradle$' /tmp/changed.txt || true)
+          echo "changelog_touched=$changelog_touched" >> "$GITHUB_OUTPUT"
+          echo "version_touched=$version_touched" >> "$GITHUB_OUTPUT"
+
+      - name: 门禁校验
+        if: steps.scope.outputs.code_touched == '1'
+        shell: bash
+        run: |
+          if [ "${{ steps.scope.outputs.changelog_touched }}" != "0" ] || \
+             [ "${{ steps.scope.outputs.version_touched }}" != "0" ]; then
+            echo "✓ 代码路径变更已附带 CHANGELOG 条目或 version 变更，门禁通过。"
+          else
+            echo "✗ 代码路径有变更，但既未改 CHANGELOG.md 也未改 app/build.gradle 的 version。"
+            echo "  请同步更新 CHANGELOG（Unreleased 段）或 bump version，详见 docs/version-log-governance.md §6.1。"
+            exit 1
+          fi
+
+      - name: 豁免说明
+        if: steps.scope.outputs.code_touched != '1'
+        shell: bash
+        run: echo "本 PR 未触及代码路径，门禁豁免（纯文档/内容/CI 变更）。"
+
+  # =========================================================================
+  # Job 2：Tag / version 一致性校验（发布前红线）
+  # 接入点：release-please / git-cliff 在打 Tag 前应先完成 version bump 与 CHANGELOG 生成。
+  # =========================================================================
+  tag-version-consistency:
+    name: Tag 与 version 一致性校验
+    # 只在打 v* Tag 或发布时跑；main 上的普通 push 不触发（避免误报）
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      - name: 解析 Gradle version（真源）
+        id: gradle
+        shell: bash
+        run: |
+          # 从 app/build.gradle 取 project 级 version；排除 toolVersion 等相似字段
+          VER=$(grep -m1 -E "^[[:space:]]*version[[:space:]]*[:=]" app/build.gradle \
+                | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+          echo "gradle_version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Gradle 真源 version = $VER"
+
+      - name: 解析 Tag 并校验
+        id: tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"                 # 例如 v0.8.6
+          TAG_NO_V="${TAG#v}"                       # 0.8.6
+          GRADLE="${{ steps.gradle.outputs.gradle_version }}"
+          echo "tag=$TAG  tag_no_v=$TAG_NO_V  gradle=$GRADLE"
+          if [ -z "$GRADLE" ]; then
+            echo "✗ 未能解析 Gradle version，中止发布。" && exit 1
+          fi
+          if [ "$TAG_NO_V" != "$GRADLE" ]; then
+            echo "✗ Tag($TAG_NO_V) 去掉 v 后 ≠ Gradle version($GRADLE)，中止发布。"
+            echo "  发布四件套要求 version bump → CHANGELOG → Tag → Release 原子化（§5/§6.2）。"
+            exit 1
+          fi
+          echo "✓ Tag 与 version 一致（$TAG_NO_V）。"
+
+      # 同时校验派生文件（VERSION / package.json）与真源一致
+      - name: 校验派生文件一致性
+        shell: bash
+        run: |
+          GRADLE="${{ steps.gradle.outputs.gradle_version }}"
+          fail=0
+          if [ -f "../VERSION" ]; then
+            VV=$(tr -d 'v' < ../VERSION | tr -d '[:space:]')
+            [ "$VV" = "$GRADLE" ] && echo "✓ VERSION=$VV" || { echo "✗ VERSION=$VV ≠ $GRADLE"; fail=1; }
+          fi
+          for pf in package.json ../package.json; do
+            if [ -f "$pf" ]; then
+              pv=$(grep -m1 -E '"version"' "$pf" | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+              [ "$pv" = "$GRADLE" ] && echo "✓ $pf version=$pv" || { echo "✗ $pf version=$pv ≠ $GRADLE"; fail=1; }
+            fi
+          done
+          exit $fail
+
+  # =========================================================================
+  # Job 3：发布后冒烟（/healthz 断言 version == Tag）
+  # 接入点：放在 release-please/git-cliff 完成 Release 创建之后串行执行（§5/§6.3）。
+  # =========================================================================
+  release-smoke:
+    name: 发布冒烟（/healthz 版本断言）
+    needs: [ tag-version-consistency ]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+      # 注：以下 setup-java / gradle / 启动 / 通知等步骤均为骨架，
+      # 真实接入时第三方 Action 须固定到 commit SHA（§6.4 / §9）。
+      - name: 准备 JDK 17（骨架，需固定 SHA）
+        uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedbca3e77
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 构建产物（骨架）
+        shell: bash
+        run: |
+          echo "TODO: npm --prefix web run build && ./gradlew :app:fatJar"
+          # 真实步骤：构建 fatJar / Docker 镜像，作为 Release 产物。
+
+      - name: 启动并断言 /healthz 版本（骨架）
+        shell: bash
+        run: |
+          TAG_NO_V="${GITHUB_REF_NAME#v}"
+          echo "TODO: 启动产物，等待 /healthz 可答后执行："
+          echo "  curl -s http://127.0.0.1:1234/healthz | jq -r .version"
+          echo "  断言返回值 == $TAG_NO_V，不等则判定产物来自旧构建，发布失败。"
+          # 真实实现示例：
+          # node start.mjs --no-open &
+          # for i in $(seq 1 90); do curl -sf http://127.0.0.1:1234/healthz && break; sleep 1; done
+          # HV=$(curl -s http://127.0.0.1:1234/healthz | grep -oE '"version"[ ]*:[ ]*"[^"]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          # [ "$HV" = "$TAG_NO_V" ] && echo "✓ 运行版本=$HV" || { echo "✗ 运行版本=$HV ≠ $TAG_NO_V"; exit 1; }
+
+      # Telegram 通知：continue-on-error，失败不阻断发布（§6.4 / §9）
+      - name: 通知（Telegram，失败不阻断）
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          echo "TODO: 通过 Secrets 注入的 Bot Token 发送发布通知；"
+          echo "      使用 continue-on-error，通知失败不影响发布结果。"

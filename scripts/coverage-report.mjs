@@ -33,6 +33,19 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUT_DIR = path.join(ROOT, 'coverage-report')
 
+/**
+ * 报告上那个版本号从 `app/build.gradle` 现读，不写死。
+ * 从前这里硬编码过 `0.8.3`：版本升到 0.8.5 之后报告还在说 0.8.3，
+ * 一份"看覆盖率"的报告自己就是过期的，谁还敢信它别的数字。
+ * 版本号唯一书写处是 gradle（见 CHANGELOG 顶部与 tools/verify/version-check.mjs），这里只做读者。
+ */
+function appVersion() {
+  try {
+    const gradle = fs.readFileSync(path.join(ROOT, 'app/build.gradle'), 'utf8')
+    return /^\s*version\s*=\s*'([^']+)'/m.exec(gradle)?.[1] ?? '未知版本'
+  } catch { return '未知版本' }
+}
+
 const args = process.argv.slice(2)
 const skipRun = args.includes('--skip-run')
 const wantJson = args.includes('--json')
@@ -271,7 +284,7 @@ function writeHtml(backend, frontend, combined) {
   .note { background:#f8f9fa; border-left: 3px solid #dadce0; padding: 10px 14px; margin: 20px 0; font-size: 13px; color:#444; }
 </style></head><body>
 <h1>青阅 · 覆盖率总报告</h1>
-<div class="meta">生成时间 ${new Date().toLocaleString('zh-CN')} · 版本 0.8.3</div>
+<div class="meta">生成时间 ${new Date().toLocaleString('zh-CN')} · 版本 ${appVersion()}</div>
 
 ${combined ? `<div class="big">
   <div><div class="n">${combined.lines.pct}%</div><div class="l">整体行覆盖（前后端合计 ${combined.lines.total} 行）</div></div>
@@ -304,7 +317,7 @@ function writeSummary(backend, frontend, combined) {
   const lines = []
   lines.push('# 覆盖率摘要')
   lines.push('')
-  lines.push(`> 生成时间 ${new Date().toLocaleString('zh-CN')} · 版本 0.8.3`)
+  lines.push(`> 生成时间 ${new Date().toLocaleString('zh-CN')} · 版本 ${appVersion()}`)
   lines.push('')
   if (combined) {
     lines.push(`**整体行覆盖 ${combined.lines.pct}%**（${combined.lines.covered}/${combined.lines.total} 行）`)

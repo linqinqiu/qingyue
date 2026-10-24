@@ -15,7 +15,7 @@
 - `SubscriptionService`：订阅更新
 - `CoverCache`：封面缓存
 
-这些对象就是 139 个 HTTP 端点背后那同一批实例。AI 调用它们 == 端点调用它们，
+这些对象就是 142 个 HTTP 端点背后那同一批实例。AI 调用它们 == 端点调用它们，
 **没有第二条实现路径**，也就不会出现「AI 能改、界面改不了」或反过来这种分裂。
 
 **关键约束（来自 `web/test/ApiCatalog.test.ts`）：** 那份判据逐条比对 `http/` 目录的路由文件与
@@ -30,7 +30,7 @@ app/src/main/kotlin/io/legado/ai/
 ├── Agent.kt          // 编排：能力清单 / 执行单工具 / 规划 / LLM 钩子占位
 ├── AgentCatalog.kt   // 读 agent-api.json，生成给 AI 看的能力说明
 ├── Guardrails.kt     // 护栏：拒绝公网绑定 / 写前确认 / 版本冲突转译
-├── BuiltinTools.kt   // 内置工具清单（~39 个，覆盖现有服务层）
+├── BuiltinTools.kt   // 内置工具清单（54 个，覆盖现有服务层）
 ├── ToolRegistry.kt   // ★ 工具注册表：运行时增删工具，替代硬编码 listOf
 ├── ToolHooks.kt      // ★ 生命周期钩子：before / after / onError 四个介入点
 ├── AgentConnection.kt// ★ 程序内部"连接 API"句柄：call / manifest（同步，不增路由）
@@ -39,11 +39,11 @@ app/src/main/kotlin/io/legado/ai/
 
 > **内容 / 框架边界**：`ai/` 是「可覆盖的默认内容容器」（类比前端 `features/`），与 `plugin/`
 > （纯框架容器，内容无关）不同。两者都**不注册任何 HTTP 路由**（Ktor 路由只从 `http/` 装配），
-> 所以 139 端点计数不动。`ai/` 里的 `OpenAiCompatibleProvider` / `BuiltinTools` / `FirstProfileSelector`
+> 所以 142 端点计数不动。`ai/` 里的 `OpenAiCompatibleProvider` / `BuiltinTools` / `FirstProfileSelector`
 > 只是默认实现，全部可插拔（外部 provider / 工具 / 选择器用新 id 注册、`replace` 覆盖、`unregister`
 > 摘掉）。这条边界由 `FrameworkContractTest`（`@Tag("framework-contract")`，钉进 `verifyFramework`
 > 与 `check`）守住：默认只含 `openai-compatible` 与 `FirstProfileSelector`、重复 id 被拒、
-> 内置工具默认不可删、`agent-api.json` 契约 139/19/8。详见 `docs/plugin-framework.md` §0.1。
+> 内置工具默认不可删、`agent-api.json` 契约 142/19/8。详见 `docs/plugin-framework.md` §0.1。
 
 ## 2. 核心类型（`AgentContext.kt`）
 
@@ -102,13 +102,19 @@ AI 能改库，所以每一条写路径都要先过护栏：
 任何"意图把监听搬出本机"或"不经确认就破坏"的调用，都会在框架层被拦下，
 不会真的落到 `Database`。
 
+> **别把入站和出站混了。** 上表 `refuseExternalBind` 管的是**入站**——服务自己绑哪个地址（只许回环）。
+> AI **出站**连模型走的是另一道闸：`OpenAiCompatibleProvider.assertPublicBaseUrl()` →
+> `NetworkSecurity.resolveAndValidateSafeHttpTarget()`，它**连回环也拒**（`isLoopbackAddress` 直接抛）。
+> 所以 `baseUrl` 填 `127.0.0.1` / `localhost` / 私网段，调用时一律 `400 invalid_request`，
+> 本机跑的模型（Ollama 等）默认接不进来。
+
 ## 4. 能力清单（`AgentCatalog.kt` + `BuiltinTools.kt`）
 
 `AgentCatalog.loadEndpoints()` 直接读 `agent-api.json`（与 `/api/catalog` 同一份文件），
 把它变成给 AI 看的、带 `version` 注记的文本说明。这样 **AI 看到的能力面 == 1234 交付的
 能力面**，不会因为另写一套而漂走。
 
-`BuiltinTools.all()` 注册约 43 个工具，按面分组，每个都只是把参数转成一次既有服务调用：
+`BuiltinTools.all()` 注册 54 个工具，按面分组，每个都只是把参数转成一次既有服务调用：
 
 - **书源**：列举 / 取单条 / 校验草稿 / 写库（带版本乐观锁）/ 删除 / 批量整理 / 导入 / 自定义排序
 - **净化规则**：列举 / 增删改 / 切换启用 / 导入
@@ -228,7 +234,7 @@ val conn = AgentModule.connect(database, runner, coverCache, subscriptions, regi
    直接调用 `agent.runTool(...)` 的演示逻辑，仅供本地排查，不对外暴露。
 
 要让人/脚本以「AI 客户端」方式驱动这台服务，仍然走 `GET /api/catalog` 拿契约、
-走既有 139 个端点执行——进程内 `Agent` 是给"服务自己内嵌的自动化/智能体"用的同一条路径。
+走既有 142 个端点执行——进程内 `Agent` 是给"服务自己内嵌的自动化/智能体"用的同一条路径。
 
 ## 6.5 连接自己的配置（`options`）
 
@@ -262,7 +268,7 @@ val conn = AgentModule.connect(database, runner, coverCache, subscriptions, regi
 
 ## 7. 当前边界（骨架阶段只到这）
 
-- 已就位：连接句柄 `AgentConnection`、进程接线 `AgentModule`（默认关闭）、能力清单、护栏、~39 个工具、异常兜底、目录读取、两套运行验证。
+- 已就位：连接句柄 `AgentConnection`、进程接线 `AgentModule`（默认关闭）、能力清单、护栏、54 个工具、异常兜底、目录读取、两套运行验证。
 - **基础设施三件套（0.8.2 结构重排补，让框架"提供更多可能"）**：
   - `ToolRegistry` —— 工具面从硬编码 `listOf(...)` 变成**运行时可变**：外部可以 `register` / `unregister`
     自己的工具，不改框架源码、不重编译。三条不变量：id 唯一（重复注册默认拒绝，要覆盖得显式

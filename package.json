@@ -1,6 +1,6 @@
 {
   "name": "legado",
-  "version": "0.8.4",
+  "version": "0.8.6",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Legado (开源阅读) Headless Server & Modern Web Reader",
@@ -31,7 +31,12 @@
     "coverage": "node scripts/coverage-report.mjs",
     "coverage:report-only": "node scripts/coverage-report.mjs --skip-run --json",
     "docs:api": "node scripts/gen-api-reference.mjs",
-    "docs:api-check": "node scripts/gen-api-reference.mjs --check"
+    "docs:api-check": "node scripts/gen-api-reference.mjs --check",
+    "changelog": "node scripts/changelog.mjs",
+    "changelog:dry": "node scripts/changelog.mjs --dry-run",
+    "changelog:check": "node scripts/changelog.mjs --check",
+    "hooks:install": "node scripts/install-hooks.mjs",
+    "prepare": "node scripts/install-hooks.mjs"
   },
   "repository": {
     "type": "git",

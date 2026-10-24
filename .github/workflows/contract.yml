@@ -1,7 +1,7 @@
 name: 框架守门（契约双锁）
 
 # 钉死"框架只立稳固钩子、内容交外部"的两条硬约束：
-#   前端双锁 —— web/test/ApiCatalog.test.ts（139 端点 / 19 组 / AI 自定义接入 8 条，不漂）
+#   前端双锁 —— web/test/ApiCatalog.test.ts（端点总数与分组数的绝对计数断言 + AI 自定义接入 8 条，不漂）
 #              + web/test/FrameworkHasNoContent.test.ts（内容→框架方向，容器不反向依赖）
 #   后端守门 —— :app:verifyFramework（plugin/ 容器不夹带具体功能 + 端点计数契约）
 #   文档第三锁 —— scripts/gen-api-reference.mjs --check（agent-api.json ↔ docs/API-REFERENCE.md）
@@ -33,6 +33,23 @@ jobs:
         run: npm --prefix web install --no-audit --no-fund
       - name: 跑前端判据（含 ApiCatalog / FrameworkHasNoContent 双锁）
         run: npm --prefix web test
+
+  changelog-gate:
+    name: 更新日志不漏记（feat/fix 必须有用户可见条目）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        # 边界要看"最后一笔动过 CHANGELOG 的提交"，浅克隆会把这条边界切掉，
+        # 于是把已记录的提交误报成漏记。拉全历史（这仓库不大）。
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      # 第四把锁：提交是日志的唯一事实来源，那么"有 feat/fix 却没进日志"就该红。
+      # 少了这一条，"自动更新日志"只剩一个可选脚本，没人会被拦。
+      - name: 有该记而没记的改动就失败
+        run: node scripts/changelog.mjs --check
 
   backend-gate:
     name: 后端守门（框架不夹带内容 + 端点计数契约）

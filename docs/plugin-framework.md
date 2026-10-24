@@ -25,7 +25,7 @@
 都是夹带。前端没有统一实验容器，每个成熟功能（更新日志/备份/关于/阅读记录/书源体检/插件）
 各自是 `AppModal` 浮层（`features/modal` 约定），与插件并列。
 
-两边都**不注册 HTTP 路由**，所以 `/api/catalog` 的端点计数恒定（139 条），
+两边都**不注册 HTTP 路由**，所以 `/api/catalog` 的端点计数恒定（142 条），
 既有门禁不受影响。
 
 ### 0.1 后端的内容 / 框架边界（契约化）
@@ -36,7 +36,7 @@
 |---|---|---|---|
 | `app/src/main/kotlin/io/legado/plugin/` | **纯框架容器**：`Plugin` / `PluginManager` / `EventBus` / `AppEvents` | **绝不**含任何业务 | 0 条 |
 | `app/src/main/kotlin/io/legado/ai/` | **内置 AI 接入**（类比 `features/`）：默认 provider / 默认工具 / 默认选择器 | 可含**可覆盖**的默认内容 | 0 条 |
-| `app/src/main/kotlin/io/legado/http/` | 路由装配点 | 仅装配 | 139 条（唯一的路由来源） |
+| `app/src/main/kotlin/io/legado/http/` | 路由装配点 | 仅装配 | 142 条（唯一的路由来源） |
 
 要点：
 
@@ -47,7 +47,7 @@
   外部 provider / 工具 / 选择器可用新 id 注册、用 `replace` 覆盖、用 `unregister` 摘掉；
   框架只立 `LlmProvider` / `Tool` / `ConnectionSelector` 这几个形状，**不认识任何一家具体协议**。
 - **两个容器都不注册任何 HTTP 路由**（`ai/AgentModule.kt` 注释已写明「不调用 `routing { }`」），
-  Ktor 路由只从 `http/` 装配，因此 139 端点计数稳定。
+  Ktor 路由只从 `http/` 装配，因此 142 端点计数稳定。
 
 这套边界由 `FrameworkContractTest`（带 `@Tag("framework-contract")`）落地，并接入 Gradle
 `verifyFramework` 任务、再 `check.dependsOn verifyFramework`，**每次构建都跑**；破坏以下任一
@@ -57,7 +57,7 @@
 2. `ConnectionSelectorRegistry` 默认只含 `FirstProfileSelector`（首连接优先），
    命名类外部策略可增删、同名被拒；
 3. `ToolRegistry` 接受外部工具、默认拒绝删除内置工具；
-4. `agent-api.json` 契约 = 139 端点 / 19 组 / `AI 自定义接入` 8 条；
+4. `agent-api.json` 契约 = 142 端点 / 19 组 / `AI 自定义接入` 8 条；
 5. `plugin/` 与 `ai/` 目录扫描不出任何 Ktor 路由装配（`import io.ktor.server.routing` /
    `routing {` / `route(`）。
 
@@ -293,7 +293,8 @@ frontendPlugins.register({
 
 - 工具清单来自 `ToolRegistry`，所以**插件注册的工具自动对模型可见**，不必为每个插件
   单独写 AI 集成
-- 最多 6 轮（`Agent.MAX_TOOL_ROUNDS`），防止模型无限"我再查一个"
+- 默认 6 轮，可用 `LEGADO_AI_MAX_TOOL_ROUNDS` 调整（`AppConfig.aiMaxToolRounds`，范围 1–20），
+  防止模型无限"我再查一个"
 - 工具执行走 `runTool`，护栏、钩子全部照常生效
 - 任何一轮失败都返回明确错误（409/502），不伪造回答；响应里带 `toolRounds` 让用户看到执行了什么
 - provider 侧：`LlmProvider.chatWithTools` 默认退化为纯对话，老 provider 零改动；

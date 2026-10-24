@@ -18,6 +18,11 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const gradle = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+// 命令都交给 shell 跑（见文件头那条 DEP0190 的说明），所以这里必须用**当前这个 node 进程自己的
+// 可执行文件路径**而不是写字面量 `node`：PATH 上没有 node 时（某些 Windows 装法、CI 的
+// 非 nvm 环境）写字面量会直接"找不到命令"，而 process.execPath 永远指得回来。
+// 路径可能带空格（`C:\Program Files\nodejs\node.exe`），所以整串里要加引号。
+const node = `"${process.execPath}"`;
 
 const tasks = {
   // 顺序不能倒：processResources 是在 fatJar 那一步把 web/dist 拷进 jar 的。
@@ -26,8 +31,12 @@ const tasks = {
     ['2/2 后端 fatJar（内嵌 web/dist）', `${gradle} :app:fatJar`],
   ],
   test: [
-    ['1/2 前端用例', 'npm --prefix web test'],
-    ['2/2 服务端用例', `${gradle} :app:test`],
+    // 顺序有意：先查"有没有该记的改动没进日志"。它最快（读几行 git 输出），
+    // 而且失败信息是**给人看的下一步动作**（跑一次 node scripts/changelog.mjs），
+    // 放在两端用例之后就会被一堆测试输出盖掉。
+    ['0/3 更新日志没漏记', `${node} scripts/changelog.mjs --check`],
+    ['1/3 前端用例', 'npm --prefix web test'],
+    ['2/3 服务端用例', `${gradle} :app:test`],
   ],
 };
 

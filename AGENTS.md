@@ -83,7 +83,16 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/sources \
 行为（必须有外部模型）：
 - **已登记外部连接** → 走该 openai-compatible 模型，返回 `engine: "external:<连接id>"` + `summary`（模型原文）。
 - **没有任何外部连接** → `409 no_connection`，不返回摘要。**没有本地抽取兜底。**
-- **外部调用失败（超时/不可达/非 2xx/解析失败）** → `502 upstream_unreachable`，不返回摘要。
+- **地址被出站闸门拒绝 / 地址不合法**（内网、本机、非 HTTP(S)）→ `400 invalid_request`，
+  并把闸门那句中文原样带回 `message`。这是**客户端能自己修**的一类，不该混进 502。
+- **外呼失败（连不上 / 域名解析不了 / 非 2xx / 没返回内容）** → `502 upstream_unreachable`，不返回摘要。
+
+> 这条 400/502 的分界是 0.8.6 补的，之前是一处真缺陷：`AgentRoutes.outcomeStatus()` 压根没有
+> `invalid_request` 分支，于是填了内网地址的用户看到 `500`，去翻服务端日志；而填错的域名
+> （DNS 都解析不了）与"上游挂了"共用同一个异常类型，也一律被说成"连不上"。
+> 判据在 `app/src/test/kotlin/io/legado/AgentErrorClassHttpTest.kt`：
+> 它起真服务验**状态码与那句话**，而不是只断言 provider 抛了什么异常。
+> `comprehend` 与 `chat` 两条路径的分类必须一致（从前不一致：同一内网地址一个 500、一个 502）。
 
 > ⚠️ 多连接时的选择规则：默认 `FirstProfileSelector`（见 `ai/ConnectionSelector.kt`）取 `agent-profiles.json` 里**第一个**连接（按文件顺序）。
 > 只要这个「第一个」连接存在，无论后面还有多少可用连接，都只走它；它不可达就直接报错，**不会自动顺延到下一个连接**。
@@ -119,6 +128,12 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/connections \
 该字段连同 `builtin-stub` 连接类型一起删了（老配置里若还有 `builtin-stub` 记录，读配置时会被
 跳过并留一行日志，其余连接照常恢复）。
 
+> ⚠️ 上面这个 `baseUrl` 用的是回环地址（本机 mock / Ollama / LM Studio 就只有这种地址可填），
+> 而**登记这一步不校验地址**（`agentCreateConnection` 只校验 name 与 kind），所以它会返回 200 ——
+> 真正的拒绝发生在**外呼那一刻**：默认配置下返回 `400 invalid_request` + 闸门那句中文。
+> 要接本机模型，服务侧先设 `LEGADO_AI_ALLOW_LOOPBACK_BASEURL=1`（只放回环，且仍硬拒打到服务自己）。
+> 0.8.6 之前这里更坑：同一件事返回的是 `500`，于是人去翻服务端日志而不是改自己填的地址。
+
 ### 5.2 配置文件预设
 
 在 `agent-profiles.json`（运行时由 `LEGADO_HOME` 指定，默认 `.`）写入：
@@ -147,7 +162,8 @@ curl -s -X POST http://127.0.0.1:1234/api/agent/connections \
 
 ## 6. 一致性闸门（给维护者）
 
-`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（当前全量契约：139 条端点 / 19 组，其中本组 8 条属于 `AI 自定义接入` 组；版本号见 `app/build.gradle` 的 `version`）。
+`web/test/ApiCatalog.test.ts` 是双向核对闸门：`http/AgentApiRoutes.kt` 里本组 8 个 `route("agent")` 端点，**必须同时**原样镜像到 `resources/agent-api.json`，且二者数量一致（其中本组 8 条属于 `AI 自定义接入` 组；版本号见 `app/build.gradle` 的 `version`）。
+**全量条数不在这里写**：权威值只有 `ApiCatalog.test.ts` 里那一条绝对计数断言（改端点时会逼你更新它），文档抄一份必然滞后 —— 这句从 139 一路错过到 142。
 **改动 `/api/agent/*` 时禁止动既有路由数量、路径、分组**；新增端点要同时在两处登记。运行：
 
 ```bash
@@ -160,10 +176,20 @@ npx tsx test/ApiCatalog.test.ts   # 期望 3/3 PASS
 - 1234 服务：`gradlew :app:run`，环境变量 `LEGADO_HOST=127.0.0.1 LEGADO_PORT=1234 LEGADO_DATA_DIR=<数据目录> LEGADO_HOME=<dir>`，并加 `-Dai.debug`（或环境变量 `JAVA_OPTS=-Dai.debug`）启用外部网关句柄。
 - **交互入口（已改版）**：设置 → 「AI 接入」→ 打开「AI 接入 · 对话助手」面板。主形态就是**对话**：在输入框说话，消息走 `POST /api/agent/chat`；**必须先登记外部模型（openai-compatible）**，没有连接时输入框禁用、状态显示「未连接外部模型，AI 不可用」。连接登记与书源只读校验收进同面板底部的「连接与工具」折叠区。**没有也不再有独立的 `agent.html` 页面**（已删除，仅保留 SPA 设置入口）。
 - 注意：根路径 `http://127.0.0.1:1234/` 是青阅**阅读器主应用**（书架/书源/阅读），与 `/api/agent/*` 这套 AI 接入无关；AI 接入的对话入口是上面设置面板里的「AI 接入」。
-- 端到端（已实测，三条路径全过）：
-  1. **外部命中（chat）**：起一个 mock openai-compatible（默认 `:5591`，沙箱禁绑 5599）→ 注册为第一个外部连接 → `/api/agent/chat` 返回 `engine:"external:<id>"` + 模型原文回复。
-  2. **外呼失败（chat）**：把第一个外部连接指向不可达地址（如 `:6555`）→ `/api/agent/chat` 返回 `502 upstream_unreachable`，没有回答文本。
-  3. **没有连接（chat）**：删光外部连接 → `/api/agent/chat` 返回 `409 no_connection`，不再有本地说明冒充回答。
+- 端到端（0.8.6 重测，四条路径各自都验过状态码与文案）：
+  1. **没有连接（chat）**：删光外部连接 → `409 no_connection`，不再有本地说明冒充回答。
+  2. **地址被闸门拒（chat / comprehend）**：登记 `baseUrl=http://127.0.0.1:5591/v1`（默认配置不放回环）
+     → 两条路径都返回 **`400 invalid_request`**，`message` 里带闸门原话"拒绝访问内网或本机地址"。
+     ⚠️ 本文件旧版这里写的是"`engine:"external:<id>"` + 模型原文"，那是回环闸门加入**之前**的结果，
+     照着做必然失败 —— 起好 mock、登记成功（登记不校验地址）、一发 chat 就被拒。
+     要用本机 mock / Ollama / LM Studio 跑通这一条，服务侧先设 `LEGADO_AI_ALLOW_LOOPBACK_BASEURL=1`；
+     它只放回环，并且**仍然硬拒打到服务自己那个 host:port**（否则不带 Origin 的出站请求等于绕过唯一的写保护）。
+  3. **公网不可达 / 域名解析不了** → `502 upstream_unreachable`，`message` 带上是真因
+     （"无法解析 xxx 域名"与"连不上"不再共用同一句套话）。
+  4. **外部命中**（公网地址，或按 2 开了回环口子）→ `engine:"external:<id>"` + 模型原文；
+     工具调用闭环另见 `AgentToolCallingTest`。
+- 判据在 `AgentErrorClassHttpTest.kt`：它起真服务断言**状态码 + 那句中文**，
+  而不是只断言 provider 抛了什么异常 —— 上一轮就是"单测全绿、HTTP 层没人验"才让这三类顶包 bug 发出去的。
 - 注意中文请求体务必以**无 BOM 的 UTF-8** 发送，否则 kotlinx 解析会把字段读空（这是调用方编解码问题，不是网关 bug）。
 
 ## 8. 状态显示：显示状态 + 实测便携状态

@@ -51,11 +51,14 @@ for (const ep of endpoints) {
 const cell = (text) => String(text ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
 
 // 生成时间只影响首行那一个字段。`--check` 若把它算进去，文档隔天就会"不一致"，
-// 于是门禁天天红、天天要重跑一次生成器 —— 那等于没有门禁。所以比对时把这一行剔掉，
-// 只认实质内容（端点、分组、写门、说明）。
-// 注意别在这条正则末尾加 `$` 之外的宽松锚：这里用「行首 + 日期收尾」双条件，
-// 避免把端点说明里碰巧含"生成时间"的行也一起剔掉，那会让门禁漏报真漂移。
-const GENERATED_AT = /^> 版本：.+· 端点数：\d+ · 生成时间：\d{4}-\d{2}-\d{2}$/;
+// 于是门禁天天红、天天要重跑一次生成器 —— 那等于没有门禁。
+//
+// 但**只能归一化日期那一段，不许把整行剔掉**：上一版写的就是"过滤掉这一行再比"，
+// 而那一行同时带着「版本：x.y.z」与「端点数：N」—— 整行剔除等于这两项也不比了。
+// 实测后果：把 agent-api.json 的版本从 0.8.5 改成 0.8.6，`--check` 照样报"文档一致"，
+// 而文档还写着 0.8.5 —— 这正是本项目反复栽过的"全绿但文档骗人"，只是这次骗人的是门禁自己。
+const GENERATED_AT_DATE = /生成时间：\d{4}-\d{2}-\d{2}/;
+const normalizeGeneratedAt = (text) => text.replace(GENERATED_AT_DATE, '生成时间：<日期>');
 
 const lines = [];
 lines.push('# 青阅 API 参考');
@@ -117,12 +120,9 @@ for (const name of groups) {
 // 否则每次生成都会把全文行尾翻一遍，diff 里看不出真正的改动。
 const output = lines.join('\r\n') + '\r\n';
 const existing = fs.existsSync(TARGET) ? fs.readFileSync(TARGET, 'utf8') : null;
-// 剔掉「生成时间」那一行再比：见上方 GENERATED_AT 的说明。
-const stripGeneratedAt = (text) =>
-  text.split(/\r?\n/).filter((line) => !GENERATED_AT.test(line)).join('\n');
 
 if (checkOnly) {
-  if (stripGeneratedAt(existing ?? '') !== stripGeneratedAt(output)) {
+  if (normalizeGeneratedAt(existing ?? '') !== normalizeGeneratedAt(output)) {
     console.error('[gen-api-reference] docs/API-REFERENCE.md 与 agent-api.json 不一致，重跑 `node scripts/gen-api-reference.mjs`');
     process.exit(1);
   }
