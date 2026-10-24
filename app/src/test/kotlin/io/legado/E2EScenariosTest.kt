@@ -215,17 +215,24 @@ class E2EScenariosTest {
 
             // Wait for 2,000 chapters to finish caching.
             //
-            // 这里原来只给 20s，是一条**对机器负载过于敏感**的断言：2000 章要按
-            // CACHE_CONCURRENCY 分批，每批一次 runner.content + 一次 sqlite 写，
-            // 慢盘/杀软/同时跑别的测试时会稳定超时（本地实测多次复现，且在
-            // tools/verify/baselines/server-test-failures-47.txt 里挂了很久）。
-            // 判据要判的是「最终能不能全部缓存完」，不是「多快缓存完」，
-            // 所以超时放宽到 120s，并在失败时把真实进度打出来 —— 否则只看到
-            // "Condition not met within 20000ms"，分不清是卡死还是慢。
-            waitForCondition(120_000, describe = {
-                val s = database.listBookshelf().singleOrNull()
-                "cacheState=${s?.cacheState} cached=${s?.cachedChapters}/${s?.totalChapters}"
-            }) {
+            // 判据要判的是「最终能不能全部缓存完」，不是「多快缓存完」。
+            // 这里从前是固定墙钟（先 20s、后放宽到 120s，见 tools/verify/baselines/
+            // server-test-failures-47.txt），2026-10-24 本机在并发跑其他判据时又红了：
+            // 120s 到点缓到 1457/2000 —— 进度一直在动，只是机器被压满。
+            // 换成「进度还在推进就不算超时」：慢盘 / 杀软 / 抢 CPU 时多等一会儿，
+            // 真卡死（进度停住超过 60s）仍然立刻红，并且把「停在哪」打进错误里。
+            waitWhileProgressing(
+                stallMs = 45_000,
+                hardCapMs = 300_000,
+                progress = {
+                    val s = database.listBookshelf().singleOrNull()
+                    "${s?.cacheState}/${s?.cachedChapters}"
+                },
+                describe = {
+                    val s = database.listBookshelf().singleOrNull()
+                    "cacheState=${s?.cacheState} cached=${s?.cachedChapters}/${s?.totalChapters}"
+                },
+            ) {
                 database.listBookshelf().single().cacheState == "ready"
             }
 
@@ -528,9 +535,56 @@ class E2EScenariosTest {
             if (condition()) return
             delay(20)
         }
+        throw stalled(timeoutMs, neverAdvanced = true, describe = describe)
+    }
+
+    /**
+     * **只要还在推进就不算超时**的等待：[progress] 每次变化就把截止点往后推 [stallMs]，
+     * 但总不超过 [hardCapMs]（真卡死仍要失败，不能挂到 CI 超时）。
+     *
+     * 为什么要有这一条：上一版把判据的墙钟从 20s 放宽到 120s，注释里写的是
+     * 「判据要判的是最终能不能全部缓存完，不是多快缓存完」—— 但**实现仍然是固定墙钟**，
+     * 那句话并没有落地。实测 2026-10-24 本机在并发跑其他判据时，120s 到点只缓到 1457/2000：
+     * 进度一直在动，纯粹是机器被压满。墙钟数字调多大都只是把偶然往后挪，
+     * 换成"停滞才算失败"才是那条注释的语义：慢机器多等一会儿，卡死的照样红。
+     */
+    private suspend fun waitWhileProgressing(
+        stallMs: Long,
+        hardCapMs: Long,
+        progress: () -> String,
+        describe: (() -> String)? = null,
+        condition: () -> Boolean,
+    ) {
+        val started = System.currentTimeMillis()
+        var lastProgress = ""
+        var deadline = started + stallMs
+        while (true) {
+            if (condition()) return
+            val now = System.currentTimeMillis()
+            val current = runCatching { progress() }.getOrDefault("")
+            if (current != lastProgress) {
+                lastProgress = current
+                deadline = now + stallMs
+            }
+            if (now >= deadline) {
+                throw AssertionError(
+                    "既没有满足条件、进度也停在同一处超过 ${stallMs}ms（总计 ${now - started}ms，上限 ${hardCapMs}ms）" +
+                        "· 最后进度「$lastProgress」" +
+                        (describe?.let { runCatching { it() }.getOrNull() }?.let { "（当前状态：$it）" } ?: ""),
+                )
+            }
+            if (now - started >= hardCapMs) {
+                throw stalled(hardCapMs, neverAdvanced = false, describe = describe)
+            }
+            delay(50)
+        }
+    }
+
+    private fun stalled(timeoutMs: Long, neverAdvanced: Boolean, describe: (() -> String)?): AssertionError {
         val detail = describe?.let { runCatching { it() }.getOrNull() }?.takeIf { it.isNotBlank() }
-        throw AssertionError(
-            "Condition not met within ${timeoutMs}ms" + (detail?.let { "（当前状态：$it）" } ?: ""),
+        val hint = if (neverAdvanced) "" else "（进度仍在推进，多半是机器被压满而非逻辑卡死）"
+        return AssertionError(
+            "Condition not met within ${timeoutMs}ms$hint" + (detail?.let { "（当前状态：$it）" } ?: ""),
         )
     }
 

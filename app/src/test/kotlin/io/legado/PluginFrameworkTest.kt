@@ -325,4 +325,57 @@ class PluginFrameworkTest {
         assertTrue("默认实现不能被插件覆盖", providers.find("openai-compatible") is io.legado.ai.OpenAiCompatibleProvider)
         assertTrue("撞名要留痕", pm.loadFailures().any { it.reason.contains("已存在") })
     }
+
+    /**
+     * 「插件研究到底怎么处理，要不取消了」（用户 2026-10-23）的落点 —— 保留还是取消，这里给结论：
+     * **保留四个进程内扩展点**（工具注册表 / 生命周期钩子 / LLM provider / 连接选择策略），
+     * 因为 `Agent` 的运行路径真的依赖它们（`Agent.kt` 的 `selectedProfile()` 走 selectorRegistry、
+     * `callExternalHttp()` 走 providerRegistry），全删要重写 Agent；
+     * 但**默认不再扫描 `plugins/` 目录吞 jar**。
+     *
+     * 关它的理由是安全边界而不是"没人用"（虽然 `plugins/` 里实测 0 个 jar、`examples/` 都没入库）：
+     * 装载第三方 jar = 在青阅进程里执行任意代码，而本服务没有账号没有 token、
+     * 唯一边界是"这台机器的文件权限"。装进来的代码读得到 `agent-profiles.json` 里的明文 apiKey、
+     * 能绕过护栏直接改库（`confirm` 只是内置工具自愿调的闭包），它自写的 provider 还完全不过
+     * `NetworkSecurity` 那道出站闸门 —— 上一轮发现的"AI 侧门"缺陷装个插件就能整体绕开。
+     *
+     * 所以这条判据是**反向**的：它钉的是"以后不许有人把无条件扫盘又接回 Application"，
+     * 用静态读源码的方式（与本仓库 `插件不能注册路由` 那条同一手法），不起服务也能跑。
+     */
+    @Test
+    fun `默认不扫盘装 jar 但四个扩展点照旧接得住`() {
+        val application = readRepoFile("app/src/main/kotlin/io/legado/Application.kt")
+        val config = readRepoFile("app/src/main/kotlin/io/legado/AppConfig.kt")
+
+        assertTrue("discoverFrom 必须受开关控制，不许无条件扫盘",
+            Regex("if \\(jarScanEnabled\\)[\\s\\r\\n]{0,60}pluginManager\\.discoverFrom").containsMatchIn(application))
+        assertTrue("开关的键要在 AppConfig 里显式存在", config.contains("LEGADO_PLUGIN_JAR_SCAN"))
+        assertFalse("开关默认必须是关（不许写成 || true 这类默认开）",
+            Regex("val pluginJarScan[\\s\\S]{0,240}?\\|\\|\\s*true").containsMatchIn(config))
+        // 有 jar 却没扫时必须说一句话：静默不装最难查 —— 用户丢进一个 jar、界面上永远是 0，
+        // 他会以为是自己插件写错了。
+        assertTrue("目录里有 jar 而未装载时要留痕", application.contains("但默认不装载外部 jar 插件"))
+        // 四个扩展点一个都不许撤：撤了 Agent 就跑不起来。
+        for (point in listOf(
+            "registry = agentConnection.registry",
+            "hooks = agentConnection.hooks",
+            "providers = agentConnection.providerRegistry",
+            "selectors = agentConnection.selectorRegistry",
+        )) {
+            assertTrue("构造 PluginManager 时要带上 $point", application.contains(point))
+        }
+    }
+
+    /**
+     * 从仓库根读文件文本。`:app:test` 的工作目录是 `legado/app`，
+     * 所以先试模块目录、再试它的上一级（仓库根）—— 两处都能找到就不依赖跑测试时的 cwd。
+     */
+    private fun readRepoFile(relative: String): String {
+        val module = java.io.File(System.getProperty("user.dir"))
+        val file = listOf(module, module.parentFile).filterNotNull()
+            .map { java.io.File(it, relative) }
+            .firstOrNull { it.isFile }
+        assertTrue("找不到 $relative（测的是源码形状，文件不在就说明路径变了）", file != null)
+        return file!!.readText()
+    }
 }

@@ -103,7 +103,7 @@ tasks.register('testCoverageReport', JacocoReport) {
 
 
 group = 'io.legado'
-version = '0.8.4'
+version = '0.8.6'
 
 base {
     // plain jar 与发行版统一叫 legado：Docker 构建层 `jar uf …/lib/legado-*.jar`
@@ -184,6 +184,19 @@ processResources {
             into("meta")
             rename { "changelog.md" }
         }
+    }
+    // **必须把这两个动态 `from` 显式登记成输入。**
+    // `from(...)` 在配置阶段才求值，Gradle 的增量快照有时抓不到它们：
+    // 表现是 `processResources` 被判定 UP-TO-DATE，而 `meta/changelog.md` 还是上一次构建的旧副本
+    // —— 用户看到的现象就是「改了 CHANGELOG，界面里的更新日志没变」（0.8.4 实测踩到）。
+    // 用 `inputs.files(...).withPropertyName(...)` 把它们钉进任务输入，内容一变就重跑。
+    inputs.files("${rootProject.projectDir}/CHANGELOG.md")
+        .withPropertyName("bundledChangelog")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    if (file("${rootProject.projectDir}/web/dist").exists()) {
+        inputs.dir("${rootProject.projectDir}/web/dist")
+            .withPropertyName("bundledWebDist")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
     }
 }
 

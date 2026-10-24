@@ -337,6 +337,18 @@ data class SourceLoginStateRecord(
     val chapterUrl: String,
     val chapterIndex: Int,
     val scrollPosition: Double = 0.0,
+    /**
+     * 逻辑位置模型（P1-T1）：章节内绝对字符偏移（0 基）。
+     * 取代 `scrollPosition` 成为阅读恢复的唯一真相；改字号/翻页后据此二分定位当前位置。
+     * 老客户端不报此字段时为 0，不影响旧流程。
+     */
+    val charOffset: Int = 0,
+    /** 段落锚点：稳定定位用的段落标识（如段落索引或段首哈希），内容重排后辅助回退。可空。 */
+    val paragraphAnchor: String? = null,
+    /** 逻辑位置编码版本，便于后续格式迁移。 */
+    val positionVersion: Int = 1,
+    /** 保存时刻的章节内容校验值（前端提供，如内容哈希）。内容漂移时用于判断 charOffset 是否失效。 */
+    val positionChecksum: String? = null,
     val updatedAt: Long = 0,
 )
 /**
@@ -378,6 +390,14 @@ data class SourceLoginStateRecord(
     val note: String = "",
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
+    /** 书签：只标位置、不写想法（与「划线/笔记」区分）。前端从 GET /api/notes 里按此字段筛出书签。 */
+    val bookmark: Boolean = false,
+    /** 段落锚点（逻辑位置模型 P1-T1）：重排后辅助回退。可空。 */
+    val paragraphAnchor: String? = null,
+    /** 逻辑位置编码版本。 */
+    val positionVersion: Int = 1,
+    /** 保存时刻的章节内容校验值，用于锚点失效检测与模糊重定位。 */
+    val positionChecksum: String? = null,
 )
 @Serializable data class BookNoteWrite(
     val sourceId: String,
@@ -389,9 +409,49 @@ data class SourceLoginStateRecord(
     val endOffset: Int,
     val excerpt: String,
     val note: String = "",
+    val bookmark: Boolean = false,
+    /** 段落锚点（逻辑位置模型 P1-T1）。可空。 */
+    val paragraphAnchor: String? = null,
+    /** 逻辑位置编码版本。 */
+    val positionVersion: Int = 1,
+    /** 保存时刻的章节内容校验值。 */
+    val positionChecksum: String? = null,
 )
 /** 改备注（只改 `note` 这一栏；划线的位置与原文不动）。 */
 @Serializable data class BookNoteUpdate(val note: String = "")
+/**
+ * 本书正文检索命中（搜索本书 feature）：在已缓存的章节正文里按关键词找，
+ * 回「哪一章 + 命中处前后截一段」。只覆盖已离线缓存的章节（没缓存的搜不到）。
+ */
+@Serializable data class BookSearchHit(
+    val chapterUrl: String,
+    val chapterIndex: Int,
+    val title: String,
+    val snippet: String,
+)
+/**
+ * AI 闭环（阅读器 AI 闭环 feature，2026-10）：一本书某一章被 AI 净化/润色后的「覆盖正文」。
+ * 读者选中/整章交给 AI，AI 返回干净正文，落这张表；`GET/POST /api/books/content` 读到覆盖就回它，
+ * 正文实时重载（所见即所得）。`kind` 区分 `ai_clean`（净化）/ `ai_rewrite`（润色）。
+ */
+@Serializable data class ContentProcess(
+    val sourceId: String,
+    val bookUrl: String,
+    val chapterUrl: String,
+    val kind: String,
+    val original: String,
+    val processed: String,
+    val updatedAt: Long,
+)
+/** 写覆盖正文的请求体（落库用）。 */
+@Serializable data class ContentProcessRequest(
+    val sourceId: String,
+    val bookUrl: String,
+    val chapterUrl: String,
+    val kind: String,
+    val original: String,
+    val processed: String,
+)
 @Serializable data class BookshelfWriteRequest(
     val sourceId: String,
     val bookUrl: String,
@@ -436,6 +496,19 @@ data class CachedBookRequest(
     val cachedChapterUrls: List<String>,
     val cachedCount: Int,
     val totalChapters: Int = 0,
+    /**
+     * 已缓存章节的字数（`chapter_url` → 正文字符数）。
+     *
+     * 用户要的「当获取到内容的时候，把章节字数显示在右边」就靠这份数据：只有正文真的
+     * 落库（服务端缓存或读正文时顺手缓存）的章节才有字数 —— 没内容就没有字数可说。
+     * 用 `length(content)` 现算，不另存一列：`book_content_cache` 的行就是内容本身，
+     * 加列要么得维护双写一致性、要么回填历史行，都不如直接量。
+     * SQLite 的 `length()` 对 TEXT 返回**字符数**（不是字节），中文一章 2000 字就报 2000，
+     * 与阅读器里看到的排版字数一致。
+     *
+     * 与 [cachedChapterUrls] 同序同长，调用方也可以按 url 建表查。
+     */
+    val cachedWordCounts: List<Int> = emptyList(),
 )
 @Serializable data class BookshelfItem(
     val sourceId: String,

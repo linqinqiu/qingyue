@@ -1400,17 +1400,48 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         return raw
     }
 
-    private fun String.cleanContent(): String = this        .replace(SCRIPT_BLOCK, "")
-        .replace(STYLE_BLOCK, "")
-        .replace(DIV_BLOCK, "")
-        .replace(BR_TAG, "\n")
-        .replace(P_TAG, "\n")
-        .replace(ANY_TAG, "")
-        .let { org.jsoup.parser.Parser.unescapeEntities(it, false) }
-        .lines()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .joinToString("\n\n")
+    private fun String.cleanContent(): String {
+        // 漫画正文的图是 `![图片](…)` 占位行，而占位行由 `preserveContentImages` 生成在
+        // **`<div>` 内部**（漫画页几乎普遍是"每页图包在一个 div 单元里"）。
+        // 下面的 DIV_BLOCK 会把整个 div 连同内容一起删掉 —— 于是占位行被连图带壳吃掉，
+        // 整章正文变空，最后报「正文规则未提取到内容」（用户：「漫画源当前还不能使用」）。
+        //
+        // 不能简单把 DIV_BLOCK 改成"只剥标签保内容"：`ANY_TAG`（下面几行）本来就已经
+        // 剥掉所有标签，DIV_BLOCK 的**净效果正是"丢弃 div 里的文字"**，那是文本站屏蔽
+        // 广告/推荐位的既有语义，动它会让笔趣阁那类站把侧栏文字灌进正文。
+        //
+        // 所以这里只救图：先把占位行摘成哨兵（不含 `<` `>`，任何标签清洗都碰不到它），
+        // 走完整条清洗，再还原成独占一行的占位。DIV_BLOCK 删块时把块内哨兵留在原地，
+        // 于是"div 里的图保住、div 里的广告文字照旧丢掉"。嵌套 div 的非贪婪半截匹配
+        // 也一并成立：被切成两段的 div，前一段返回哨兵，残壳交给 ANY_TAG。
+        val saved = mutableListOf<String>()
+        val withSentinels = CONTENT_IMG_PLACEHOLDER.replace(this) { match ->
+            val url = match.groupValues[1]
+            val token = "\u0001${saved.size}\u0001"
+            saved += url
+            "\n$token\n"
+        }
+        return withSentinels
+            .replace(SCRIPT_BLOCK, "")
+            .replace(STYLE_BLOCK, "")
+            .replace(DIV_BLOCK) { match ->
+                val kept = SENTINEL.findAll(match.value).map { it.value }.toList()
+                if (kept.isEmpty()) "" else "\n" + kept.joinToString("\n") + "\n"
+            }
+            .replace(BR_TAG, "\n")
+            .replace(P_TAG, "\n")
+            .replace(ANY_TAG, "")
+            .let { org.jsoup.parser.Parser.unescapeEntities(it, false) }
+            .lines()
+            .map { line -> SENTINEL.replace(line.trim()) { m ->
+                // 越界守卫：正文里本来就带 \u0001 数字 \u0001 这种形状（罕见但非零概率）时，
+                // 索引会指向没存过的槽位；取不到就原样丢掉，不能让整章炸掉。
+                val url = m.groupValues[1].toIntOrNull()?.let { saved.getOrNull(it) }
+                if (url == null) "" else "![图片]($url)"
+            } }
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+    }
     private fun String.absolute(base: String): String = try {
         val cleanBase = base.substringBefore("##").substringBefore("#").trim()
         // 规则里常见这种写法：`a.0@href##book\/(.*)\/##https://站点/img/$1.jpg` ——
@@ -1455,6 +1486,14 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         val SCRIPT_BLOCK = Regex("(?i)<script[\\s\\S]*?</script>")
         val STYLE_BLOCK = Regex("(?i)<style[\\s\\S]*?</style>")
         val DIV_BLOCK = Regex("(?i)<div[\\s\\S]*?</div>")
+        /**
+         * `cleanContent` 用来把 `![图片](地址)` 占位行临时换成哨兵的两种正则。
+         * 哨兵形如 `\u0001<序号>\u0001`：不含 `<` `>`，所以 ANY_TAG 剥标签时碰不到它；
+         * 也不含 div/script/style 的任何语法，所以 DIV_BLOCK 删块时它只是块里的一段文本。
+         * 见 [cleanContent] 的注释 —— 这是"漫画图被 div 整块吞掉"的修法。
+         */
+        val CONTENT_IMG_PLACEHOLDER = Regex("!\\[图片]\\(([^)]*)\\)")
+        val SENTINEL = Regex("\u0001(\\d+)\u0001")
         val BR_TAG = Regex("(?i)<br\\s*/?>")
         val P_TAG = Regex("(?i)</?p[^>]*>")
         val ANY_TAG = Regex("<[^>]+>")

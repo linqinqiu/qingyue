@@ -176,12 +176,22 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                 create table if not exists book_group (
                   group_id integer primary key, name text not null, sort_order integer not null default 0, created_at integer not null
                 );
+                -- `chapter_index` 是「这本书里第几章」：本书正文检索要按它排序、命中要能跳章。
+                -- 正文按 URL 存，章号本来属于目录（book_toc_cache），但这张表被检索直接读，
+                -- 不在行上留一份就只能每次去解目录 JSON —— 写入时目录就在手边，落下来更省事。
+                -- 老库缺这一列由 migrateBookContentCache 补，并按目录回填。
                 create table if not exists book_content_cache (
                   source_id text not null, book_url text not null, chapter_url text not null,
+                  chapter_index integer not null default 0,
                   title text, content text not null, cached_at integer not null,
                   primary key (source_id, book_url, chapter_url)
                 );
                 create index if not exists book_content_cache_book_idx on book_content_cache(source_id, book_url);
+                create table if not exists book_content_process (
+                  source_id text not null, book_url text not null, chapter_url text not null,
+                  kind text not null, original text not null, processed text not null, updated_at integer not null,
+                  primary key (source_id, book_url, chapter_url, kind)
+                );
                 create table if not exists book_cache_status (
                   source_id text not null, book_url text not null, total_chapters integer not null default 0,
                   cached_chapters integer not null default 0, state text not null default 'idle',
@@ -271,9 +281,25 @@ class Database(private val path: String) : Closeable, AutoCloseable {
                   chapter_url text, chapter_index integer not null default 0,
                   start_offset integer not null, end_offset integer not null,
                   excerpt text not null, note text not null default '',
+                  bookmark integer not null default 0,
                   created_at integer not null, updated_at integer not null
                 );
                 create index if not exists idx_book_note_book on book_note(source_id, book_url, chapter_index);
+
+                -- 书源体检结论（0.8.5）。以前体检结果只活在浏览器 localStorage 里：
+                -- 服务端看不到，于是「搜索优先搜能用的源」这件事根本无从做起。
+                -- 一场体检跑几十分钟的结论只有体检弹窗自己消费，而最该用它的搜索却拿不到。
+                -- 一个源一行（按 id 覆盖），字段只留搜索排序与界面要用的那些。
+                create table if not exists source_health (
+                  source_id text primary key,
+                  name text not null default '',
+                  ok integer not null default 0,
+                  latency_ms integer not null default 0,
+                  status_category text not null default '',
+                  error text,
+                  checked_at integer not null default 0
+                );
+                create index if not exists idx_source_health_rank on source_health(ok desc, latency_ms asc);
             """.trimIndent())
             // 不再有账号与会话：这台服务不设身份（写操作只留 Guard.kt 的同源闸门）。
             // 老库里的这两张表是死重量，启动时收掉。
@@ -284,6 +310,8 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         migrateBookshelf(db)
         migrateSourceTable(db)
         migrateLegacyCookieJars(db)
+        migrateBookNote(db)
+        migrateBookContentCache(db)
         reclaimFreePages(db)
     }
 
@@ -410,6 +438,19 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         if ("scroll_position" !in columns) {
             db.createStatement().use { it.executeUpdate("alter table reading_progress add column scroll_position real not null default 0") }
         }
+        // 逻辑位置模型（P1-T1）：章节内字符偏移 + 段落锚点 + 编码版本 + 内容校验值。
+        if ("char_offset" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table reading_progress add column char_offset integer not null default 0") }
+        }
+        if ("paragraph_anchor" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table reading_progress add column paragraph_anchor text") }
+        }
+        if ("position_version" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table reading_progress add column position_version integer not null default 1") }
+        }
+        if ("position_checksum" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table reading_progress add column position_checksum text") }
+        }
     }
 
     private fun migrateBookshelf(db: Connection) {
@@ -444,6 +485,88 @@ class Database(private val path: String) : Closeable, AutoCloseable {
         }
         db.createStatement().use {
             it.executeUpdate("update source set has_login = 1 where (payload like '%\"loginUi\"%' or payload like '%\"loginUrl\"%' or payload like '%\"loginCheckJs\"%') and (has_login is null or has_login = 0)")
+        }
+    }
+
+    /** 笔记表加 `bookmark` 列（0.8.x 书签需求）。老库缺列就补，已有就跳过。 */
+    private fun migrateBookNote(db: Connection) {
+        val columns = db.createStatement().use { statement ->
+            statement.executeQuery("pragma table_info(book_note)").use { rs ->
+                buildSet { while (rs.next()) add(rs.getString("name")) }
+            }
+        }
+        if ("bookmark" !in columns) {
+            db.createStatement().use {
+                it.executeUpdate("alter table book_note add column bookmark integer not null default 0")
+            }
+        }
+        // 逻辑位置模型（P1-T1）：段落锚点 + 编码版本 + 内容校验值，配合 char 偏移做失效回退。
+        if ("paragraph_anchor" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table book_note add column paragraph_anchor text") }
+        }
+        if ("position_version" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table book_note add column position_version integer not null default 1") }
+        }
+        if ("position_checksum" !in columns) {
+            db.createStatement().use { it.executeUpdate("alter table book_note add column position_checksum text") }
+        }
+    }
+
+    /**
+     * 缓存正文表加 `chapter_index` 列（本书正文检索要按章号排序、命中要能跳章）。
+     *
+     * 老库缺列就补；补完**必须按目录回填一次** —— 不回填的话历史缓存行的章号全是 0，
+     * 检索命中会统统跳回第 1 章，比搜不到更误导。
+     */
+    private fun migrateBookContentCache(db: Connection) {
+        val columns = db.createStatement().use { statement ->
+            statement.executeQuery("pragma table_info(book_content_cache)").use { rs ->
+                buildSet { while (rs.next()) add(rs.getString("name")) }
+            }
+        }
+        if ("chapter_index" in columns) return
+        db.createStatement().use {
+            it.executeUpdate("alter table book_content_cache add column chapter_index integer not null default 0")
+        }
+
+        // 回填：一本书只解一次目录 JSON，再把这本已缓存的行按 URL 对回章号。
+        val books = buildList {
+            db.createStatement().use { statement ->
+                statement.executeQuery("select distinct source_id, book_url from book_content_cache").use { rs ->
+                    while (rs.next()) add(rs.getString(1) to rs.getString(2))
+                }
+            }
+        }
+        if (books.isEmpty()) return
+        db.prepareStatement(
+            "update book_content_cache set chapter_index = ? where source_id = ? and book_url = ? and chapter_url = ?",
+        ).use { update ->
+            var pending = 0
+            for ((sourceId, bookUrl) in books) {
+                val indexByUrl = readTocChapters(db, sourceId, bookUrl)
+                    ?.associate { it.url to it.index }
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: continue
+                db.prepareStatement(
+                    "select chapter_url from book_content_cache where source_id = ? and book_url = ?",
+                ).use { select ->
+                    select.setString(1, sourceId)
+                    select.setString(2, bookUrl)
+                    select.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val url = rs.getString(1) ?: continue
+                            val index = indexByUrl[url] ?: continue
+                            update.setInt(1, index)
+                            update.setString(2, sourceId)
+                            update.setString(3, bookUrl)
+                            update.setString(4, url)
+                            update.addBatch()
+                            pending++
+                        }
+                    }
+                }
+            }
+            if (pending > 0) update.executeBatch()
         }
     }
 }

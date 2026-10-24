@@ -12,6 +12,7 @@ import io.legado.data.Database
 import io.legado.data.getSource
 import io.legado.data.listExploreSources
 import io.legado.data.listSearchSourceRecords
+import io.legado.data.healthSearchOrder
 import io.legado.model.ApiError
 import io.legado.model.ExploreRequest
 import io.legado.model.SearchRequest
@@ -20,12 +21,16 @@ import io.legado.model.SearchStreamEvent
 import io.legado.rules.RuleRunner
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -48,8 +53,35 @@ fun Route.searchRoutes(
             val request = call.receive<SearchRequest>()
             if (request.keyword.isBlank()) { call.respond(HttpStatusCode.BadRequest, ApiError("invalid_keyword", "请输入搜索关键词")); return@post }
             val sourceRecords = database.listSearchSourceRecords(request.sourceIds)
-            val results = boundedConcurrentMap(sourceRecords, sourceSearchConcurrency()) { source -> readableSearchResults(runner, source.json, request.keyword) }.flatten()
-            call.respond(results)
+
+            // 体检过的源排在前面搜：一场体检跑几十分钟，结论存进 source_health 表后，
+            // 这里按「能用的在前、快的在前」发车。截止时间一样，但先撞上的是好源 ——
+            // 以前 60 秒只能搜完 280 个源且大半是死站，现在同样的时间搜到的可用结果多得多。
+            // 没体检过的源保持原有相对顺序（排在体检过的后面），不因为"没体检"就被歧视。
+            val ordered = orderByHealth(sourceRecords, database.healthSearchOrder())
+            // 带总量截止的收集：到点返回已搜到的部分，而不是无限期挂着。
+            //
+            // 旧写法是 `boundedConcurrentMap(...).awaitAll()` —— 它要等**每一个**源都收尾。
+            // 取值链路是阻塞式 `HttpClient.send()`，单源 30 秒的 `withTimeout` 取消不掉它，
+            // 于是 65 个慢站就能把请求拖过 300 秒（selfcheck 实测红在这里）。
+            val outcome = collectWithDeadline(
+                ordered,
+                sourceSearchConcurrency(),
+                AppConfig.searchTotalTimeoutMs,
+            ) { source -> readableSearchResults(runner, source.json, request.keyword) }
+
+            // 截断要**说出来**，不能静默返回半份结果 —— 调用方分不清"就这么多"与"没搜完"。
+            // 用响应头而不是改回包形状：`List<SearchResult>` 是既有契约，不能动。
+            call.response.header("X-Search-Total", outcome.total.toString())
+            call.response.header("X-Search-Completed", outcome.completed.toString())
+            call.response.header("X-Search-Truncated", outcome.truncated.toString())
+            if (outcome.truncated) {
+                call.application.log.info(
+                    "搜索到点截断：关键词「{}」已搜 {}/{} 个源（上限 {}ms）",
+                    request.keyword, outcome.completed, outcome.total, AppConfig.searchTotalTimeoutMs,
+                )
+            }
+            call.respond(outcome.values.flatten())
         }
         webSocket("/search/stream") {
             // 没有凭据可校验了：流式搜索同样只认"这个连接是不是本机页面发起的"
@@ -206,5 +238,103 @@ internal fun sourceSearchConcurrency(processors: Int = Runtime.getRuntime().avai
 internal suspend fun <T, R> boundedConcurrentMap(values: List<T>, limit: Int, action: suspend (T) -> R): List<R> = coroutineScope {
     val semaphore = Semaphore(limit.coerceAtLeast(1))
     values.map { value -> async { semaphore.withPermit { action(value) } } }.awaitAll()
+}
+
+/** 一次「带截止的收集」的结果：拿到了什么、搜完几个、共几个。 */
+internal data class DeadlineCollection<R>(
+    val values: List<R>,
+    /** 真正跑完的输入条数（不含到点时被取消的）。 */
+    val completed: Int,
+    /** 输入总条数。`completed < total` 说明到点截断了。 */
+    val total: Int,
+) {
+    val truncated: Boolean get() = completed < total
+}
+
+/**
+ * 带总量截止的并发收集 —— 同步 `/api/search` 用它。
+ *
+ * 为什么不能用 `withTimeoutOrNull { boundedConcurrentMap(...) }`：
+ * 本项目的取值链路是**阻塞式** `HttpClient.send()`，它不响应线程中断，
+ * 于是 `withTimeout` 取消不掉正卡在网络上的协程 —— `withTimeoutOrNull` 会一直等
+ * 那些协程真正结束才返回，截止等于没有。
+ *
+ * 所以这里**自己不挂在请求的协程树上等待**：把工作丢进一个独立的 supervisor scope，
+ * 用轮询等到"全部完成或到点"，然后返回**已经收到的**结果。
+ * 到点被取消的任务由阻塞调用自己走完后释放线程 —— 我们不再等它们。
+ *
+ * 代价：到点后仍有一批阻塞线程在收尾（最多 [limit] 个）。这是刻意的取舍：
+ * 宁可让它们自生自灭，也不要把 HTTP 响应无限期挂着。
+ */
+/**
+ * 按体检结论给待搜的书源排先后。
+ *
+ * 三条规则：
+ * 1. **体检通过的排最前**，慢的其后，连不上的最后 —— 截止时间不变，
+ *    但同样的时间先撞上的是能用的源。
+ * 2. **同档内按延迟升序**：快的先搜，早点把结果送出去。
+ * 3. **没体检过的源**排在体检过的之后，且保持原有相对顺序（稳定排序）——
+ *    "没体检"不是"不能用"，不该被歧视，只是没证据表明它该靠前。
+ *
+ * 用 index 做 tie-breaker 保证稳定：Kotlin 的 `sortedWith` 是稳定的，
+ * 但显式带上原下标更耐改（也便于写测试）。
+ */
+internal fun orderByHealth(
+    sources: List<io.legado.model.SourceRecord>,
+    health: Map<String, Pair<Int, Long>>,
+): List<io.legado.model.SourceRecord> {
+    if (health.isEmpty()) return sources
+    // 没体检过的源给一个"比最差还差一点"的分档，让它们排在所有体检过的源之后。
+    val unknownBucket = (health.values.maxOfOrNull { it.first } ?: 1) + 1
+    return sources
+        .withIndex()
+        .sortedWith(
+            compareBy(
+                { (_, source) -> health[source.id]?.first ?: unknownBucket },
+                { (_, source) -> health[source.id]?.second ?: Long.MAX_VALUE },
+                { (index, _) -> index },
+            ),
+        )
+        .map { it.value }
+}
+
+internal suspend fun <T, R> collectWithDeadline(
+    values: List<T>,
+    limit: Int,
+    deadlineMs: Long,
+    action: suspend (T) -> R,
+): DeadlineCollection<R> {
+    if (values.isEmpty()) return DeadlineCollection(emptyList(), 0, 0)
+    if (deadlineMs <= 0) {
+        // 不限制：保持旧行为，老老实实等完。
+        val all = boundedConcurrentMap(values, limit, action)
+        return DeadlineCollection(all, values.size, values.size)
+    }
+
+    val done = java.util.concurrent.atomic.AtomicInteger()
+    val collected = java.util.Collections.synchronizedList(mutableListOf<R>())
+    val work = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    try {
+        val semaphore = Semaphore(limit.coerceAtLeast(1))
+        values.forEach { value ->
+            work.launch {
+                semaphore.withPermit {
+                    runCatching { action(value) }
+                        .onSuccess { collected.add(it) }
+                        .onFailure { /* 单个源失败不算整次失败：与流式路径口径一致 */ }
+                    done.incrementAndGet()
+                }
+            }
+        }
+        val until = System.currentTimeMillis() + deadlineMs
+        while (done.get() < values.size && System.currentTimeMillis() < until) {
+            delay(25)
+        }
+    } finally {
+        // 无论正常结束还是到点都收掉这个 scope：
+        // 已完成的协程立即结束；卡在阻塞 IO 上的会自己走完，不再被任何人 await。
+        work.cancel()
+    }
+    return DeadlineCollection(collected.toList(), done.get(), values.size)
 }
 

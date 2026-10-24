@@ -17,6 +17,7 @@ import io.legado.data.Database
 import io.legado.data.assignBookGroup
 import io.legado.data.batchUpdateBookshelfGroup
 import io.legado.data.cachedChapterUrls
+import io.legado.data.cachedChapterWordCounts
 import io.legado.data.clearBookCacheContent
 import io.legado.data.clearBookshelfOrder
 import io.legado.data.createBookGroup
@@ -231,9 +232,19 @@ fun Route.shelfRoutes(
                 call.respond(HttpStatusCode.BadRequest, ApiError("invalid_bookshelf", "缺少书籍标识"))
                 return@get
             }
-            val cachedUrls = database.cachedChapterUrls(sourceId, bookUrl).toList()
+            val cachedRows = database.cachedChapterWordCounts(sourceId, bookUrl)
+            val cachedUrls = cachedRows.map { it.first }
             val total = database.getTocCache(sourceId, bookUrl)?.size ?: 0
-            call.respond(CachedChaptersResponse(sourceId, bookUrl, cachedUrls, cachedUrls.size, total))
+            call.respond(
+                CachedChaptersResponse(
+                    sourceId = sourceId,
+                    bookUrl = bookUrl,
+                    cachedChapterUrls = cachedUrls,
+                    cachedCount = cachedUrls.size,
+                    totalChapters = total,
+                    cachedWordCounts = cachedRows.map { it.second },
+                ),
+            )
         }
         delete("/bookshelf/cache") {
             if (!call.requireSameOriginWrite()) return@delete

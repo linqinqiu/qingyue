@@ -671,6 +671,50 @@ class RuleRunnerTest {
     }
 
     @Test
+    fun `keeps images wrapped in div units instead of deleting the whole div block`() {
+        // 用户：「漫画源当前还不能使用」。根因在 `cleanContent()`：`DIV_BLOCK` 连内容删掉整个
+        // `<div>…</div>`，而漫画页几乎普遍是"每张图包在一个 div 单元里"——
+        // `preserveContentImages` 先换成 `![图片](…)` 占位行，紧接着就被 DIV_BLOCK 连图带壳吃掉，
+        // 整章正文变空 → 抛「正文规则未提取到内容」。
+        // 上面那条夹具用 `#content@html` 取 innerHTML，图外层没有 div，正好绕过了这条路径。
+        val source = """{
+            "bookSourceUrl":"https://comic.example",
+            "ruleContent":{"content":"@css:#content@html"}
+        }"""
+        val runner = RuleRunner {
+            """<div id="content">""" +
+                """<div class="unit"><img data-original="https://cdn.example/1.jpg"></div>""" +
+                """<div class="unit"><img src="/p/2.jpg"></div>""" +
+                """<div class="footer">扫码关注微信公众号获取最新章节</div>""" +
+                """</div>"""
+        }
+
+        val content = runner.content(source, "https://comic.example/c/1").content
+        assertTrue("div 单元里的图被 DIV_BLOCK 吞掉了: $content", content.contains("![图片](https://cdn.example/1.jpg)"))
+        assertTrue("根相对地址应被绝对化并保住: $content", content.contains("![图片](https://comic.example/p/2.jpg)"))
+        // 关键取舍：DIV_BLOCK「丢弃 div 里的文字」是文本站屏蔽广告位的既有语义，不能因为救图而放开。
+        assertFalse("div 里的广告文字应照旧被丢掉: $content", content.contains("扫码关注微信公众号"))
+    }
+
+    @Test
+    fun `keeps images in nested divs where DIV_BLOCK only matches half the block`() {
+        // 嵌套 div：非贪婪的 `<div[\s\S]*?</div>` 只匹配到**第一个** `</div>` 为止，
+        // 于是外层块被切成半截残文。修法用的是哨兵（不含尖括号），所以半截里的哨兵仍会活下来。
+        val source = """{
+            "bookSourceUrl":"https://comic2.example",
+            "ruleContent":{"content":"@css:#content@html"}
+        }"""
+        val runner = RuleRunner {
+            """<div id="content"><div class="wrap"><div class="unit"><img src="/n/1.jpg"></div>""" +
+                """<div class="unit"><img src="/n/2.jpg"></div></div></div>"""
+        }
+
+        val content = runner.content(source, "https://comic2.example/c/1").content
+        assertTrue("嵌套 div 里的第一张图丢了: $content", content.contains("![图片](https://comic2.example/n/1.jpg)"))
+        assertTrue("嵌套 div 里的第二张图丢了: $content", content.contains("![图片](https://comic2.example/n/2.jpg)"))
+    }
+
+    @Test
     fun `supports Legado rule dialects used by aggregate JSON sources`() {        // 番茄这类官方接口源同时用到：`{{表达式}}` 占位、`<js>…</js>` 后再接取值路径、
         // `$..a||$..b` 备选规则、以及裸键（`author` 等价 `$.author`）。缺一个就整本源搜不到书。
         val source = """{

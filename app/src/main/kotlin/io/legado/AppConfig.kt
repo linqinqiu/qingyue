@@ -25,6 +25,33 @@ object AppConfig {
     /** 单次搜索整体截止（毫秒）。 */
     val searchTimeoutMs: Long = long("LEGADO_SEARCH_TIMEOUT_MS", 30_000L)
 
+    /**
+     * 同步 `/api/search` 的**总量截止**（毫秒）。
+     *
+     * 为什么需要它：单源超时管不住整批。`RuleRunner` 用的是阻塞式
+     * `HttpClient.send()`，而阻塞调用不响应线程中断 —— 外面套的 `withTimeout`
+     * 取消不掉它，慢源会一直占着并发名额。实测 65 个源的样本就能拖过 300 秒。
+     *
+     * 到点后返回**已经搜到的部分**，并在响应头上如实标出「截断了、搜了多少个」。
+     * 不静默：`X-Search-Truncated` / `X-Search-Completed` / `X-Search-Total` 三个头
+     * 让调用方分得清"就这么多结果"与"没搜完"。
+     *
+     * 设为 0 表示不限制（回到旧行为，调用方自己兜超时）。
+     */
+    val searchTotalTimeoutMs: Long = long("LEGADO_SEARCH_TOTAL_TIMEOUT_MS", 60_000L)
+
+    /**
+     * 一次对话里最多让模型调几轮工具。
+     *
+     * 原来是 `Agent.MAX_TOOL_ROUNDS` 写死的 6。调到可配置不是为了"能改大"，
+     * 而是为了**能改小**：接的模型很笨时会反复调同一个工具，把一次对话拖成十几次外呼；
+     * 那时要能把它压到 2~3 轮，不必重新编译。
+     */
+    val aiMaxToolRounds: Int = int("LEGADO_AI_MAX_TOOL_ROUNDS", 6).coerceIn(1, 20)
+
+    /** 单次工具结果塞回模型上下文的字符上限。默认 4000（约 2 KB 中文）。 */
+    val aiMaxToolData: Int = int("LEGADO_AI_MAX_TOOL_DATA", 4000).coerceIn(500, 20000)
+
     /** 整书离线缓存的分片并发数。 */
     val cacheConcurrency: Int = int("LEGADO_CACHE_CONCURRENCY", 4)
 
@@ -82,6 +109,44 @@ object AppConfig {
      * 只有明确知道自己要干什么的部署才该打开。
      */
     val aiAllowRemovingBuiltinTools: Boolean = flag("LEGADO_AI_ALLOW_REMOVING_BUILTIN_TOOLS")
+
+    /**
+     * 是否扫描安装根 `plugins/` 里的 jar 并装载（**默认 false**）。
+     *
+     * 装载第三方 jar 等于在本进程里执行任意代码：它读得到 `agent-profiles.json` 里的明文
+     * apiKey，能绕过护栏直接改库，它自写的 LLM provider 还完全不过出站 SSRF 闸门
+     * （那道闸门只写在内置的 `OpenAiCompatibleProvider` 里）。而本服务没有账号没有 token，
+     * 唯一的边界是"这台机器的文件权限"—— 扫目录把这条边界变成了"谁能动那个目录"。
+     *
+     * 四个扩展点（工具注册表 / 生命周期钩子 / LLM provider / 连接选择策略）照旧全部可用，
+     * 只是不再从磁盘吞 jar。明确知道自己要干什么的部署设
+     * `LEGADO_PLUGIN_JAR_SCAN` / `LEGADO_AI_PLUGIN_JAR_SCAN` 为 1 打开。
+     *
+     * 写成 `get()` 而不是 `val`（同 [aiEnabled] 的理由）：环境变量本身在进程启动就定了，
+     * 但测试与嵌入式宿主会用反射改那张缓存的 map，计算属性才不会被初始化那一刻冻住。
+     */
+    val pluginJarScan: Boolean
+        get() = flag("LEGADO_PLUGIN_JAR_SCAN") || flag("LEGADO_AI_PLUGIN_JAR_SCAN")
+
+    /**
+     * 是否允许 AI 连接的 `baseUrl` 指向**回环地址**（默认 false）。
+     *
+     * 为什么需要这个口子：这台软件只跑在本机，而想接的模型也常常就在本机 ——
+     * Ollama 默认 `127.0.0.1:11434`、LM Studio 默认 `127.0.0.1:1234/v1`，只有回环地址可填。
+     * 闸门一刀切拒掉回环的实际后果是：本机模型接不进来，文档里"任何 openai-compatible 地址都行"
+     * 与 provider 自述"支持 Ollama / LM Studio"都成了谎话（内置那 26 条 TXT 规则手工补全角空格
+     * 是同一类事：约定只有作者知道，用户看不见）。
+     *
+     * 放开时守住两条，所以它不是"关掉闸门"：
+     * 1. 只放回环（localhost / 127.x / ::1）—— 私网段、CGNAT、链路本地、云元数据照旧拒；
+     * 2. 只认**字面**回环、不走 DNS，且**硬拒指向这台服务自己**（见 refusePointingAtSelf）：
+     *    本服务对不带 Origin 的请求放行写操作，而 JDK HttpClient 不带 Origin，
+     *    能打到自己的 AI 连接等于绕过它唯一的写保护。
+     *
+     * 设 `LEGADO_AI_ALLOW_LOOPBACK_BASEURL=1` 打开。
+     */
+    val aiAllowLoopbackBaseUrl: Boolean
+        get() = flag("LEGADO_AI_ALLOW_LOOPBACK_BASEURL")
 
     private fun flag(key: String): Boolean =
         when (env[key]?.trim()?.lowercase()) {

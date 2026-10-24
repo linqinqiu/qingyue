@@ -1,6 +1,7 @@
 package io.legado.http
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -27,13 +28,24 @@ internal object RouteCatalog {
     ).jsonObject
 
     /**
-     * 响应时盖两样东西：`version` 换成**当前真正在跑的构建号**，`count` 按端点条数现数 ——
-     * 这两个值只要是人填的就一定会有对不上的一天。
+     * 响应时盖三样东西：
+     * - `version` 换成**当前真正在跑的构建号**；
+     * - `count` 按端点条数现数；
+     * - `howToConnect.baseUrl` 换成**当前真正在监听的地址**。
+     *
+     * 前两个只要是人填的就一定会有对不上的一天。第三个同理：文件里写死的
+     * `http://127.0.0.1:1234` 只在产品入口（`npm start`）成立；开发者用
+     * `gradlew :app:run`（默认 8080）时，契约就会把调用方指到错误的端口。
+     * 所以 baseUrl 不写死在文件里，按运行时身份注入 —— 哪个端口起的，就报哪个。
      */
-    fun serve(version: String): String {
+    fun serve(version: String, baseUrl: String): String {
         val endpoints = source["endpoints"]?.jsonArray ?: error("端点目录里没有 endpoints 数组")
-        return json.encodeToString(JsonObject.serializer(), JsonObject(
-            source + ("version" to JsonPrimitive(version)) + ("count" to JsonPrimitive(endpoints.size)),
-        ))
+        val entries = LinkedHashMap<String, JsonElement>(source)
+        entries["version"] = JsonPrimitive(version)
+        entries["count"] = JsonPrimitive(endpoints.size)
+        (source["howToConnect"] as? JsonObject)?.let { howTo ->
+            entries["howToConnect"] = JsonObject(howTo + ("baseUrl" to JsonPrimitive(baseUrl)))
+        }
+        return json.encodeToString(JsonObject.serializer(), JsonObject(entries))
     }
 }

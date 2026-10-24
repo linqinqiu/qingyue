@@ -115,7 +115,8 @@ class BookCacheService(private val database: Database, private val runner: RuleR
                                     if (content.content.toByteArray().size <= MAX_CHAPTER_BYTES) {
                                         database.cacheBookContent(
                                             book.sourceId, book.bookUrl, chapter.url,
-                                            content.copy(title = content.title ?: chapter.title)
+                                            content.copy(title = content.title ?: chapter.title),
+                                            chapter.index,
                                         )
                                         // 漫画/图文书：正文是 `![图片](url)` 占位行 —— 把图也抓进磁盘缓存，
                                         // 离线打开才有图（阅读器那边点图也走同一个缓存，不会重复抓）。

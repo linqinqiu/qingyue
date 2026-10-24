@@ -48,6 +48,7 @@ import io.legado.model.SourceCookieRemoveResponse
 import io.legado.model.SourceCredentialStatus
 import io.legado.model.SourceHealthCheckItem
 import io.legado.model.SourceHealthCheckRequest
+import io.legado.data.saveHealthResults
 import io.legado.model.SourceHealthCheckResponse
 import io.legado.model.SourceLoginActionRequest
 import io.legado.model.SourceLoginCookieResponse
@@ -206,6 +207,13 @@ fun Route.sourcesRoutes(
             val successCount = results.count { it.statusCategory == "valid" }
             val slowCount = results.count { it.statusCategory == "slow" }
             val failedCount = results.count { !it.ok }
+
+            // 落库：体检结论以前只活在浏览器 localStorage 里，服务端看不到，
+            // 于是「搜索优先搜能用的源」无从做起。现在存进 source_health 表，
+            // 搜索按它排序 —— 一场跑几十分钟的体检，终于能被最需要它的地方用上。
+            // 失败不挡住响应：结论已经算出来了，存不进去是另一件事，如实记一行日志。
+            runCatching { withContext(Dispatchers.IO) { database.saveHealthResults(results) } }
+                .onFailure { call.application.log.warn("体检结论落库失败：${it.message}") }
 
             call.respond(
                 SourceHealthCheckResponse(

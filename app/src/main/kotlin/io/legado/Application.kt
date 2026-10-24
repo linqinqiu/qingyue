@@ -96,20 +96,49 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
     val agentConnection = AgentModule.connect(
         database, runner, coverCache, subscriptions,
         homeDirectory = config.homeDirectory,
+        // 朗读与备份的 AI 工具要用到这两个；与 HTTP 端点背后是**同一份**服务，
+        // 不在进程里另起一套（否则 AI 合成的音频、看到的备份与界面上的不是一回事）。
+        edgeTts = edgeTts,
+        backupStore = io.legado.backup.BackupStore(config.localBooksDirectory.resolveSibling("backup_kept")),
     )
     // 仅调试：额外自检（不会污染真实库）。生产环境返回 null，不影响任何对外行为。
     AgentModule.install(agentConnection)
 
-    // 插件框架：从安装根的 `plugins/` 目录装载外部插件（jar）。
-    // 目录不存在 = 没装插件，正常状态，不报错。框架本身不含任何插件。
-    // 插件只能通过注册工具/钩子扩展能力，不能注册路由（端点计数恒定）。
+    // 插件框架：四个扩展点（工具注册表 / 生命周期钩子 / LLM 协议 / 连接选择策略）**照旧全部可用**，
+    // 宿主代码与内嵌自动化可以直接 `register()` 挂进去 —— 这是 `/api/agent` 自身的运行依赖，不动。
+    //
+    // 但**默认不再扫描 `plugins/` 目录里的 jar**。理由不是"没人用"（虽然确实 0 个插件在用），
+    // 而是这条把这台服务的信任边界从"本机进程"扩大成"谁能动那个目录"：
+    // 装载 jar = 在青阅进程里执行任意代码，而本服务不设身份、`AGENTS.md` 的安全模型写着
+    // "不带 Origin 的请求直接放行"，唯一那道门就是"文件权限"。装进去的代码能直接读
+    // `agent-profiles.json` 里的明文 apiKey、能绕过护栏改库、自写的 provider 还完全不过
+    // `NetworkSecurity` 那道出站闸门。docs/plugin-framework.md 自己也承认"框架不提供隔离"。
+    // 想显式打开的人仍然可以：设 `LEGADO_PLUGIN_JAR_SCAN=1`，装载范围只有那一个目录、由你指定。
     val pluginManager = PluginManager(
         registry = agentConnection.registry,
         hooks = agentConnection.hooks,
         providers = agentConnection.providerRegistry,
         selectors = agentConnection.selectorRegistry,
     )
-    val loadedPlugins = pluginManager.discoverFrom(config.homeDirectory.resolve("plugins"))
+    val jarScanEnabled = AppConfig.pluginJarScan
+    val pluginDir = config.homeDirectory.resolve("plugins")
+    val loadedPlugins = if (jarScanEnabled) pluginManager.discoverFrom(pluginDir) else {
+        // 目录里有 jar 却没扫时要把话说出来：静默不装是最难查的形态
+        // （用户丢进一个 jar、界面上却永远是 0，他会以为是插件写错了）。
+        val stranded = runCatching {
+            // Java Stream 的 count() 是无参的（Kotlin 不会把 lambda 接上去），所以先 filter 再 count。
+            Files.list(pluginDir).use { stream ->
+                stream.filter { it.fileName.toString().endsWith(".jar", ignoreCase = true) }.count()
+            }
+        }.getOrDefault(0L)
+        if (stranded > 0) {
+            logSystem(
+                "检测到 plugins/ 里有 $stranded 个 jar，但默认不装载外部 jar 插件",
+                mapOf("目录" to pluginDir.toString(), "开启办法" to "LEGADO_PLUGIN_JAR_SCAN=1"),
+            )
+        }
+        0
+    }
     if (loadedPlugins > 0 || pluginManager.loadFailures().isNotEmpty()) {
         logSystem(
             "插件装载完成",
@@ -203,7 +232,7 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
         )
         // 注册在 staticWeb 之前：根路由是 `staticResources("/")`，先摆 /next 才不必去猜路由树的优先级
         staticNext(config.nextDirectory)
-        staticWeb()
+        staticWeb(config.homeDirectory)
     }
     logSystem(
         if (Files.isRegularFile(config.nextDirectory.resolve("index.html"))) "新骨架界面已挂载 /next" else "新骨架界面未挂载（没有 next/index.html）",

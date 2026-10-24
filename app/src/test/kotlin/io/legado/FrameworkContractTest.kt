@@ -25,11 +25,11 @@ import kotlin.io.path.readText
  *    即 AGENTS.md §4 的「已确认正确行为」）；外部策略用命名类可增删，同名类注册被拒。
  * 3. **工具面可插拔、内置工具不可被默认摘掉**：`ToolRegistry` 内置一份 `BuiltinTools.all()`，
  *    外部工具可注册/注销，但内置工具默认拒绝删除（保持框架不被插件悄悄削弱）。
- * 4. **端点计数契约**：随包的 `agent-api.json` 是 139 条端点 / 19 个组，其中 `AI 自定义接入` 组 8 条。
+ * 4. **端点计数契约**：随包的 `agent-api.json` 是 142 条端点 / 19 个组，其中 `AI 自定义接入` 组 8 条。
  *    这是与 `http/` 路由文件双向核对的真实数目（见 AGENTS.md §6）。
  * 5. **框架容器不注册任何 HTTP 路由**：`plugin/`（纯框架容器）与 `ai/`（内置 AI 接入，类比 `features/`）
  *    都不 import `io.ktor.server.routing`、不出现 `routing {` / `route(` —— 端点只由 `http/` 装配，
- *    因此 139 计数稳定，框架扩展不会凭空多出路由。
+ *    因此 142 计数稳定，框架扩展不会凭空多出路由。
  *
  * 注意：本文件只断言「框架形状」，不绑定任何具体业务端点/工具 id；新增内置工具或 provider 时，
  * 只要不破坏上述不变量，本测试照常通过。
@@ -118,12 +118,12 @@ class FrameworkContractTest {
         assertEquals(before, registry.size())
     }
 
-    // ===== 4. 端点计数契约（139 / 19 / 8） =====
+    // ===== 4. 端点计数契约（142 / 19 / 8） =====
 
     @Test
-    fun `agent-api 契约：139 端点、19 组、AI 自定义接入 8 条`() {
-        // RouteCatalog 从 classpath 读 /agent-api.json，serve 会补齐 version 与 count。
-        val raw = RouteCatalog.serve("0.0.0-contract")
+    fun `agent-api 契约：142 端点、19 组、AI 自定义接入 8 条`() {
+        // RouteCatalog 从 classpath 读 /agent-api.json，serve 会补齐 version、count 与 baseUrl。
+        val raw = RouteCatalog.serve("0.0.0-contract", "http://127.0.0.1:1234")
         val root = Json.parseToJsonElement(raw).jsonObject
         val endpoints = root["endpoints"]?.jsonArray
             ?: error("agent-api.json 缺少 endpoints 数组")
@@ -132,8 +132,12 @@ class FrameworkContractTest {
         val declaredCount = root["count"]?.jsonPrimitive?.int
         assertEquals("count 必须等于 endpoints 实际条数", endpoints.size, declaredCount)
 
-        // 全量契约：139 条端点。
-        assertEquals("端点总数必须是 139", 139, endpoints.size)
+        // 全量契约：142 条端点。
+        assertEquals("端点总数必须是 142", 142, endpoints.size)
+
+        // baseUrl 必须按运行时地址注入，不能沿用文件里写死的端口。
+        val injectedBase = root["howToConnect"]?.jsonObject?.get("baseUrl")?.jsonPrimitive?.content
+        assertEquals("howToConnect.baseUrl 应注入运行时地址", "http://127.0.0.1:1234", injectedBase)
 
         val groups = endpoints.map { (it as JsonObject)["group"]!!.jsonPrimitive.content }
         // 19 个互不相同的组。

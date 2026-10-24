@@ -11,7 +11,10 @@ import io.legado.content.ContentProcessor
 import io.legado.data.Database
 import io.legado.data.cacheBookContent
 import io.legado.data.cachedContent
+import io.legado.data.deleteContentProcess
+import io.legado.data.getContentProcess
 import io.legado.data.getCachedChaptersFallback
+import io.legado.data.saveContentProcess
 import io.legado.data.getEnabledReplaceRulesForScope
 import io.legado.data.getSource
 import io.legado.data.getTocCache
@@ -22,6 +25,7 @@ import io.legado.model.ApiError
 import io.legado.model.BookDetails
 import io.legado.model.BookRequest
 import io.legado.model.ChapterContent
+import io.legado.model.ContentProcessRequest
 import io.legado.model.ContentRequest
 import io.legado.rules.JsSandbox
 import io.legado.rules.RuleExecutionException
@@ -126,6 +130,14 @@ fun Route.readingRoutes(
                 database.listBookshelf().firstOrNull { it.sourceId == request.sourceId && it.bookUrl == url }?.name
             }
             val cached = bookUrl?.let { database.cachedContent(request.sourceId, it, request.chapterUrl) }
+            // AI 闭环（阅读器 AI 闭环 feature）：原始正文之上再叠一层 AI 净化/润色覆盖，命中就回覆盖版。
+            // 净化优先于润色（两者互斥，同一章只存一种）。没覆盖就回原始正文，行为不变。
+            fun override(base: ChapterContent): ChapterContent {
+                if (bookUrl == null) return base
+                val proc = database.getContentProcess(request.sourceId, bookUrl, request.chapterUrl, "ai_clean")
+                    ?: database.getContentProcess(request.sourceId, bookUrl, request.chapterUrl, "ai_rewrite")
+                return if (proc != null) ChapterContent(base.title, proc.processed) else base
+            }
 
             if (request.sourceId == LocalBookParser.LOC_BOOK_SOURCE_ID) {
                 if (cached != null) {
@@ -133,7 +145,7 @@ fun Route.readingRoutes(
                     val jsSandbox = JsSandbox(runner)
                     val cleaned = ContentProcessor.processContent(cached.content, rules, jsSandbox = jsSandbox, bookName = bookName, chapterTitle = cached.title)
                     val cleanedTitle = cached.title?.let { ContentProcessor.processTitle(it, rules, jsSandbox = jsSandbox, bookName = bookName) }
-                    call.respond(ChapterContent(title = cleanedTitle ?: cached.title, content = cleaned))
+                    call.respond(override(ChapterContent(title = cleanedTitle ?: cached.title, content = cleaned)))
                 } else {
                     call.respond(HttpStatusCode.NotFound, ApiError("not_found", "本地章节内容不存在"))
                 }
@@ -145,7 +157,7 @@ fun Route.readingRoutes(
                 return@post
             }
             if (cached != null && cached.content.isNotBlank()) {
-                call.respond(cached)
+                call.respond(override(cached))
             } else call.respondCatching {
                 try {
                     withContext(Dispatchers.IO) {
@@ -154,11 +166,40 @@ fun Route.readingRoutes(
                     }
                     }
                 } catch (error: Throwable) {
-                    if (cached != null && cached.content.isNotBlank()) cached
+                    if (cached != null && cached.content.isNotBlank()) override(cached)
                     else throw error
                 }
             }
+            // AI 闭环（阅读器 AI 闭环 feature）：落一份「AI 净化/润色覆盖正文」。读者把本章交给 AI，
+        // 把干净正文存这里，下一次读这一章就回覆盖版（正文实时重载，所见即所得）。
+        post("/books/content-process") {
+            if (!call.requireSameOriginWrite()) return@post
+            val req = call.receive<ContentProcessRequest>()
+            if (req.sourceId.isBlank() || req.bookUrl.isBlank() || req.chapterUrl.isBlank() || req.kind.isBlank() || req.processed.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_process", "缺少 sourceId / bookUrl / chapterUrl / kind / processed"))
+                return@post
+            }
+            if (req.kind != "ai_clean" && req.kind != "ai_rewrite") {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_process", "kind 只能是 ai_clean 或 ai_rewrite"))
+                return@post
+            }
+            call.respond(database.saveContentProcess(req))
         }
+        // 撤掉某一章的 AI 覆盖（恢复原始正文）。
+        delete("/books/content-process") {
+            if (!call.requireSameOriginWrite()) return@delete
+            val sourceId = call.request.queryParameters["sourceId"]
+            val bookUrl = call.request.queryParameters["bookUrl"]
+            val chapterUrl = call.request.queryParameters["chapterUrl"]
+            val kind = call.request.queryParameters["kind"] ?: "ai_clean"
+            if (sourceId.isNullOrBlank() || bookUrl.isNullOrBlank() || chapterUrl.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ApiError("invalid_process", "缺少 sourceId / bookUrl / chapterUrl"))
+                return@delete
+            }
+            if (database.deleteContentProcess(sourceId, bookUrl, chapterUrl, kind)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "这一章没有对应的 AI 覆盖"))
+        }
+    }
 }
 
 

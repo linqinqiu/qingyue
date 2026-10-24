@@ -153,7 +153,7 @@ object TocRules {
         var added = 0
         var unusable = 0
         for (rule in incoming) {
-            if (runCatching { Regex(rule.rule, RegexOption.MULTILINE) }.isFailure) {
+            if (!canCompile(rule.rule)) {
                 unusable += 1
                 continue
             }
@@ -205,9 +205,26 @@ object TocRules {
         reload()
     }
 
+    /**
+     * 所有分章正则的**唯一**编译入口。三个旗标都有明确理由，改这里必须三处同时改
+     * （[compile] 缓存、[patternUsable] 保存前校验、[applyBackup] 收备份）：
+     * 校验与真实编译用不同旗标，就会出现"存进去了但运行时不匹配"这种最难查的错。
+     *
+     * `UNICODE_CHARACTER_CLASS` 是修「txt目录规则有问题」的关键：Java 的 `\s` 只认 ASCII 空白，
+     * **不含全角空格 U+3000**，而中文 TXT 的章节标题恰恰普遍用全角空格缩进。
+     * 证据就在随包那 26 条里：23 条都手工补了 `　`（写成 `[ 　\t]{0,4}`、`[\s　]`）——
+     * 上游作者被迫绕开这个局限。用户按浏览器直觉写 `^\s*第\d+章`，在 JS 里能匹配
+     * "　　第一章"，存进 Java 引擎就成了 0 命中：整本书切不出一章，
+     * 界面上却写着"规则已保存"，这就是「规则有问题」的体感来源。
+     * 加上这个旗标后 `\s`=`[\t\n\x0B\f\r\p{Z}]`（含 U+3000）、`\d` 认全角数字，与 JS 语义对齐。
+     */
+    private fun compilePattern(pattern: String): Regex =
+        Regex("(?U)$pattern", RegexOption.MULTILINE)
+
+    private fun canCompile(pattern: String): Boolean = runCatching { compilePattern(pattern) }.isSuccess
+
     /** 一条正则在这台机器上编不编得出来 —— 保存之前先问，别把"选了切不出章"留给用户。 */
-    fun patternUsable(pattern: String): Boolean =
-        runCatching { Regex(pattern, RegexOption.MULTILINE) }.isSuccess
+    fun patternUsable(pattern: String): Boolean = canCompile(pattern)
 
     /**
      * 新建或改一条规则（用户 2026-10-03：「txt目录规则可新建可编辑」）。三条口径：
@@ -258,7 +275,10 @@ object TocRules {
     }
 
     private fun nextCustomId(existing: List<TxtTocRule>): Int =
-        generateSequence(10_000) { it + 1 }.first { id -> existing.none { it.id == id } }
+        generateSequence(CUSTOM_ID_BASE) { it + 1 }.first { id -> existing.none { it.id == id } }
+
+    /** 自建规则的 id 起点：用它区分"随包段/自建段"（见 [suggest] 的早停条件）。 */
+    private const val CUSTOM_ID_BASE = 10_000
 
 
     /** 能参与打分/选用的：启用、规则非空、且真的编译得出来（坏正则跳过，不是崩）。 */
@@ -293,7 +313,7 @@ object TocRules {
             rejected += id
             return null
         }
-        val regex = runCatching { Regex(rule.rule, RegexOption.MULTILINE) }.getOrElse { error ->
+        val regex = runCatching { compilePattern(rule.rule) }.getOrElse { error ->
             // 坏规则不该拖垮整条导入链，但必须看得见是哪一条坏了（本轮日志改造的口径）。
             rejected += id
             Unit.logParsing("TXT 目录规则正则编译失败，已跳过该规则", mapOf("规则" to rule.name, "原因" to (error.message ?: "")))
@@ -348,19 +368,33 @@ object TocRules {
         return titles to volumes
     }
 
-    /** 给这本书挑一条规则；一条都不合格时返回 null，由调用方回落到内置那条。 */
+    /**
+     * 给这本书挑一条规则；一条都不合格时返回 null，由调用方回落到内置那条。
+     *
+     * 关于 `EARLY_ACCEPT` 提前定案：它的目的是少跑几条正则，但它原来**无条件生效**，
+     * 而自建规则的 `serialNumber = max+1`（见 [save]）必然排在整张表末尾 ——
+     * 于是长篇书在前面的随包规则就凑满 70 条命中、当场定案，
+     * **用户新建的那条精准规则永远得不到打分机会**，界面上"已新建、已启用"却毫无效果
+     * （用户报「txt目录规则有问题」的第二条真因）。
+     *
+     * 修法要守住一条：随包那 26 条之间的选择行为不能变，否则全部存量书的目录都可能漂。
+     * 自建段既然一定排在表尾，那就只把"已经进入自建段"当成**不许提前定案**的条件 ——
+     * 早停只会发生在随包段内部，随包段的行为逐字节与原来一致。
+     */
     fun suggest(text: String): TxtTocRule? {
         val head = if (text.length > SNIFF_CHARS) text.substring(0, SNIFF_CHARS) else text
+        val pool = candidates
+        val firstCustomSerial = pool.firstOrNull { it.id >= CUSTOM_ID_BASE }?.serialNumber ?: Int.MAX_VALUE
         var best: TxtTocRule? = null
         var maxNum = -1
-        for (rule in candidates) {
+        for (rule in pool) {
             val regex = compile(rule.id) ?: continue
             if (missesFirstHeading(head, regex)) continue
             val (titles, volumes) = score(head, rule.id) ?: continue
             if (titles >= volumes * 3 && titles > maxNum + OVER_RULE_COUNT) {
                 maxNum = titles
                 best = rule
-                if (maxNum > EARLY_ACCEPT) break
+                if (maxNum > EARLY_ACCEPT && rule.serialNumber < firstCustomSerial) break
             }
         }
         return best

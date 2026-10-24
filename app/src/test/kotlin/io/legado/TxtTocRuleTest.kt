@@ -291,6 +291,105 @@ class TxtTocRuleTest {
         assertEquals("随包那条的名字也还原了", packaged.name, TocRules.byId(packaged.id)?.name)
     }
 
+    /**
+     * 「txt目录规则有问题」第一条真因：Java 的 `\s` 只认 ASCII 空白，**不含全角空格 U+3000**，
+     * 而中文 TXT 的章节标题普遍用全角空格缩进。铁证是随包那 26 条里有 23 条手工补了 `　`
+     * （写成 `[ 　\t]{0,4}`）—— 上游作者被迫绕开这个局限，可这个约定用户看不见。
+     * 用户按浏览器直觉写 `^\s*第\d+章`：JS 里能匹配「　　第一章」，存进 Java 引擎就是 0 命中，
+     * 于是「规则已保存、也启用了，但整本书切不出章」。
+     * 修法是给编译统一加 `(?U)`（UNICODE_CHARACTER_CLASS），让 `\s` 认 Unicode 空白。
+     */
+    @Test
+    fun `用户按 JS 直觉写的 s 和 d 能认出全角空格缩进的标题`() {
+        val dir = java.nio.file.Files.createTempDirectory("legado-toc-unicode")
+        val store = dir.resolve("txt_toc_rules.json")
+        // 每章正文一千多字：远超打分里的 1000 字间隔线，标题也不会被当成"伪命中"。
+        val body = "这是讲情节推进与人物对话的正文内容，够长以免被打分当成噪声。".repeat(40) + "\n"
+        val text = buildString {
+            append("　　第1章 起风了\n").append(body)
+            append("　　第2章 落雨了\n").append(body)
+            append("　　第3章 天晴了\n").append(body)
+        }
+        try {
+            TocRules.useStore(store)
+            // 用户按浏览器直觉写的一条：`^\s*第\d+章.*`。全角空格（U+3000）缩进 + 阿拉伯数字序号。
+            val created = TocRules.save(null, "自造：全角缩进", """^\s*第\d+章.*""", "　　第1章 起风了", true)
+            assertNotNull("新建规则要成功", created)
+            val regex = TocRules.regexFor(created!!.id.toString())
+            assertNotNull("这条规则要能编译", regex)
+            // 直接量正则：不经过切分，判据才只盯「(?U) 让 \s 吃到全角空格」这一件事。
+            // 实测对照（tools 诊断过）：不带 (?U) 时 \s 在 U+3000 前 0 命中，带了是 3 命中。
+            val hits = regex!!.findAll(text).toList()
+            assertEquals("三条全角缩进的标题应全部命中（实际 ${hits.size}）", 3, hits.size)
+            val chapters = TocRules.split(text, regex)
+            assertEquals("切不出三章就是没生效（实际 ${chapters.size}）", 3, chapters.size)
+            assertTrue("第一章标题要认出来", chapters.first().title.contains("第1章"))
+        } finally {
+            TocRules.clearOverrides()
+            TocRules.useStore(dir.resolve("nothing-here.json"))
+            java.nio.file.Files.deleteIfExists(store)
+            java.nio.file.Files.deleteIfExists(dir)
+        }
+    }
+
+    /** `(?U)` 只加语义、不许改行为：随包那 26 条的编译与自动选择必须与加旗标前一致。 */
+    @Test
+    fun `加 Unicode 旗标后随包规则照常编译且仍能选出章`() {
+        assertEquals("随包这份里仍不许有坏正则", 0, TocRules.brokenCount)
+        assertEquals("启用条数不变", 12, TocRules.all.count { it.enable })
+        val text = wellMarkedBook()
+        val picked = TocRules.suggest(text)
+        assertNotNull("规整的书仍然选得出规则", picked)
+        val chapters = TocRules.split(text, TocRules.regexFor(picked!!.id.toString())!!)
+        assertTrue("切出的章数不退化（实际 ${chapters.size}）", chapters.size >= 8)
+        // 这本的开头那段散稿是**真前言**（既有基线，见上面 split keeps the prologue），
+        // 加旗标后必须还是前言；变成别的就说明随包规则的选择被改动了。
+        assertEquals("前言位不变", "前言", chapters.first().title)
+    }
+
+    /**
+     * 「txt目录规则有问题」第二条真因：新建规则的 `serialNumber = max+1` 必然排在整张表末尾，
+     * 而自动打分命中够 `EARLY_ACCEPT` 条就**提前定案** —— 于是用户新建的精准规则可能
+     * 永远得不到评分机会：界面上"已新建、已启用"，实际一点作用没有。
+     *
+     * 这条用例证明的范围要说清楚：它钉的是**自建段必须参与打分并能够被选中**
+     * （构造一种随包 26 条都识别不了、只有自建规则识别得了的标题形状，
+     * 「第N节课」——随包那几条「第N节」规则都带 `节(?!课)` 负向排除，正好全都避开）。
+     * 配套修复是 [TocRules.suggest] 只在"已经进入自建段"时不再提前定案，
+     * 随包段之间的相对行为一字不动。
+     */
+    @Test
+    fun `自建规则能参与自动打分并被选中`() {
+        val dir = java.nio.file.Files.createTempDirectory("legado-toc-order")
+        val store = dir.resolve("txt_toc_rules.json")
+        val body = "这是讲情节推进与人物对话的正文内容，够长以免被打分当成噪声。".repeat(40) + "\n"
+        // 120 章，标题一律是「第N节课」——随包那几条第N节类规则都用 `节(?!课)` 排除了它。
+        val text = buildString {
+            for (index in 1..120) {
+                append("第").append(index).append("节课 ").append(index).append(". ").append(body)
+            }
+        }
+        try {
+            TocRules.useStore(store)
+            val custom = TocRules.save(null, "自造：第N节课", """^第\d+节课.{0,20}""", "第1节课", true)
+            assertNotNull("要建得起自建规则", custom)
+            assertTrue("自建规则的序号必然排在表尾（否则这条用例没东西可判）",
+                custom!!.serialNumber > TocRules.packaged.maxOf { it.serialNumber })
+
+            val picked = TocRules.suggest(text)
+            assertNotNull("打分要能选出规则", picked)
+            assertEquals(
+                "这种形状的标题只有自建那条认得，必须落在它上（实际选中「${picked!!.name}」）",
+                custom.id, picked.id,
+            )
+        } finally {
+            TocRules.clearOverrides()
+            TocRules.useStore(dir.resolve("nothing-here.json"))
+            java.nio.file.Files.deleteIfExists(store)
+            java.nio.file.Files.deleteIfExists(dir)
+        }
+    }
+
     @Test
     fun `只有自建的规则能删，随包那 26 条删不掉`() {
         val dir = java.nio.file.Files.createTempDirectory("legado-toc-remove")

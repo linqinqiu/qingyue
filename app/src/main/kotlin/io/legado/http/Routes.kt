@@ -85,7 +85,13 @@ fun Route.apiRoutes(
          * "加完接口的那天"过期，所以这条判据替人记着。
          */
         get("/catalog") {
-            call.respondText(RouteCatalog.serve(BuildInfo.version), ContentType.Application.Json)
+            // baseUrl 按**运行时真实监听地址**注入，不写死 1234：产品入口是 1234，
+            // 但 `gradlew :app:run` 默认 8080 —— 写死哪个都会把另一种用法的调用方指错端口。
+            val rawHost = ServerIdentity.host
+            val host = if (rawHost.isBlank() || rawHost == "0.0.0.0" || rawHost == "::") "127.0.0.1" else rawHost
+            val hostForUrl = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
+            val baseUrl = "http://$hostForUrl:${ServerIdentity.port}"
+            call.respondText(RouteCatalog.serve(BuildInfo.version, baseUrl), ContentType.Application.Json)
         }
         /**
          * 插件状态：装了什么、各自贡献了什么、哪些装载失败了。
@@ -173,7 +179,7 @@ fun Route.apiRoutes(
         shelfRoutes(database, bookCache, coverCache, localBooksDirectory)
         tocRulesRoutes(database, backupKeep, localBooksDirectory)
         mediaRoutes(database, coverCache, localBooksDirectory)
-        progressRoutes(database)
+        readerRoutes(database)
         ttsRoutes(edgeTts, ttsSessions)
         agentApiRoutes(database, homeDirectory, agentConnection, profileStore)
     }

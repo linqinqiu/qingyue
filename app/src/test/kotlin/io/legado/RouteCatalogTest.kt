@@ -44,6 +44,9 @@ class RouteCatalogTest {
                 assertEquals(endpoints.size, body["count"]!!.jsonPrimitive.int)
                 // 文件里写的是发版那天手填的号；响应里必须是这个进程真正的版本
                 assertEquals(BuildInfo.version, body["version"]!!.jsonPrimitive.content)
+                // baseUrl 必须按运行时监听地址注入：本测试起在 8080，就不能回文件里写死的 1234。
+                val baseUrl = body["howToConnect"]?.jsonObject?.get("baseUrl")?.jsonPrimitive?.content
+                assertEquals("howToConnect.baseUrl 应等于运行时监听地址", "http://127.0.0.1:8080", baseUrl)
                 val first = endpoints[0].jsonObject
                 assertTrue("每条都要带 method/path/write/purpose：$first",
                     first.containsKey("method") && first.containsKey("path") && first.containsKey("write") && first.containsKey("purpose"))
