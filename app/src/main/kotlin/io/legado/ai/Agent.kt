@@ -1,6 +1,7 @@
 package io.legado.ai
 
 import io.legado.data.VersionConflict
+import io.legado.AppConfig
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -124,12 +125,53 @@ class Agent(
      */
     suspend fun callLlm(prompt: String): String? {
         val ext = selectedProfile() ?: return null
-        return callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
+        return (callLlmOutcome(ext, listOf(LlmMessage("user", prompt))) as? LlmOutcome.Ok)?.text
+    }
+
+    /**
+     * 一次外呼的结果。**必须分成三类**，因为它们的修法完全不同，而从前只有两类可用：
+     * - [Ok] 拿到文本；
+     * - [Blocked] 地址被出站闸门拒了（填了内网/本机、语法不对）→ 4xx，并把闸门那句中文原样带回；
+     * - [Unreachable] 到不了 / 解析不了 / 上游没给内容 → 502。
+     *
+     * 从前这里只把结果压成 `String?`：`runCatching { … }.getOrNull()` 一把抓，
+     * 于是"你填的地址是内网"和"这台机器连不上它"都变成同一个 null，
+     * 上层只能报 `upstream_unreachable`；而 chat 那条路径反过来又把闸门异常当非法参数
+     * 一路抛成 500。实测三种形态都对不上用户看到的那句话。
+     */
+    private sealed class LlmOutcome {
+        data class Ok(val text: String) : LlmOutcome()
+        data class Blocked(val why: String) : LlmOutcome()
+        data class Unreachable(val why: String) : LlmOutcome()
+    }
+
+    /** 带工具外呼的同一套分类（chat 的循环里用），把异常收成三态而不是 null。 */
+    private fun classifyProviderError(error: Throwable): LlmOutcome = when (error) {
+        // 闸门拒绝与"参数不对"都是"你的地址/输入有问题"→ 4xx，且要把真因带回去
+        is IllegalArgumentException -> LlmOutcome.Blocked(error.message ?: "地址不合法或被出站闸门拒绝")
+        // 解析不了、连不上、协议本身失败 → 502
+        else -> LlmOutcome.Unreachable(error.message ?: "外呼失败（${error::class.simpleName}）")
+    }
+
+    /**
+     * 通过注册的 [LlmProvider] 外呼一次，并把结果收成三态（见 [LlmOutcome]）。
+     * 具体协议由 provider 决定 —— 框架不认识任何一家（从前这里写死 OpenAI 的
+     * URL 拼接与 `choices[0]` 解析，想接别家只能改框架）。
+     */
+    private fun callLlmOutcome(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): LlmOutcome {
+        val provider = providerRegistry.forProfile(profile)
+            ?: return LlmOutcome.Unreachable("没有能处理「${profile.kind.name}」这种连接的 provider")
+        return try {
+            val text = provider.chat(profile, messages)
+            if (text.isNullOrBlank()) LlmOutcome.Unreachable("上游没有返回可用内容") else LlmOutcome.Ok(text)
+        } catch (error: Throwable) {
+            classifyProviderError(error)
+        }
     }
 
     /**
      * 文章阅读理解：必须有外部模型连接。没有连接或外呼失败都返回 `error`，
-     * 由 HTTP 层映射成 409/502 —— 不再用本地关键词抽取冒充模型结果。
+     * 由 HTTP 层映射成 409/400/502 —— 不再用本地关键词抽取冒充模型结果。
      * 这是 `/api/agent/comprehend` 的真正执行体（经由 [AgentConnection] 收口到 HTTP）。
      */
     suspend fun comprehend(
@@ -148,22 +190,35 @@ class Agent(
                 error = "no_connection",
             )
         val prompt = buildComprehensionPrompt(text, question, summarySentences, topKeywords)
-        val llm = callExternalHttp(ext, listOf(LlmMessage("user", prompt)))
-            ?: return ComprehendOutcome(
+        when (val llm = callLlmOutcome(ext, listOf(LlmMessage("user", prompt)))) {
+            is LlmOutcome.Ok -> return ComprehendOutcome(
+                engine = "external:" + ext.id,
+                summary = llm.text.trim(),
+                keywords = emptyList(),
+                answer = question,
+                sentencesCount = -1,
+            )
+            // 从前这里不分青红皂白报 `upstream_unreachable`：用户填了内网地址被告知"连不上"，
+            // 于是去查网络，而真相是他自己填的地址被闸门拒了 —— 这条分支现在如实说 400 + 原因。
+            is LlmOutcome.Blocked -> return ComprehendOutcome(
+                engine = "unavailable",
+                summary = "",
+                keywords = emptyList(),
+                answer = null,
+                sentencesCount = 0,
+                error = "invalid_request",
+                errorDetail = llm.why,
+            )
+            is LlmOutcome.Unreachable -> return ComprehendOutcome(
                 engine = "unavailable",
                 summary = "",
                 keywords = emptyList(),
                 answer = null,
                 sentencesCount = 0,
                 error = "upstream_unreachable",
+                errorDetail = llm.why,
             )
-        return ComprehendOutcome(
-            engine = "external:" + ext.id,
-            summary = llm.trim(),
-            keywords = emptyList(),
-            answer = question,
-            sentencesCount = -1,
-        )
+        }
     }
 
     /**
@@ -189,7 +244,11 @@ class Agent(
         val ext = selectedProfile()
             ?: return ChatOutcome(engine = "unavailable", content = "", error = "no_connection")
 
-        val provider = providerRegistry.forProfile(ext)
+        val provider = providerRegistry.forProfile(ext) ?: return ChatOutcome(
+            engine = "unavailable", content = "", error = "upstream_unreachable",
+            // 没有 provider 是配置状态，不是网络问题 —— 一句"连不上"会让人去查网络。
+            errorDetail = "没有能处理「${ext.kind.name}」这种连接的 provider",
+        )
         val tools = registry.manifest()
         val toolRounds = mutableListOf<String>()
         val convo = norm.toMutableList()
@@ -206,11 +265,30 @@ class Agent(
         //     original request instead of resending tool results`。
         //     对这类上游，只有 B 能通。所以 A 失败一次就整体切到 B，不再回头试 A。
         var useNativeToolProtocol = true
+        // 最后一跳"到不了"的真因（DNS 失败 / 连不上 / 上游返回非 2xx）。
+        // 只用来把 HTTP 层那句套话换成能照着做事的话，不参与控制流。
+        var providerFailure: String? = null
         for (round in 0 until MAX_TOOL_ROUNDS) {
-            val reply = runCatching {
-                if (useNativeToolProtocol) provider?.chatWithTools(ext, convo, tools)
-                else provider?.chatWithTools(ext, convo, emptyList())
-            }.getOrNull()
+            // 内网地址被闸门拒了要**说清是拒绝**，不能混进 runCatching 变成
+            // "返回 null → 上层报 upstream_unreachable" —— 那会让用户去查网络，
+            // 而真相是他填的 baseUrl 指向本机/内网。这两件事的修法完全不同。
+            val reply: LlmReply? = try {
+                if (useNativeToolProtocol) provider.chatWithTools(ext, convo, tools)
+                else provider.chatWithTools(ext, convo, emptyList())
+            } catch (error: IllegalArgumentException) {
+                // 地址被闸门拒了 / 参数非法：明确报 invalid_request，并把那句中文原样带回去。
+                // 上层（HTTP 层）据此回 400 + 这句消息，用户看到的是"你填的地址是内网"，
+                // 而不是"模型不可达"。
+                val blocked = classifyProviderError(error) as LlmOutcome.Blocked
+                return ChatOutcome(engine = "unavailable", content = "", error = "invalid_request", errorDetail = blocked.why)
+            } catch (error: Throwable) {
+                // 「到不了」这一支从前把异常整个丢掉（`{ null }`），于是域名打错一个字母
+                // 与上游超时在用户眼里都是同一句"外部模型连不上"。
+                // 留着 null 继续走既有的协议降级逻辑（A→B），但把原因记下来，
+                // 最后真要报错时把它带回 HTTP 层。
+                providerFailure = error.message ?: "外呼失败（${error::class.simpleName}）"
+                null
+            }
             // 原生协议这一跳失败：可能是上游不认「回灌」形态。切到文本回灌重试一次本轮。
             if (reply == null && useNativeToolProtocol && convo.any { it.role == "tool" }) {
                 useNativeToolProtocol = false
@@ -223,7 +301,9 @@ class Agent(
                     role = "user",
                     content = "已执行以下工具，结果如下：\n$transcript\n请基于这些结果直接回答，不要再次请求工具。",
                 )
-                val retry = runCatching { provider?.chatWithTools(ext, convo, emptyList()) }.getOrNull()
+                val retry = runCatching { provider.chatWithTools(ext, convo, emptyList()) }
+                    .onFailure { providerFailure = it.message ?: "外呼失败（${it::class.simpleName}）" }
+                    .getOrNull()
                 if (retry != null && retry.toolCalls.isEmpty()) {
                     return ChatOutcome(
                         engine = "external:" + ext.id,
@@ -239,6 +319,7 @@ class Agent(
                     content = "",
                     error = "upstream_unreachable",
                     toolRounds = toolRounds.ifEmpty { null },
+                    errorDetail = providerFailure,
                 )
             }
             if (reply.toolCalls.isEmpty()) {
@@ -284,7 +365,7 @@ class Agent(
 
         // 轮数用完：逼它收敛（不带工具再问一次）。
         val finalText = runCatching {
-            provider?.chat(ext, convo + LlmMessage("user", "请基于以上工具结果直接回答，不要再调用工具。"))
+            provider.chat(ext, convo + LlmMessage("user", "请基于以上工具结果直接回答，不要再调用工具。"))
         }.getOrNull()
         if (!finalText.isNullOrBlank()) {
             return ChatOutcome(
@@ -346,19 +427,6 @@ class Agent(
             append("\n文章：\n" + text + "\n")
         }
 
-    /**
-     * 通过注册的 [LlmProvider] 外呼。具体协议由 provider 决定 —— 框架不认识任何一家。
-     *
-     * 这是本次"框架牢固化"的关键：从前这里写死了 OpenAI 协议（URL 拼 /v1/chat/completions、
-     * 解析 choices[0]），想接别家只能改框架。现在只认 [LlmProvider] 这个形状。
-     *
-     * 失败语义不变：provider 返回 null 或抛异常，都视为"这次没拿到"，由调用方报错。
-     */
-    private fun callExternalHttp(profile: AgentProfileStore.Profile, messages: List<LlmMessage>): String? {
-        val provider = providerRegistry.forProfile(profile) ?: return null
-        return runCatching { provider.chat(profile, messages) }.getOrNull()
-    }
-
     /** 文章阅读理解的结构化结果，与 HTTP 层 ComprehendResponse 对齐。 */
     data class ComprehendOutcome(
         val engine: String,
@@ -367,6 +435,11 @@ class Agent(
         val answer: String?,
         val sentencesCount: Int,
         val error: String? = null,
+        /**
+         * 出错的真因（一句中文）。从前只有 `error` 那个码，HTTP 层只能回一句写死的
+         * 套话（"外部模型连不上"），于是"地址是内网"被说成"连不上"。
+         */
+        val errorDetail: String? = null,
     )
 
     /** 一个目标经"规划 → 执行"的极简闭环结果。 */
@@ -383,13 +456,15 @@ class Agent(
         val error: String? = null,
         /** 本轮对话实际执行过的工具（`工具id:结果码`）。没调工具就是 null。 */
         val toolRounds: List<String>? = null,
+        /** 出错的真因（一句中文），同 ComprehendOutcome.errorDetail。 */
+        val errorDetail: String? = null,
     )
 
     companion object {
         /** 一次对话里最多让模型调几轮工具 —— 防止它无限"我要再查一个"把请求拖死。 */
-        const val MAX_TOOL_ROUNDS = 6
+        val MAX_TOOL_ROUNDS: Int = AppConfig.aiMaxToolRounds
 
         /** 单次工具结果塞回上下文的字符上限。 */
-        const val MAX_TOOL_DATA = 4000
+        val MAX_TOOL_DATA: Int = AppConfig.aiMaxToolData
     }
 }

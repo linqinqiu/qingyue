@@ -25,13 +25,14 @@ import java.util.concurrent.ConcurrentHashMap
  * 与 HTTP 端点计数无关：这里注册的工具**不产生任何 HTTP 路由**，`/api/catalog` 的 139 条不变。
  * `ApiCatalog.test.ts` 那道双向核对门禁照常成立。
  */
-class ToolRegistry(
-    builtin: List<Tool> = BuiltinTools.all(),
+class ToolRegistry(    builtin: List<Tool> = BuiltinTools.all(),
     private val allowRemovingBuiltin: Boolean = false,
 ) {
 
     private val tools = ConcurrentHashMap<String, Tool>()
     private val builtinIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /** 插件 id → 它注册进来的工具 id。卸载插件时据此精确摘除，不碰别人的。 */
+    private val originIndex: MutableMap<String, MutableSet<String>> = ConcurrentHashMap()
 
     init {
         builtin.forEach { t ->
@@ -40,6 +41,39 @@ class ToolRegistry(
             require(tools.putIfAbsent(id, t) == null) { "内置工具 id 重复：$id" }
             builtinIds += id
         }
+    }
+
+    /**
+     * 以插件身份注册一个工具 —— [PluginManager] 装载插件时走这条。
+     *
+     * 与普通 [register] 的区别只有一件：把「这个工具归哪个插件」记下来。
+     * 有了它，`/api/agent/manifest` 能说清每个工具是谁装的，卸载时也能精确摘除。
+     *
+     * 来源会**写回** `tool.meta.origin`：manifest 直接把它发出去，
+     * 不需要调用方另外维护一份映射。
+     */
+    fun registerFromPlugin(pluginId: String, tool: Tool, replace: Boolean = false): Boolean {
+        require(pluginId.isNotBlank()) { "插件 id 不能为空" }
+        tool.meta = tool.meta.copy(origin = "plugin:$pluginId")
+        val ok = register(tool, replace)
+        if (ok) originIndex.getOrPut(pluginId) { ConcurrentHashMap.newKeySet() } += tool.meta.id
+        return ok
+    }
+
+    /** 某个插件注册进来的工具 id（按 id 排序，便于展示）。 */
+    fun toolIdsOf(pluginId: String): Set<String> = originIndex[pluginId]?.toSortedSet() ?: emptySet()
+
+    /** 全部工具按来源分组：`origin` → 工具 id 列表。用于「插件」面板与审计。 */
+    fun toolsByOrigin(): Map<String, List<String>> =
+        tools.values.groupBy({ it.meta.origin ?: BUILTIN_ORIGIN }, { it.meta.id })
+            .mapValues { (_, ids) -> ids.sorted() }
+
+    /** 卸载某个插件注册的全部工具。返回摘掉几个。 */
+    fun unregisterFromPlugin(pluginId: String): Int {
+        val ids = originIndex.remove(pluginId) ?: return 0
+        var removed = 0
+        ids.forEach { id -> if (tools.remove(id) != null) removed++ }
+        return removed
     }
 
     /** 注册一个工具。id 已存在时返回 false（不覆盖），除非 [replace] 为 true。 */
@@ -88,4 +122,14 @@ class ToolRegistry(
 
     /** 内置工具 id 快照（只读用途）。 */
     fun builtinToolIds(): Set<String> = builtinIds.toSet()
+
+    companion object {
+        /**
+         * 内置工具在「按来源分组」里的键。
+         *
+         * 用一个可读的名字而不是 null：`toolsByOrigin()` 的返回要能直接拿去展示，
+         * 让调用方不用先判空再补一个"内置"标签。
+         */
+        const val BUILTIN_ORIGIN = "builtin"
+    }
 }

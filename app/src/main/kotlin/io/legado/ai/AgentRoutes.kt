@@ -23,7 +23,22 @@ import java.nio.file.Path
 // ===== 清单 manifest =====
 
 @Serializable
-private data class ManifestTool(val id: String, val group: String, val description: String, val writes: Boolean)
+private data class ManifestTool(
+    val id: String,
+    val group: String,
+    val description: String,
+    val writes: Boolean,
+    /**
+     * 工具来源：`"builtin"` = 框架内置，`"plugin:<插件id>"` = 插件注册的。
+     *
+     * 插件一多，「AI 能调 56 个工具」就是黑话 —— 分不清哪个归谁管，
+     * 想卸一个插件时也无从判断会连带影响哪些能力。带来源之后，
+     * 调用方（前端「插件」面板、审计）能直接说清。
+     *
+     * 用非空字符串而不是可空：序列化出去少一层判空，前端也不用补默认值。
+     */
+    val origin: String = "builtin",
+)
 
 @Serializable
 private data class ManifestResponse(
@@ -38,7 +53,13 @@ suspend fun ApplicationCall.agentManifest(profileStoreHome: Path, profileStore: 
     // 不再用内置 local 兜底——所以 builtinConnections 恒为空，保留字段只为契约稳定。
     val externalExists = store.list(profileStoreHome).isNotEmpty()
     val tools = agentConnection?.manifest().orEmpty().map {
-        ManifestTool(id = it.id, group = it.group, description = it.description, writes = it.writes)
+        ManifestTool(
+            id = it.id,
+            group = it.group,
+            description = it.description,
+            writes = it.writes,
+            origin = it.origin ?: ToolRegistry.BUILTIN_ORIGIN,
+        )
     }
     respond(
         ManifestResponse(
@@ -227,7 +248,7 @@ suspend fun ApplicationCall.agentComprehend(agentConnection: AgentConnection?) {
     }
     val outcome = conn.comprehend(req.text, req.question, req.summarySentences, req.topKeywords)
     if (outcome.error != null) {
-        respond(outcomeStatus(outcome.error), ApiError(outcome.error, outcomeMessage(outcome.error)))
+        respond(outcomeStatus(outcome.error), ApiError(outcome.error, outcomeMessage(outcome.error, outcome.errorDetail)))
         return
     }
     respond(toComprehendResponse(outcome))
@@ -266,7 +287,7 @@ suspend fun ApplicationCall.agentChat(agentConnection: AgentConnection?) {
     }
     val outcome = conn.chat(req.messages.map { (it.role to it.content) })
     if (outcome.error != null) {
-        respond(outcomeStatus(outcome.error), ApiError(outcome.error, outcomeMessage(outcome.error)))
+        respond(outcomeStatus(outcome.error), ApiError(outcome.error, outcomeMessage(outcome.error, outcome.errorDetail)))
         return
     }
     respond(
@@ -279,20 +300,38 @@ suspend fun ApplicationCall.agentChat(agentConnection: AgentConnection?) {
     )
 }
 
-/** 网关错误的 HTTP 语义：没配置是客户端可修复的（409），外呼失败是上游问题（502）。 */
+/**
+ * 网关错误的 HTTP 语义。三条各管一件事，从前少了中间那条：
+ * - `no_connection` 是没配置，客户端自己就能修 → 409；
+ * - `invalid_request` 是**地址被出站闸门拒了 / 参数不对**，同样是客户端可修的 → 400。
+ *   从前这个码根本不在表里，落进 `else -> 500`：用户填了 `127.0.0.1:5591` 当 baseUrl，
+ *   看到的是"服务器内部错误"，而真相是他自己填的地址被拒 —— 500 还会让人去翻服务端日志。
+ * - `upstream_unreachable` / `tool_rounds_exhausted` 是上游问题 → 502。
+ */
 private fun outcomeStatus(code: String): HttpStatusCode = when (code) {
     "no_connection" -> HttpStatusCode.Conflict
+    "invalid_request" -> HttpStatusCode.BadRequest
     "upstream_unreachable", "tool_rounds_exhausted" -> HttpStatusCode.BadGateway
     "empty_messages" -> HttpStatusCode.BadRequest
     else -> HttpStatusCode.InternalServerError
 }
 
-private fun outcomeMessage(code: String): String = when (code) {
-    "no_connection" -> "尚未登记外部模型连接；请先在「AI 接入 → 连接」里登记一个 openai-compatible 地址。"
-    "upstream_unreachable" -> "外部模型连不上，本次没有结果。"
-    "tool_rounds_exhausted" -> "外部模型在工具调用轮数上限内仍未给出结论。"
-    "empty_messages" -> "messages 不能为空"
-    else -> "AI 请求失败：$code"
+/**
+ * 错误文案：有真因就报真因（网关那句中文"拒绝访问内网或本机地址"、
+ * "无法解析 xxx 域名"），没有才回兜底套话。
+ * 从前这里一律套话，于是"被拒绝"与"连不上"在界面上长得一模一样。
+ */
+private fun outcomeMessage(code: String, detail: String? = null): String {
+    val specific = detail?.trim()?.takeIf { it.isNotEmpty() }
+    if (specific != null) return specific
+    return when (code) {
+        "no_connection" -> "尚未登记外部模型连接；请先在「AI 接入 → 连接」里登记一个 openai-compatible 地址。"
+        "invalid_request" -> "这个连接用不了：地址不合法或被出站安全闸门拒绝（内网 / 本机地址不放开）。"
+        "upstream_unreachable" -> "外部模型连不上，本次没有结果。"
+        "tool_rounds_exhausted" -> "外部模型在工具调用轮数上限内仍未给出结论。"
+        "empty_messages" -> "messages 不能为空"
+        else -> "AI 请求失败：$code"
+    }
 }
 
 private fun toComprehendResponse(o: Agent.ComprehendOutcome) = ComprehendResponse(

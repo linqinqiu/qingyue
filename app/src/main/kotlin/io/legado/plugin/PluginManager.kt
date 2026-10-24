@@ -156,8 +156,11 @@ class PluginManager(
      */
     fun unload(pluginId: String): Boolean {
         val target = loaded.firstOrNull { it.plugin.metadata.id == pluginId } ?: return false
+        // 只撤本插件注册的那些。以注册表的来源索引为准（单一来源），
+        // 万一装载时漏记了某条，这里也兜得住。
+        registry.unregisterFromPlugin(pluginId)
         target.registeredToolIds.forEach { id ->
-            // 只撤本插件注册的那些；撞名被拒的情况不会出现在这里
+            // 撞名被拒的情况不会出现在这里；上面那句已摘掉绝大部分
             registry.unregister(id)
         }
         target.registeredProviderIds.forEach { id ->
@@ -286,7 +289,9 @@ class PluginManager(
         for (tool in tools) {
             val id = tool.meta.id
             val ok = try {
-                registry.register(tool)
+                // 走 registerFromPlugin：把「这个工具归哪个插件」记进注册表，
+                // manifest 才能说清每个工具是谁装的，卸载时也摘得干净。
+                registry.registerFromPlugin(meta.id, tool)
             } catch (e: Throwable) {
                 failures += LoadFailure(source = source, reason = "注册工具 $id 失败：${e.message ?: e::class.simpleName}")
                 false

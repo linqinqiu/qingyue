@@ -25,6 +25,13 @@ data class AgentContext(
     val health: SourceHealth,
     val subscriptions: SubscriptionService,
     val coverCache: CoverCache,
+    // 朗读引擎（Edge TTS）。给 AI 的 `tts.*` 工具用 —— 与 `/api/tts/*` 端点同一份服务。
+    // 可空：不是每个装配场景都有朗读引擎（单元测试、某些嵌入用法）。
+    // 工具遇到 null 时要如实说"这台服务没装朗读引擎"，不能假装成功。
+    val edgeTts: io.legado.tts.EdgeTtsService? = null,
+    // 备份区（`/api/backup/kept` 背后那一份）。给 AI 的 `backup.*` 工具用。
+    // 可空，理由同 edgeTts。
+    val backupStore: io.legado.backup.BackupStore? = null,
     /** 当前进程真实绑定的身份，护栏据此拒绝"把服务搬到公网"之类意图。 */
     val boundHost: String = "127.0.0.1",
     val boundPort: Int = 1234,
@@ -57,6 +64,14 @@ typealias ToolArgs = Map<String, Any?>
 
 /**
  * 工具的元信息，供 [Agent] 选择、也作为进程内"能力清单"对外暴露。
+ *
+ * [origin] 说明这个工具**是谁装的**：
+ * - `null` = 框架内置（`BuiltinTools`）
+ * - `"plugin:<插件id>"` = 某个插件注册的
+ *
+ * 为什么必须有：插件一多，「AI 现在能调 56 个工具」这句话就变成了黑话 ——
+ * 出了事（某个工具行为怪异、想卸掉一个插件）时，分不清哪个工具归谁管，
+ * 审计就只能靠猜。带来源之后，`/api/agent/manifest` 与「插件」面板都能直接说清。
  */
 data class ToolMeta(
     val id: String,
@@ -64,7 +79,12 @@ data class ToolMeta(
     val description: String,
     /** 该工具是否会写库（AI 在真正调用前要先过护栏）。 */
     val writes: Boolean,
-)
+    /** 工具来源：null = 框架内置；`"plugin:<插件id>"` = 插件注册。 */
+    val origin: String? = null,
+) {
+    /** 是不是框架内置的。 */
+    val isBuiltin: Boolean get() = origin == null
+}
 
 /**
  * 单个可调用能力。实现里直接复用 [AgentContext] 持有的服务，与 HTTP handler 同一条路径。

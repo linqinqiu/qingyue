@@ -2,6 +2,9 @@ package io.legado.ai
 
 import io.legado.data.addNote
 import io.legado.data.addReadingLog
+import io.legado.data.assignBookGroup
+import io.legado.data.createBookGroup
+import io.legado.data.deleteBookGroup
 import io.legado.data.deleteNote
 import io.legado.data.deleteReplaceRule
 import io.legado.data.deleteRssSource
@@ -12,6 +15,7 @@ import io.legado.data.getRssSource
 import io.legado.data.getSource
 import io.legado.data.importReplaceRules
 import io.legado.data.importSources
+import io.legado.data.listBookGroups
 import io.legado.data.listBookshelf
 import io.legado.data.listNotes
 import io.legado.data.listReadingLog
@@ -22,6 +26,7 @@ import io.legado.data.listSubscriptions
 import io.legado.data.removeBookshelf
 import io.legado.data.reorderSources
 import io.legado.data.saveBookshelf
+import io.legado.data.saveProgress
 import io.legado.data.saveReplaceRule
 import io.legado.data.saveSource
 import io.legado.data.setBookshelfCompleted
@@ -30,12 +35,14 @@ import io.legado.data.toggleReplaceRules
 import io.legado.data.updateBookshelfInfo
 import io.legado.data.updateNote
 
+import io.legado.content.ContentProcessor
 import io.legado.model.ReplaceRule
 import io.legado.model.ReplaceRuleImportResponse
 import io.legado.model.BookshelfWriteRequest
 import io.legado.model.BookshelfInfoUpdateRequest
 import io.legado.model.BookNoteWrite
 import io.legado.model.ReadingLogRequest
+import io.legado.model.ReadingProgress
 import io.legado.source.SourceCodec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -91,10 +98,22 @@ object BuiltinTools {
 
         // —— 笔记/阅读 notes ——
         noteList, noteAdd, noteUpdate, noteDelete, readingLogAdd, readingLogList,
-        progressGet,
+        progressGet, progressSet,
 
         // —— 订阅 subscriptions ——
         subList, subUpdateOne, subUpdateAll,
+
+        // —— 书籍分组（上游 BookGroup）——
+        groupList, groupAdd, groupRemove, groupAssign,
+
+        // —— 阅读器 A I：清洗 / 改写 / 选中行为 ——
+        textClean, textRewrite, selectTextAction,
+
+        // —— 朗读 tts ——
+        ttsVoices, ttsSpeak,
+
+        // —— 备份 backup ——
+        backupList, backupGet,
 
         // —— 发现/搜索/正文（只读探针，供 AI 探查内容）explore/search ——
         exploreTabs, explore, search, bookInfo, chapters, content,
@@ -417,6 +436,172 @@ object BuiltinTools {
         AgentResult("ok", data = ctx.database.listReadingLog(days))
     }.also { it.meta = ToolMeta("readingLog.list", "notes", "读取最近 N 天的阅读记录。", writes = false) }
 
+    val progressSet = Tool { ctx, args ->
+        val sourceId = string(args, "sourceId")
+        val bookUrl = string(args, "bookUrl")
+        val chapterUrl = string(args, "chapterUrl")
+        val chapterIndex = (args["chapterIndex"] as? Number)?.toInt() ?: 0
+        val scrollPosition = (args["scrollPosition"] as? Number)?.toDouble() ?: 0.0
+        if (sourceId.isBlank() || bookUrl.isBlank()) return@Tool ctx.error("invalid_request", "缺少 sourceId 或 bookUrl")
+        val progress = ctx.database.saveProgress(ReadingProgress(sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition, updatedAt = System.currentTimeMillis()))
+        AgentResult("ok", data = progress)
+    }.also { it.meta = ToolMeta("progress.set", "notes", "保存一本书的阅读进度（当前章节 + 滚动位置）。", writes = true) }
+
+    // ===== 阅读 A I：清洗 / 改写 / 选中行为 =====
+
+    /**
+     * 对一个选中的文本块调用「净化」规则：清掉广告、乱码、版权水印等。
+     *
+     * 这里**不自己跑正则**：交给模型把规则按 `pattern` + `replacement` 翻译成
+     * `replace` 操作，服务端用 `replaceRuleRunner` 执行。模型负责"找规则、判后果"，
+     * 服务端负责"执行且不越狱"。
+     *
+     * 参数：
+     * - `text`：待清洗的原始文本（通常是选中的一段正文）
+     * - `ruleIds`：要用的净化规则 id 列表（不给就不改，保持安全）
+     * - `dryRun`：true 只预览变更，不落库
+     *
+     * 返回：清洗后的文本 + 变化摘要（`changed`、`removedChars`、`rulesApplied`）。
+     */
+    val textClean = Tool { ctx, args ->
+        val text = string(args, "text")
+        val ruleIds = listString(args, "ruleIds")
+        val dryRun = boolean(args, "dryRun", false)
+
+        if (text.isBlank()) return@Tool ctx.error("invalid_request", "缺少 text")
+
+        // 1) 按 id 把规则取出来（不信任模型传来的 pattern/replacement —— 那是它能编的东西）
+        val rules = mutableListOf<ReplaceRule>()
+        val validRuleIds = mutableSetOf<String>()
+        for (r in ruleIds) {
+            val id = r.trim()
+            if (id.isBlank()) continue
+            val rule = ctx.database.getReplaceRule(id) ?: continue
+            validRuleIds += id
+            rules += rule
+        }
+
+        val originalSize = text.length
+        // 2) 走**与正文同一套**的净化执行器（ContentProcessor），不是另写一份正则逻辑
+        val cleaned = if (rules.isNotEmpty()) {
+            ContentProcessor.processContent(text, rules, bookName = string(args, "bookName").ifBlank { null })
+        } else text
+
+        val changed = cleaned != text
+        AgentResult("ok", data = mapOf(
+            "dryRun" to dryRun,
+            "changed" to changed,
+            "originalChars" to originalSize,
+            "finalChars" to cleaned.length,
+            "removedChars" to (originalSize - cleaned.length).coerceAtLeast(0),
+            "rulesApplied" to (if (dryRun) emptyList() else validRuleIds.toList()),
+            "content" to cleaned,
+        ))
+    }.also {
+        it.meta = ToolMeta(
+            "ai.textClean", "reading",
+            "对选中正文调用净化规则清洗：去广告、去乱码、去版权水印。规则由 id 指定（模型不能自己编规则），执行走与正文同一套净化器。",
+            writes = false,
+        )
+    }
+
+    /**
+     * 对选中文本改写/润色/朗读稿生成。
+     *
+     * 这是纯 LLM 工具：没有服务端正则会动，模型负责生成新文本。
+     */
+    val textRewrite = Tool { ctx, args ->
+        val text = string(args, "text")
+        val purpose = string(args, "purpose", "普通润色").ifBlank { "普通润色" }
+        val length = string(args, "length", "normal") // short / normal / long
+
+        if (text.isBlank()) return@Tool ctx.error("invalid_request", "缺少 text")
+
+        val prompt = buildString {
+            append("请把下面的文本改成「$purpose」风格。\n")
+            append("长度要求：")
+            append("short → 最多 60 字，直接给最精炼版；")
+            append("normal → 保持原长，仅润色语病与措辞；")
+            append("long → 把每个要点扩展成 2~3 句，用于朗读稿。\n")
+            append("\n请直接给出改写后的文本，不要解释、不要标题。\n\n")
+            append("原文：\n")
+            append(text)
+        }
+
+        AgentResult("ok", data = mapOf(
+            "purpose" to purpose,
+            "length" to length,
+            "content" to prompt,
+            "error" to null,
+        ))
+    }.also {
+        it.meta = ToolMeta(
+            "ai.textRewrite", "reading",
+            "对选中文本做改写/润色/朗读稿生成。模型负责生成，服务端只负责把文本转回。",
+            writes = false,
+        )
+    }
+
+    /**
+     * 对选中文本执行系统动作：高亮保存、保存笔记、删除该选中项。
+     *
+     * 这条工具真正写库：把选中区域作为 `book_note` 存进 `book_note` 表。
+     * 模型负责"我要做什么"，调用本工具把结果落库。
+     */
+    val selectTextAction = Tool { ctx, args ->
+        val action = string(args, "action") // "highlight", "note", "delete"
+        val sourceId = string(args, "sourceId")
+        val bookUrl = string(args, "bookUrl")
+        val note = string(args, "note")
+        val excerpt = string(args, "excerpt")
+
+        if (action.isBlank()) return@Tool ctx.error("invalid_request", "缺少 action")
+        // delete 走的是 noteId，不按书定位 —— 别拿 sourceId/bookUrl 去卡它，
+        // 否则"删掉刚才那条笔记"永远因为缺书标识而失败。
+        if (action != "delete" && (sourceId.isBlank() || bookUrl.isBlank())) {
+            return@Tool ctx.error("invalid_request", "缺少 sourceId 或 bookUrl")
+        }
+
+        when (action) {
+            "highlight", "note" -> {
+                // 章节定位：优先用模型给的 chapterIndex；没有就给 0（第一章），
+                // 并把实际落点如实回给调用方，别让它以为落在别处。
+                val chapterIndex = (args["chapterIndex"] as? Number)?.toInt() ?: 0
+                val chapterUrl = string(args, "chapterUrl")
+                val startOffset = (args["startOffset"] as? Number)?.toInt() ?: 0
+                val endOffset = (args["endOffset"] as? Number)?.toInt() ?: 0
+                val written = ctx.database.addNote(
+                    BookNoteWrite(
+                        sourceId = sourceId,
+                        bookUrl = bookUrl,
+                        bookName = string(args, "bookName"),
+                        chapterUrl = chapterUrl,
+                        chapterIndex = chapterIndex,
+                        startOffset = startOffset,
+                        endOffset = endOffset,
+                        excerpt = excerpt,
+                        note = if (action == "highlight") (note.ifBlank { "高亮" }) else note,
+                    ),
+                )
+                AgentResult("ok", data = mapOf("action" to action, "note" to written))
+            }
+            "delete" -> {
+                // 用 strId 而不是 string：noteId 可能以数字传过来（工具参数不保证都是字符串）。
+                val noteId = strId(args, "noteId")
+                if (noteId == null) return@Tool ctx.error("invalid_request", "delete 动作缺少 noteId")
+                val ok = ctx.database.deleteNote(noteId)
+                if (ok) AgentResult("ok") else ctx.error("not_found", "笔记 $noteId 不存在")
+            }
+            else -> ctx.error("invalid_action", "不支持的动作：$action（支持 highlight / note / delete）")
+        }
+    }.also {
+        it.meta = ToolMeta(
+            "ai.selectTextAction", "reading",
+            "对选中文本执行系统动作：保存为高亮（highlight）、保存为笔记（note）、或删除某条笔记（delete，需 noteId）。",
+            writes = true,
+        )
+    }
+
     // ===== subscriptions =====
 
     val subList = Tool { ctx, _ -> AgentResult("ok", data = ctx.database.listSubscriptions()) }
@@ -434,7 +619,99 @@ object BuiltinTools {
         AgentResult("ok", data = mapOf("updated" to res.count { it.second.isSuccess }, "failed" to res.count { it.second.isFailure }))
     }.also { it.meta = ToolMeta("subscription.updateAll", "subscriptions", "更新全部订阅。", writes = true) }
 
-    // ===== explore / search / content（只读探针） =====
+    // ===== 书架分组（bookshelf group） =====
+
+    val groupList = Tool { ctx, _ ->
+        AgentResult("ok", data = ctx.database.listBookGroups())
+    }.also { it.meta = ToolMeta("source.group.list", "sources", "列出“书籍分组”（上游 `data/entities/BookGroup.kt`），`group_id=0` 代表“未分组”。", writes = false) }
+
+    val groupAdd = Tool { ctx, args ->
+        val name = string(args, "name")
+        if (name.isBlank()) return@Tool ctx.error("invalid_request", "分组名不能为空")
+        val group = ctx.database.createBookGroup(name)
+        AgentResult("ok", data = group)
+    }.also { it.meta = ToolMeta("source.group.add", "sources", "新建一个书籍分组。`name` 最长 24 字；同名不重复，直接返回已存在的那个。", writes = true) }
+
+    val groupRemove = Tool { ctx, args ->
+        val id = strId(args) ?: return@Tool ctx.error("invalid_request", "缺少 id")
+        val ok = ctx.database.deleteBookGroup(id)
+        if (ok) AgentResult("ok") else ctx.error("not_found", "分组不存在或已删除")
+    }.also { it.meta = ToolMeta("source.group.remove", "sources", "删除一个分组。若该组内有书，书会整体回到“未分组”（group_id=0）。", writes = true) }
+
+    val groupAssign = Tool { ctx, args ->
+        val sourceId = string(args, "sourceId")
+        val bookUrl = string(args, "bookUrl")
+        val groupId = strId(args, "groupId")
+        if (sourceId.isBlank() || bookUrl.isBlank()) return@Tool ctx.error("invalid_request", "缺少 sourceId 或 bookUrl")
+        if (groupId == null) return@Tool ctx.error("invalid_request", "缺少 groupId")
+        val item = ctx.database.assignBookGroup(sourceId, bookUrl, groupId)
+        if (item == null) ctx.error("not_found", "该分组不存在或这本书不在书架上")
+        else AgentResult("ok", data = item)
+    }.also { it.meta = ToolMeta("source.group.assign", "sources", "把一本书放进/移出分组。groupId=0 表示移出分组。", writes = true) }
+
+    // ===== 朗读 tts =====
+
+    val ttsVoices = Tool { ctx, _ ->
+        val tts = ctx.edgeTts ?: return@Tool ctx.error("tts_unavailable", "这台服务没装朗读引擎")
+        AgentResult("ok", data = tts.listVoices())
+    }.also { it.meta = ToolMeta("tts.voices", "tts", "列出可用的朗读音色（id / 名称 / 语言 / 性别）。", writes = false) }
+
+    /**
+     * 把一段文字合成成朗读音频。
+     *
+     * 只把**音频字节数**与参数回给模型，不把音频塞进上下文 ——
+     * 音频是二进制，进了模型上下文就废了。
+     */
+    val ttsSpeak = Tool { ctx, args ->
+        val tts = ctx.edgeTts ?: return@Tool ctx.error("tts_unavailable", "这台服务没装朗读引擎")
+        val text = string(args, "text")
+        if (text.isBlank()) return@Tool ctx.error("invalid_request", "缺少 text")
+        val voice = string(args, "voice", "zh-CN-XiaoxiaoNeural")
+        val rate = (args["rate"] as? Number)?.toInt() ?: 0
+        val pitch = (args["pitch"] as? Number)?.toInt() ?: 0
+        val bytes = runCatching { tts.synthesize(text, voice, rate, pitch) }
+            .getOrElse { return@Tool ctx.error("tts_synthesis_failed", it.message ?: "朗读合成失败") }
+        if (bytes.isEmpty()) {
+            return@Tool ctx.error("tts_empty_audio", "合成结果是空的（文本可能只有标点，或音色不可用）")
+        }
+        AgentResult("ok", data = mapOf(
+            "audioBytes" to bytes.size,
+            "voice" to voice,
+            "rate" to rate,
+            "pitch" to pitch,
+            "textChars" to text.length,
+        ))
+    }.also {
+        it.meta = ToolMeta(
+            "tts.speak", "tts",
+            "把一段文字合成为朗读音频。返回音频字节数与所用参数（音频本身不进模型上下文）。",
+            writes = false,
+        )
+    }
+
+    // ===== 备份 backup =====
+
+    val backupList = Tool { ctx, _ ->
+        val store = ctx.backupStore ?: return@Tool ctx.error("backup_unavailable", "这台服务没接备份区")
+        AgentResult("ok", data = store.list())
+    }.also { it.meta = ToolMeta("backup.list", "backup", "列出备份区里原样收下的条目（书签 / 字典 / 朗读引擎等个性化内容）。", writes = false) }
+
+    val backupGet = Tool { ctx, args ->
+        val store = ctx.backupStore ?: return@Tool ctx.error("backup_unavailable", "这台服务没接备份区")
+        val name = string(args, "name")
+        if (name.isBlank()) return@Tool ctx.error("invalid_request", "缺少 name")
+        val text = store.read(name) ?: return@Tool ctx.error("not_found", "备份区里没有「$name」")
+        // 内容可能很大，回给模型前截断并说明长度 —— 别把整个备份包塞进上下文。
+        val limit = 4000
+        AgentResult("ok", data = mapOf(
+            "name" to name,
+            "chars" to text.length,
+            "truncated" to (text.length > limit),
+            "content" to text.take(limit),
+        ))
+    }.also { it.meta = ToolMeta("backup.get", "backup", "按 name 读取备份区里某一条的内容（超长会截断并说明真实长度）。", writes = false) }
+
+    // ===== subscriptions =====
 
     val exploreTabs = Tool { ctx, args ->
         val raw = string(args, "json")

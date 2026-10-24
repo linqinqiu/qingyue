@@ -50,6 +50,13 @@ object AgentModule {
          * 仅放开"批量写需显式确认"这一业务默认；地址外绑 / 乐观锁冲突两道硬护栏不可经此放开。
          */
         guardrailsPolicy: GuardrailsPolicy = DefaultGuardrailsPolicy,
+        /**
+         * 朗读引擎：给 `tts.*` 工具用。不传就是 null，工具会如实回 `tts_unavailable`
+         * （而不是假装合成成功）。
+         */
+        edgeTts: io.legado.tts.EdgeTtsService? = null,
+        /** 备份区：给 `backup.*` 工具用。不传就是 null，同理如实报不可用。 */
+        backupStore: io.legado.backup.BackupStore? = null,
     ): AgentConnection {
         val ctx = AgentContext(
             database = database,
@@ -58,6 +65,8 @@ object AgentModule {
             health = SourceHealth(runner),
             subscriptions = subscriptions,
             coverCache = coverCache,
+            edgeTts = edgeTts,
+            backupStore = backupStore,
         )
         // 网关需要 homeDirectory 才能读写 agent-profiles.json，从而真正支持外部模型阅读理解。
         return AgentConnection(
