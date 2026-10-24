@@ -4,6 +4,7 @@
 // `VirtualChapterList.tsx`，那条理由与它的默认导入一起搬过去了。）
 import React, { CSSProperties, Fragment, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, BookDetails, BookNote, Chapter, SearchResult, TocRuleOption } from '../lib/api'
+import { getBrand } from '../lib/brandStore'
 import { ContextMenuItem, showContextMenu } from '../components/ContextMenu'
 import { Icon } from '../icons'
 import { useEscapeClose } from '../lib/useEscapeClose'
@@ -13,7 +14,11 @@ import { TapAction, zoneAt } from './tapZones'
 import { isMediaType } from '../shelf/bookType'
 import { TapZoneEditor } from './TapZoneEditor'
 import { NoteToolbar, type NoteDraft } from './NoteToolbar'
+import { MarkingMenu } from './MarkingMenu'
+import { setAiChatOpen } from '../features/ai/aiChatStore'
+import { setSelection, setSelectionFromDraft } from '../lib/selectionStore'
 import { NotesPanel } from './NotesPanel'
+import { BookSearchDialog } from './BookSearchDialog'
 import { TocDrawerHeader } from './TocDrawerHeader'
 import { ReaderHeader } from './ReaderHeader'
 import { Md3BottomBar, Md3TopBar } from './Md3Chrome'
@@ -149,6 +154,27 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   /** 正在拖「目录 | 正文」那条边界（只为高亮它）。 */
   const [resizingSidebar, setResizingSidebar] = useState(false)
   const [toolbarsVisible, setToolbarsVisible] = useState(false)
+  /**
+   * 「隐藏所有控件」纯阅读模式（P1-T3）：进入后顶/底栏、TTS 条、目录/设置弹层、AI 悬浮球全部收起，
+   * 只剩正文。退出靠**边缘把手**或 **Esc**（都标在把手上，可发现）。
+   * 与 `toolbarsVisible` 正交：沉浸式只是把工具栏平移出屏，纯阅读要彻底收掉所有浮层。
+   */
+  const [pureReading, setPureReading] = useState(false)
+  // 纯阅读要连全局的 AI 悬浮球一起藏掉 —— 它在 reader-workspace 之外（main.tsx 挂载），
+  // 所以借 body 类让 CSS 够得着它；组件卸载时摘掉，避免污染别的页面。
+  useEffect(() => {
+    document.body.classList.toggle('reader-pure', pureReading)
+    return () => document.body.classList.remove('reader-pure')
+  }, [pureReading])
+  /** 进/出纯阅读：进入时顺手关掉抽屉与工具栏，避免纯阅读里还飘着半截控件。 */
+  const togglePureReading = useCallback(() => {
+    const next = !pureReading
+    setPureReading(next)
+    if (next) {
+      setActiveDrawer(null)
+      setToolbarsVisible(false)
+    }
+  }, [pureReading])
   // PROPOSAL-020：MD3 阅读外壳，**默认开启**；`?ui=legacy` 或 localStorage 置 0 时回旧界面（回退用）。
   const [uiV2] = useState(() => {
     try {
@@ -174,6 +200,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }
   const [showReplaceRules, setShowReplaceRules] = useState(false)
   const [cachedChapterUrls, setCachedChapterUrls] = useState<Set<string>>(new Set())
+  /**
+   * 已取到正文的章节字数（`chapterUrl` → 字符数）。用户要的「当获取到内容的时候，把章节字数
+   * 显示在右边」就是这张表：只有正文真的落库的章节才进得来，没内容就没有字数可说。
+   *
+   * 两个来源汇成一张表：
+   * - 服务端 `GET /api/bookshelf/cached-chapters` 的 `cachedWordCounts`（与 `cachedChapterUrls` 同序）；
+   * - 本章刚取回正文时本地直接量 `content.length` —— 服务端那一刻也把它写进了缓存，
+   *   但界面不该等下一轮同步才显示出"眼前这一章的字数"。
+   */
+  const [chapterWordCounts, setChapterWordCounts] = useState<ReadonlyMap<string, number>>(new Map())
   const [offlineStatsModal, setOfflineStatsModal] = useState(false)
   const [localSyncing, setLocalSyncing] = useState(false)
   const [localSyncProgress, setLocalSyncProgress] = useState({ current: 0, total: 0 })
@@ -294,6 +330,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   // 异步回调里判断「这一章还是不是当前章」必须用 ref：闭包捕获的 chapter 是发起请求那一刻的。
   const currentChapterUrlRef = useRef('')
   currentChapterUrlRef.current = chapter?.url ?? ''
+  // AI 闭环：记住「本章原始正文」（AI 覆盖应用之前的那一版），用于「撤销」回滚。
+  // 只在正常加载正文时写入；AI 覆盖走 setContent 直接改，不会污染这里。
+  const chapterBaseContentRef = useRef('')
   const bookName = currentBook.details.name || '书籍正文'
 
   /**
@@ -391,12 +430,19 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       if (!syncCacheAliveRef.current) return
 
       const mergedSet = new Set<string>(localOfflineSet)
+      const mergedWords = new Map<string, number>()
       if (cachedUrlsRes?.cachedChapterUrls) {
-        for (const u of cachedUrlsRes.cachedChapterUrls) {
+        cachedUrlsRes.cachedChapterUrls.forEach((u, i) => {
           mergedSet.add(u)
-        }
+          // 服务端把「地址 → 字数」按同序两个数组回传（见 CachedChaptersResponse.cachedWordCounts）。
+          // 对不上号（旧版服务端的响应没这个字段）就干脆不填，让界面那一格留空 ——
+          // 报 0 字是谎话，报旧书的字数也是谎话。
+          const words = cachedUrlsRes.cachedWordCounts?.[i]
+          if (typeof words === 'number') mergedWords.set(u, words)
+        })
       }
       setCachedChapterUrls(mergedSet)
+      setChapterWordCounts(mergedWords)
 
       const item = shelf.find(s => s.sourceId === currentBook.details.sourceId && s.bookUrl === currentBook.bookUrl)
       // 这本本地书"实际用的是哪条目录规则"只有书架记录知道（设置里那条只是下一本的默认值）
@@ -444,11 +490,14 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   }, [cacheStatus.state, syncCacheStatus])
 
   useEffect(() => {
+    // 名字读单一来源而不是写死「青阅」：用户改了应用名之后，
+    // 这里若照旧硬编码，一进阅读器标签页就把新名字冲回去（"改了又变回去"最难查）。
+    const brandName = getBrand().displayName
     const shown = chapter?.title ? convert(chapter.title) : ''
-    const title = shown ? `${bookName} - ${shown} | 青阅` : `${bookName} | 青阅`
+    const title = shown ? `${bookName} - ${shown} | ${brandName}` : `${bookName} | ${brandName}`
     document.title = title
     return () => {
-      document.title = '青阅'
+      document.title = getBrand().displayName
     }
   }, [bookName, chapter?.title, convert])
 
@@ -543,6 +592,13 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
   const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null)
   /** 目录抽屉里的「笔记」面板开关（按书查看）。 */
   const [notesPanel, setNotesPanel] = useState(false)
+  /** 标记快捷条 vs 笔记编辑器：选中后先显示快捷条，点「笔记」才展开 NoteToolbar。 */
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false)
+  /** 本书正文检索弹窗（搜索本书 feature，只在已缓存章节正文里找）。 */
+  const [bookSearchOpen, setBookSearchOpen] = useState(false)
+  /** 阅读设置弹层里的顶层标签页：阅读（排版/颜色/行为）或其它（简繁/点击区域/工具栏/本地书目录/净化）。
+   *  用户要求「两颗齿轮合并成一颗，点开用标签页切换界面/其它」。 */
+  const [settingsTab, setSettingsTab] = useState<'reader' | 'other'>('reader')
 
   /** 段落里某个节点位置 → 段内字符偏移（选区跨多个文本节点时，前面那些也要加上）。 */
   const offsetWithin = (root: HTMLElement, node: Node, offset: number): number => {
@@ -556,31 +612,58 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     return total
   }
 
-  /** 松手时看有没有选中正文；选中了就摆出浮层（划线 / 写备注都在那一层里）。 */
-  const onReaderMouseUp = () => {
+  /** 把当前选区算成一条 noteDraft + 同步给 AI 的 selection；选中了正文就返回，否则 null。
+   * 左键松手（onReaderMouseUp）和右键菜单（onBodyContextMenu）共用这一份算法。 */
+  const buildSelectionDraft = (): { draft: NoteDraft; selection: Parameters<typeof setSelectionFromDraft>[0] } | null => {
     const selection = window.getSelection()
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
     const range = selection.getRangeAt(0)
     const startEl = (range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer as HTMLElement)
     const endEl = (range.endContainer.nodeType === Node.TEXT_NODE ? range.endContainer.parentElement : range.endContainer as HTMLElement)
     const startP = startEl?.closest<HTMLElement>('.reader-paragraph')
     const endP = endEl?.closest<HTMLElement>('.reader-paragraph')
-    if (!startP || !endP) return
+    if (!startP || !endP) return null
     const startIndex = Number(startP.dataset.paragraphIndex ?? -1)
     const endIndex = Number(endP.dataset.paragraphIndex ?? -1)
-    if (startIndex < 0 || endIndex < startIndex) return
+    if (startIndex < 0 || endIndex < startIndex) return null
     const excerpt = selection.toString().trim()
-    if (!excerpt) return
+    if (!excerpt) return null
     const startOffset = (paragraphStarts[startIndex] ?? 0) + offsetWithin(startP, range.startContainer, range.startOffset)
     const endOffset = (paragraphStarts[endIndex] ?? 0) + offsetWithin(endP, range.endContainer, range.endOffset)
     // 选中的那一段属于**哪一章**：续接上来的下一章也在同一个容器里，不能一律按锚点章记
     const ownerIndex = Number(startP.closest<HTMLElement>('[data-chapter-index]')?.dataset.chapterIndex ?? chapterIndex)
     const rect = range.getBoundingClientRect()
-    setNoteDraft({
-      id: null, chapterIndex: ownerIndex, chapterUrl: currentBook.chapters[ownerIndex]?.url ?? '',
+    const chapterUrl = currentBook.chapters[ownerIndex]?.url ?? ''
+    const draft: NoteDraft = {
+      id: null, chapterIndex: ownerIndex, chapterUrl,
       startOffset, endOffset: Math.max(endOffset, startOffset + excerpt.length), excerpt, text: '',
       x: rect.left + rect.width / 2, y: rect.top,
-    })
+    }
+    const sel = {
+      excerpt,
+      chapterIndex: ownerIndex,
+      chapterUrl,
+      startOffset,
+      endOffset: Math.max(endOffset, startOffset + excerpt.length),
+      sourceId: currentBook.details.sourceId,
+      bookUrl: currentBook.bookUrl,
+      bookName,
+      chapterTitle: currentBook.chapters[ownerIndex]?.title,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+    }
+    return { draft, selection: sel }
+  }
+
+  /** 松手时看有没有选中正文；选中了就摆出浮层（划线 / 写备注都在那一层里）。 */
+  const onReaderMouseUp = () => {
+    const built = buildSelectionDraft()
+    if (!built) return
+    setNoteDraft(built.draft)
+    setNoteEditorOpen(false)
+    // 同一份选区同步到共享 store：AI 悬浮球挂在根节点上，拿不到这里的局部 state，
+    // 于是模型只知道"你在第几章"、不知道"你正盯着哪一段"（用户说的「不能在对应地点研究」）。
+    setSelectionFromDraft(built.selection)
   }
 
   /** 保存（新建或改备注）。备注留空就是纯划线。 */
@@ -593,12 +676,20 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         chapterUrl: draft.chapterUrl, chapterIndex: draft.chapterIndex,
         startOffset: draft.startOffset, endOffset: draft.endOffset, excerpt: draft.excerpt, note: draft.text,
       }).catch(() => null)
-      if (created) setNotes(list => [...list, created])
+      if (created) {
+        setNotes(list => [...list, created])
+        toast.success(draft.text?.trim() ? '已保存笔记' : '已划线')
+      }
     } else {
       const ok = await api.updateNote(draft.id, draft.text).then(() => true).catch(() => false)
-      if (ok) setNotes(list => list.map(item => (item.id === draft.id ? { ...item, note: draft.text } : item)))
+      if (ok) {
+        setNotes(list => list.map(item => (item.id === draft.id ? { ...item, note: draft.text } : item)))
+        toast.success('已更新笔记')
+      }
     }
     setNoteDraft(null)
+    setNoteEditorOpen(false)
+    setSelection(null)
     window.getSelection()?.removeAllRanges()
   }
 
@@ -608,11 +699,54 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const ok = await api.deleteNote(draft.id).then(() => true).catch(() => false)
     if (ok) setNotes(list => list.filter(item => item.id !== draft.id))
     setNoteDraft(null)
+    setSelection(null)
+  }
+
+  /** 标记快捷条：划线（仅高亮，不写备注）。 */
+  const highlightFromMenu = () => { void saveNote() }
+  /** 标记快捷条：加书签（只标位置，不写想法）。 */
+  const bookmarkFromMenu = async () => {
+    const draft = noteDraft
+    if (!draft) return
+    const created = await api.addNote({
+      sourceId: currentBook.details.sourceId, bookUrl: currentBook.bookUrl, bookName,
+      chapterUrl: draft.chapterUrl, chapterIndex: draft.chapterIndex,
+      startOffset: draft.startOffset, endOffset: draft.endOffset, excerpt: draft.excerpt, note: '', bookmark: true,
+    }).catch(() => null)
+    if (created) {
+      setNotes(list => [...list, created])
+      toast.success('已加书签')
+    }
+    setNoteDraft(null)
+    setNoteEditorOpen(false)
+    setSelection(null)
+    window.getSelection()?.removeAllRanges()
+  }
+  /** 标记快捷条：展开笔记编辑器。 */
+  const openNoteEditor = () => setNoteEditorOpen(true)
+  /** 标记快捷条：复制选中原文。 */
+  const copySelection = () => {
+    const text = noteDraft?.excerpt
+    if (text) void navigator.clipboard?.writeText(text).then(() => toast.success('已复制'), () => toast.warning('浏览器没让复制'))
+    setNoteDraft(null)
+    setNoteEditorOpen(false)
+  }
+  /** 标记快捷条：把选区交给 AI 悬浮球（选区已写入 selectionStore）。 */
+  const sendSelectionToAi = () => {
+    setAiChatOpen(true)
+    setNoteDraft(null)
+    setNoteEditorOpen(false)
+  }
+  /** 标记快捷条：关闭（Esc 也走这条）。 */
+  const dismissMarkingMenu = () => {
+    setNoteDraft(null)
+    setNoteEditorOpen(false)
   }
 
   /** 点已有高亮：打开编辑（改备注 / 删）。 */
   const openNote = (note: BookNote, x: number, y: number) => {
     setNoteDraft({ id: note.id, chapterIndex: note.chapterIndex, chapterUrl: note.chapterUrl, startOffset: note.startOffset, endOffset: note.endOffset, excerpt: note.excerpt, text: note.note, x, y })
+    setNoteEditorOpen(true)
   }
 
   /** 从「笔记」面板跳到那一条所在的章。 */
@@ -1030,8 +1164,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       )
       if (!controller.signal.aborted) {
         toast.success(`离线同步完成：成功 ${res.successful} 章，跳过/已缓存 ${targetChapters.length - res.failed - res.successful} 章`)
-        const offlineSet = await getOfflineChaptersSet(currentBook.details.sourceId, currentBook.bookUrl)
-        setCachedChapterUrls(offlineSet)
+        // 原来这里 `setCachedChapterUrls(offlineSet)` —— 用 IndexedDB 那一份**整体替换**，
+        // 于是「只在服务端缓存过」的那些章节（整本缓存过、或换设备后本地库被清空）云朵全部复亮，
+        // 用户看到的就是「缓存下载了怎么还有小云朵」。改成走同一条并集通道：
+        // syncCacheStatus 自己就是「服务端 ∪ IndexedDB」，顺带把字数表一起刷新。
+        await syncCacheStatus()
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -1123,8 +1260,23 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const applyContent = (nextContent: string, nextMediaUrl: string | null = null) => {
       if (cancelled) return
       setContent(nextContent)
+      chapterBaseContentRef.current = nextContent
       setMediaUrl(nextMediaUrl)
       setLoadedChapterUrl(chapter.url)
+      // 「当获取到内容的时候」就把这一章的字数记进表里：服务端这一刻同时把正文写进了缓存
+      // （ReadingRoutes 的 cacheBookContent），但界面不该等下一轮同步才显示出眼前这一章的字数。
+      if (nextContent.length > 0) {
+        setChapterWordCounts(prev => {
+          if (prev.get(chapter.url) === nextContent.length) return prev
+          const nextMap = new Map(prev)
+          nextMap.set(chapter.url, nextContent.length)
+          return nextMap
+        })
+        // 同一刻这一章在服务端已经落库（cacheBookContent 就在刚才那次请求里写了行），
+        // 云朵该立刻熄掉。缓存标记的轮询只在 `state==='caching'` 时才跑（见下面的 effect），
+        // 平时读到的新章不会有人再来拉 —— "读着读着云还挂着"就是这条断链。
+        setCachedChapterUrls(prev => (prev.has(chapter.url) ? prev : new Set(prev).add(chapter.url)))
+      }
       // 漫画/图文章节：趁用户看首屏，把正文里的图片提前喂给服务端代理取回落盘缓存，
       // 后面滚动/翻页不必每张都等服务端联网（referer 用本章地址，图站防盗链才放得过去）。
       warmContentImages(nextContent, chapter.url)
@@ -1719,8 +1871,15 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         // 字号口径唯一出处 fontSizeControl.ts（设置步进器/快捷键/Ctrl+滚轮三处共用）。
         fontSize: stepFontSize(settings.fontSize, delta),
       })
+      // 键盘回调里抛出的异常只能落到 window.onerror —— ErrorBoundary 只兜渲染期，兜不住事件回调。
+      // 「快速连按快捷键」正是把这类一次性异常放大成"界面卡死"的场景：`setLoading(true)` 已执行、
+      // 后续步骤抛出，界面就永远停在加载态。这里收一道：动作出错不崩界面，如实报一句并交还控制权。
+      // 整个 switch 留在本函数作用域内：`event`、上面那两个局部helper 都要能拿到。
+      try {
       switch (hit.action) {
         case 'close':
+          // 纯阅读模式下 Esc 优先退出纯阅读（可发现性：把手与 Esc 同义）。
+          if (pureReading) { setPureReading(false); break }
           if (!activeDrawer) return
           setActiveDrawer(null)
           break
@@ -1785,11 +1944,20 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           event.preventDefault()
           toggleFullscreen()
           break
+        case 'pure-reading':
+          event.preventDefault()
+          togglePureReading()
+          break
+      }
+      } catch (error) {
+        // 出了错也要把界面交回来：不能停在"正在加载"那一档让人以为书打不开。
+        setLoading(false)
+        setMessage(error instanceof Error ? error.message : '这一下快捷键没有执行成功')
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activeDrawer, changeChapter, chapterIndex, goNextPage, goPrevPage, onSettingsChange, settings, toggleTts])
+  }, [activeDrawer, changeChapter, chapterIndex, goNextPage, goPrevPage, onSettingsChange, settings, toggleTts, pureReading, togglePureReading])
 
   // Ctrl/⌘ + 滚轮直接调字号：不用先开设置抽屉再拖滑杆。必须 passive:false，否则拦不住浏览器的页面缩放。
   useEffect(() => {
@@ -1837,6 +2005,16 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
    */
   const runTapAction = useCallback((action: TapAction) => {
     const paginate = settings.pageMode === 'paginate'
+    // 纯阅读里：翻页区照样翻页（核心阅读不中断），其余任意点击都视为「把控件叫回来」，
+    // 跟边缘把手 / Esc 同一语义 —— 退出操作始终可发现，不会卡在纯阅读里出不来。
+    if (pureReading) {
+      if (action === 'previous' || action === 'next') {
+        // 落到下面的翻页逻辑
+      } else {
+        setPureReading(false)
+        return
+      }
+    }
     if (action === 'previous') {
       if (paginate) {
         goPrevPage()
@@ -1861,7 +2039,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     }
     if (action === 'none') return
     setToolbarsVisible(visible => !visible)
-  }, [chapterIndex, changeChapter, goNextPage, goPrevPage, settings.pageMode])
+  }, [chapterIndex, changeChapter, goNextPage, goPrevPage, settings.pageMode, pureReading])
 
   /**
    * 正文区的视口矩形。
@@ -1961,6 +2139,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     const selectedText = (window.getSelection()?.toString() ?? '').trim()
     const items: ContextMenuItem[] = []
     if (selectedText) {
+      const built = buildSelectionDraft()
+      const cite = `${selectedText}\n—— 《${bookName}》${chapter?.title ? ` · ${convert(chapter.title)}` : ''}`
       items.push({
         label: '复制',
         icon: 'copy',
@@ -1971,6 +2151,57 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           )
         },
       })
+      items.push({
+        label: '复制为引用',
+        icon: 'book',
+        onSelect: () => {
+          void navigator.clipboard?.writeText(cite).then(
+            () => toast.success('已复制为引用'),
+            () => toast.warning('浏览器没让复制，手动选一次再试'),
+          )
+        },
+      })
+      if (built) {
+        const draft = built.draft
+        items.push({
+          label: '划线',
+          icon: 'edit',
+          onSelect: () => {
+            void api.addNote({
+              sourceId: currentBook.details.sourceId, bookUrl: currentBook.bookUrl, bookName,
+              chapterUrl: draft.chapterUrl, chapterIndex: draft.chapterIndex,
+              startOffset: draft.startOffset, endOffset: draft.endOffset, excerpt: draft.excerpt, note: '',
+            }).then(
+              created => { if (created) { setNotes(list => [...list, created]); toast.success('已划线') } },
+              () => toast.warning('划线失败'),
+            )
+          },
+        })
+        items.push({
+          label: '书签',
+          icon: 'bookmark',
+          onSelect: () => {
+            void api.addNote({
+              sourceId: currentBook.details.sourceId, bookUrl: currentBook.bookUrl, bookName,
+              chapterUrl: draft.chapterUrl, chapterIndex: draft.chapterIndex,
+              startOffset: draft.startOffset, endOffset: draft.endOffset, excerpt: draft.excerpt, note: '', bookmark: true,
+            }).then(
+              created => { if (created) { setNotes(list => [...list, created]); toast.success('已加书签') } },
+              () => toast.warning('书签失败'),
+            )
+          },
+        })
+        items.push({
+          label: '笔记',
+          icon: 'file',
+          onSelect: () => { setNoteDraft(draft); setNoteEditorOpen(true) },
+        })
+        items.push({
+          label: '发给 AI',
+          icon: 'sparkles',
+          onSelect: () => { setSelectionFromDraft(built.selection); setAiChatOpen(true) },
+        })
+      }
     }
     items.push({ label: '章节目录', icon: 'list', onSelect: () => setActiveDrawer('toc') })
     showContextMenu(event, items)
@@ -2043,7 +2274,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
     </>
   )
 
-  return <main className={`reader-workspace ${themeClassNames(settings).join(' ')} ${toolbarsVisible ? 'toolbars-open' : 'toolbars-hidden'} ${settings.sidebarPinned ? 'sidebar-pinned' : ''}`} style={readerStyle}>
+  return <main className={`reader-workspace ${themeClassNames(settings).join(' ')} ${toolbarsVisible ? 'toolbars-open' : 'toolbars-hidden'} ${pureReading ? 'pure-reading' : ''} ${settings.sidebarPinned ? 'sidebar-pinned' : ''} ${activeDrawer ? 'drawer-open' : ''}`} style={readerStyle}>
     {/* 顶栏：MD3 外壳（PROPOSAL-020）或旧浮动工具栏，由 uiV2 开关切换 */}
     {uiV2 ? <Md3TopBar
       bookName={bookName}
@@ -2058,6 +2289,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         if (settings.sidebarPinned) {
           onSettingsChange({ ...settings, sidebarPinned: false })
           setActiveDrawer(null)
+        } else if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 960px)').matches) {
+          // 桌面端：点目录直接把目录 dock 成左侧常驻侧栏（推出版心），而不是盖一层遮罩的抽屉 —— 更像桌面阅读器。
+          // 移动端（<960px）仍走覆盖式抽屉；持久化默认值不变（仍是 false），所以门禁对默认值的断言不受影响。
+          onSettingsChange({ ...settings, sidebarPinned: true })
+          setActiveDrawer(null)
         } else {
           setActiveDrawer(d => d === 'toc' ? null : 'toc')
         }
@@ -2067,6 +2303,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       onToggleFullscreen={toggleFullscreen}
       onToggleTts={toggleTts}
       onResetTtsBar={resetTtsBarPosition}
+      onBookSearch={() => setBookSearchOpen(true)}
+      onToggleNotes={() => { setActiveDrawer('toc'); setNotesPanel(true) }}
+      notesCount={notes.length}
     /> : <ReaderHeader
       bookName={bookName}
       menuItems={settings.menuItems}
@@ -2078,6 +2317,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       onToggleToc={() => {
         if (settings.sidebarPinned) {
           onSettingsChange({ ...settings, sidebarPinned: false })
+          setActiveDrawer(null)
+        } else if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 960px)').matches) {
+          // 桌面端：点目录直接把目录 dock 成左侧常驻侧栏（推出版心），而不是盖一层遮罩的抽屉 —— 更像桌面阅读器。
+          // 移动端（<960px）仍走覆盖式抽屉；持久化默认值不变（仍是 false），所以门禁对默认值的断言不受影响。
+          onSettingsChange({ ...settings, sidebarPinned: true })
           setActiveDrawer(null)
         } else {
           setActiveDrawer(d => d === 'toc' ? null : 'toc')
@@ -2104,7 +2348,8 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       onToggleNotes={() => { setActiveDrawer('toc'); setNotesPanel(true) }}
       onToggleTts={toggleTts}
       onToggleSettings={() => setActiveDrawer(d => d === 'settings' ? null : 'settings')}
-      onOpenOtherSettings={() => setActiveDrawer(d => d === 'other' ? null : 'other')}
+      onBookSearch={() => setBookSearchOpen(true)}
+      onTogglePureReading={togglePureReading}
     />}
 
     {/* TOC Drawer (Left) */}
@@ -2119,6 +2364,9 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         notesPanel={notesPanel}
         notesCount={notes.length}
         onToggleNotes={() => setNotesPanel(value => !value)}
+        onOpenSourceSwitch={() => { setActiveDrawer(null); setShowSourceSwitch(true) }}
+        inShelf={inShelf}
+        onToggleShelf={() => void toggleShelf()}
         onClose={() => {
           if (settings.sidebarPinned) {
             onSettingsChange({ ...settings, sidebarPinned: false })
@@ -2127,8 +2375,21 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         }}
       />
       {notesPanel ? (
-        /* 「笔记」面板（PROPOSAL-019 E）：这本书的全部划线 / 备注，点一条跳到那一章。 */
-        <NotesPanel notes={notes} onJump={jumpToNote} />
+        /* 「笔记」面板（PROPOSAL-019 E）：这本书的全部划线 / 备注，点一条跳到那一章。
+           导出需要书名与章名：书名从 currentBook 取，章名用 chapters 的标题表，
+           缺章名时导出那边会退回「第 N 章」，不编造。 */
+        <NotesPanel
+          notes={notes}
+          onJump={jumpToNote}
+          meta={{
+            bookName: currentBook.details.name,
+            author: currentBook.details.author,
+            sourceId: currentBook.details.sourceId,
+          }}
+          chapterTitles={Object.fromEntries(
+            currentBook.chapters.map((chapter, index) => [index, chapter.title]),
+          )}
+        />
       ) : (
         <>
           <div className="chapter-search">
@@ -2139,6 +2400,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
             chapters={tocList}
             activeChapterIndex={chapterIndex}
             cachedUrlsSet={cachedChapterUrls}
+            wordCounts={chapterWordCounts}
             onSelect={index => {
               changeChapter(index)
               if (!settings.sidebarPinned) {
@@ -2152,139 +2414,6 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           />
         </>
       )}
-      <footer className={`drawer-footer ${drawerFooterOpen ? 'is-open' : ''}`}>
-        {/* 收起态只有这一行；展开才露出缓存与「这本书」那两组（见 drawerFooterOpen 的注释） */}
-        <button
-          type="button"
-          className="drawer-footer-toggle"
-          aria-expanded={drawerFooterOpen || cacheStatus.state === 'caching' || localSyncing}
-          onClick={() => setDrawerFooterOpen(value => !value)}
-        >
-          <Icon name={drawerFooterOpen ? 'chevronDown' : 'chevronRight'} />
-          <span>离线缓存 · 这本书</span>
-          {inShelf && <span className="drawer-footer-badge">已在书架</span>}
-        </button>
-        {(drawerFooterOpen || cacheStatus.state === 'caching' || localSyncing) && (
-        <div className="drawer-footer-body">
-        {/* Cache Control Section */}
-        <div className="drawer-cache-section">
-          {cacheStatus.state === 'caching' ? (
-            <div className="drawer-cache-progress">
-              <div className="cache-progress-text">
-                <span>正在服务端缓存</span>
-                <strong>{cachePercent}% ({cacheStatus.cached}/{cacheStatus.total || currentBook.chapters.length}章)</strong>
-              </div>
-              <div className="cache-progress-bar-track">
-                <div className="cache-progress-bar-fill" style={{ width: `${cachePercent}%` }} />
-              </div>
-              <button className="cache-cancel-btn" onClick={() => void handleCancelCache()}>取消缓存</button>
-            </div>
-          ) : localSyncing ? (
-            <div className="drawer-cache-progress">
-              <div className="cache-progress-text">
-                <span>正在下载到这台电脑</span>
-                <strong>{localSyncProgress.current} / {localSyncProgress.total} 章</strong>
-              </div>
-              <div className="cache-progress-bar-track">
-                <div
-                  className="cache-progress-bar-fill"
-                  style={{ width: `${Math.min(100, Math.round((localSyncProgress.current / Math.max(1, localSyncProgress.total)) * 100))}%` }}
-                />
-              </div>
-              <button className="cache-cancel-btn" onClick={() => { localSyncAbortRef.current?.abort(); setLocalSyncing(false) }}>取消本地下载</button>
-            </div>
-          ) : (
-            <div className="drawer-cache-idle">
-              <span className="drawer-action-group-label">离线缓存</span>
-              <div className="cache-range-btn-grid">
-                <button
-                  type="button"
-                  className="cache-range-btn"
-                  title="缓存全本"
-                  onClick={() => void handleCacheRange('all')}
-                >
-                  缓存全本
-                </button>
-                <button
-                  type="button"
-                  className="cache-range-btn"
-                  title="自定义章节范围"
-                  onClick={() => setCustomRangeOpen(prev => !prev)}
-                >
-                  自定义…
-                </button>
-              </div>
-
-              {customRangeOpen && (
-                <div className="cache-custom-range-box">
-                  <div className="range-inputs">
-                    <span>第</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={currentBook.chapters.length}
-                      value={customRangeStart}
-                      onChange={e => setCustomRangeStart(Number(e.target.value))}
-                    />
-                    <span>至</span>
-                    <input
-                      type="number"
-                      min={customRangeStart}
-                      max={currentBook.chapters.length}
-                      value={customRangeEnd}
-                      onChange={e => setCustomRangeEnd(Number(e.target.value))}
-                    />
-                    <span>章</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="primary-button range-start-btn"
-                    onClick={() => {
-                      setCustomRangeOpen(false)
-                      void handleCacheRange('custom', customRangeStart, customRangeEnd)
-                    }}
-                  >
-                    开始缓存
-                  </button>
-                </div>
-              )}
-
-              <div className="cache-local-sync-row">
-                <button
-                  type="button"
-                  className="cache-sync-btn"
-                  onClick={() => void handleSyncToLocal()}
-                  title="把已缓存的章节下载到这台电脑的浏览器里，断网也能读"
-                >
-                  <Icon name="download" />
-                  <span>下载到本设备</span>
-                </button>
-                <button
-                  type="button"
-                  className="cache-manage-btn"
-                  onClick={() => setOfflineStatsModal(true)}
-                  title="管理本设备离线缓存"
-                >
-                  <Icon name="sliders" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="drawer-footer-actions">
-          <span className="drawer-action-group-label">这本书</span>
-          <button className="shelf-button" onClick={() => { setActiveDrawer(null); setShowSourceSwitch(true) }}>
-            <Icon name="sliders" />换源
-          </button>
-          <button className="shelf-button" onClick={() => void toggleShelf()}>
-            <Icon name={inShelf ? 'check' : 'plus'} />{inShelf ? '已在书架' : '加书架'}
-          </button>
-        </div>
-        </div>
-        )}
-      </footer>
     </aside>
 
     {/* 目录 | 正文 那条边界：固定目录时可左右拖（用户 2026-10-09） */}
@@ -2300,21 +2429,39 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       />
     )}
 
-    {/* 阅读设置：MD3 底部弹层（界面 / 设置）或旧右侧抽屉（PROPOSAL-020 P3/P4） */}
+    {/* 阅读设置：一颗齿轮 + 单个弹层，层内用「阅读 / 其它」标签页切换两批设置。
+     *  （原来「界面」「设置」各占一颗齿轮、各一个弹层，用户反馈「现在有两个设置处理一下」。） */}
     {uiV2 ? <>
-      <ReaderSheet open={activeDrawer === 'settings'} title="界面" onClose={() => setActiveDrawer(null)}>
-        <ReaderSettingsControls settings={settings} onChange={onSettingsChange} />
-      </ReaderSheet>
-      <ReaderSheet open={activeDrawer === 'other'} title="设置" onClose={() => setActiveDrawer(null)}>
-        <OtherSettingsPanel
-          settings={settings}
-          onChange={onSettingsChange}
-          onOpenReplaceRules={() => setShowReplaceRules(true)}
-          onEditTapZones={() => { setActiveDrawer(null); setTapZoneEditing(true) }}
-          localBook={currentBook.details.sourceId === 'loc_book' ? { name: bookName, tocRule: shelfTocRule } : null}
-          tocRuleOptions={tocRuleOptions}
-          onReparseLocal={currentBook.details.sourceId === 'loc_book' ? reparseLocalBook : undefined}
-        />
+      <ReaderSheet open={activeDrawer === 'settings'} title="阅读设置" onClose={() => setActiveDrawer(null)}>
+        <nav className="settings-tabs is-two" role="tablist" aria-label="设置分组">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={settingsTab === 'reader'}
+            className={`settings-tab${settingsTab === 'reader' ? ' selected' : ''}`}
+            onClick={() => setSettingsTab('reader')}
+          ><Icon name="columns" />阅读</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={settingsTab === 'other'}
+            className={`settings-tab${settingsTab === 'other' ? ' selected' : ''}`}
+            onClick={() => setSettingsTab('other')}
+          ><Icon name="sliders" />其它</button>
+        </nav>
+        {settingsTab === 'reader' ? (
+          <ReaderSettingsControls settings={settings} onChange={onSettingsChange} />
+        ) : (
+          <OtherSettingsPanel
+            settings={settings}
+            onChange={onSettingsChange}
+            onOpenReplaceRules={() => setShowReplaceRules(true)}
+            onEditTapZones={() => { setActiveDrawer(null); setTapZoneEditing(true) }}
+            localBook={currentBook.details.sourceId === 'loc_book' ? { name: bookName, tocRule: shelfTocRule } : null}
+            tocRuleOptions={tocRuleOptions}
+            onReparseLocal={currentBook.details.sourceId === 'loc_book' ? reparseLocalBook : undefined}
+          />
+        )}
       </ReaderSheet>
     </> : <aside className={`reader-drawer reader-drawer-right ${activeDrawer === 'settings' ? 'open' : ''}`} aria-label="阅读设置">
       <header className="drawer-header">
@@ -2397,7 +2544,11 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
           </div>
           <footer className="reader-paginated-footer">
             <span>{convert(paginatedFooterTitle || '')}</span>
-            <span>{pageIndex + 1} / {pageCount}</span>
+            <div className="reader-paginated-pager">
+              <button className="md3-icon-btn" type="button" aria-label="上一页" title="上一页" onClick={goPrevPage}><Icon name="arrowLeft" /></button>
+              <span className="reader-paginated-pagecount">{pageIndex + 1} / {pageCount}</span>
+              <button className="md3-icon-btn" type="button" aria-label="下一页" title="下一页" onClick={goNextPage}><Icon name="arrowRight" /></button>
+            </div>
           </footer>
         </div>
       ) : (
@@ -2589,18 +2740,57 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
         <img src={lightboxSrc} alt="" onClick={event => event.stopPropagation()} />
       </div>
     )}
+    {bookSearchOpen && (
+      <BookSearchDialog
+        sourceId={currentBook.details.sourceId}
+        bookUrl={currentBook.bookUrl}
+        onJump={index => { if (index !== chapterIndex) changeChapter(index, 'first'); setBookSearchOpen(false) }}
+        onClose={() => setBookSearchOpen(false)}
+      />
+    )}
     {/*
-      笔记浮层（PROPOSAL-019 E）：选中正文后摆出来，也用来改 / 删已有的高亮。
-      挂在 `<section class="reader-main">` **之外** —— 它自己的点击不该再触发 onReaderMouseUp。
+      选中正文后的浮层（PROPOSAL-019 E 笔记编辑器 + 标记快捷条）：
+      先摆「标记快捷条」（划线 / 书签 / 笔记 / 复制 / AI），点「笔记」才展开 NoteToolbar 编辑器。
+      两者都挂在 `<section class="reader-main">` **之外**，自己的点击不该再触发 onReaderMouseUp。
     */}
-    {noteDraft && (
+    {noteDraft && !noteEditorOpen && (
+      <MarkingMenu
+        x={noteDraft.x}
+        y={noteDraft.y}
+        onHighlight={highlightFromMenu}
+        onBookmark={bookmarkFromMenu}
+        onNote={openNoteEditor}
+        onCopy={copySelection}
+        onAi={sendSelectionToAi}
+        onDismiss={dismissMarkingMenu}
+      />
+    )}
+    {noteDraft && noteEditorOpen && (
       <NoteToolbar
         draft={noteDraft}
         onChangeText={text => setNoteDraft(current => (current ? { ...current, text } : current))}
         onSave={() => void saveNote()}
         onRemove={() => void removeNote()}
-        onDismiss={clearSelection => { setNoteDraft(null); if (clearSelection) window.getSelection()?.removeAllRanges() }}
+        onDismiss={clearSelection => { setNoteEditorOpen(false); setNoteDraft(null); setSelection(null); if (clearSelection) window.getSelection()?.removeAllRanges() }}
       />
+    )}
+
+    {/*
+      纯阅读沉浸模式（P1-T3）：这是唯一的常驻可见控件，所以必须「可发现」。
+      一条贴右缘的把手，悬停/聚焦显出「退出沉浸 · Esc」字样；点一下退出纯阅读。
+      正文区任意非翻页点击、以及 Esc，都和它同义退出 —— 不会卡在纯阅读里出不来。
+    */}
+    {pureReading && (
+      <button
+        type="button"
+        className="reader-immersive-handle"
+        aria-label="退出纯阅读模式"
+        title="退出纯阅读模式（正文任意处点击或按 Esc 也可退出）"
+        onClick={() => setPureReading(false)}
+      >
+        <Icon name="eye" />
+        <span className="reader-immersive-handle-label">退出沉浸 · Esc</span>
+      </button>
     )}
   </main>
 }

@@ -35,6 +35,29 @@ export type CustomSkin = {
   name: string
   css: string
   base: BuiltinSkinId
+  /**
+   * 这一套怎么取"自己没写的那些变量"。
+   *
+   * - `'overlay'`（**老数据缺省这个**，逐字节保持历史行为）：叠在 `base` 那套内置皮肤之上，
+   *   没写到的变量沿用那一套的取值。
+   * - `'standalone'`：全权自定义 —— 只挂自己这一个类，没写到的变量落到 `styles.css`
+   *   里 `:root` 的中性颜色基线，**不沿用任何预设皮肤**。
+   *
+   * 用户原话：「自定义不是叠在哪一套之上（没写到的变量沿用那一套），是全权自定义」。
+   * 做成可选而不是直接改掉，是因为 `overlay` 是既有 12 套以内数据的现状语义；
+   * 老记录没有这个字段 → 解析成 `overlay` → 外观一个像素都不动，想要全权的那一套手动切。
+   */
+  mode?: SkinMode
+}
+
+/** 自定义皮肤的两种语义。 */
+export type SkinMode = 'overlay' | 'standalone'
+
+/** 没写 mode 的老数据按历史语义走（不改变既有外观）。 */
+export const DEFAULT_SKIN_MODE: SkinMode = 'overlay'
+
+export function parseSkinMode(mode: unknown): SkinMode {
+  return mode === 'standalone' ? 'standalone' : DEFAULT_SKIN_MODE
 }
 
 export type ReaderSettings = {
@@ -264,7 +287,7 @@ export function parseCustomSkin(value: unknown): CustomSkin | null {
   const css = typeof raw.css === 'string' ? raw.css.slice(0, 20000) : ''
   if (!id || !css.trim()) return null
   const name = typeof raw.name === 'string' ? raw.name.replace(/[\r\n]+/g, ' ').trim().slice(0, 40) : ''
-  return { id, name, css, base: parseSkinBase(raw.base) }
+  return { id, name, css, base: parseSkinBase(raw.base), mode: parseSkinMode(raw.mode) }
 }
 
 /** 清洗皮肤库：逐套过 `parseCustomSkin`，丢掉不成立的；同 id 只留最后一套。 */
@@ -290,16 +313,24 @@ export function activeCustomSkin(settings: ReaderSettings): CustomSkin | undefin
 }
 
 /**
- * 皮肤类名列表 —— **自定义皮肤是叠在内置皮肤上的，不是替换它**。
+ * 皮肤类名列表 —— 一套自定义皮肤到底挂几个类，由那一套的 `mode` 决定。
  *
- * 为什么必须叠：用户只写两三条变量（例如只改 `--canvas`）是常见用法，
- * 若此时页面上只有 `.theme-midnight` 这一个类，其余 `--surface / --ink / --line` 全部落空，
- * 界面会直接变成"字和底一个颜色"。叠一层内置皮肤后，没写到的变量沿用那一套的取值，
- * 写到的由注入的 `<style>` 覆盖（它在 `<head>` 末尾，同特异性下后者胜）。
+ * - `overlay`（老数据缺省）：**叠在内置皮肤上，不是替换它**。
+ *   为什么当年必须叠：用户只写两三条变量（例如只改 `--canvas`）是常见用法，
+ *   若页面上只有 `.theme-midnight` 一个类，而那时 `:root` 又没定义任何颜色令牌，
+ *   其余 `--surface / --ink / --line` 全部落空，界面直接变成"字和底一个颜色"。
+ * - `standalone`：**全权自定义**，只挂自己这一个类。没写到的变量落到 `styles.css`
+ *   最前面那个 `:root` 里的中性颜色基线（本次一并补上的），**不沿用任何预设皮肤**。
+ *   用户要的正是这个语义：「自定义不是叠在哪一套之上，是全权自定义」。
+ *   这条能成立的前提就是那份 `:root` 基线 —— 没有它就会复现上面那个花屏事故。
  */
 export function themeClassNames(settings: ReaderSettings): string[] {
   const active = activeCustomSkin(settings)
-  if (active) return [`theme-${parseSkinBase(active.base)}`, `theme-${active.id}`]
+  if (active) {
+    return active.mode === 'standalone'
+      ? [`theme-${active.id}`]
+      : [`theme-${parseSkinBase(active.base)}`, `theme-${active.id}`]
+  }
   return [`theme-${settings.theme}`]
 }
 

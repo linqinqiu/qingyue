@@ -2,16 +2,35 @@
 // 其余靠上下垫高凑出总滚动高度。实现与窗口算式同源（./virtualSlice），判据在
 // web/test/VirtualChapterList.test.ts —— 那份判据现在读的就是这个文件。
 // classic JSX 说明（AGENTS §5 的同形坑）：这条静态渲染链路走 React.createElement，默认导入必须在。
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Icon } from '../icons'
 import type { Chapter } from '../lib/api'
 import { TOC_ROW_HEIGHT } from './readerInteractions'
 import { IDENTITY_CONVERTER } from './scriptConvert'
 import { computeCenterScrollOffset, computeVirtualWindow } from './virtualSlice'
+import { getProgress, subscribeProgress } from './readerProgress'
+
+/** 当前阅读章内的细进度条：只挂在这一行上、自订阅进度 store，不拖累整张虚拟列表重渲染。 */
+function CurrentChapterProgress({ chapterIndex }: { chapterIndex: number }) {
+  const progress = useSyncExternalStore(subscribeProgress, getProgress, getProgress)
+  const fraction = progress.chapterIndex === chapterIndex ? progress.fraction : 0
+  return (
+    <span className="reader-chapter-progress" aria-hidden="true">
+      <i style={{ width: `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%` }} />
+    </span>
+  )
+}
 
 export interface VirtualChapterListProps {
   chapters: Chapter[]
   activeChapterIndex: number
   cachedUrlsSet?: Set<string>
+  /**
+   * 已取到正文的章节字数（`chapterUrl` → 字符数）。有字数的行在右侧那一格显示「N 字」，
+   * 与云朵互斥占同一槽位（已缓存 → 无云 → 有地方放字数；未缓存 → 云朵）。
+   * 用户原话：「当获取到内容的时候，显示章节字数放在右面合适位置」。
+   */
+  wordCounts?: ReadonlyMap<string, number>
   onSelect: (index: number) => void
   itemHeight?: number
   overscan?: number
@@ -25,6 +44,7 @@ export function VirtualChapterList({
   chapters,
   activeChapterIndex,
   cachedUrlsSet,
+  wordCounts,
   onSelect,
   itemHeight = TOC_ROW_HEIGHT,
   overscan = 8,
@@ -119,19 +139,29 @@ export function VirtualChapterList({
           )
         }
         const isCached = cachedUrlsSet ? cachedUrlsSet.has(chapter.url) : false
+        const words = wordCounts?.get(chapter.url) ?? null
         // url 不能单独当 key：服务端 `RuleRunner.kt` 的 `chapters()`（HTTP 规则与 JS 书源两条实现）
         // 都不按地址去重，上下篇共用一页、"本章完"重复条目都会给出同 url 两行 —— 撞 key 只 warning，门禁看不见
         return (
           <button
             key={`${chapter.index}-${chapter.url}`}
             style={{ height: itemHeight }}
-            className={`reader-chapter-item ${chapter.index === activeChapterIndex ? 'current' : ''} ${isCached ? 'cached' : ''}`}
+            className={`reader-chapter-item ${chapter.index === activeChapterIndex ? 'current' : ''} ${chapter.index < activeChapterIndex ? 'read' : ''} ${isCached ? 'cached' : ''}`}
             onClick={() => onSelect(chapter.index)}
-            title={`${convertTitle(chapter.title)}${isCached ? '（已离线缓存）' : ''}`}
+            title={`${convertTitle(chapter.title)}${isCached ? '（已离线缓存）' : '（未缓存，需联网）'}${words !== null ? `，${words} 字` : ''}`}
           >
             <i />
             <span className="reader-chapter-title">{convertTitle(chapter.title)}</span>
-            {isCached && <span className="chapter-cached-badge" title="已离线缓存" />}
+            {/*
+              右侧那一格是同一个槽位（.chapter-cloud-badge / .chapter-word-count 都是
+              margin-left:auto + flex-shrink:0），二选一：
+              - 未取到内容 → 挂一朵小云（需联网加载）；
+              - 已取到内容且有字数 → 显示「N 字」（用户：「当获取到内容的时候，显示章节字数放在右面」）。
+              没有字数数据（旧服务端不返回 cachedWordCounts）时那一格留空，不报 0 骗人。
+            */}
+            {!isCached && <span className="chapter-cloud-badge" title="未缓存，需联网加载"><Icon name="cloud" /></span>}
+            {isCached && words !== null && <span className="chapter-word-count">{words} 字</span>}
+            {chapter.index === activeChapterIndex && <CurrentChapterProgress chapterIndex={chapter.index} />}
           </button>
         )
       })}

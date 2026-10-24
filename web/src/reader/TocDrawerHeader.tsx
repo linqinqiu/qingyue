@@ -7,7 +7,7 @@ import { IconButton } from './IconButton'
  * 从 `ReaderScreen` 抽出来（PROPOSAL-019 F）：只有标题与四个开关回调，
  * 跟目录内容、翻页、进度都不相干。
  */
-export function TocDrawerHeader({ chapterTitle, chapterCount, tocReverse, onToggleReverse, sidebarPinned, onTogglePin, notesPanel, notesCount, onToggleNotes, onClose }: {
+export function TocDrawerHeader({ chapterTitle, chapterCount, tocReverse, onToggleReverse, sidebarPinned, onTogglePin, notesPanel, notesCount, onToggleNotes, onOpenSourceSwitch, inShelf, onToggleShelf, onClose }: {
   /** 当前正在读那一章的标题（已过简繁转换）；空表示还没定位到章。 */
   chapterTitle: string | null
   chapterCount: number
@@ -18,6 +18,11 @@ export function TocDrawerHeader({ chapterTitle, chapterCount, tocReverse, onTogg
   notesPanel: boolean
   notesCount: number
   onToggleNotes: () => void
+  /** 换源：用户要求把入口从目录底部挪到目录顶端（「换源保留在目录侧放到顶端」）。 */
+  onOpenSourceSwitch: () => void
+  /** 这本书在不在书架里；决定「加书架」按钮是加还是移出。 */
+  inShelf: boolean
+  onToggleShelf: () => void
   onClose: () => void
 }) {
   return (
@@ -33,6 +38,17 @@ export function TocDrawerHeader({ chapterTitle, chapterCount, tocReverse, onTogg
         </small>
       </div>
       <div className="drawer-header-actions">
+        <IconButton
+          className={inShelf ? 'active' : ''}
+          label={inShelf ? '移出书架' : '加入书架'}
+          icon="bookmark"
+          onClick={onToggleShelf}
+        />
+        <IconButton
+          label="换源"
+          icon="sliders"
+          onClick={onOpenSourceSwitch}
+        />
         <IconButton
           className={`desktop-reverse-btn ${tocReverse ? 'reversed' : ''}`}
           label={tocReverse ? '切换为正序目录' : '切换为倒序目录'}

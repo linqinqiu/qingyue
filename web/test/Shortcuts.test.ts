@@ -23,6 +23,25 @@ const HANDLER_PROBES: Record<string, string> = {
   'font-wheel': 'ctrlKey',
 }
 
+/**
+ * 「快捷键快速点击切换，容易崩溃」（用户 2026-10-23）。
+ *
+ * 事件回调里抛出的异常 ErrorBoundary 兜不住（它只管渲染期），一旦冒到 window.onerror，
+ * 界面会停在已经执行过的 `setLoading(true)` 上 —— 表现就是"按了几下之后书打不开了"。
+ * 所以键盘动作整段必须被收在一道 try/catch 里，并且出错时要把加载态交还。
+ * 这条判据用静态读源码的方式钉住（与本文件其余判据同形），不需要起浏览器。
+ */
+test('阅读器的快捷键处理器兜得住异常，且出错时交还加载态', () => {
+  const from = readerSource.indexOf('const onKeyDown = (event: KeyboardEvent)')
+  const to = readerSource.indexOf("window.addEventListener('keydown', onKeyDown)")
+  assert.ok(from >= 0 && to > from, '要能定位到 onKeyDown 这一段处理器（从定义到注册之间）')
+  const handler = readerSource.slice(from, to)
+  assert.match(handler, /try \{[\s\S]*switch \(hit\.action\)/, '快捷键动作必须整体包在 try 里')
+  assert.match(handler, /catch \(/, 'catch 要在（异常只能落到 window.onerror 的那种默认路径不许有）')
+  assert.match(handler, /setLoading\(false\)/, '出错必须把加载态清掉，不能把人留在"正在加载"')
+  assert.match(handler, /setMessage\(/, '并且如实说一句，不静默吞掉')
+})
+
 test('表本身的形状：每条都有动作名、给人看的键名与一句说明', () => {
   for (const table of SHORTCUT_TABLES) {
     assert.ok(table.items.length > 0, `${table.title} 这一组不能是空的`)

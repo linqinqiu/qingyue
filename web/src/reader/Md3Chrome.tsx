@@ -48,12 +48,15 @@ function TopAction({ id, ...props }: { id: ReaderMenuAction } & ActionProps) {
   }
 }
 
-export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleToc, ...action }: {
+export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleToc, onBookSearch, onToggleNotes, notesCount, ...action }: {
   bookName: string
   chapterTitle: string | null
   menuItems: ReaderMenuAction[]
   onBack: () => void
   onToggleToc: () => void
+  onBookSearch: () => void
+  onToggleNotes: () => void
+  notesCount: number
 } & ActionProps) {
   return <header className="md3-topbar" data-testid="reader-header">
     <div className="md3-topbar-side">
@@ -65,12 +68,26 @@ export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleT
       <small>{bookName}</small>
     </div>
     <div className="md3-topbar-side md3-topbar-actions">
+      <button
+        type="button"
+        className="md3-icon-btn"
+        aria-label="搜索本书"
+        title="在已缓存的章节正文里搜索关键词"
+        onClick={onBookSearch}
+      ><Icon name="search" /></button>
+      <button
+        type="button"
+        className="md3-icon-btn"
+        aria-label={`笔记（${notesCount}）`}
+        title="笔记与划线"
+        onClick={onToggleNotes}
+      ><Icon name="bookmark" /></button>
       {menuItems.map(id => <TopAction key={id} id={id} {...action} />)}
     </div>
   </header>
 }
 
-export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesCount, ttsActive, onSeekChapter, onPrev, onNext, onToggleToc, onToggleNotes, onToggleTts, onToggleSettings, onOpenOtherSettings }: {
+export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesCount, ttsActive, onSeekChapter, onPrev, onNext, onToggleToc, onToggleNotes, onToggleTts, onToggleSettings, onBookSearch, onTogglePureReading }: {
   chapterIndex: number
   totalChapters: number
   chapterTitle: string | null
@@ -83,7 +100,8 @@ export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesC
   onToggleNotes: () => void
   onToggleTts: () => void
   onToggleSettings: () => void
-  onOpenOtherSettings: () => void
+  onBookSearch: () => void
+  onTogglePureReading: () => void
 }) {
   const max = Math.max(0, totalChapters - 1)
   const atStart = chapterIndex <= 0
@@ -116,10 +134,11 @@ export function Md3BottomBar({ chapterIndex, totalChapters, chapterTitle, notesC
     </div>
     <div className="md3-actions-row">
       <button className="md3-pill" aria-label="目录" onClick={onToggleToc}><Icon name="list" /><span>目录</span></button>
+      <button className="md3-pill" aria-label="搜索本书" title="在已缓存的章节正文里搜索关键词" onClick={onBookSearch}><Icon name="search" /><span>搜书</span></button>
       <button className="md3-pill" aria-label={`笔记（${notesCount}）`} onClick={onToggleNotes}><Icon name="bookmark" /><span>笔记{notesCount > 0 ? ` ${notesCount}` : ''}</span></button>
       <button className={`md3-pill${ttsActive ? ' is-active' : ''}`} aria-label="朗读" onClick={onToggleTts}><Icon name="volume2" /><span>朗读</span></button>
-      <button className="md3-pill" aria-label="阅读设置" onClick={onToggleSettings}><Icon name="sliders" /><span>界面</span></button>
-      <button className="md3-pill" aria-label="更多设置" onClick={onOpenOtherSettings}><Icon name="settings" /><span>设置</span></button>
+      <button className="md3-pill" aria-label="阅读设置" onClick={onToggleSettings}><Icon name="settings" /><span>设置</span></button>
+      <button className="md3-pill" aria-label="纯阅读：隐藏所有控件" title="纯阅读（隐藏所有控件，Esc 或边缘把手退出）" onClick={onTogglePureReading}><Icon name="eyeOff" /><span>沉浸</span></button>
     </div>
   </footer>
 }

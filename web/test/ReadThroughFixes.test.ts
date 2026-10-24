@@ -172,18 +172,18 @@ test('四份文件里那批"把两条 import 粘成一行"的裸 CR 不许长回
   assert.deepEqual(offenders, [], `这些文件里还有裸 CR：${offenders.join('、')}`)
 })
 
-test('底部弹层只在开着的时候接 Esc（两张同时挂在树上）', () => {
-  // 「界面」与「设置」各是一个 ReaderSheet 实例，都挂在 ReaderScreen 的同一棵树里。
-  // useEscapeClose 的监听挂在 window 上，与 open 无关 —— 于是按一次 Esc 触发两次关闭。
-  // 此刻两处都写同一个 null，看不出症状；等哪张的关闭变成"还要还回点什么"时就是错关。
+test('底部弹层只在开着的时候接 Esc', () => {
+  // 阅读设置现在合并成**一张** ReaderSheet（层内用「阅读 / 其它」标签页切换，不再两张同挂）。
+  // useEscapeClose 的监听挂在 window 上，与 open 无关 —— 关闭态必须不接 Esc，否则按一次 Esc
+  // 会连触发两次关闭。这条判据仍然盯着那个「只在 open 时接 Esc」的写法。
   const sheet = read('reader', 'ReaderSheet.tsx')
   assert.match(sheet, /useEscapeClose\(open \? onClose : ignoreEscape\)/,
     '关闭态不许接 Esc（0.7.0 那轮的修法）')
   assert.doesNotMatch(sheet, /useEscapeClose\(onClose\)/,
-    '反向对照：无条件接 Esc 的写法（两张同挂时按一次关两回）')
+    '反向对照：无条件接 Esc 的写法')
   const screen = read('reader', 'ReaderScreen.tsx')
-  assert.equal((screen.match(/<ReaderSheet /g) ?? []).length, 2,
-    '这条判据的前提是"两张同时挂着"；只剩一张时上面那条的意义就变了，要重写')
+  assert.equal((screen.match(/<ReaderSheet /g) ?? []).length, 1,
+    '阅读设置合并成一张弹层；再冒出第二张说明又把两个设置拆回去了')
 })
 
 test('MD3 外壳的注释不许把"默认"写回旧界面', () => {
