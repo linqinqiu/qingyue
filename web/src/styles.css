@@ -7,6 +7,38 @@
   color: var(--ink);
   background: var(--canvas);
   font-synthesis: none;
+  /*
+   * 颜色令牌的中性基线 ——「全权自定义」的前提。
+   *
+   * 这 16 个令牌原先**只**存在于下面 7 个 `.theme-*` 类里，`:root` 一个都不定义。
+   * 于是自定义皮肤必须"叠在某套预设之上"才不至于字和底同色 —— 那正是用户否掉的语义
+   * （「自定义不是叠在哪一套之上，是全权自定义」）。
+   * 现在给一份与皮肤无关的地板：自定义皮肤没写到的变量落到这里，而不是落到任何预设。
+   *
+   * 位置是硬约束：必须在文件最开头的这个 `:root` 里。`.theme-*` 与本选择器同为 (0,1,0)，
+   * 靠源序定胜负 —— 谁在后面谁赢。文件后段还有别的 `:root`（排版/尺寸档），
+   * 把颜色基线塞进那里就会排在 `.theme-*` 之后，把 7 套预设皮肤的配色整体洗成同一个颜色。
+   *
+   * 取值取浅色系（与 .theme-light 同源）：浏览器默认的字/底就是浅色的，
+   * 用户只写一两个变量时最不容易读不出东西。
+   */
+  --canvas: #f8f9f7;
+  --surface: #ffffff;
+  --surface-muted: #f6f8f5;
+  --ink: #202522;
+  --muted: #666f68;
+  --line: #e7eae6;
+  --accent: #247a58;
+  --accent-soft: #eaf4ee;
+  --accent-ink: #176145;
+  --accent-solid: #1f6a4c;
+  --accent-solid-hover: #17543b;
+  --on-accent: #ffffff;
+  --danger: #bf4a43;
+  --danger-solid: #b0433c;
+  --on-danger: #ffffff;
+  --shadow: 0 12px 30px rgba(24, 36, 28, .08);
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -965,14 +997,28 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-drawer-right { right: 0; border-left: 1px solid var(--line); transform: translateX(100%); }
 .reader-drawer-right.open { transform: translateX(0); }
 .reader-drawer-backdrop { position: fixed; inset: 0; z-index: 28; background: rgba(0, 0, 0, .35); backdrop-filter: blur(2px); transition: opacity .25s ease; }
-.drawer-header { display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.drawer-header-actions { display: flex; align-items: center; gap: 4px; }
+/*
+ * 抽屉标题栏：宽度可能是 250px（固定侧栏）也可能是 640px（浮层），
+ * 里面要放「图标 + 目录 + 正在读：章名」和一排 6 颗按钮。
+ * 窄的时候若不允许换行，标题会被挤成 0 宽——「目录」两个字就竖着排了，按钮还会溢出到正文上。
+ * 所以：标题永不换行、按需截断；按钮不压缩，放不下时整排换到第二行（右对齐）。
+ */
+.drawer-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; row-gap: 2px; flex-wrap: wrap; min-height: 56px; padding: 4px 12px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.drawer-header-actions { display: flex; align-items: center; gap: 2px; flex: none; margin-left: auto; }
+.drawer-header .reader-icon-button { width: 32px; height: 32px; }
 .desktop-pin-btn { display: none; }
 .desktop-reverse-btn { display: none; }
-.drawer-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; }
+.drawer-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; min-width: 0; flex: 1 1 auto; }
+.drawer-title > svg { flex: none; }
+.drawer-title strong { flex: none; white-space: nowrap; }
 .drawer-title small { font-size: 12px; color: var(--muted); font-weight: normal; margin-left: 4px; }
 /* 标题栏里的当前章名：长章名截断，全名放 title */
-.drawer-title-current { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-title-current { flex: 0 1 auto; min-width: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 固定成侧栏后空间只够「目录」+ 按钮；章名在下面的列表里本来就高亮着，这里不再重复占位。 */
+.reader-drawer.pinned .drawer-title-current { display: none; }
+/* 目录标题栏底部的「全书已读比例」细条（MD3 风格）：绝对定位贴底，不挤占左右布局。 */
+.drawer-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; }
+.drawer-progress > i { display: block; height: 100%; background: var(--accent); transition: width .15s linear; }
 .drawer-scroll-content { flex: 1 1 auto; overflow-y: auto; padding: 18px; display: grid; gap: 20px; align-content: start; }
 .drawer-footer { padding: 8px 16px max(12px, var(--safe-bottom)); border-top: 1px solid var(--line); flex-shrink: 0; }
 /* 目录抽屉底部：默认只留一行（用户 2026-10-09「折叠整理归纳到底部，不要影响目录显示」） */
@@ -989,14 +1035,26 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .chapter-search input { width: 100%; padding: 0; border: 0; background: transparent; font-size: 13px; color: var(--ink); }
 .chapter-search svg { width: 15px; flex-shrink: 0; }
 .reader-chapters { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; display: block; contain: strict; will-change: scroll-position; -webkit-overflow-scrolling: touch; }
-.reader-chapter-item { width: 100%; height: var(--row-h-list); box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 0; border-left: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; font-size: 13px; line-height: 1.3; cursor: pointer; user-select: none; }
+.reader-chapter-item { position: relative; width: 100%; height: var(--row-h-list); box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 0; border-left: 3px solid transparent; background: transparent; color: var(--muted); text-align: left; font-size: 13px; line-height: 1.3; cursor: pointer; user-select: none; }
 .reader-chapter-volume { width: 100%; height: var(--row-h-list); box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; background: var(--surface-muted); color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.3; border-left: 3px solid var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: none; }
 .reader-chapter-item:hover { background: var(--surface-muted); color: var(--ink); }
+.reader-chapter-item.read { color: var(--ink); }
 .reader-chapter-item.current { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .reader-chapter-item i { width: 5px; height: 5px; flex: none; border-radius: 50%; background: transparent; }
 .reader-chapter-item.current i { background: var(--accent); }
 .reader-chapter-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .chapter-cached-badge { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: auto; flex-shrink: 0; box-shadow: 0 0 6px var(--accent-soft); }
+/* 未缓存章节右侧的小云朵（与截图一致）：已缓存的章节改在同一个右侧槽位显示字数（见下）。 */
+.chapter-cloud-badge { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; flex-shrink: 0; color: var(--muted); opacity: .55; }
+.chapter-cloud-badge svg { width: 14px; height: 14px; }
+.reader-chapter-item.current .chapter-cloud-badge { color: var(--accent); opacity: .8; }
+/* 章节字数（用户：「当获取到内容的时候，显示章节字数放在右面」）：与云朵共用右侧槽位，
+   所以布局口径必须一致（margin-left:auto + flex-shrink:0 + 不换行），否则长章名会把字数挤掉。 */
+.chapter-word-count { margin-left: auto; flex-shrink: 0; font-size: 12px; line-height: 1; opacity: .55; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reader-chapter-item.current .chapter-word-count { color: var(--accent); opacity: .8; }
+/* 目录当前章底部的章内阅读进度（薄条，MD3 风格）：只渲在 .current 行，靠绝对定位贴底，不挤占左右布局。 */
+.reader-chapter-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; }
+.reader-chapter-progress > i { display: block; height: 100%; background: var(--accent); transition: width .12s linear; }
 
 /* Settings Controls Inside Drawer */
 .setting-section { display: grid; gap: 10px; }
@@ -1005,6 +1063,8 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
    一条 tab 导航 + 每页独立内容。控件高度/间距走全站 token，别再自己造刻度。 */
 .settings-panel { display: flex; flex-direction: column; gap: 0; padding: 0; }
 .settings-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 12px 12px 0; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+/* 合并后的设置弹层顶层只有「阅读 / 其它」两页，用两列网格（默认三列会空一格）。 */
+.settings-tabs.is-two { grid-template-columns: repeat(2, 1fr); }
 .settings-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--ctl-34, 34px); border: 0; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; background: transparent; color: var(--muted); font-size: var(--t-sm, 13px); cursor: pointer; }
 .settings-tab:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .settings-tab.selected { color: var(--accent-solid, var(--accent)); border-bottom-color: var(--accent-solid, var(--accent)); font-weight: 600; }
@@ -1218,6 +1278,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-text-input:focus { outline: none; border-color: var(--accent); }
 .bg-row { display: flex; align-items: center; gap: 10px; }
 .reader-bg-color { width: 44px; height: 30px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; }
+.segmented-control { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-2, 12px); background: var(--surface-muted); }
+.segmented-option { min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--r-1, 8px); background: transparent; color: var(--muted); font: inherit; font-size: var(--t-sm); cursor: pointer; }
+.segmented-option:hover { color: var(--accent-ink); }
+.segmented-option.selected { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 
 .reader-paginated-viewport { position: relative; flex: 1 1 auto; width: min(var(--reader-max-width, 860px), calc(100% - var(--reader-pad, 80px) * 2)); margin: 40px auto 10px; overflow: hidden; user-select: none; }
 .reader-paginated-viewport.is-double-column::after {
@@ -1269,6 +1333,10 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .agreement-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
 .agreement-actions .primary-button[disabled] { opacity: .55; cursor: default; }
 .reader-paginated-footer { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px, 5vw, 40px) 10px; color: var(--muted); font-size: 12px; user-select: none; }
+.reader-paginated-pager { display: flex; align-items: center; gap: 2px; }
+.reader-paginated-pager .md3-icon-btn { width: 28px; height: 28px; padding: 4px; }
+.reader-paginated-pager .md3-icon-btn svg { width: 18px; height: 18px; }
+.reader-paginated-pagecount { font-variant-numeric: tabular-nums; min-width: 56px; text-align: center; }
 
 /* Desktop Sidebar Pinning */
 @media (min-width: 960px) {
@@ -1293,6 +1361,13 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
   }
   .reader-workspace.sidebar-pinned .reader-drawer-backdrop {
     display: none;
+  }
+  /* 固定目录栏时，MD3 顶/底栏也要让出左侧目录宽度 —— 否则它们横跨整屏、压在正文上
+   * （用户反馈：锁定目录后「仍然有信息在正文页面出现」「目录宽度变化时工具栏位置会乱」）。
+   * 与正文同用 --reader-sidebar-width，拖动改宽度时顶/底栏实时跟随。 */
+  .reader-workspace.sidebar-pinned .md3-topbar,
+  .reader-workspace.sidebar-pinned .md3-bottombar {
+    left: var(--reader-sidebar-width, 300px);
   }
 }
 
@@ -2160,7 +2235,7 @@ mark.search-highlight { background: var(--accent-soft); color: var(--accent); fo
 .reader-paragraph-image img { max-width: 100%; height: auto; border-radius: 4px; }
 /* 正文配图取失败时的那一行：说清失败了、为什么，并给一条「重取这一张」的出路。
    以前这张图被整块藏掉，"取失败"与"这一页本来没图"在界面上是同一个样子。 */
-.reader-image-failed { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 1.2em 0; text-indent: 0; color: var(--ink-dim); font-size: var(--t-s); text-align: center; }
+.reader-image-failed { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 1.2em 0; text-indent: 0; color: var(--muted); font-size: var(--t-sm); text-align: center; }
 /* 正文配图点击放大：挡片是 `.overlay-backdrop.is-viewer`（那一档只改底色与光标），
    图上那颗关闭键 40×40 是它自己的一档 —— 深色画布上的可点面积要更大，见文末浮层判据的白名单。 */
 .overlay-backdrop.is-viewer img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5); cursor: default; }
@@ -4100,11 +4175,14 @@ body:has(.overlay-backdrop) .pwa-install-banner { display: none; }
   border-radius: 6px;
   background: var(--surface);
   font-size: 13px;
-  color: var(--text);
+  /* 原来写的是 `var(--text)` —— 这条令牌**全样式表都没有定义**（已逐条 grep 确认），
+     于是 var() 解析失败，这整条声明作废：颜色落回继承，`.health-baseline-note`
+     拿不到自己声明的墨色。改用实际存在的 `--ink`。 */
+  color: var(--ink);
 }
 
 .health-baseline-note strong {
-  color: var(--accent, var(--text));
+  color: var(--accent, var(--ink));
 }
 
 .health-tabs {
@@ -5293,6 +5371,10 @@ input[type="checkbox"] {
 /* ② 选源：只列启用中的，停用要显式勾出来 */
 .library-scope-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--t-sm); white-space: nowrap; cursor: pointer; }
 .library-scope .ui-select-trigger { min-width: 230px; max-width: 420px; background: var(--surface); }
+/* 换源弹窗里复用搜索页那条范围条（`.library-scope`）的样式，但弹窗更窄：
+   下拉收一档，并把整条压在标题栏下面留出的间距里。 */
+.source-switch-scope { padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.source-switch-scope .ui-select-trigger { min-width: 170px; max-width: 280px; }
 @media (max-width: 640px) { .library-scope .ui-select-trigger { min-width: 0; width: 100%; } }
 
 /* ③ 发现页：选源本身就是一个搜索口（用户：「需要的是搜对应书源」，不是在这儿再搜一遍书名）。
@@ -5345,6 +5427,14 @@ input[type="checkbox"] {
 /* 「服务端口」弹窗：一行现状 + 一个数字框 + 保存，比皮肤那套简单。 */
 .server-port-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px; display: grid; gap: 14px; }
 .server-port-current { margin: 0; font-size: 13px; color: var(--muted); }
+/* 「应用名称与图标」与「服务端口」同族（都写安装根），排版直接复用 .server-port-body，
+   只补这里多出来的三样：颜色取色器一行、图标一行、预览格。 */
+.brand-color-row { display: flex; align-items: center; gap: 8px; }
+.brand-color-row input[type="color"] { width: 40px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-1); background: var(--surface); }
+.brand-color-row input[type="text"] { flex: 1; min-width: 0; }
+.brand-icon-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: var(--t-sm); }
+.brand-icon-preview { width: 40px; height: 40px; flex: none; border-radius: var(--r-1); border: 1px solid var(--line); background: var(--surface); object-fit: contain; }
+.brand-icon-preview.is-empty { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 .customize-section { display: grid; gap: 8px; }
 .customize-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .customize-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
@@ -5470,12 +5560,17 @@ input[type="checkbox"] {
 /* —— 全局 AI 悬浮球 ——
    以前 AI 只能从「设置 → AI 接入」打开模态弹窗，人得离开正在看的书/书源才能问一句。
    现在常驻右下角：任意页面可唤起，面板带着当前页面的上下文，对话历史跨页面保留。
-   层级要高于正文、低于模态遮罩（模态打开时不该被球挡住）。 */
+   层级要高于正文、低于模态遮罩（模态打开时不该被球挡住）。
+
+   层级取值 60：`.overlay-backdrop`（模态遮罩）是 100，球在它**之下**。
+   早先这里写的是 900 —— 实测（openChrome 量 getComputedStyle）弹窗打开时球心
+   elementFromPoint 命中的仍是球自己，也就是说悬浮球盖在了用户正在看的模态之上，
+   与上面那句注释矛盾。改成 60 后注释与行为一致：常驻 ≠ 最上。 */
 .ai-fab {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 900;
+  z-index: 60;
   width: 52px;
   height: 52px;
   display: grid;
@@ -5485,9 +5580,45 @@ input[type="checkbox"] {
   background: var(--accent);
   color: #fff;
   cursor: pointer;
+  /* 拖动要吃掉触摸手势，否则手机上会被滚动/缩放抢走 */
+  touch-action: none;
+  user-select: none;
   box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent);
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
+/* 连接状态点：灰=未连外部模型，绿=已连。让"现在能不能问"一眼可见。 */
+.ai-fab-dot {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--surface);
+}
+.ai-fab-dot.on { background: #2fbf71; }
+.ai-fab-dot.off { background: color-mix(in srgb, var(--danger) 70%, #888); }
+.ai-fab-offline { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+
+/* 隐藏后留在边缘的极小把手 —— 完全消失会让用户找不到恢复入口 */
+.ai-fab-restore {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  width: 20px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.ai-fab-restore:hover { color: var(--accent); }
 .ai-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 45%, transparent); }
 .ai-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .ai-fab-open { background: var(--surface); color: var(--ink); border-color: var(--line); }
@@ -5496,10 +5627,12 @@ input[type="checkbox"] {
   position: fixed;
   right: 24px;
   bottom: 88px;
-  z-index: 901;
-  width: min(420px, calc(100vw - 32px));
-  /* 外壳几何（圆角/阴影/最大高度）**不在这一档重写** —— 那是 `.dialog-shell` 唯一的职责，
-     UiContract 判据盯着"不许再长出第 17 套外壳"。这里只摆位置与内部布局。 */
+  z-index: 61;
+  /* 宽度**不在这里写**：这一档借了 `.dialog-shell` 当外壳，而 `.dialog-shell` 的宽度
+     由 `size-s/m/l` 三档统一给（`min(--dw-N, 94vw)`）。早先这里写
+     `width: min(420px, calc(100vw - 32px))`，实测渲染出来是 680px ——
+     后置的同特异性 `.dialog-shell` 把它静默覆盖了，声明的 420 从来没生效过。
+     几何只有一处来源：宽度交给 size-s 档，这里只摆位置与内部布局。 */
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -5514,6 +5647,76 @@ input[type="checkbox"] {
 .ai-fab-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
 .ai-fab-ctx { color: var(--muted); font-size: 11px; }
 .ai-fab-system { width: 100%; resize: vertical; font-size: 12px; }
+.ai-fab-system-wrap { display: grid; gap: 6px; }
+
+/* 多会话标签：横向可滚，标签多了不换行挤爆 */
+.ai-session-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.ai-session-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  max-width: 160px;
+}
+.ai-session-tab.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.ai-session-tab-label {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  padding: 3px 10px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ai-session-tab-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.ai-session-tab-close:hover { color: var(--danger); }
+.ai-session-add {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ai-session-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 系统提示词模板芯片 */
+.ai-template-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-template-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.ai-template-chip.active { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.ai-tool-origin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 
 .ai-fab-log {
   flex: 1 1 auto;
@@ -5539,7 +5742,10 @@ input[type="checkbox"] {
     right: 8px;
     left: 8px;
     bottom: 70px;
+    /* 窄屏下铺满。宽度仍然由 `.dialog-shell` 的档位给（size-s → min(480px, 94vw)），
+       这里只让它跟着左右一起铺开；不另写一个 width，免得"几何只有一处来源"又破。 */
     width: auto;
+    max-width: none;
     max-height: calc(100vh - 110px);
   }
 }
@@ -5785,7 +5991,15 @@ input[type="checkbox"] {
 .reader-note-input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); color: var(--ink); font: inherit; font-size: var(--t-sm); outline: 0; }
 .reader-note-input:focus { border-color: var(--accent); }
 .reader-note-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 标记快捷条（MD3 MarkingSelectionMenu 形态）：选中正文先摆这一条，点「笔记」才展开编辑器。 */
+.reader-marking-menu { position: fixed; transform: translate(-50%, calc(-100% - 10px)); z-index: 41; display: flex; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-2, 12px); background: var(--surface); box-shadow: 0 12px 32px rgba(0, 0, 0, .18); }
+.reader-marking-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: var(--r-1, 8px); background: transparent; color: var(--ink); cursor: pointer; }
+.reader-marking-btn svg { width: 20px; height: 20px; }
+.reader-marking-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
 .reader-notes-list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+/* 笔记面板顶部那条：导出按钮 + 条数。以前划线只能一条条看，拿不走。 */
+.reader-notes-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); padding: 8px 10px 0; flex: 0 0 auto; }
+.reader-notes-count { color: var(--muted); font-size: var(--t-sm); }
 .reader-notes-empty { padding: 16px 8px; color: var(--muted); font-size: var(--t-md); line-height: 1.7; }
 .reader-note-item { margin: 0; }
 .reader-note-item-main { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
@@ -5793,8 +6007,27 @@ input[type="checkbox"] {
 .reader-note-item-excerpt { font-size: var(--t-md); line-height: 1.6; }
 .reader-note-item-text { color: var(--accent); font-size: var(--t-sm); }
 .reader-note-item-meta { color: var(--muted); font-size: var(--t-xs); }
+/* 书签徽标（与「划线 / 笔记」并列的只读位置标记）。复用既有着色，不新增令牌。 */
+.reader-note-badge { display: inline-block; margin-right: 6px; padding: 1px 7px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: var(--t-xs); vertical-align: middle; }
+/* 笔记面板里的「全部 / 书签」过滤：纯前端，不加端点。 */
+.reader-notes-filter { display: flex; gap: var(--s-1); padding: 6px 10px 0; flex: 0 0 auto; }
+.reader-notes-filter-btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: var(--t-sm); cursor: pointer; }
+.reader-notes-filter-btn.is-active { border-color: var(--accent); color: var(--ink); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 /* 正文引导语：替代原来的整页大标题（标题已由 .dialog-head 给，正文不再重复一遍 h1） */
 .page-dialog .page-lead { margin: 0 0 var(--s-4); color: var(--muted); font-size: var(--t-lg); line-height: 1.7; }
+
+/* 搜索本书弹窗（复用 .dialog-shell.size-m + .dialog-head 外壳；这里只放内容样式，不新增令牌） */
+.reader-book-search { display: flex; flex-direction: column; max-height: 80vh; }
+.reader-book-search-body { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4) var(--s-5) var(--s-5); min-height: 0; }
+.reader-book-search-input input { width: 100%; box-sizing: border-box; min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 10px 12px; font-size: var(--t-md); outline: none; }
+.reader-book-search-input input:focus { border-color: var(--accent); }
+.reader-book-search-status { margin: 0; padding: var(--s-2) 2px; color: var(--muted); font-size: var(--t-sm); }
+.reader-book-search-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.reader-book-search-item { margin: 0; }
+.reader-book-search-main { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
+.reader-book-search-main:hover { border-color: var(--accent); }
+.reader-book-search-chapter { font-size: var(--t-sm); color: var(--accent); }
+.reader-book-search-snippet { font-size: var(--t-md); line-height: 1.6; color: var(--ink); }
 
 /* —— 渲染崩掉的兜底面板（ErrorBoundary）—— */
 /* 阅读器那一支崩了时它替换的是正文区域：占满可用高度但不铺满整屏（外壳与书架还在）。 */
@@ -5834,7 +6067,7 @@ input[type="checkbox"] {
 .md3-topbar {
   top: 0;
   display: flex; align-items: center; gap: 8px;
-  padding: calc(8px + var(--safe-top)) max(12px, var(--safe-right)) 22px max(12px, var(--safe-left));
+  padding: calc(12px + var(--safe-top)) max(12px, var(--safe-right)) 22px max(12px, var(--safe-left));
   background: linear-gradient(to bottom,
     var(--surface) 0%,
     color-mix(in srgb, var(--surface) 74%, transparent) 58%,
@@ -5852,6 +6085,27 @@ input[type="checkbox"] {
 .reader-workspace.toolbars-hidden .md3-topbar { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 .reader-workspace.toolbars-hidden .md3-bottombar { transform: translateY(100%); opacity: 0; pointer-events: none; }
 
+/* 纯阅读模式退出把手（P1-T3）：贴右缘的浮层，默认半透明收起、hover/focus 显出，确保「退出可发现」。
+   此前该把手无任何样式，退化成文档流里的原生按钮，定位与可见性都失效。 */
+.reader-immersive-handle {
+  position: fixed;
+  right: max(12px, var(--safe-right));
+  bottom: calc(20px + var(--safe-bottom));
+  z-index: 30;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px;
+  border: none; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  color: var(--ink);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  cursor: pointer;
+  opacity: .35;
+  transition: opacity .2s ease;
+}
+.reader-immersive-handle:hover,
+.reader-immersive-handle:focus-visible { opacity: 1; }
+.reader-immersive-handle-label { font-size: 12px; line-height: 1; }
+
 .md3-topbar-side { display: flex; align-items: center; gap: 4px; flex: none; }
 .md3-topbar-actions { justify-content: flex-end; }
 .md3-topbar-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: center; }
@@ -5861,6 +6115,13 @@ input[type="checkbox"] {
   font-family: Georgia, "Noto Serif SC", serif;
 }
 .md3-topbar-title small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/*
+ * 抽屉是盖在正文上的浮层（z-index 30 > 顶栏 20），而顶栏标题是整屏居中的 ——
+ * 抽屉一开，标题正好被抽屉右缘切掉一半，看着像被裁了。
+ * 抽屉打开时收起标题（抽屉自己的头部已经写着「正在读：第几章」），只留右侧动作。
+ * 固定成侧栏时不算：那时顶栏已经让位到侧栏右边，不重叠。
+ */
+.reader-workspace.drawer-open:not(.sidebar-pinned) .md3-topbar-title { visibility: hidden; }
 
 .md3-icon-btn {
   width: 40px; height: 40px; flex: none; display: grid; place-items: center; padding: 0;
@@ -5921,6 +6182,59 @@ input[type="checkbox"] {
   .md3-bottombar {
     -webkit-backdrop-filter: blur(18px) saturate(1.5);
     backdrop-filter: blur(18px) saturate(1.5);
+  }
+}
+
+/* ---- 桌面端（≥960px）：把手机式的「底部竖排药丸 + 贴底抽屉」改回电脑阅读器形态 ----
+ * 底部栏：从「竖排大药丸」变成一行纤细底部状态条（左=章进度/翻章，右=紧凑 图标+文字 按钮）；
+ * 「界面 / 设置」：从贴底上滑的抽屉变成居中对话框（复用 .dialog-shell 几何，与书架其它弹层同形态）。
+ * 窄屏（<960px）维持原来的移动端形态不变，保证手机/小窗仍然好用。 */
+@media (min-width: 960px) {
+  .md3-bottombar {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 8px max(16px, var(--safe-right)) calc(8px + var(--safe-bottom)) max(16px, var(--safe-left));
+  }
+  .md3-bottombar .md3-progress-row { flex: 1 1 auto; min-width: 0; }
+  .md3-bottombar .md3-actions-row { justify-content: flex-end; flex: none; gap: 2px; }
+  .md3-bottombar .md3-pill {
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    gap: 6px;
+  }
+  .md3-bottombar .md3-pill svg { width: 16px; height: 16px; }
+  /* 桌面端不再需要底部那一排动作（目录/搜书/笔记/朗读/界面/设置）—— 它们都已收到顶栏，
+   * 底部只留一行进度状态条，彻底去掉手机式的「底部动作栏」。窄屏仍保留原样。 */
+  .md3-bottombar .md3-actions-row { display: none; }
+
+  .overlay-backdrop.is-sheet { place-items: center; padding: var(--s-4); }
+  .dialog-shell.is-sheet {
+    width: min(760px, 100%);
+    max-height: min(84vh, 880px);
+    border-radius: var(--r-3);
+    border-bottom: 1px solid var(--line);
+    animation: scaleUp .2s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  .md3-sheet-handle { display: none; }
+
+  /* 桌面端把顶/底栏做成固定「应用框架」：实底 + 发丝边，而不是手机式渐隐浮层；
+   * 顶栏不再留 22px 渐隐留白，压紧成一条工具栏，更像桌面阅读器的 chrome。 */
+  .md3-topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding-top: calc(12px + var(--safe-top));
+    padding-bottom: 8px;
+  }
+  .md3-bottombar {
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+    padding-bottom: calc(8px + var(--safe-bottom));
   }
 }
 

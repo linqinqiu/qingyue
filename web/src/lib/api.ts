@@ -13,6 +13,21 @@ export type AboutInfo = { title: string; version: string; repository: string }
 /** 服务自身：这次运行实际绑在哪（改 port.txt 不会让它变，要重启）。 */
 export type ServerInfo = { host: string; port: number }
 export type ServerPortResult = { port: number; restartRequired: boolean }
+
+/**
+ * 自定义品牌（用户 2026-10-23：「允许自定义图标和名称」）。
+ * `displayName` 是服务端算好的实际显示名（没设过就等于内置的「青阅」），
+ * `builtinName` 一起回，界面才能区分"这是默认"与"这是你改过的"。
+ */
+export type BrandInfo = {
+  name: string
+  displayName: string
+  shortName: string
+  themeColor: string
+  hasIcon: boolean
+  iconUrl?: string
+  builtinName: string
+}
 export type UpdateCheckResult = {
   current: string
   /** 版本号发布里最高的一个标签（形如 `v0.6.26`），没有版本号发布时为 null。 */
@@ -31,12 +46,24 @@ export type SearchResult = { sourceId: string; name: string; author?: string; bo
 export type ExploreTab = { title: string; url: string; /** 服务端按规则写法判出来的"这一栏吃不吃页码"；缺省按支持（旧数据/别的入口没带这个字段） */ supportsPaging?: boolean }
 export type BookDetails = { sourceId: string; name: string; author?: string; intro?: string; coverUrl?: string; tocUrl: string; kind?: string; wordCount?: string; lastChapter?: string; alternateSources?: SearchResult[]; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type Chapter = { index: number; title: string; url: string; isVolume?: boolean }
-export type ReadingProgress = { sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number }
+export type ReadingProgress = {
+  sourceId: string; bookUrl: string; chapterUrl: string; chapterIndex: number; scrollPosition: number; updatedAt: number
+  /** 逻辑位置模型（P1-T1）：章节内绝对字符偏移；老客户端不报时为 undefined。 */
+  charOffset?: number
+  /** 段落锚点：重排后辅助回退。可空。 */
+  paragraphAnchor?: string | null
+  /** 逻辑位置编码版本。 */
+  positionVersion?: number
+  /** 保存时刻章节内容校验值。 */
+  positionChecksum?: string | null
+}
 /** 阅读记录（PROPOSAL-019 D）：粒度「一天 · 一本书」一行，秒数只累加。`day` 是本地日 YYYY-MM-DD。 */
 export type ReadingLogEntry = { day: string; sourceId: string; bookUrl: string; bookName: string; chapterIndex: number; seconds: number; updatedAt: number }
-/** 笔记 / 划线（PROPOSAL-019 E）。偏移是**章节内字符偏移**，不是像素 / 列号。 */
-export type BookNote = { id: number; sourceId: string; bookUrl: string; bookName: string; chapterUrl: string; chapterIndex: number; startOffset: number; endOffset: number; excerpt: string; note: string; createdAt: number; updatedAt: number }
-export type BookNoteWrite = { sourceId: string; bookUrl: string; bookName?: string; chapterUrl?: string; chapterIndex?: number; startOffset: number; endOffset: number; excerpt: string; note?: string }
+/** 笔记 / 划线 / 书签（PROPOSAL-019 E）。偏移是**章节内字符偏移**，不是像素 / 列号。`bookmark` 为真表示只标位置不写想法。 */
+export type BookNote = { id: number; sourceId: string; bookUrl: string; bookName: string; chapterUrl: string; chapterIndex: number; startOffset: number; endOffset: number; excerpt: string; note: string; createdAt: number; updatedAt: number; bookmark?: boolean; paragraphAnchor?: string | null; positionVersion?: number; positionChecksum?: string | null }
+export type BookNoteWrite = { sourceId: string; bookUrl: string; bookName?: string; chapterUrl?: string; chapterIndex?: number; startOffset: number; endOffset: number; excerpt: string; note?: string; bookmark?: boolean; paragraphAnchor?: string | null; positionVersion?: number; positionChecksum?: string | null }
+/** 本书正文检索命中（搜索本书 feature）：在已缓存章节正文里按关键词找，snippet 是命中处前后截一段。 */
+export type BookSearchHit = { chapterUrl: string; chapterIndex: number; title: string; snippet: string }
 export type BookshelfItem = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverKey?: string; chapterIndex?: number; scrollPosition?: number; lastReadAt: number; tocUpdatedAt?: number; cachedChapters: number; totalChapters: number; cacheState: 'idle' | 'caching' | 'ready' | 'failed'; cacheError?: string; completed: boolean; alternateSources?: SearchResult[]; groupId?: number; /** 这本本地书实际用的目录规则（`auto`/`builtin`/规则 id）；在线书没有 */ tocRule?: string | null; /** 自定义排序位（1 起）；null/缺省 = 没参与过自定义排序 */ sortOrder?: number | null; /** 书源 bookSourceType：0 文本 / 1 音频 / 2 漫画 / 3 文件 / 4 视频 */ sourceType?: number }
 export type BookshelfWrite = { sourceId: string; bookUrl: string; name: string; author?: string; tocUrl: string; coverUrl?: string; alternateSources?: SearchResult[] }
 export type BookshelfSourceSwitch = { oldSourceId: string; oldBookUrl: string; book: BookshelfWrite; alternateSources?: SearchResult[] }
@@ -413,6 +440,24 @@ export const api = {
   /** 改端口：只写安装根的 `port.txt`，重启青阅后生效。 */
   setServerPort: (port: number) => request<ServerPortResult>('/api/server/port', { method: 'PUT', body: JSON.stringify({ port }) }),
   checkUpdate: () => request<UpdateCheckResult>('/api/about/update-check', { method: 'POST' }),
+  /**
+   * 自定义品牌：名称/短名/主题色 + 图标。走 `/brand` 这一组**非 /api 表面**的路由
+   * （与 `/sw.js`、`/manifest.webmanifest` 同一档，见 StaticWeb.kt 的注释），
+   * 所以它不进 `/api/catalog` 的端点计数；但写操作照过服务端的同源闸门。
+   * 名称与主题色改完**立刻生效**（manifest 那条路由带 no-cache）；
+   * 已经装到桌面/主屏幕的 PWA 要等浏览器同步清单，界面上得把这句说清楚。
+   */
+  brand: () => request<BrandInfo>('/brand'),
+  setBrand: (brand: { name: string; shortName: string; themeColor: string }) =>
+    request<BrandInfo>('/brand', { method: 'PUT', body: JSON.stringify(brand) }),
+  resetBrand: () => request<BrandInfo>('/brand', { method: 'DELETE' }),
+  /** 图标只收 PNG / JPEG / WebP（服务端按魔数判、拒 SVG），上限 5 MB。 */
+  uploadBrandIcon: (file: File) => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    return request<BrandInfo>('/brand/icon', { method: 'POST', body: form })
+  },
+  clearBrandIcon: () => request<BrandInfo>('/brand/icon', { method: 'DELETE' }),
   createShelfGroup: (name: string) => request<BookGroup>('/api/bookshelf/groups', { method: 'POST', body: JSON.stringify({ name }) }),
   removeShelfGroup: (id: number) => request<void>(`/api/bookshelf/groups/${id}`, { method: 'DELETE' }),
   setBookGroup: (sourceId: string, bookUrl: string, groupId: number) => request<BookshelfItem>('/api/bookshelf/group', { method: 'PUT', body: JSON.stringify({ sourceId, bookUrl, groupId }) }),
@@ -483,8 +528,24 @@ export const api = {
     }
   },
   progress: (sourceId: string, bookUrl: string, signal?: AbortSignal) => request<ReadingProgress | undefined>(`/api/reading-progress?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}`, { signal }),
-  saveProgress: async (sourceId: string, bookUrl: string, chapterUrl: string, chapterIndex: number, scrollPosition: number) => {
-    const progressItem = { sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition, updatedAt: Date.now() }
+  saveProgress: async (
+    sourceId: string,
+    bookUrl: string,
+    chapterUrl: string,
+    chapterIndex: number,
+    scrollPosition: number,
+    /** 逻辑位置模型（P1-T1）：章节内字符偏移 + 段落锚点 + 内容校验值；老调用方不传。 */
+    position?: { charOffset?: number; paragraphAnchor?: string | null; positionChecksum?: string | null },
+  ) => {
+    const charOffset = position?.charOffset
+    const progressItem = {
+      sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition,
+      ...(charOffset != null ? { charOffset } : {}),
+      paragraphAnchor: position?.paragraphAnchor ?? null,
+      positionVersion: 1,
+      positionChecksum: position?.positionChecksum ?? null,
+      updatedAt: Date.now(),
+    }
     // 先冲掉此前积压的（flush 自带"成功即出队"），本次直写成功就不再入队 ——
     // 原来"入队 → 直写 → flush"会把刚入队的这条再发一遍（每次存进度都双写）；
     // 且 flush 排在直写前并 await，旧位置不会晚于新位置到达服务端。
@@ -492,12 +553,12 @@ export const api = {
       await request<ReadingProgress>('/api/reading-progress', { method: 'PUT', body: JSON.stringify(item) })
     }).catch(() => {})
     try {
-      const res = await request<ReadingProgress>('/api/reading-progress', { method: 'PUT', body: JSON.stringify({ sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition }) })
+      const res = await request<ReadingProgress>('/api/reading-progress', { method: 'PUT', body: JSON.stringify(progressItem) })
       return res
     } catch {
       // 直写失败才进离线队列，等服务恢复由下次 saveProgress 的 flush 补发
       enqueueOfflineProgress(progressItem)
-      return { sourceId, bookUrl, chapterUrl, chapterIndex, scrollPosition, updatedAt: progressItem.updatedAt }
+      return progressItem as ReadingProgress
     }
   },
   /**
@@ -513,6 +574,9 @@ export const api = {
    */
   notes: (sourceId: string, bookUrl: string, signal?: AbortSignal) =>
     request<BookNote[]>(`/api/notes?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}`, { signal }),
+  /** 本书正文检索：在已离线缓存的章节正文里按关键词找命中（没缓存的章节搜不到）。 */
+  bookSearch: (sourceId: string, bookUrl: string, query: string, signal?: AbortSignal) =>
+    request<BookSearchHit[]>(`/api/book-search?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}&q=${encodeURIComponent(query)}`, { signal }),
   addNote: (write: BookNoteWrite) => request<BookNote>('/api/notes', { method: 'POST', body: JSON.stringify(write) }),
   updateNote: (id: number, note: string) => request<void>(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ note }) }),
   deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: 'DELETE' }),
@@ -553,7 +617,7 @@ export const api = {
   cacheBookshelfRange: (data: { sourceId: string; bookUrl: string; startIndex?: number; endIndex?: number; count?: number }) =>
     request<{ status: string }>('/api/bookshelf/cache', { method: 'POST', body: JSON.stringify(data) }),
   getCachedChapters: (sourceId: string, bookUrl: string) =>
-    request<{ sourceId: string; bookUrl: string; cachedChapterUrls: string[]; cachedCount: number; totalChapters: number }>(
+    request<{ sourceId: string; bookUrl: string; cachedChapterUrls: string[]; cachedCount: number; totalChapters: number; cachedWordCounts?: number[] }>(
       `/api/bookshelf/cached-chapters?sourceId=${encodeURIComponent(sourceId)}&bookUrl=${encodeURIComponent(bookUrl)}`
     ),
   clearBookCacheData: (sourceId: string, bookUrl: string) =>
@@ -679,7 +743,7 @@ export const api = {
   },
   // ===== 自定义 AI 接入（/api/agent/*）=====
   // 同源写门由服务端把关，浏览器自动带 Origin，这里不注入任何令牌。
-  agentManifest: () => request<{ enabled: boolean; builtinConnections: string[] }>('/api/agent/manifest'),
+  agentManifest: () => request<AgentManifest>('/api/agent/manifest'),
   listAgentConnections: () => request<AgentConnection[]>('/api/agent/connections'),
   registerAgentConnection: (req: AgentConnectionInput) =>
     request<AgentConnection>('/api/agent/connections', { method: 'POST', body: JSON.stringify(req) }),
@@ -714,6 +778,21 @@ export function streamSearch(keyword: string, sourceIds: string[] | undefined, o
 }
 
 // ===== 自定义 AI 接入的类型 =====
+export type AgentManifestTool = {
+  id: string
+  group: string
+  description: string
+  writes: boolean
+  /** `"builtin"` = 框架内置，`"plugin:<id>"` = 插件注册的。由后端 ToolRegistry 标注。 */
+  origin: string
+}
+
+export type AgentManifest = {
+  enabled: boolean
+  builtinConnections: string[]
+  tools: AgentManifestTool[]
+}
+
 export type AgentConnection = {
   id: string
   name: string

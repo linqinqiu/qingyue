@@ -34,6 +34,7 @@ function fakeActions(): { actions: SettingsActions; called: string[] } {
     openBackup: make('openBackup'),
     openLogs: make('openLogs'),
     openServerPort: make('openServerPort'),
+    openBrand: make('openBrand'),
     openAiConnections: make('openAiConnections'),
     openPlugins: make('openPlugins'),
   }
@@ -77,8 +78,10 @@ test('每一行的 onClick 真的调到对应回调（不是死按钮）', () =>
     const added = called.filter(c => !before.has(c))
     assert.equal(added.length, 1, `点「${row.title}」应恰好触发 1 个动作，实际触发 ${added.length} 个：${added}`)
   }
-  // 全部点完后，10 个动作每个都被点到过至少一次（没有哪一行是摆设）
-  assert.equal(new Set(called).size, 10, `应有 10 个不同动作被触发，实际 ${new Set(called).size}：${[...new Set(called)]}`)
+  // 全部点完后，每一个动作都被点到过至少一次（没有哪一行是摆设）。
+  // 数目从 actions 本身派生而不是写死：加一行设置项时这里不许跟着改一个魔数。
+  const totalActions = Object.keys(actions).length
+  assert.equal(new Set(called).size, totalActions, `应有 ${totalActions} 个不同动作被触发，实际 ${new Set(called).size}：${[...new Set(called)]}`)
 })
 
 test('接入与扩展分组：AI 接入 / 插件各自一行，不合并', () => {
@@ -120,6 +123,17 @@ test('搜索大小写不敏感，且能搜到 hint 里的词', () => {
   const upper = allRows(filterSettingsSections(sections, 'CSS')).length
   const lower = allRows(filterSettingsSections(sections, 'css')).length
   assert.equal(upper, lower, `大小写应不敏感：CSS=${upper} / css=${lower}`)
+})
+
+test('长关键词照样能搜到（搜索不许有长度阈值）', () => {
+  const { actions } = fakeActions()
+  const sections = buildSettingsSections(actions)
+  // 这几个都是 6 字以上的真设置项：曾经有一段「查询超过 5 个字就不算命中」的阈值，
+  // 理由是躲一行根本不存在的「登录」入口 —— 结果把这些真词全挡成了空结果。
+  for (const word of ['替换净化规则', 'TXT 分章规则', '应用名称与图标']) {
+    const hit = allRows(filterSettingsSections(sections, word))
+    assert.ok(hit.length > 0, `「${word}」应能搜到，实际为空 —— 搜索又加了长度阈值？`)
+  }
 })
 
 test('反向对照：把搜索改成"只搜标题"必须被这条判据逮住', () => {

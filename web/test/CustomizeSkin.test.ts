@@ -12,11 +12,13 @@ import {
   availableSkins,
   BUILTIN_SKINS,
   DEFAULT_SKIN_BASE,
+  DEFAULT_SKIN_MODE,
   defaultReaderSettings,
   parseCustomSkin,
   parseCustomSkins,
   parseSkinBase,
   parseSkinId,
+  parseSkinMode,
   skinLabel,
   themeClassNames,
   type CustomSkin,
@@ -62,23 +64,62 @@ test('皮肤列表 - 内置七套 + 库里每一套自定义皮肤', () => {
   assert.equal(availableSkins(settings({ customSkins: [skin(), skin({ id: 'dawn' })] })).length, 9)
 })
 
-test('自定义皮肤是叠在内置皮肤之上的，不是替换它', () => {
+test('自定义皮肤两种语义：叠在内置之上（老数据缺省）或全权自定义', () => {
   assert.deepEqual(themeClassNames(settings()), ['theme-light'])
   assert.deepEqual(themeClassNames(settings({ theme: 'dark' })), ['theme-dark'])
+  // 老数据没有 mode 字段 → 缺省 overlay：挂两个类，外观与历史逐字节一致。
   const custom = settings({ customSkins: [skin({ base: 'dark' })], theme: 'midnight' })
   assert.deepEqual(themeClassNames(custom), ['theme-dark', 'theme-midnight'],
-    '只写两三条变量的皮肤必须有一整套内置变量兜底，否则界面会变成"字和底一个颜色"')
+    'overlay 模式下只写两三条变量的皮肤仍要有一整套内置变量兜底')
+  // 全权自定义（用户 2026-10-23：「自定义不是叠在哪一套之上，是全权自定义」）：
+  // 只挂自己这一个类 —— 没写到的变量落到 styles.css 里 :root 那份与皮肤无关的中性基线，
+  // 不跟随任何预设皮肤，因此换内置皮肤不会让这一套的观感漂移。
+  const standalone = settings({ customSkins: [skin({ base: 'dark', mode: 'standalone' })], theme: 'midnight' })
+  assert.deepEqual(themeClassNames(standalone), ['theme-midnight'],
+    'standalone 必须只有自己的类，否则就还在叠预设')
+  // 基线与 mode 无关：同一套 skin，standalone 下 base 完全不参与类名。
+  assert.deepEqual(themeClassNames(settings({ customSkins: [skin({ base: 'paper', mode: 'standalone' })], theme: 'midnight' })),
+    ['theme-midnight'])
   // 填了自定义皮肤但当前选的还是内置那档时，不要把基类和皮肤类同时挂上
   assert.deepEqual(themeClassNames({ ...custom, theme: 'paper' }), ['theme-paper'])
+  assert.deepEqual(themeClassNames({ ...standalone, theme: 'paper' }), ['theme-paper'])
   assert.equal(parseSkinBase('paper'), 'paper')
   assert.equal(parseSkinBase('midnight'), DEFAULT_SKIN_BASE, '基档只认内置档')
   assert.equal(parseSkinBase(undefined), DEFAULT_SKIN_BASE)
+  assert.equal(parseSkinMode('standalone'), 'standalone')
+  assert.equal(parseSkinMode(undefined), DEFAULT_SKIN_MODE, '缺省必须是 overlay（老皮肤外观不许变）')
+  assert.equal(parseSkinMode('乱写的值'), 'overlay', '非法值退回缺省，不许产生第三种语义')
+})
+
+/**
+ * 全权自定义要能成立，前提是有一份**与皮肤无关**的中性颜色基线：
+ * 历史上这 16 个颜色令牌只存在于 7 个 `.theme-*` 类里，`:root` 一个都不定义，
+ * 所以"只挂自己一个类"必然花屏（字和底同色）—— 那正是当年强制叠加的理由。
+ * 位置也是判据的一部分：`:root` 与 `.theme-*` 同为 (0,1,0)，靠源序定胜负，
+ * 基线若排在 `.theme-*` 之后就会把 7 套预设皮肤的配色整体洗成同一个颜色。
+ */
+test('styles.css 给了与皮肤无关的中性颜色基线，且排在预设皮肤之前', () => {
+  const css = read('../src/styles.css')
+  // 按**行首选择器**定位，别用 indexOf('.theme-light')：注释里也会提到它，会把区间截错。
+  const rootAt = /^:root \{$/m.exec(css)
+  const lightAt = /^\.theme-light \{/m.exec(css)
+  assert.ok(rootAt, '文件里要有顶格的 `:root {` 块')
+  assert.ok(lightAt, '要有 `.theme-light {` 预设皮肤')
+  assert.ok(rootAt.index < lightAt.index, '第一个 :root 必须排在 .theme-* 之前（同特异性靠源序定胜负）')
+  const baseline = css.slice(rootAt.index, lightAt.index)
+  for (const token of ['--canvas', '--surface', '--ink', '--muted', '--line', '--accent', '--accent-soft', '--on-accent', '--danger', '--shadow']) {
+    assert.ok(baseline.includes(`${token}:`), `中性基线要定义 ${token}（放在 .theme-* 之前才不洗掉预设配色）`)
+  }
+  // 反向：颜色基线不许被塞进文件后段的 :root（那里排在 .theme-* 之后，同特异性后者胜，
+  // 一旦发生就会把 7 套预设皮肤的配色整体洗成同一个颜色）。
+  const afterThemes = css.slice(/\.theme-shimo \{/m.exec(css)!.index)
+  assert.ok(!/^\s*--canvas:/m.test(afterThemes), '颜色基线不能出现在 .theme-* 之后的 :root 里')
 })
 
 test('皮肤库清洗：id 过白名单、空 id / 空 CSS 丢掉、同 id 只留最后一套', () => {
   assert.deepEqual(parseCustomSkins('不是数组'), [])
   assert.deepEqual(parseCustomSkins([{ id: 'MidNight', name: ' 午夜 ', css: 'a{b:c}' }]),
-    [{ id: 'midnight', name: '午夜', css: 'a{b:c}', base: 'light' }])
+    [{ id: 'midnight', name: '午夜', css: 'a{b:c}', base: 'light', mode: 'overlay' }])
   // id 清洗后为空（中文）、或 CSS 为空的那一套不成立 —— 不进库，也就不会多出一个选不中的项
   assert.deepEqual(parseCustomSkins([{ id: '中文', css: 'a{b:c}' }, { id: 'ok', css: '   ' }]), [])
   assert.equal(parseCustomSkins([{ id: 'dup', css: 'a{b:1}' }, { id: 'dup', css: 'a{b:2}' }])[0].css, 'a{b:2}')
@@ -101,7 +142,9 @@ test('旧版单套皮肤会迁进皮肤库，不丢用户已存的皮肤', () =>
   // loadCustomSkins 是私有的，走公开的 loadReaderSettings 不便（要 window），
   // 所以这里直接验迁移的两半：旧字段能被 parseCustomSkin 收成一套，且空 CSS 的旧值不收。
   const migrated = parseCustomSkin({ id: 'midnight', css: '.theme-midnight { --canvas: #0f1213; }', base: 'dark' })
-  assert.deepEqual(migrated, { id: 'midnight', name: '', css: '.theme-midnight { --canvas: #0f1213; }', base: 'dark' })
+  assert.deepEqual(migrated, { id: 'midnight', name: '', css: '.theme-midnight { --canvas: #0f1213; }', base: 'dark', mode: 'overlay' },
+    '旧版那一套没有 mode，迁过来必须落到 overlay（老皮肤的外观一个像素都不许变）')
+  assert.equal(parseCustomSkin({ id: 'm', css: 'a{b:c}', mode: 'standalone' })?.mode, 'standalone')
   assert.equal(parseCustomSkin({ id: 'midnight', css: '' }), null, '旧版只填了 id 没填 CSS 的，迁过来也是空的，不收')
 })
 

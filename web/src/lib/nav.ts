@@ -15,6 +15,8 @@ export type AppModal =
   | 'shortcuts'
   | 'customize'
   | 'server-port'
+  /** 应用名称与图标：改的都是本机安装根，与端口同一族 */
+  | 'brand'
   /** 更新日志：一版看一次的低频信息页 */
   | 'changelog'
   /** 备份与恢复：换机器/重装才用 */

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api, BookDetails, BookshelfItem, SearchResult, SourceSummary } from './lib/api'
+import { reportBrand } from './lib/brandStore'
 import { ContextMenuLayer } from './components/ContextMenu'
 import { ReaderScreen } from './reader/ReaderScreen'
 import type { OpenBook } from './reader/openBook'
@@ -10,6 +11,7 @@ import { AppHeader } from './components/AppHeader'
 import { FirstRunAgreement } from './components/FirstRunAgreement'
 import { CustomizeModal } from './components/CustomizeModal'
 import { ServerPortModal } from './components/ServerPortModal'
+import { BrandModal } from './components/BrandModal'
 import { frontendPlugins } from './extensions/registry'
 import { installBuiltinPlugins } from './plugins'
 import { builtinSettingsSections } from './features/builtinSettings'
@@ -22,6 +24,7 @@ import { AiModal } from './features/ai/AiModal'
 import { AiFloatingBall } from './features/ai/AiFloatingBall'
 import { PluginsModal } from './plugins/plugin-intro/PluginIntroModal'
 import type { UiContext } from './lib/uiContext'
+import { getSelection, subscribeSelection } from './lib/selectionStore'
 import { cleanAuthor, cleanTitle } from './lib/searchFilters'
 import { loadSourceBook, SourceChoice, SourceChoiceStatus, useSearchStore } from './lib/searchStore'
 import { ReplaceRulesModal } from './components/ReplaceRulesModal'
@@ -136,6 +139,9 @@ function App() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', canvas || '#f8f9f7')
   }, [skinClasses])
   const [page, setPage] = useState<Page>(pageFromHash)
+  // 阅读器里的选区（划出来的那段）：存放在组件之外（lib/selectionStore），
+  // 因为 AI 悬浮球与阅读器是两棵独立的树，靠 props 传要一路穿下来。
+  const currentSelection = useSyncExternalStore(subscribeSelection, getSelection, getSelection)
   const [readerReturnPage, setReaderReturnPage] = useState<Page>('shelf')
   const [sources, setSources] = useState<SourceSummary[]>([])
   /** 服务端 /healthz 报回来的版本号，显示在顶栏功能菜单里；构建清单是唯一来源。 */
@@ -215,8 +221,7 @@ function App() {
   }, [settings])
 
   useEffect(() => {
-    const handleOnline = () => {
-      void flushOfflineProgress(async (item) => {
+    const handleOnline = () => {      void flushOfflineProgress(async (item) => {
         await api.saveProgress(item.sourceId, item.bookUrl, item.chapterUrl, item.chapterIndex, item.scrollPosition)
       })
     }
@@ -276,6 +281,19 @@ function App() {
     }
     void tick()
     return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
+  }, [])
+
+  // 品牌（应用名称与图标）在启动时拉一次，写进单一来源 lib/brandStore：
+  // 顶栏品牌字、标签页标题都读那里。取不到就保持内置的「青阅」，不把界面弄成空名字。
+  useEffect(() => {
+    void api.brand()
+      .then(info => reportBrand({
+        displayName: info.displayName,
+        builtinName: info.builtinName,
+        iconUrl: info.hasIcon ? info.iconUrl ?? null : null,
+        themeColor: info.themeColor,
+      }))
+      .catch(() => undefined)
   }, [])
 
   useEffect(() => {
@@ -473,6 +491,44 @@ function App() {
     )
   }
 
+  /**
+   * 当前界面上下文 —— 给 AI 面板用（它随对话发给模型）。
+   *
+   * 只收集**真实存在**的状态：当前页、打开的浮层、选中的书源、正在读的书与章节。
+   * 不做推断、不塞正文（正文让模型用工具去取，那才是插件级功能的用法）。
+   *
+   * 位置说明：这一段**必须在阅读器分支之前**算出来。
+   * 阅读器那一支是提前 `return` 的独立外壳（它自己那层 app-shell，见下），
+   * 上下文原先定义在这个 return 之后，于是阅读器里拿不到「正在读这本书第几章」——
+   * 而阅读恰恰是最需要"在对应地点研究"的地方。所以这里上移，两支共用同一份。
+   */
+  const currentUiContext: UiContext = {
+    page,
+    dialog: pageDialog,
+    source: selected ? { id: selected.id, name: selected.name } : null,
+    book: reader
+      ? {
+          sourceId: reader.book.details.sourceId,
+          bookUrl: reader.book.bookUrl,
+          name: reader.book.details.name,
+          author: reader.book.details.author,
+          chapterIndex: reader.index,
+          chapterTitle: reader.book.chapters[reader.index]?.title,
+        }
+      : null,
+    keyword: null,
+    // 选中的那一段：模型据此知道"你问的这一句"具体指哪段话。
+    // 没有选区时是 null —— 不猜、不编。
+    selection: currentSelection
+      ? {
+          text: currentSelection.text,
+          fullLength: currentSelection.fullLength,
+          chapterIndex: currentSelection.chapterIndex,
+          chapterTitle: currentSelection.chapterTitle,
+        }
+      : null,
+  }
+
   if (page === 'reader' && reader) {
     return (
       <div className={`app-shell ${skinClasses}`}>
@@ -490,6 +546,13 @@ function App() {
             onClose={() => navigate(readerReturnPage)}
           />
         </ErrorBoundary>
+        {/* 全局 AI 悬浮球在阅读器里也要在：
+            「不能随时随地使用、不能在对应地点研究」——读到一半的正文正是最该能问的地方。
+            这里带的 uiContext 含「正在读这本书第几章」，模型问的是眼前这一段。
+
+            注意它必须挂在**这一支自己的返回树**里：主壳那支在下面提前 return 了，
+            读到这里说明主壳根本没渲染过，指望主壳的悬浮球是等不到的。 */}
+        <AiFloatingBall uiContext={currentUiContext} />
       </div>
     )
   }
@@ -498,29 +561,6 @@ function App() {
     void api.sources().then(setSources).catch(() => undefined)
   }
 
-
-  /**
-   * 当前界面上下文 —— 给实验室里的 AI 面板用（它随对话发给模型）。
-   *
-   * 只收集**真实存在**的状态：当前页、打开的浮层、选中的书源、正在读的书与章节。
-   * 不做推断、不塞正文（正文让模型用工具去取，那才是插件级功能的用法）。
-   */
-  const currentUiContext: UiContext = {
-    page,
-    dialog: pageDialog,
-    source: selected ? { id: selected.id, name: selected.name } : null,
-    book: reader
-      ? {
-          sourceId: reader.book.details.sourceId,
-          bookUrl: reader.book.bookUrl,
-          name: reader.book.details.name,
-          author: reader.book.details.author,
-          chapterIndex: reader.index,
-          chapterTitle: reader.book.chapters[reader.index]?.title,
-        }
-      : null,
-    keyword: null,
-  }
 
   /**
    * 页面渲染上下文 —— 宿主只负责把状态与动作打包，选哪一页由 `app/pages.tsx` 的
@@ -539,6 +579,7 @@ function App() {
       openBackup: () => openModalDirect('backup'),
       openLogs: () => openModalDirect('logs'),
       openServerPort: () => openModalDirect('server-port'),
+      openBrand: () => openModalDirect('brand'),
       openAiConnections: () => openModalDirect('ai'),
       openPlugins: () => openModalDirect('plugins'),
     }),
@@ -606,6 +647,7 @@ function App() {
         <CustomizeModal settings={settings} onChange={setSettings} onClose={closeModal} />
       )}
       {openModal === 'server-port' && <ServerPortModal onClose={closeModal} />}
+      {openModal === 'brand' && <BrandModal onClose={closeModal} />}
 
       {/* —— 成熟功能浮层（已定型、低频、不占导航）。它们**不是**实验室条目。 —— */}
       {openModal === 'changelog' && (

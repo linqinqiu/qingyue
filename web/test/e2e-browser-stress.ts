@@ -174,14 +174,12 @@ async function runPwaAndManifestSuite() {
     assert.ok(metaTags.viewport?.includes('viewport-fit=cover'), 'Viewport must contain viewport-fit=cover for safe-area')
 
     // 4. Verify PWA wiring is present (install banner is transient; don't key off it)
-    const pwaWiring = await page.evaluate(`
-      (function() {
-        return {
-          manifest: !!document.querySelector('link[rel="manifest"]'),
-          serviceWorker: 'serviceWorker' in navigator,
-        };
-      })()
-    `)
+    // 传**函数**而不是字符串：`evaluate(string)` 的返回类型是 unknown，
+    // 于是下面两行属性访问在 `npm run check:test` 里直接报 TS18046（编译期就红，跑不到断言）。
+    const pwaWiring = await page.evaluate(() => ({
+      manifest: !!document.querySelector('link[rel="manifest"]'),
+      serviceWorker: 'serviceWorker' in navigator,
+    }))
     assert.ok(pwaWiring.manifest, 'PWA manifest link should be present')
     assert.ok(pwaWiring.serviceWorker, 'Service Worker API should be available')
   })

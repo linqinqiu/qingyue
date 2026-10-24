@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, Chapter, SearchResult, SearchStreamEvent, streamSearch } from '../lib/api'
+import { api, Chapter, SearchResult, SearchStreamEvent, SourceSummary, streamSearch } from '../lib/api'
 import { cleanTitle } from '../lib/searchFilters'
-import { sourceLabel } from './sourceOrder'
+import { sourceLabel, sourcePickerOptions } from './sourceOrder'
+import { splitSourceGroups } from './sourceGrouping'
 import { Icon } from '../icons'
+import { Select } from '../components/Select'
 import { toast } from '../components/Toast'
 import { useEscapeClose } from '../lib/useEscapeClose'
 
@@ -28,6 +30,14 @@ export type SourceSwitchModalProps = {
   currentChapterTitle?: string
   currentChapterIndex?: number
   knownAlternateSources?: SearchResult[]
+  /**
+   * 换源搜索的范围选择（用户 2026-10-23：「书籍内部换源允许指定书源和分组，像搜索页面一样」）。
+   * 传了就在弹窗里摆出与搜索页同款那条"全部书源 / 按分组 / 指定书源"；
+   * **没传时保持历史行为**：书架入口已经持有整张表，会传；
+   * 阅读器入口没有这张表（不为了一个弹窗把它塞进 2700 行的 ReaderScreen 与 main.tsx 的 props 链），
+   * 由弹窗自己拉 `api.sources()` —— 拉之前那一拍按老语义搜全库，拉到后换范围条接管。
+   */
+  sources?: SourceSummary[]
   onSwitch: (chosen: { result: SearchResult; chapters: Chapter[]; targetChapterIndex: number }) => Promise<void>
   onClose: () => void
 }
@@ -79,6 +89,7 @@ export function SourceSwitchModal({
   currentChapterTitle,
   currentChapterIndex,
   knownAlternateSources = [],
+  sources = [],
   onSwitch,
   onClose,
 }: SourceSwitchModalProps) {
@@ -89,6 +100,66 @@ export function SourceSwitchModal({
 
   const socketRef = useRef<WebSocket | null>(null)
   const fetchingTocRef = useRef<Set<string>>(new Set())
+
+  /**
+   * 换源搜索范围（用户 2026-10-23：「书籍内部换源允许指定书源和分组，像搜索页面一样」）。
+   * 三档词汇、算式、空范围闸门都与搜索页（LibraryPage 的 `.library-scope`）同一套，
+   * 不另起一份语义 —— 两个入口说"按分组"必须是同一件事。
+   */
+  const [scopeMode, setScopeMode] = useState<'all' | 'group' | 'single'>('all')
+  const [scopeGroup, setScopeGroup] = useState('')
+  const [scopeSourceId, setScopeSourceId] = useState('')
+  const [includeDisabled, setIncludeDisabled] = useState(false)
+  /** 弹窗自己拉的那份书源表（调用方没传 sources 时用，见 props 注释）。 */
+  const [ownSources, setOwnSources] = useState<SourceSummary[]>([])
+  const table = sources.length > 0 ? sources : ownSources
+
+  useEffect(() => {
+    if (sources.length > 0) return
+    let cancelled = false
+    void api.sources().then(list => { if (!cancelled) setOwnSources(list) }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [sources.length])
+
+  /** 分组下拉的候选：把每个源的标签串拆开聚合，与搜索页同一个算式。 */
+  const groupOptions = useMemo(() => {
+    const tally = new Map<string, { total: number; ready: number }>()
+    for (const source of table) {
+      for (const tag of splitSourceGroups(source.group)) {
+        const row = tally.get(tag) ?? { total: 0, ready: 0 }
+        row.total += 1
+        if (source.enabled) row.ready += 1
+        tally.set(tag, row)
+      }
+    }
+    return [...tally.entries()]
+      .map(([name, row]) => ({ name, ...row }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'zh-CN'))
+  }, [table])
+
+  /**
+   * 范围 → 书源 id 列表。**`null` 与空数组必须分清**（与 searchStore 同一条坑）：
+   * `null`/undefined = 不限制（全库启用源），空数组 = 一个源都不搜 ——
+   * 把空数组当"不限制"传下去，用户选了个空分组却搜完全库，是最难查的那种错。
+   * 所以空范围这里直接返回空数组，由搜索那条 effect 认出"别发起搜索"。
+   */
+  const scopeIds = useMemo(() => {
+    if (scopeMode === 'all') return null
+    if (scopeMode === 'single') return scopeSourceId ? [scopeSourceId] : []
+    return scopeGroup
+      ? table.filter(source => source.enabled && splitSourceGroups(source.group).includes(scopeGroup)).map(source => source.id)
+      : []
+  }, [scopeMode, scopeGroup, scopeSourceId, table])
+
+  const scopeHint = scopeMode === 'all'
+    ? `全库换源：会挨个搜启用中的 ${table.filter(source => source.enabled).length} 个书源`
+    : scopeMode === 'group'
+      ? (scopeGroup
+        ? (scopeIds && scopeIds.length ? `只在「${scopeGroup}」分组内换源（${scopeIds.length} 个启用书源）` : `「${scopeGroup}」分组当前没有启用中的书源，搜不到东西`)
+        : '选一个分组，换源只在该分组内进行')
+      : (scopeSourceId
+        ? `只在你指定的那一个书源里找同名书，最干净但也最容易空`
+        : '下拉里是启用中的书源（停用的搜不到，需要时勾「含已停用」）')
 
   const fetchCandidateToc = useCallback(async (candidate: SourceCandidate) => {
     const key = `${candidate.result.sourceId}\u0000${candidate.result.bookUrl}`
@@ -177,11 +248,23 @@ export function SourceSwitchModal({
   // Start streaming search for other sources
   useEffect(() => {
     let cancelled = false
+    // 空范围闸门：选了分组但组里 0 个启用源、或"指定书源"还没选 —— 这时**不该发起搜索**。
+    // 原来 `sourceIds` 写死 undefined（= 全库），现在要按范围传：把空数组当 undefined 传下去
+    // 等于"没限制"，用户选空分组却搜完全库 —— 与 searchStore 那条注释同一个坑，反过来栽。
+    if (scopeIds !== null && scopeIds.length === 0) {
+      setSearching(false)
+      return
+    }
     setSearching(true)
+    // 换范围就要换候选：留着上一次（更宽范围）搜到的那批，用户会以为范围没生效。
+    // 只留"当前源 + 已知备选源"这份基线 —— 它们与搜索范围无关，本来就一直该在。
+    // 挂载这一趟也走这里，但那时长列表里只有这份基线，等于空操作。
+    setCandidates(prev => prev.filter(c => c.isCurrent || c.isKnownAlternate))
 
     const socket = streamSearch(
       bookName,
-      undefined,
+      // `null` = 不限制（全库启用源）；非 null 就按这份 id 列表搜。
+      scopeIds ?? undefined,
       event => {
         if (cancelled) return
         if (event.type === 'start' || event.type === 'progress' || event.type === 'done') {
@@ -239,7 +322,7 @@ export function SourceSwitchModal({
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [bookName, fetchCandidateToc])
+  }, [bookName, fetchCandidateToc, scopeIds])
 
   const handleSelect = async (candidate: SourceCandidate) => {
     if (candidate.isCurrent) {
@@ -320,14 +403,58 @@ export function SourceSwitchModal({
           </button>
         </header>
 
+        {/*
+          换源范围（用户 2026-10-23：「书籍内部换源允许指定书源和分组，像搜索页面一样」）。
+          三档 + 分组下拉 + 书源下拉 + 含已停用，形状与搜索页 `.library-scope` 一致，
+          复用同一批算式（splitSourceGroups / sourcePickerOptions），不另起一份语义。
+        */}
+        <div className="library-scope source-switch-scope">
+          <span className="library-scope-label">换源范围</span>
+          <div className="library-scope-modes" role="group" aria-label="换源范围">
+            {([['all', '全部书源'], ['group', '按分组'], ['single', '指定书源']] as const).map(([key, label]) => (
+              <button key={key} type="button" className={scopeMode === key ? 'active' : ''} onClick={() => setScopeMode(key)}>{label}</button>
+            ))}
+          </div>
+          {scopeMode === 'group' && (
+            <Select
+              ariaLabel="按分组换源"
+              placeholder={table.length ? '选择分组' : '书源还在载入'}
+              value={scopeGroup}
+              onChange={setScopeGroup}
+              options={groupOptions.map(item => ({ value: item.name, label: item.name, hint: `可搜 ${item.ready} / 共 ${item.total}` }))}
+            />
+          )}
+          {scopeMode === 'single' && (
+            <>
+              <Select
+                ariaLabel="指定书源换源"
+                placeholder={table.length ? '选择书源' : '书源还在载入'}
+                value={scopeSourceId}
+                onChange={setScopeSourceId}
+                options={sourcePickerOptions(table, includeDisabled)}
+              />
+              {/* 默认只列启用中的：停用的源选了必然搜不到（与搜索页同一个理由）。 */}
+              {table.some(source => !source.enabled) && (
+                <label className="library-scope-toggle">
+                  <input type="checkbox" checked={includeDisabled} onChange={event => setIncludeDisabled(event.target.checked)} />
+                  含已停用（{table.filter(source => !source.enabled).length}）
+                </label>
+              )}
+            </>
+          )}
+          <small className="library-scope-hint">{scopeHint}</small>
+        </div>
+
         {/* Search Stream Progress Banner */}
         <div className="source-search-banner">
           <div className="search-banner-text">
             <span>
               {searching ? (
-                <>正在全源检索《{bookName}》…</>
+                <>正在{scopeMode === 'all' ? '全源' : scopeMode === 'group' ? `「${scopeGroup}」分组内` : '指定书源里'}检索《{bookName}》…</>
+              ) : (scopeMode === 'group' && !scopeGroup) || (scopeMode === 'single' && !scopeSourceId) ? (
+                <>还没选范围：上面挑一个分组或一个书源，才会开始检索</>
               ) : (
-                <>全源检索完成，共找到 {candidates.length} 本（一个书源可能出好几本）</>
+                <>检索完成，共找到 {candidates.length} 本（一个书源可能出好几本）</>
               )}
             </span>
             <small>

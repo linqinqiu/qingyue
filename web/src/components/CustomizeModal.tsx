@@ -6,11 +6,14 @@ import {
   availableSkins,
   BUILTIN_SKINS,
   DEFAULT_SKIN_BASE,
+  DEFAULT_SKIN_MODE,
   parseSkinBase,
   parseSkinId,
+  parseSkinMode,
   skinLabel,
   type CustomSkin,
   type ReaderSettings,
+  type SkinMode,
 } from '../reader/readerSettings'
 
 /**
@@ -47,6 +50,7 @@ export function CustomizeModal({
   const [formName, setFormName] = useState('')
   const [formCss, setFormCss] = useState('')
   const [formBase, setFormBase] = useState<string>(DEFAULT_SKIN_BASE)
+  const [formMode, setFormMode] = useState<SkinMode>(DEFAULT_SKIN_MODE)
   const [error, setError] = useState('')
 
   const sanitized = parseSkinId(formId)
@@ -54,11 +58,11 @@ export function CustomizeModal({
 
   const startNew = () => {
     setEditingId(null)
-    setFormId(''); setFormName(''); setFormCss(''); setFormBase(DEFAULT_SKIN_BASE); setError('')
+    setFormId(''); setFormName(''); setFormCss(''); setFormBase(DEFAULT_SKIN_BASE); setFormMode(DEFAULT_SKIN_MODE); setError('')
   }
   const startEdit = (skin: CustomSkin) => {
     setEditingId(skin.id)
-    setFormId(skin.id); setFormName(skin.name); setFormCss(skin.css); setFormBase(skin.base); setError('')
+    setFormId(skin.id); setFormName(skin.name); setFormCss(skin.css); setFormBase(skin.base); setFormMode(skin.mode ?? DEFAULT_SKIN_MODE); setError('')
   }
 
   const save = () => {
@@ -79,7 +83,13 @@ export function CustomizeModal({
       setError('id `' + sanitized + '` 已经有一套了，换个 id，或去编辑那一套。')
       return
     }
-    const next: CustomSkin = { id: sanitized, name: formName.trim(), css: formCss, base: parseSkinBase(formBase) }
+    const next: CustomSkin = {
+      id: sanitized,
+      name: formName.trim(),
+      css: formCss,
+      base: parseSkinBase(formBase),
+      mode: parseSkinMode(formMode),
+    }
     const rest = library.filter(skin => skin.id !== editingId && skin.id !== sanitized)
     const nextLibrary = [...rest, next].sort((a, b) => a.id.localeCompare(b.id))
     // 保存即套用：让用户马上看到效果（theme 指向这一套的 id）
@@ -155,7 +165,7 @@ export function CustomizeModal({
                       <div className="skin-library-main">
                         <span className="skin-library-name">{skinLabel(skin)}</span>
                         <span className="skin-library-meta">
-                          <code>.theme-{skin.id}</code> · 叠在 {baseName} 上 · {skin.css.length} 字符
+                          <code>.theme-{skin.id}</code> · {skin.mode === 'standalone' ? '全权自定义' : `叠在 ${baseName} 上`} · {skin.css.length} 字符
                         </span>
                       </div>
                       <div className="skin-library-actions">
@@ -207,8 +217,42 @@ export function CustomizeModal({
                   onChange={event => setFormCss(event.target.value)}
                 />
               </label>
-              {/* 自定义皮肤是**叠**在一档内置皮肤之上的：只写 `--canvas` 也有一整套可用变量兜底，
-                  不至于"字和底一个颜色"。取值随每一套存在库里，注入点在 main.tsx。 */}
+              {/*
+                两种语义（用户 2026-10-23：「自定义不是叠在哪一套之上，是全权自定义」）：
+                - 全权自定义：只挂自己这一个类，没写到的变量落到 styles.css 里 `:root`
+                  那份与皮肤无关的中性颜色基线 —— 不会跟着换肤漂移。
+                - 叠在某一档之上：历史语义，没写到的变量沿用那一档预设（老数据缺省仍是它，
+                  这样既有皮肤的外观一个像素都不变）。
+              */}
+              <div className="customize-field">
+                <span>没写到的变量怎么补</span>
+                <div className="customize-base-row" role="radiogroup" aria-label="自定义皮肤的取值方式">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={formMode === 'standalone'}
+                    className={`customize-base ${formMode === 'standalone' ? 'selected' : ''}`}
+                    onClick={() => setFormMode('standalone')}
+                  >
+                    <span>全权自定义</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={formMode === 'overlay'}
+                    className={`customize-base ${formMode === 'overlay' ? 'selected' : ''}`}
+                    onClick={() => setFormMode('overlay')}
+                  >
+                    <span>叠在某一档之上</span>
+                  </button>
+                </div>
+                <small className="customize-note">
+                  {formMode === 'standalone'
+                    ? '只用自己的 CSS；没写的变量走一份与皮肤无关的中性基线，不跟随任何预设配色。'
+                    : '沿用所选那一档预设里没写到的变量；切换内置皮肤时，这一套的观感会跟着变。'}
+                </small>
+              </div>
+              {formMode === 'overlay' && (
               <div className="customize-field">
                 <span>叠在哪一套之上（没写到的变量沿用那一套）</span>
                 <div className="customize-base-row" role="radiogroup" aria-label="自定义皮肤的基础皮肤">
@@ -227,6 +271,7 @@ export function CustomizeModal({
                   ))}
                 </div>
               </div>
+              )}
               {!!error && <p className="customize-error" role="alert">{error}</p>}
               <div className="customize-actions">
                 <button type="button" className="primary-button" onClick={save}>保存并套用</button>

@@ -8,7 +8,7 @@ import { VitePWA } from 'vite-plugin-pwa'
  * 显示上一版图形。改这一个常量等于给所有图标 URL 换指纹，客户端必然重取。
  * 每次动 `web/public` 下的图标就 +1。
  */
-const ICON_VERSION = '2'
+const ICON_VERSION = '3'
 /**
  * dev server 把 `/api` 转给谁。默认打在**本机日常那个实例**（`start.mjs` 起的 1234）——
  * 先前这里写死 8081，那是双 AI 三棵工作树时代 AI-1 后端端口，那棵树 2026-10-14 实测已不存在，
@@ -41,6 +41,7 @@ export default defineConfig({
         name: '青阅',
         short_name: '青阅',
         description: 'Legado 现代化 Web 阅读器与服务端',
+        lang: 'zh-CN',
         theme_color: '#247a58',
         background_color: '#f8f9f7',
         display: 'standalone',
@@ -62,19 +63,19 @@ export default defineConfig({
             name: '我的书架',
             short_name: '书架',
             url: '/',
-            icons: [{ src: `/favicon-48.png?v=${ICON_VERSION}`, sizes: '48x48', type: 'image/png' }],
+            icons: [{ src: `/shortcut-96x96.png?v=${ICON_VERSION}`, sizes: '96x96', type: 'image/png' }],
           },
           {
             name: '书源管理',
             short_name: '书源',
             url: '/#sources',
-            icons: [{ src: `/favicon-48.png?v=${ICON_VERSION}`, sizes: '48x48', type: 'image/png' }],
+            icons: [{ src: `/shortcut-96x96.png?v=${ICON_VERSION}`, sizes: '96x96', type: 'image/png' }],
           },
           {
             name: '替换净化',
             short_name: '净化',
             url: '/#replace-rules',
-            icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+            icons: [{ src: `/shortcut-96x96.png?v=${ICON_VERSION}`, sizes: '96x96', type: 'image/png' }],
           },
         ],
       },

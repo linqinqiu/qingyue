@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Icon } from '../icons'
 import { PRIMARY_PAGES } from '../app/pageMeta'
 import type { Page } from '../lib/nav'
+import { getBrand, subscribeBrand } from '../lib/brandStore'
 import { Logo } from './Logo'
 import { promptPwaInstall, subscribePwaInstall } from './PwaManager'
 import { availableSkins, BUILTIN_SKINS, type ReaderSettings } from '../reader/readerSettings'
@@ -41,6 +42,9 @@ export function AppHeader({
   const [menuOpen, setMenuOpen] = useState(false)
   const [canInstall, setCanInstall] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  // 品牌名单一来源（lib/brandStore）：此前这里硬编码「青阅」，
+  // 用户改了名（设置 → 应用名称与图标）之后顶栏照旧，等于"改了个寂寞"。
+  const brand = useSyncExternalStore(subscribeBrand, getBrand, getBrand)
 
   useEffect(() => {
     const sync = () => setIsFullscreen(Boolean(document.fullscreenElement))
@@ -103,10 +107,10 @@ export function AppHeader({
           type="button"
           className="app-brand"
           onClick={() => onNavigate('library')}
-          aria-label="青阅"
+          aria-label={brand.displayName}
         >
           <Logo size={22} />
-          <strong>青阅</strong>
+          <strong>{brand.displayName}</strong>
         </button>
         {/*
           版本号常驻顶栏，且本身就是「更新日志」的入口。

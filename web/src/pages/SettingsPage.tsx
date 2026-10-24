@@ -12,14 +12,14 @@ import { filterSettingsSections } from '../settings/settingsSections'
  * 它有一个 `useState`，装的是**搜索框里的字**：那是这一页自己的界面态，不是任何设置的值。
  * 分区表与筛选算式都在 `settings/settingsSections.ts`，这里只管画。
  */
-export type SettingsRow = {
-  title: string
-  hint: string
-  action: string
-  onClick: () => void
-}
-
-export type SettingsSection = { title: string; rows: SettingsRow[] }
+/**
+ * 行的形状与分区类型都住在 `settings/settingsSections.ts`（数据权威源那侧），
+ * 这里只重导出，`pages.tsx` 等既有 `from '../pages/SettingsPage'` 的引用不受影响。
+ * 从前这两份类型定义在本文件里，`settingsSections.ts` 反过来 import 页面 ——
+ * 等于让数据表依赖它的渲染者，与仓库「内容 → 框架」的单向纪律相反。
+ */
+export type { SettingsRow, SettingsSection } from '../settings/settingsSections'
+import type { SettingsSection } from '../settings/settingsSections'
 
 /**
  * 插件贡献的设置分区。

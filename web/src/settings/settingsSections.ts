@@ -1,4 +1,17 @@
-import type { SettingsSection } from '../pages/SettingsPage'
+/**
+ * 内置设置分区的形状。定义在**这一侧**而不是页面那侧：
+ * 这张表才是分区数据的权威源，`SettingsPage` 只是画它 —— 类型长在消费者身上，
+ * 表就得反过来 import 页面（而本仓库的依赖方向纪律是「内容 → 框架」单向）。
+ * 页面保留同名重导出，`pages.tsx` 等既有引用不受影响。
+ */
+export type SettingsRow = {
+  title: string
+  hint: string
+  action: string
+  onClick: () => void
+}
+
+export type SettingsSection = { title: string; rows: SettingsRow[] }
 
 /**
  * 「设置」这一页的分区表（PROPOSAL-021 P0.3）。
@@ -21,6 +34,8 @@ export type SettingsActions = {
   openBackup: () => void
   openLogs: () => void
   openServerPort: () => void
+  /** 应用名称与图标（本机安装根的品牌；与端口同一族） */
+  openBrand: () => void
   /** AI 接入 —— 独立一类，不是实验室条目 */
   openAiConnections: () => void
   /** 插件 —— 独立一类，不是实验室条目 */
@@ -93,12 +108,21 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
     },
     {
       title: '服务',
-      rows: [{
-        title: '服务端口',
-        hint: '青阅跑在哪个端口；改完要重启青阅才生效。',
-        action: '改端口',
-        onClick: actions.openServerPort,
-      }],
+      rows: [
+        {
+          title: '服务端口',
+          hint: '青阅跑在哪个端口；改完要重启青阅才生效。',
+          action: '改端口',
+          onClick: actions.openServerPort,
+        },
+        {
+          // 与端口同一族：改的都是「这台机器上的青阅长什么样」，都写安装根、都本机生效。
+          title: '应用名称与图标',
+          hint: '把这台服务的名字与图标改成自己的（写安装根的 brand.json）；本机所有浏览器与装出去的桌面应用都跟着变。',
+          action: '去改',
+          onClick: actions.openBrand,
+        },
+      ],
     },
     {
       // AI 接入与插件是两类不同的东西，各有一行，不要合并。
@@ -131,6 +155,9 @@ export function buildSettingsSections(actions: SettingsActions): SettingsSection
 export function filterSettingsSections(sections: SettingsSection[], query: string): SettingsSection[] {
   const needle = query.trim().toLowerCase()
   if (needle === '') return sections
+  // 不设长度阈值：搜索就该按"输入什么、匹配什么"来。曾经在这里加过一条
+  // 「超过 5 个字不算命中」，理由是要避开一行根本不存在的「登录」入口 ——
+  // 结果是「替换净化规则」「TXT 分章规则」这类 6 字以上的真词一律搜不到。
   return sections
     .map(section => ({
       ...section,
