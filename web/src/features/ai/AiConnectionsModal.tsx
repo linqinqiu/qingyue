@@ -96,6 +96,7 @@ function AiConnectionsPanel({ uiContext }: { uiContext?: UiContext }) {
           )}
           <RegisterConnection onRegistered={refresh} />
         </section>
+        <ToolOriginPanel />
         <SourceValidatePanel />
       </details>
     </div>
@@ -287,6 +288,53 @@ function ChatPanel({
   )
 }
 
+function ToolOriginPanel() {
+  const [manifest, setManifest] = useState<{ tools: { id: string; origin: string }[] } | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.agentManifest()
+      .then(m => setManifest({ tools: m.tools ?? [] }))
+      .catch(err => setError(err instanceof Error ? err.message : '读取能力清单失败'))
+  }, [])
+
+  // 按来源分组：内置一堆、每个插件各自一组。插件工具用 origin 前缀区分。
+  const groups = new Map<string, string[]>()
+  for (const tool of manifest?.tools ?? []) {
+    const key = tool.origin || 'builtin'
+    groups.set(key, [...(groups.get(key) ?? []), tool.id])
+  }
+  const pluginGroups = [...groups.entries()].filter(([origin]) => origin !== 'builtin')
+
+  return (
+    <section className="ai-section">
+      <h3>工具与来源</h3>
+      <p className="ai-section-hint">
+        每个能力标了来源：<code>builtin</code> 是框架内置，<code>plugin:&lt;id&gt;</code> 是插件注册的。
+        插件只增工具、不新增 HTTP 路由，所以端点计数不随插件变化。
+      </p>
+      {error ? (
+        <p className="customize-error" role="alert">{error}</p>
+      ) : !manifest ? (
+        <p className="ai-muted">读取中…</p>
+      ) : (
+        <>
+          <p className="ai-muted">
+            共 {manifest.tools.length} 个能力：内置 {groups.get('builtin')?.length ?? 0} 个
+            {pluginGroups.length > 0 ? `，插件 ${pluginGroups.length} 个` : '，暂无插件注册的工具'}。
+          </p>
+          {pluginGroups.map(([origin, ids]) => (
+            <div key={origin} className="ai-tool-origin">
+              <span className="ai-tag ai-tag-ok">{origin}</span>
+              <span className="ai-muted">{ids.length} 个：{ids.join('、')}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </section>
+  )
+}
+
 function RegisterConnection({ onRegistered }: { onRegistered: () => void }) {
   const [name, setName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
@@ -340,7 +388,7 @@ function RegisterConnection({ onRegistered }: { onRegistered: () => void }) {
         </label>
         <label className="customize-field">
           <span>密钥（可空）</span>
-          <input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-…（留空则不带 Authorization）" />
+          <input type="password" autoComplete="off" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-…（留空则不带 Authorization）" />
         </label>
       </div>
       {!!error && <p className="customize-error" role="alert">{error}</p>}

@@ -22,11 +22,16 @@ test('AI 悬浮球挂在应用根节点，每个页面都在', () => {
   assert.match(main, /<AiFloatingBall uiContext=\{currentUiContext\} \/>/, '悬浮球要拿到当前界面上下文')
 
   // 它必须在 App 的返回树里、且常驻，不能是 `{openModal === 'ai' && ...}` 那种"要满足条件才出现"的模态。
-  // 判据：悬浮球出现的位置在 `<AiModal` 之后（同属根返回树），且**没有**被包在条件渲染里。
-  const fabIndex = main.indexOf('<AiFloatingBall')
+  // 判据：主壳返回树里那处悬浮球在 `<AiModal` 之后（同属根返回树），且**没有**被包在条件渲染里。
+  //
+  // 注意：文件里现在有**两处** `<AiFloatingBall` —— 主壳一处、阅读器那一支一处
+  // （阅读器是提前 return 的独立外壳，主壳那颗在阅读器里根本渲染不到）。
+  // 所以这里要按位置取主壳那处，不能用 indexOf 取第一处。
   const modalIndex = main.indexOf('openModal === \'ai\'')
+  assert.ok(modalIndex > 0, '设置里的 AI 模态入口存在')
+  const fabIndex = main.indexOf('<AiFloatingBall', modalIndex)
   assert.ok(fabIndex > 0, '根返回树里要有悬浮球')
-  assert.ok(modalIndex > 0 && fabIndex > modalIndex, '悬浮球在根返回树末尾，与模态并列常驻')
+  assert.ok(fabIndex > modalIndex, '悬浮球在根返回树末尾，与模态并列常驻')
   // 悬浮球那一行前面紧邻的不是 `{xxx && (` 条件
   const before = main.slice(Math.max(0, fabIndex - 120), fabIndex)
   assert.doesNotMatch(before, /\{[^}]*&&\s*\(\s*$/, '悬浮球不许条件渲染 —— 它要一直在')
@@ -34,6 +39,36 @@ test('AI 悬浮球挂在应用根节点，每个页面都在', () => {
   const fab = read('../src/features/ai/AiFloatingBall.tsx')
   assert.match(fab, /className=\{`ai-fab/, '要有一个固定的悬浮按钮')
   assert.match(fab, /position: fixed|ai-fab/, '')
+})
+
+test('阅读器里也有 AI 悬浮球（读到一半的正文最该能问）', () => {
+  // 用户的原话是「不能随时随地使用，不能在对应地点研究」——
+  // 而阅读器那一支是**提前 return 的独立外壳**（自己那层 app-shell）：
+  // 主壳返回树末尾那颗悬浮球在阅读器里根本没渲染过，
+  // 于是「正在读这本书第几章」这个上下文在阅读器里根本发不出去。
+  // 这一条钉住阅读器那一支也挂上了球。
+  const main = read('../src/main.tsx')
+
+  // 1) 阅读器分支存在，且它自己挂了悬浮球
+  const readerBranch = main.indexOf("page === 'reader' && reader")
+  assert.ok(readerBranch > 0, '有阅读器这一支')
+  const readerReturn = main.indexOf('return (', readerBranch)
+  assert.ok(readerReturn > 0, '阅读器分支是一个独立返回')
+  // 这一支的返回树里要能找到悬浮球
+  const branchTail = main.slice(readerReturn, readerReturn + 1400)
+  assert.match(branchTail, /<AiFloatingBall uiContext=\{currentUiContext\} \/>/,
+    '阅读器这一支也要挂 AI 悬浮球 —— 否则「在对应地点研究」在阅读器里不成立')
+
+  // 2) 上下文必须在阅读器分支**之前**算出来，否则它拿不到「正在读第几章」
+  const ctxIndex = main.indexOf('const currentUiContext: UiContext = {')
+  assert.ok(ctxIndex > 0, '有 currentUiContext')
+  assert.ok(ctxIndex < readerBranch,
+    'currentUiContext 要在阅读器分支之前算出来 —— 提前 return 之后才算就取不到书名与章节')
+
+  // 3) 阅读器里带的是"正在读的书"：ctx.book 要真的从 reader 状态里取
+  const ctxBlock = main.slice(ctxIndex, ctxIndex + 900)
+  assert.match(ctxBlock, /book:\s*reader/, '上下文里的书要从 reader 状态取（阅读器里才有书名与章节）')
+  assert.match(ctxBlock, /chapterTitle/, '上下文要带章节标题')
 })
 
 test('AI 不再只能从设置打开：全局按钮独立于设置模态', () => {

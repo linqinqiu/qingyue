@@ -20,6 +20,9 @@ const base: UiContext = {
   source: null,
   book: null,
   keyword: null,
+  // `selection` 是后加的一档（AI 悬浮球要能问"选中这一段"），字段本身是必填的。
+  // 这里显式写成 null 而不是靠类型可选：判据要能看出"没有选区"是采集到的一种正常状态。
+  selection: null,
 }
 
 test('空上下文不产生消息 —— 不该无端占一条 system', () => {
