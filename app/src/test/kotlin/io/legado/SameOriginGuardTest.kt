@@ -105,4 +105,59 @@ class SameOriginGuardTest {
         assertEquals(HttpStatusCode.OK, client.get("/api/sources").status)
         assertEquals(HttpStatusCode.OK, client.get("/healthz").status)
     }
+
+    /**
+     * 闸门收成全局插件后，**没手调过 `requireSameOriginWrite` 的路由也必须在保护之下**。
+     *
+     * 这条盯的是真实漏网：`/api/tts/session` 三条会话写路由从前整条没调闸门，
+     * 任何网页都能替用户建朗读会话、追加音频、改播放状态。判据只能真打一发 ——
+     * 从路由源码里是看不出"少调了一次"的。
+     */
+    @Test
+    fun `没手调闸门的 TTS 会话写路由也被挡住`() = testApplication {
+        application { legadoApplication(config()) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val response = client.post("/api/tts/session") {
+            header("Origin", "http://evil.example")
+            header("Host", "127.0.0.1:8080")
+            contentType(ContentType.Application.Json)
+            setBody("""{"text":"跨站建会话"}""")
+        }
+        assertEquals("TTS 会话写路由必须被全局闸门挡下：${response.status} ${response.bodyAsText()}",
+            HttpStatusCode.Forbidden, response.status)
+        assertTrue("错误码要说清是被同源闸门挡下：${response.bodyAsText()}",
+            response.bodyAsText().contains("cross_origin"))
+    }
+
+    @Test
+    fun `同一个 TTS 会话路由，同源来源照常放行`() = testApplication {
+        application { legadoApplication(config()) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val response = client.post("/api/tts/session") {
+            header("Origin", "http://127.0.0.1:8080")
+            header("Host", "127.0.0.1:8080")
+            contentType(ContentType.Application.Json)
+            setBody("""{"text":"同源建会话"}""")
+        }
+        assertTrue("同源不该被闸门拦：${response.status} ${response.bodyAsText()}",
+            response.status != HttpStatusCode.Forbidden)
+    }
+
+    /**
+     * 白名单里的只读 POST 跨站也放行 —— 这是插件相对"一律拦"的**行为差异**，
+     * 没有这条判据，谁把白名单删了都不会有人发现。
+     */
+    @Test
+    fun `白名单里的只读 POST 跨站不被闸门拦`() = testApplication {
+        application { legadoApplication(config()) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val response = client.post("/api/agent/sources/validate") {
+            header("Origin", "http://evil.example")
+            header("Host", "127.0.0.1:8080")
+            contentType(ContentType.Application.Json)
+            setBody("""{"json":"{}"}""")
+        }
+        assertTrue("只读校验不该被写门拦：${response.status} ${response.bodyAsText()}",
+            response.status != HttpStatusCode.Forbidden)
+    }
 }

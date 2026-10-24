@@ -20,6 +20,7 @@ import io.legado.cache.BookCacheService
 import io.legado.cache.CoverCache
 import io.legado.data.Database
 import io.legado.data.getCookieForUrl
+import io.legado.http.SameOriginWriteGate
 import io.legado.http.ServerIdentity
 import io.legado.http.apiRoutes
 import io.legado.model.HealthStatus
@@ -219,6 +220,8 @@ fun Application.legadoApplication(config: ServerConfig = ServerConfig.fromEnviro
             call.respond(HttpStatusCode.InternalServerError, ApiError("internal_error", "服务器内部错误"))
         }
     }
+    // 同源写门：全局拦所有写方法，路由不必再各自记得调一次（只读 POST 走插件内的白名单）。
+    install(SameOriginWriteGate)
     routing {
         get("/healthz") { call.respond(HealthStatus(title = BuildInfo.title, version = BuildInfo.version, status = "ok")) }
         // 自定义接入的持久层：随安装根目录，存于 agent-profiles.json（与 port.txt 同级）。

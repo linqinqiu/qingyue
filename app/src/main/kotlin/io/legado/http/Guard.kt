@@ -4,6 +4,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.response.respond
 import java.net.URI
 import io.legado.ops.logGuard
@@ -32,6 +33,64 @@ object ServerIdentity {
 }
 
 private val SAFE_METHODS = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Options)
+
+/**
+ * 真正只读的 POST：**不改这台机器上的任何状态**，所以跨站来源也放行。
+ *
+ * 这张表必须一条条手写，不能拿端点目录里的 `write=false` 自动生成 —— 目录的 `write`
+ * 说的是"写不写库"，而 `/api/tts/session*` 三条标着 `write=false` 却会建会话、追加音频、
+ * 改播放状态，正是漏掉闸门的那三条。按目录自动放行等于把漏洞写进白名单。
+ */
+private val READ_ONLY_POSTS = setOf(
+    "/api/replace-rules/preview",
+    "/api/agent/sources/validate",
+    "/api/agent/comprehend",
+    "/api/agent/chat",
+)
+
+private fun isReadOnlyPost(call: ApplicationCall): Boolean =
+    call.request.local.method == HttpMethod.Post &&
+        call.request.local.uri.substringBefore('?') in READ_ONLY_POSTS
+
+/**
+ * 自己管来源策略的路由：插件必须让路，否则它自己的判断永远跑不到。
+ *
+ * 目前只有「书源登录 Cookie 同步」一条：它要放行**书源自己的域名** —— 用户在那个站点的页面上
+ * 点书签/用扩展，把 Cookie 回写到本机（见 SourcesRoutes.allowCookieSyncOrigin）。
+ * 这是同源闸门给不了的一类判断（它需要查库知道"这个源是哪个站"），所以由路由自己判。
+ */
+private fun handlesOwnOriginPolicy(path: String): Boolean =
+    path.startsWith("/api/sources/") && path.endsWith("/login-cookie")
+
+/**
+ * 同源写门做成**全局插件**，而不是每个路由自己记得调一次。
+ *
+ * 从前它是 84 处手抄的 `requireSameOriginWrite()`：这道闸门是这台服务唯一的写保护，
+ * 靠"每个新路由都别忘了调"来维持，漏一处就是一处洞 —— `/api/tts/session*` 三条就整条漏了
+ * （建会话、追加音频、改播放状态全都不经闸门）。收成插件后，新加的路由默认就在保护之下，
+ * 不需要作者记得任何事；只读 POST 走上面那张显式白名单。
+ */
+val SameOriginWriteGate = createApplicationPlugin("SameOriginWriteGate") {
+    onCall { call ->
+        val method = call.request.local.method
+        if (method in SAFE_METHODS) return@onCall
+        val path = call.request.local.uri.substringBefore('?')
+        if (isReadOnlyPost(call)) return@onCall
+        if (handlesOwnOriginPolicy(path)) return@onCall
+        val origin = call.request.headers[HttpHeaders.Origin]?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return@onCall
+        if (isSameOriginIdentity(origin)) return@onCall
+        logGuard(
+            "跨站写请求被同源闸门拒绝",
+            mapOf(
+                "origin" to origin,
+                "method" to method.value,
+                "path" to path,
+            ),
+        )
+        call.respond(HttpStatusCode.Forbidden, ApiError("cross_origin", "这个页面不是青阅界面，已拒绝它代替你改动数据"))
+    }
+}
 
 suspend fun ApplicationCall.requireSameOriginWrite(extraAllowed: (ApplicationCall) -> Boolean = { false }): Boolean {
     if (request.local.method in SAFE_METHODS) return true
