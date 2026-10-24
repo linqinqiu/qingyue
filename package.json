@@ -35,6 +35,7 @@
     "changelog": "node scripts/changelog.mjs",
     "changelog:dry": "node scripts/changelog.mjs --dry-run",
     "changelog:check": "node scripts/changelog.mjs --check",
+    "version:check": "node scripts/version-check.mjs",
     "hooks:install": "node scripts/install-hooks.mjs",
     "prepare": "node scripts/install-hooks.mjs"
   },

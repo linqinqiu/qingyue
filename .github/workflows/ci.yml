@@ -64,3 +64,21 @@ jobs:
       - name: Run Web Test Suite
         working-directory: web
         run: npx tsx test/run-all.ts
+
+  # 版本号单一来源：真源是 app/build.gradle，其余几处都是抄本。
+  # 放在 PR 阶段比，而不是只在打 Tag 时比 —— 等 Tag 才发现不一致，这一版已经发不出去了。
+  version-consistency:
+    name: Version Single Source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check version consistency
+        run: node scripts/version-check.mjs
+
