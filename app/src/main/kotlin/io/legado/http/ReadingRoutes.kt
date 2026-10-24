@@ -170,8 +170,11 @@ fun Route.readingRoutes(
                     else throw error
                 }
             }
-            // AI 闭环（阅读器 AI 闭环 feature）：落一份「AI 净化/润色覆盖正文」。读者把本章交给 AI，
+        }
+        // AI 闭环（阅读器 AI 闭环 feature）：落一份「AI 净化/润色覆盖正文」。读者把本章交给 AI，
         // 把干净正文存这里，下一次读这一章就回覆盖版（正文实时重载，所见即所得）。
+        // 这两条必须是 post("/books/content") 的**兄弟**：写进它的处理器 lambda 里等于运行期才调
+        // Route.post，启动时根本不会注册 —— 目录和 ApiCatalog 的条数却已经把它们算进去了。
         post("/books/content-process") {
             if (!call.requireSameOriginWrite()) return@post
             val req = call.receive<ContentProcessRequest>()
@@ -199,7 +202,6 @@ fun Route.readingRoutes(
             if (database.deleteContentProcess(sourceId, bookUrl, chapterUrl, kind)) call.respond(HttpStatusCode.NoContent)
             else call.respond(HttpStatusCode.NotFound, ApiError("not_found", "这一章没有对应的 AI 覆盖"))
         }
-    }
 }
 
 
