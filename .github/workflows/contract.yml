@@ -23,7 +23,7 @@ jobs:
     name: 前端双锁（139/19/8 + 内容→框架方向）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
@@ -38,7 +38,7 @@ jobs:
     name: 更新日志不漏记（feat/fix 必须有用户可见条目）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         # 边界要看"最后一笔动过 CHANGELOG 的提交"，浅克隆会把这条边界切掉，
         # 于是把已记录的提交误报成漏记。拉全历史（这仓库不大）。
         with:
@@ -55,7 +55,7 @@ jobs:
     name: 后端守门（框架不夹带内容 + 端点计数契约）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -68,7 +68,7 @@ jobs:
     name: 文档契约（API-REFERENCE 与 agent-api.json 不漂）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
