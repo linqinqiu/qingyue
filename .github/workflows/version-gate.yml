@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: 检出
         # 第三方 Action 固定到 commit SHA（供应链安全，§6.4 / §9）
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
@@ -103,7 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: 解析 Gradle version（真源）
         id: gradle
@@ -162,7 +162,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       # 注：以下 setup-java / gradle / 启动 / 通知等步骤均为骨架，
       # 真实接入时第三方 Action 须固定到 commit SHA（§6.4 / §9）。
