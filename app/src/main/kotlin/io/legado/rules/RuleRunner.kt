@@ -1365,6 +1365,16 @@ class RuleRunner(private val responseFetcher: ((String) -> String)? = null, inte
         return when {
             rule.startsWith("$") -> (JsonPath.read<Any>(body, rule) as? List<*>)?.map { NodeValue.json(it) } ?: emptyList()
             else -> {
+                // JSON 响应上的「裸键」列表规则（`bookList: list`）：字段规则早就会把裸键补成 `$.list`
+                // （见 RuleValue.valueJson），列表这一路却没补 —— 于是 `list` 被当成 CSS 标签名，
+                // 整源搜索 0 条。实测样本是音频源 5sing：接口回 `{"list":[…]}`、规则写 `list`，
+                // 站点本身 200 正常，界面上只有一句"一条都没有"。
+                bareJsonListPath(body, rule)?.let { path ->
+                    val viaJson = runCatching {
+                        (JsonPath.read<Any>(body, path) as? List<*>)?.map { NodeValue.json(it) } ?: emptyList()
+                    }.getOrDefault(emptyList())
+                    if (viaJson.isNotEmpty()) return viaJson
+                }
                 // 列表规则与字段规则走同一套选择器方言（`class.a@tag.li` / `id.list@tag.dd` / `@children`）：
                 // 原来这里只把各段用空格拼成一条 CSS，`tag.` / `id.` 段被当成标签名，整条规则一条都选不出来。
                 val document = Jsoup.parse(body)
@@ -1581,5 +1591,27 @@ data class DebugTrace(
     val value: String,
     val failure: String = "",
 )
+
+// ---------------------------------------------------------------- 裸键列表规则（JSON 响应）
+
+/**
+ * JSON 响应上的「裸键」列表规则要不要补 `$.` 前缀，返回可直接交给 JsonPath 的路径。
+ *
+ * 字段规则早就支持裸键（`RuleValue.valueJson` 会把 `songName` 补成 `$.songName`），
+ * 列表规则却没补：`bookList: list` 被当成 CSS 标签名，在 `{"list":[…]}` 上一个都选不中，
+ * 整源搜索 0 条 —— 而界面上只有一句"一条都没有"，看不出是规则方言的问题。
+ *
+ * 只认「整条就是键路径」的形态（`list` / `data.list`）：带 `@`、`<js>`、`$`、空格或
+ * 选择器语法的规则一律不碰，避免把 CSS 规则误判成 JSONPath。
+ */
+internal fun bareJsonListPath(body: String, rule: String): String? {
+    val head = body.trimStart()
+    if (!head.startsWith("{") && !head.startsWith("[")) return null
+    if (rule.startsWith("$") || rule.startsWith("@") || rule.startsWith("<")) return null
+    if (!BARE_JSON_LIST_KEY.matches(rule)) return null
+    return "\$.$rule"
+}
+
+private val BARE_JSON_LIST_KEY = Regex("[A-Za-z_][\\w-]*(\\.[A-Za-z_][\\w-]*)*")
 
 // ---------------------------------------------------------------- @xpath 方言（JsoupXpath）
