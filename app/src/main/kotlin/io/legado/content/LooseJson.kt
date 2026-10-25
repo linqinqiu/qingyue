@@ -139,10 +139,28 @@ object LooseJson {
     /**
      * 按花括号配对切出 `,` 之后的参数尾巴。
      * 返回 `Pair(去掉尾巴的 URL, 尾巴文本)`；没有 `,{` 或括号不闭合时尾巴为 null。
-     * 现有实现是「取到字符串结尾」，源里 `,{...}` 后面还跟着别的东西时严格 JSON 直接解析失败。
+     *
+     * 逗号前后**允许空白**：上游 `AnalyzeUrl.paramPattern` 是 `Regex("\\s*,\\s*(?=\\{)")`，
+     * 而这里原来用 `indexOf(",{")` 只认逗号后紧跟 `{` —— 源里手写成 `地址 , {"method":"POST"}`
+     * （逗号后带个空格很常见）就切不开，整串被当成 URL 带着 `,{...}` 上路。
+     *
+     * 仍只认「逗号后是 `{`」：普通 URL 里带逗号极常见（路径段、多值参数），不能一律当选项切。
      */
     fun extractTail(value: String): Pair<String, String?> {
-        val start = value.indexOf(",{")
+        // 从后往前找最后一个「,{」—— 尾巴在后面，从后往前可以避开地址里可能出现的 `,{` 形态
+        var start = -1
+        var scan = 0
+        while (scan < value.length) {
+            val comma = value.indexOf(',', scan)
+            if (comma < 0) break
+            var after = comma + 1
+            while (after < value.length && value[after].isWhitespace()) after++
+            if (after < value.length && value[after] == '{') {
+                start = comma
+                break
+            }
+            scan = comma + 1
+        }
         if (start < 0) return value to null
         var depth = 0
         var quote: Char? = null
@@ -159,11 +177,24 @@ object LooseJson {
                 '{' -> depth++
                 '}' -> {
                     depth--
-                    if (depth == 0) return value.substring(0, start) to value.substring(start + 1, index + 1)
+                    if (depth == 0) {
+                        // 地址段要切到逗号为止：逗号与 `{` 之间的空白不属于地址
+                        return value.substring(0, start).trimEnd() to
+                            value.substring(indexOfTailStart(value, start), index + 1)
+                    }
                 }
             }
             index++
         }
-        return value to null
+        // 括号不闭合：地址照切（上游 `paramPattern.find` 也切，只是 option 解析失败后不用它），
+        // 但**不返回半截 JSON 当选项** —— 交给上层 splitUrlOptions 时它还会再解析一次。
+        return value.substring(0, start).trimEnd() to null
+    }
+
+    /** 尾巴正文的起点：跳过逗号与其后的空白，落到 `{` 上。 */
+    private fun indexOfTailStart(value: String, comma: Int): Int {
+        var index = comma + 1
+        while (index < value.length && value[index].isWhitespace()) index++
+        return index
     }
 }
