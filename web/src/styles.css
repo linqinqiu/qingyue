@@ -6085,6 +6085,15 @@ input[type="checkbox"] {
 .reader-workspace.toolbars-hidden .md3-topbar { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 .reader-workspace.toolbars-hidden .md3-bottombar { transform: translateY(100%); opacity: 0; pointer-events: none; }
 
+/* 桌面端不要手机那条底部 pill 导航。
+   这一排（目录 / 搜书 / 笔记 / 朗读 / 设置 / 沉浸）顶栏全都有，而且顶栏那排还能按
+   `settings.menuItems` 自定义 —— 同一组动作在上下各放一份，在宽屏上就是一条手机味的横条，
+   还会把正文的可读宽度和视觉重心往下拽。宽屏只留「上一章 / 进度 / 下一章」那一行；
+   窄屏（手机、半屏小窗）整条都保留，因为那时顶栏放不下。 */
+@media (min-width: 961px) {
+  .md3-actions-row { display: none; }
+}
+
 /* 纯阅读模式退出把手（P1-T3）：贴右缘的浮层，默认半透明收起、hover/focus 显出，确保「退出可发现」。
    此前该把手无任何样式，退化成文档流里的原生按钮，定位与可见性都失效。 */
 .reader-immersive-handle {

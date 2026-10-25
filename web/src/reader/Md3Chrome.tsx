@@ -48,7 +48,7 @@ function TopAction({ id, ...props }: { id: ReaderMenuAction } & ActionProps) {
   }
 }
 
-export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleToc, onBookSearch, onToggleNotes, notesCount, ...action }: {
+export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleToc, onBookSearch, onToggleNotes, notesCount, onTogglePureReading, ...action }: {
   bookName: string
   chapterTitle: string | null
   menuItems: ReaderMenuAction[]
@@ -57,6 +57,7 @@ export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleT
   onBookSearch: () => void
   onToggleNotes: () => void
   notesCount: number
+  onTogglePureReading: () => void
 } & ActionProps) {
   return <header className="md3-topbar" data-testid="reader-header">
     <div className="md3-topbar-side">
@@ -82,6 +83,15 @@ export function Md3TopBar({ bookName, chapterTitle, menuItems, onBack, onToggleT
         title="笔记与划线"
         onClick={onToggleNotes}
       ><Icon name="bookmark" /></button>
+      {/* 纯阅读开关放顶栏：桌面端底部那排 pill 不渲染（见 styles.css 的 min-width:961px），
+          而它原本只存在于底栏 —— 不放这儿，宽屏用户就没有入口了。 */}
+      <button
+        type="button"
+        className="md3-icon-btn"
+        aria-label="纯阅读：隐藏所有控件"
+        title="纯阅读（隐藏所有控件，Esc 或边缘把手退出）"
+        onClick={onTogglePureReading}
+      ><Icon name="eyeOff" /></button>
       {menuItems.map(id => <TopAction key={id} id={id} {...action} />)}
     </div>
   </header>

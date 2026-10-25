@@ -2305,6 +2305,7 @@ export function ReaderScreen({ openBook, startIndex, settings, onSettingsChange,
       onResetTtsBar={resetTtsBarPosition}
       onBookSearch={() => setBookSearchOpen(true)}
       onToggleNotes={() => { setActiveDrawer('toc'); setNotesPanel(true) }}
+      onTogglePureReading={togglePureReading}
       notesCount={notes.length}
     /> : <ReaderHeader
       bookName={bookName}
