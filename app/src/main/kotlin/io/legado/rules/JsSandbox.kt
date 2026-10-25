@@ -723,6 +723,49 @@ class JsSandbox(private val runner: RuleRunner? = null) {
             }
         })
 
+        /**
+         * java.aesBase64DecodeToString(base64, key, transformation, iv) —— Legado 的标准 API。
+         *
+         * 为什么必须有：一批聚合源/漫画源把正文用 AES 加密后塞进 JSON 的 `data` 字段，
+         * 规则里先用它解出真正的 JSON 再取路径（`ruleBookInfo.init` 就是干这个的）。
+         * 少了这个函数，`init` 抛错后引擎会把那段**密文**当 JSON 解析，报出来的是
+         * `Unexpected End Of File position 36020` —— 一个和真正原因（缺加密能力）
+         * 毫无关系的错误，排查时能把人带到完全相反的方向。
+         *
+         * 语义与 Legado 保持一致：key / iv 按**原始字节**用（不是十六进制字符串），
+         * 密文是标准 Base64。解不出来返回空串（与 base64Decode 的容错口径一致）。
+         */
+        ScriptableObject.putProperty(api, "aesBase64DecodeToString", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable, args: Array<out Any?>): Any {
+                val encoded = args.getOrNull(0)?.toString() ?: return ""
+                val key = args.getOrNull(1)?.toString() ?: return ""
+                val transformation = args.getOrNull(2)?.toString()?.takeIf { it.isNotBlank() }
+                    ?: "AES/CBC/PKCS5Padding"
+                val iv = args.getOrNull(3)?.toString()
+                return runCatching {
+                    val cipher = javax.crypto.Cipher.getInstance(transformation)
+                    val secretKey = javax.crypto.spec.SecretKeySpec(key.toByteArray(Charsets.UTF_8), "AES")
+                    if (iv.isNullOrEmpty()) {
+                        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey)
+                    } else {
+                        cipher.init(
+                            javax.crypto.Cipher.DECRYPT_MODE,
+                            secretKey,
+                            javax.crypto.spec.IvParameterSpec(iv.toByteArray(Charsets.UTF_8)),
+                        )
+                    }
+                    val raw = encoded.trim().let { text ->
+                        try {
+                            Base64.getDecoder().decode(text)
+                        } catch (_: Exception) {
+                            Base64.getUrlDecoder().decode(text)
+                        }
+                    }
+                    String(cipher.doFinal(raw), Charsets.UTF_8)
+                }.getOrDefault("")
+            }
+        })
+
         // java.hexDecodeToString(hex) / java.hexEncodeToString(str)
         // 聚合类书源用 data:;hex,... 之类的载荷在搜索→详情→目录→正文之间传递参数
         ScriptableObject.putProperty(api, "hexDecodeToString", object : BaseFunction() {
